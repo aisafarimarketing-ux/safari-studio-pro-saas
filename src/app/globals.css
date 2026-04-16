@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f5ef;
+  --foreground: #1a1a1a;
+  --forest: #1b3a2d;
+  --forest-mid: #2d5a40;
+  --gold: #c9a84c;
+  --gold-light: #f0c040;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-playfair);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+}
+
+/* Smooth scrolling for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Apply Playfair to .font-serif */
+.font-serif {
+  font-family: var(--font-playfair, Georgia, serif);
+}
