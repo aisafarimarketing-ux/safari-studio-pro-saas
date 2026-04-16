@@ -15,20 +15,20 @@ export function GreetingSection({ section }: { section: Section }) {
   // ── Two-column-consultant ──────────────────────────────────────────────────
   if (variant === "two-column-consultant") {
     return (
-      <div className="py-24 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
-        <div className="max-w-5xl mx-auto grid md:grid-cols-[220px_1fr] gap-16 items-start">
+      <div className="py-28 md:py-36 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+        <div className="max-w-4xl mx-auto grid md:grid-cols-[200px_1fr] gap-16 items-start">
 
-          {/* Consultant sidebar — sticky card */}
-          <div className="md:pt-14">
+          {/* Consultant sidebar */}
+          <div className="md:pt-12">
             <div
-              className="w-24 h-24 rounded-2xl overflow-hidden mb-4"
+              className="w-20 h-20 rounded-2xl overflow-hidden mb-5"
               style={{ background: tokens.cardBg }}
             >
               {operator.consultantPhoto ? (
                 <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
               ) : (
                 <div
-                  className="w-full h-full flex items-center justify-center text-3xl font-bold"
+                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
                   style={{ color: tokens.accent }}
                 >
                   {operator.consultantName?.charAt(0) ?? "?"}
@@ -38,39 +38,32 @@ export function GreetingSection({ section }: { section: Section }) {
             <div className="text-sm font-semibold mb-0.5" style={{ color: tokens.headingText }}>
               {operator.consultantName}
             </div>
-            <div className="text-xs" style={{ color: tokens.mutedText }}>
+            <div className="text-xs leading-relaxed" style={{ color: tokens.mutedText }}>
               {operator.companyName}
             </div>
-            {/* Decorative dot motif */}
-            <div className="mt-8 flex gap-1.5">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-full"
-                  style={{
-                    width: 6,
-                    height: 6,
-                    background: i === 0 ? tokens.accent : tokens.border,
-                  }}
-                />
-              ))}
-            </div>
+            {/* Thin accent rule */}
+            <div
+              className="mt-8 w-8"
+              style={{ height: "2px", background: tokens.accent, opacity: 0.3 }}
+            />
           </div>
 
           {/* Letter body */}
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] mb-8" style={{ color: tokens.mutedText }}>
+            <div className="text-[10px] uppercase tracking-[0.28em] mb-10" style={{ color: tokens.mutedText }}>
               A note from your consultant
             </div>
 
-            {/* Large decorative opening quote */}
+            {/* Decorative opening quote */}
             <div
-              className="text-[5rem] leading-none select-none mb-2"
+              className="select-none mb-[-1.2rem]"
+              aria-hidden="true"
               style={{
-                color: tokens.accent,
                 fontFamily: `'${theme.displayFont}', serif`,
-                opacity: 0.35,
-                lineHeight: 0.8,
+                fontSize: "7rem",
+                lineHeight: 1,
+                color: tokens.accent,
+                opacity: 0.12,
               }}
             >
               &#8220;
@@ -79,7 +72,7 @@ export function GreetingSection({ section }: { section: Section }) {
             <div
               contentEditable={isEditor}
               suppressContentEditableWarning
-              className="text-[1.2rem] leading-[2.1] outline-none whitespace-pre-line"
+              className="text-[1.1rem] leading-[2.15] outline-none whitespace-pre-line relative z-10"
               style={{
                 color: tokens.bodyText,
                 fontFamily: `'${theme.displayFont}', serif`,
@@ -96,27 +89,27 @@ export function GreetingSection({ section }: { section: Section }) {
 
   // ── Editorial-letter (default) ─────────────────────────────────────────────
   return (
-    <div className="py-24 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
-      <div className="max-w-[680px] mx-auto">
+    <div className="py-28 md:py-36 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+      <div className="max-w-[620px] mx-auto">
 
         {/* Overline */}
         <div
-          className="text-[11px] uppercase tracking-[0.22em] mb-10"
+          className="text-[10px] uppercase tracking-[0.3em] mb-12"
           style={{ color: tokens.accent }}
         >
           A personal note
         </div>
 
-        {/* Opening quote mark — huge, decorative, accent colour */}
+        {/* Opening quote mark — large, barely visible */}
         <div
           aria-hidden="true"
-          className="select-none mb-[-1.5rem]"
+          className="select-none mb-[-1.8rem]"
           style={{
             fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "9rem",
+            fontSize: "7.5rem",
             lineHeight: 1,
             color: tokens.accent,
-            opacity: 0.2,
+            opacity: 0.13,
           }}
         >
           &#8220;
@@ -126,7 +119,7 @@ export function GreetingSection({ section }: { section: Section }) {
         <div
           contentEditable={isEditor}
           suppressContentEditableWarning
-          className="text-[1.25rem] md:text-[1.4rem] leading-[2.0] outline-none whitespace-pre-line relative z-10"
+          className="text-[1.1rem] md:text-[1.2rem] leading-[2.2] outline-none whitespace-pre-line relative z-10"
           style={{
             color: tokens.headingText,
             fontFamily: `'${theme.displayFont}', serif`,
@@ -138,7 +131,7 @@ export function GreetingSection({ section }: { section: Section }) {
 
         {/* Consultant sign-off */}
         <div
-          className="mt-14 pt-8 flex items-center gap-4"
+          className="mt-20 pt-10 flex items-center gap-5"
           style={{ borderTop: `1px solid ${tokens.border}` }}
         >
           <div
@@ -157,7 +150,7 @@ export function GreetingSection({ section }: { section: Section }) {
             )}
           </div>
           <div>
-            <div className="text-sm font-semibold" style={{ color: tokens.headingText }}>
+            <div className="text-sm font-semibold tracking-wide" style={{ color: tokens.headingText }}>
               {operator.consultantName}
             </div>
             <div className="text-xs mt-0.5" style={{ color: tokens.mutedText }}>

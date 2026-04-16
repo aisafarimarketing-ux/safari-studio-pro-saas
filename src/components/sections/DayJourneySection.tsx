@@ -230,11 +230,11 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, ti
     <div className="flex flex-col h-full gap-5">
       {/* Header block */}
       <div>
-        <div className="text-[10px] uppercase tracking-[0.22em] mb-2" style={{ color: tokens.mutedText }}>
+        <div className="text-[9px] uppercase tracking-[0.28em] mb-2.5" style={{ color: tokens.mutedText }}>
           {day.country}{day.board ? ` · ${day.board}` : ""}
         </div>
         <h2
-          className="text-[2.1rem] md:text-[2.5rem] font-bold leading-[1.05] outline-none"
+          className="text-[2rem] md:text-[2.4rem] font-bold leading-[1.05] tracking-tight outline-none"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
@@ -244,7 +244,7 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, ti
         </h2>
         {day.subtitle && (
           <div
-            className="text-[13px] mt-1.5 outline-none italic"
+            className="text-[12px] mt-2 outline-none italic"
             style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
@@ -257,7 +257,7 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, ti
 
       {/* Description */}
       <p
-        className="text-[14px] leading-[1.9] outline-none flex-1"
+        className="text-[13.5px] leading-[2.0] outline-none flex-1"
         style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
         contentEditable={isEditor}
         suppressContentEditableWarning
@@ -267,55 +267,45 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, ti
       </p>
 
       {/* Accommodation tiers */}
-      <div
-        className="pt-4 border-t space-y-1.5"
-        style={{ borderColor: tokens.border }}
-      >
-        <div className="text-[9px] uppercase tracking-[0.2em] mb-2" style={{ color: tokens.mutedText }}>
-          Accommodation
+      <div className="pt-5" style={{ borderTop: `1px solid ${tokens.border}` }}>
+        <div className="text-[9px] uppercase tracking-[0.28em] mb-3.5" style={{ color: tokens.mutedText }}>
+          Where you&apos;ll stay
         </div>
-        {(["classic", "premier", "signature"] as const).map((tier) => {
-          if (!visibleTiers[tier]) return null;
-          const acc = day.tiers[tier];
-          const isActive = activeTier === tier;
-          return (
-            <div
-              key={tier}
-              className="flex items-center gap-3 py-1.5 px-2.5 rounded-xl transition"
-              style={{
-                background: isActive ? `${tierColors[tier]}18` : "transparent",
-                border: `1px solid ${isActive ? tierColors[tier] + "40" : "transparent"}`,
-              }}
-            >
-              <span
-                className="text-[9px] font-bold uppercase tracking-wider w-[60px] shrink-0 text-center py-0.5 rounded-full"
-                style={{
-                  background: isActive ? tierColors[tier] : "transparent",
-                  color: isActive ? "white" : tierColors[tier],
-                  border: `1px solid ${tierColors[tier]}80`,
-                }}
-              >
-                {tier}
-              </span>
-              <div className="min-w-0">
-                <div
-                  className="text-[13px] font-semibold leading-tight outline-none truncate"
-                  style={{ color: tokens.headingText }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
+        <div className="space-y-2.5">
+          {(["classic", "premier", "signature"] as const).map((tier) => {
+            if (!visibleTiers[tier]) return null;
+            const acc = day.tiers[tier];
+            const isActive = activeTier === tier;
+            return (
+              <div key={tier} className="flex items-baseline gap-3">
+                <span
+                  className="text-[8px] uppercase tracking-[0.18em] font-semibold shrink-0 w-[48px]"
+                  style={{ color: isActive ? tierColors[tier] : `${tierColors[tier]}60` }}
                 >
-                  {acc.camp}
-                </div>
-                <div className="text-[11px] truncate outline-none" style={{ color: tokens.mutedText }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                >
-                  {acc.location}{acc.note ? ` · ${acc.note}` : ""}
+                  {tier}
+                </span>
+                <div className="min-w-0 flex flex-col">
+                  <span
+                    className={`leading-snug outline-none truncate ${isActive ? "text-[13px] font-semibold" : "text-[12px]"}`}
+                    style={{ color: isActive ? tokens.headingText : tokens.bodyText }}
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                  >
+                    {acc.camp}
+                  </span>
+                  <span
+                    className="text-[10.5px] truncate outline-none"
+                    style={{ color: tokens.mutedText }}
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                  >
+                    {acc.location}{acc.note ? ` · ${acc.note}` : ""}
+                  </span>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -341,22 +331,22 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-20 px-8 md:px-16" style={{ background: tokens.pageBg }}>
+    <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto">
         {/* Section header */}
-        <div className="flex items-end justify-between mb-12">
+        <div className="flex items-end justify-between mb-14">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] mb-2" style={{ color: tokens.mutedText }}>
+            <div className="text-[10px] uppercase tracking-[0.28em] mb-3" style={{ color: tokens.mutedText }}>
               Day-by-day
             </div>
             <div
-              className="text-[2.5rem] font-bold leading-none"
+              className="text-[2.75rem] md:text-[3rem] font-bold leading-[1.0] tracking-tight"
               style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             >
               Your journey
             </div>
           </div>
-          <div className="text-sm pb-1" style={{ color: tokens.mutedText }}>
+          <div className="text-[12px] pb-1" style={{ color: tokens.mutedText }}>
             {days.length} {days.length === 1 ? "day" : "days"}
           </div>
         </div>

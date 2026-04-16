@@ -221,7 +221,7 @@ function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, sh
     <div className="space-y-4">
       {/* Description */}
       <p
-        className="text-[14px] leading-[1.85] outline-none"
+        className="text-[13.5px] leading-[2.0] outline-none"
         style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
         contentEditable={isEditor}
         suppressContentEditableWarning
@@ -230,15 +230,12 @@ function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, sh
         {property.description}
       </p>
 
-      {/* Why we chose this */}
+      {/* Why we chose this — left border quote treatment */}
       {property.whyWeChoseThis && (
-        <div className="rounded-xl p-4" style={{ background: `${tokens.accent}12`, border: `1px solid ${tokens.accent}25` }}>
-          <div className="text-[9px] uppercase tracking-[0.2em] mb-1.5 font-bold" style={{ color: tokens.accent }}>
-            Why we chose this
-          </div>
+        <div className="pl-4 border-l-2" style={{ borderColor: `${tokens.accent}45` }}>
           <p
-            className="text-[13px] leading-relaxed outline-none italic"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            className="text-[13px] leading-[1.85] outline-none italic"
+            style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
             onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
@@ -249,31 +246,25 @@ function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, sh
       )}
 
       {/* Quick stats row */}
-      <div className="flex flex-wrap gap-4 pt-1">
+      <div className="flex flex-wrap gap-5 pt-1">
         {[
           { label: "Meal plan", value: property.mealPlan },
           { label: "Room type", value: property.roomType },
           { label: "Nights", value: property.nights ? `${property.nights} nights` : undefined },
         ].map((item) => item.value ? (
           <div key={item.label}>
-            <div className="text-[9px] uppercase tracking-widest" style={{ color: tokens.mutedText }}>{item.label}</div>
-            <div className="text-sm font-semibold mt-0.5" style={{ color: tokens.headingText }}>{item.value}</div>
+            <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: tokens.mutedText }}>{item.label}</div>
+            <div className="text-[13px] font-semibold mt-0.5" style={{ color: tokens.headingText }}>{item.value}</div>
           </div>
         ) : null)}
       </div>
 
-      {/* Amenity pills */}
+      {/* Amenities — dot-separated text, no pills */}
       {property.amenities.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pt-1 border-t" style={{ borderColor: tokens.border }}>
-          {property.amenities.map((a) => (
-            <span
-              key={a}
-              className="text-[11px] px-2.5 py-1 rounded-full"
-              style={{ background: tokens.cardBg, color: tokens.bodyText, border: `1px solid ${tokens.border}` }}
-            >
-              {a}
-            </span>
-          ))}
+        <div className="pt-3.5 border-t" style={{ borderColor: tokens.border }}>
+          <p className="text-[11.5px] leading-relaxed" style={{ color: tokens.mutedText }}>
+            {property.amenities.join("  ·  ")}
+          </p>
         </div>
       )}
     </div>
@@ -300,22 +291,22 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-20 px-8 md:px-16" style={{ background: tokens.pageBg }}>
+    <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto">
         {/* Section header */}
-        <div className="flex items-end justify-between mb-12">
+        <div className="flex items-end justify-between mb-14">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] mb-2" style={{ color: tokens.mutedText }}>
+            <div className="text-[10px] uppercase tracking-[0.28em] mb-3" style={{ color: tokens.mutedText }}>
               Where you&apos;ll stay
             </div>
             <div
-              className="text-[2.5rem] font-bold leading-none"
+              className="text-[2.75rem] md:text-[3rem] font-bold leading-[1.0] tracking-tight"
               style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             >
               Your properties
             </div>
           </div>
-          <div className="text-sm pb-1" style={{ color: tokens.mutedText }}>
+          <div className="text-[12px] pb-1" style={{ color: tokens.mutedText }}>
             {properties.length} {properties.length === 1 ? "property" : "properties"}
           </div>
         </div>

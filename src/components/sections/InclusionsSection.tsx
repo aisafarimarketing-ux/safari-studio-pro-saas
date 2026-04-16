@@ -4,7 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import type { Section } from "@/lib/types";
 
-export function InclusionsSection({ section }: { section: Section }) {
+export function InclusionsSection({ section: _section }: { section: Section }) {
   const { proposal, updateInclusions, updateExclusions } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
@@ -29,24 +29,27 @@ export function InclusionsSection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-16 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
+    <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
-        <div className="text-[11px] uppercase tracking-[0.22em] mb-10" style={{ color: tokens.mutedText }}>
-          Inclusions & Exclusions
+        <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
+          Inclusions &amp; exclusions
         </div>
 
-        <div className="grid md:grid-cols-2 gap-10">
+        <div className="grid md:grid-cols-2 gap-12 md:gap-16">
           {/* Included */}
           <div>
-            <div className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: tokens.accent }}>
+            <div
+              className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-7 pb-4 border-b"
+              style={{ color: tokens.accent, borderColor: `${tokens.accent}25` }}
+            >
               What&apos;s included
             </div>
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {inclusions.map((item, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="text-base mt-0.5 shrink-0" style={{ color: tokens.accent }}>✓</span>
+                <li key={i} className="flex items-start gap-4">
+                  <span className="text-[10px] mt-[3px] shrink-0 font-bold" style={{ color: tokens.accent }}>✓</span>
                   <span
-                    className="text-sm leading-relaxed outline-none"
+                    className="text-[13.5px] leading-relaxed outline-none"
                     style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
                     contentEditable={isEditor}
                     suppressContentEditableWarning
@@ -60,7 +63,8 @@ export function InclusionsSection({ section }: { section: Section }) {
                 <li>
                   <button
                     onClick={() => addItem("inclusion")}
-                    className="text-xs text-black/30 hover:text-black/60 transition"
+                    className="text-xs transition pl-8"
+                    style={{ color: tokens.mutedText }}
                   >
                     + Add item
                   </button>
@@ -71,15 +75,18 @@ export function InclusionsSection({ section }: { section: Section }) {
 
           {/* Excluded */}
           <div>
-            <div className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: tokens.mutedText }}>
+            <div
+              className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-7 pb-4 border-b"
+              style={{ color: tokens.mutedText, borderColor: tokens.border }}
+            >
               Not included
             </div>
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {exclusions.map((item, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="text-base mt-0.5 shrink-0" style={{ color: tokens.border }}>✗</span>
+                <li key={i} className="flex items-start gap-4">
+                  <span className="text-[10px] mt-[3px] shrink-0" style={{ color: tokens.border }}>—</span>
                   <span
-                    className="text-sm leading-relaxed outline-none"
+                    className="text-[13.5px] leading-relaxed outline-none"
                     style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
                     contentEditable={isEditor}
                     suppressContentEditableWarning
@@ -93,7 +100,8 @@ export function InclusionsSection({ section }: { section: Section }) {
                 <li>
                   <button
                     onClick={() => addItem("exclusion")}
-                    className="text-xs text-black/30 hover:text-black/60 transition"
+                    className="text-xs transition pl-8"
+                    style={{ color: tokens.mutedText }}
                   >
                     + Add item
                   </button>

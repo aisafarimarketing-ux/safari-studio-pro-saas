@@ -3,29 +3,29 @@
 import { useProposalStore } from "@/store/proposalStore";
 import type { Section } from "@/lib/types";
 
-export function ItineraryTableSection({ section }: { section: Section }) {
+export function ItineraryTableSection({ section: _section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const { days, activeTier, theme } = proposal;
   const tokens = theme.tokens;
 
   return (
-    <div className="py-16 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
+    <div className="py-20 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
         <div
-          className="text-[11px] uppercase tracking-[0.22em] mb-8"
+          className="text-[10px] uppercase tracking-[0.3em] mb-10"
           style={{ color: tokens.mutedText }}
         >
           Itinerary at a glance
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full">
             <thead>
-              <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
+              <tr style={{ borderBottom: `1px solid ${tokens.border}` }}>
                 {["Day", "Date", "Destination", "Accommodation", "Board"].map((h) => (
                   <th
                     key={h}
-                    className="text-left py-3 pr-6 font-semibold text-[11px] uppercase tracking-widest"
+                    className="text-left pb-4 pr-8 text-[9px] font-semibold uppercase tracking-[0.25em]"
                     style={{ color: tokens.mutedText }}
                   >
                     {h}
@@ -34,40 +34,39 @@ export function ItineraryTableSection({ section }: { section: Section }) {
               </tr>
             </thead>
             <tbody>
-              {days.map((day, i) => (
+              {days.map((day) => (
                 <tr
                   key={day.id}
-                  style={{
-                    borderBottom: `1px solid ${tokens.border}`,
-                    background: i % 2 === 0 ? tokens.sectionSurface : tokens.cardBg,
-                  }}
+                  style={{ borderBottom: `1px solid ${tokens.border}` }}
                 >
                   <td
-                    className="py-4 pr-6 font-semibold tabular-nums"
+                    className="py-5 pr-8 text-[13px] font-semibold tabular-nums"
                     style={{ color: tokens.accent }}
                   >
-                    {day.dayNumber}
+                    {String(day.dayNumber).padStart(2, "0")}
                   </td>
-                  <td className="py-4 pr-6" style={{ color: tokens.mutedText }}>
+                  <td className="py-5 pr-8 text-[13px]" style={{ color: tokens.mutedText }}>
                     {day.date ?? "—"}
                   </td>
-                  <td className="py-4 pr-6 font-medium" style={{ color: tokens.headingText }}>
-                    {day.destination}
+                  <td className="py-5 pr-8" style={{ color: tokens.headingText }}>
+                    <span className="text-[13.5px] font-medium">{day.destination}</span>
                     {day.country && (
-                      <span className="font-normal ml-1" style={{ color: tokens.mutedText }}>
-                        · {day.country}
+                      <span className="text-[12px] font-normal ml-1.5" style={{ color: tokens.mutedText }}>
+                        {day.country}
                       </span>
                     )}
                   </td>
-                  <td className="py-4 pr-6" style={{ color: tokens.bodyText }}>
-                    {day.tiers[activeTier].camp}
+                  <td className="py-5 pr-8">
+                    <span className="text-[13px]" style={{ color: tokens.bodyText }}>
+                      {day.tiers[activeTier].camp}
+                    </span>
                     {day.tiers[activeTier].location && (
-                      <span className="block text-xs" style={{ color: tokens.mutedText }}>
+                      <span className="block text-[11.5px] mt-0.5" style={{ color: tokens.mutedText }}>
                         {day.tiers[activeTier].location}
                       </span>
                     )}
                   </td>
-                  <td className="py-4" style={{ color: tokens.mutedText }}>
+                  <td className="py-5 text-[12.5px]" style={{ color: tokens.mutedText }}>
                     {day.board}
                   </td>
                 </tr>
@@ -77,7 +76,7 @@ export function ItineraryTableSection({ section }: { section: Section }) {
         </div>
 
         {days.length === 0 && (
-          <div className="text-center py-12" style={{ color: tokens.mutedText }}>
+          <div className="text-center py-14 text-[13px]" style={{ color: tokens.mutedText }}>
             Add days in the Day-by-Day section to populate this table.
           </div>
         )}

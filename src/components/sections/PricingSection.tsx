@@ -16,22 +16,22 @@ export function PricingSection({ section }: { section: Section }) {
   const visibleKeys = TIER_KEYS.filter((t) => visibleTiers[t]);
 
   return (
-    <div className="py-20 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
+    <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
 
         {/* Section header */}
         <div className="mb-14 text-center">
-          <div className="text-[11px] uppercase tracking-[0.22em] mb-3" style={{ color: tokens.mutedText }}>
+          <div className="text-[10px] uppercase tracking-[0.3em] mb-4" style={{ color: tokens.mutedText }}>
             Investment
           </div>
           <div
-            className="text-[2.5rem] font-bold"
+            className="text-[2.75rem] md:text-[3rem] font-bold tracking-tight leading-[1.05]"
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
           >
             Choose your experience
           </div>
-          <p className="mt-3 text-sm max-w-md mx-auto" style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-            Each tier uses the same itinerary — only the level of accommodation changes.
+          <p className="mt-4 text-[13.5px] max-w-sm mx-auto leading-relaxed" style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+            Same itinerary. Same days. Only the level of accommodation changes.
           </p>
         </div>
 
@@ -55,37 +55,45 @@ export function PricingSection({ section }: { section: Section }) {
                   boxShadow: isHighlighted && isActive ? `0 0 0 3px ${tokens.secondaryAccent}` : undefined,
                 }}
               >
-                {/* Recommended ribbon */}
+                {/* Recommended — slim top accent line */}
                 {isHighlighted && (
                   <div
-                    className="text-[9px] font-bold uppercase tracking-widest text-center py-1.5"
-                    style={{ background: tokens.secondaryAccent, color: tokens.accent }}
-                  >
-                    Recommended
-                  </div>
+                    className="h-0.5 w-full"
+                    style={{ background: tokens.secondaryAccent }}
+                  />
                 )}
 
-                <div className="p-7">
-                  {/* Tier label */}
-                  <div
-                    className="text-[10px] font-bold uppercase tracking-[0.2em] mb-6"
-                    style={{ color: isHighlighted ? "rgba(255,255,255,0.55)" : tokens.mutedText }}
-                  >
-                    {p.label}
+                <div className="p-8">
+                  {/* Tier label + recommended badge */}
+                  <div className="flex items-center justify-between mb-7">
+                    <div
+                      className="text-[9px] font-semibold uppercase tracking-[0.22em]"
+                      style={{ color: isHighlighted ? "rgba(255,255,255,0.5)" : tokens.mutedText }}
+                    >
+                      {p.label}
+                    </div>
+                    {isHighlighted && (
+                      <span
+                        className="text-[9px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded"
+                        style={{ background: `${tokens.secondaryAccent}25`, color: tokens.secondaryAccent }}
+                      >
+                        Recommended
+                      </span>
+                    )}
                   </div>
 
                   {/* Price */}
-                  <div className="mb-1">
+                  <div className="mb-1.5">
                     <span
-                      className="text-xs align-top mt-2 inline-block mr-0.5"
-                      style={{ color: isHighlighted ? "rgba(255,255,255,0.6)" : tokens.mutedText }}
+                      className="text-[11px] align-top mt-3 inline-block mr-1 font-medium"
+                      style={{ color: isHighlighted ? "rgba(255,255,255,0.55)" : tokens.mutedText }}
                     >
                       {p.currency}
                     </span>
                     <span
                       contentEditable={isEditor}
                       suppressContentEditableWarning
-                      className="text-[2.8rem] font-bold leading-none outline-none"
+                      className="text-[3rem] font-bold leading-none outline-none tracking-tight"
                       style={{
                         color: isHighlighted ? "white" : tokens.headingText,
                         fontFamily: `'${theme.displayFont}', serif`,
@@ -96,29 +104,29 @@ export function PricingSection({ section }: { section: Section }) {
                     </span>
                   </div>
                   <div
-                    className="text-xs mb-8"
-                    style={{ color: isHighlighted ? "rgba(255,255,255,0.45)" : tokens.mutedText }}
+                    className="text-[11px] mb-8 leading-relaxed"
+                    style={{ color: isHighlighted ? "rgba(255,255,255,0.4)" : tokens.mutedText }}
                   >
                     per person · {nights} nights
                   </div>
 
-                  {/* Thin divider */}
+                  {/* Divider */}
                   <div
-                    className="mb-5"
-                    style={{ height: "1px", background: isHighlighted ? "rgba(255,255,255,0.15)" : tokens.border }}
+                    className="mb-6"
+                    style={{ height: "1px", background: isHighlighted ? "rgba(255,255,255,0.12)" : tokens.border }}
                   />
 
                   {/* Total (derived) */}
                   {client.pax && (
-                    <div className="mb-5">
+                    <div className="mb-6">
                       <div
-                        className="text-[9px] uppercase tracking-widest mb-0.5"
-                        style={{ color: isHighlighted ? "rgba(255,255,255,0.4)" : tokens.mutedText }}
+                        className="text-[9px] uppercase tracking-[0.2em] mb-1"
+                        style={{ color: isHighlighted ? "rgba(255,255,255,0.35)" : tokens.mutedText }}
                       >
-                        Total
+                        Total investment
                       </div>
                       <div
-                        className="text-sm font-semibold"
+                        className="text-[14px] font-semibold"
                         style={{ color: isHighlighted ? "rgba(255,255,255,0.8)" : tokens.headingText }}
                       >
                         {p.currency} {(parseInt(p.pricePerPerson.replace(/,/g, "")) * (parseInt(client.pax) || 1)).toLocaleString()}
@@ -128,21 +136,21 @@ export function PricingSection({ section }: { section: Section }) {
 
                   {/* Select button */}
                   <button
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+                    className={`w-full py-3 rounded-xl text-[11px] font-semibold uppercase tracking-widest transition ${
                       isActive ? "" : "hover:opacity-80"
                     }`}
                     style={{
                       background: isActive
                         ? tokens.secondaryAccent
                         : isHighlighted
-                        ? "rgba(255,255,255,0.15)"
-                        : tokens.border,
+                        ? "rgba(255,255,255,0.12)"
+                        : "transparent",
                       color: isActive
                         ? tokens.accent
                         : isHighlighted
-                        ? "white"
+                        ? "rgba(255,255,255,0.85)"
                         : tokens.mutedText,
-                      border: isActive ? "none" : `1px solid ${isHighlighted ? "rgba(255,255,255,0.2)" : tokens.border}`,
+                      border: `1px solid ${isActive ? "transparent" : isHighlighted ? "rgba(255,255,255,0.18)" : tokens.border}`,
                     }}
                   >
                     {isActive ? "Selected ✓" : "Select"}

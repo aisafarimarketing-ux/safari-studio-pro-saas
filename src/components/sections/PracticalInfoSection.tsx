@@ -13,9 +13,9 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   const isGrid = section.layoutVariant === "card-grid";
 
   return (
-    <div className="py-16 px-8 md:px-16" style={{ background: tokens.pageBg }}>
+    <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto">
-        <div className="text-[11px] uppercase tracking-[0.22em] mb-10" style={{ color: tokens.mutedText }}>
+        <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
           Good to know
         </div>
 
@@ -23,22 +23,23 @@ export function PracticalInfoSection({ section }: { section: Section }) {
           {practicalInfo.map((card) => (
             <div
               key={card.id}
-              className="relative rounded-xl p-6 border"
+              className="relative p-7 rounded-xl border"
               style={{ background: tokens.sectionSurface, borderColor: tokens.border }}
             >
               {isEditor && (
                 <button
                   onClick={() => removePracticalCard(card.id)}
-                  className="absolute top-3 right-3 text-xs text-black/30 hover:text-red-500 transition"
+                  className="absolute top-4 right-4 text-xs transition"
+                  style={{ color: tokens.mutedText }}
                 >
                   ×
                 </button>
               )}
-              <div className="flex items-start gap-3">
-                <span className="text-xl shrink-0">{card.icon ?? "ℹ"}</span>
+              <div className="flex items-start gap-4">
+                <span className="text-xl shrink-0 mt-0.5 select-none">{card.icon ?? "ℹ"}</span>
                 <div className="flex-1 min-w-0">
                   <div
-                    className="font-semibold text-sm mb-1 outline-none"
+                    className="font-semibold text-[13.5px] mb-2 outline-none"
                     style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
                     contentEditable={isEditor}
                     suppressContentEditableWarning
@@ -47,7 +48,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
                     {card.title}
                   </div>
                   <div
-                    className="text-sm leading-relaxed outline-none"
+                    className="text-[13px] leading-[1.85] outline-none"
                     style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
                     contentEditable={isEditor}
                     suppressContentEditableWarning
