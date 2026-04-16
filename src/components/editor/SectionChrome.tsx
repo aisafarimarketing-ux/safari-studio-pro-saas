@@ -57,7 +57,7 @@ export function SectionChrome({ section, children }: Props) {
   };
 
   return (
-    <div ref={setNodeRef} style={sortableStyle} data-editor-chrome>
+    <div ref={setNodeRef} style={sortableStyle} data-editor-chrome id={`section-${section.id}`}>
       {/* Inner div handles all visual states — isolated from dnd-kit's transform/transition */}
       <div
         className="relative transition-shadow duration-200"

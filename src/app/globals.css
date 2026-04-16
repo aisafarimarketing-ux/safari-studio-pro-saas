@@ -34,6 +34,9 @@ body {
 .proposal-canvas {
   --font-display: "Playfair Display", Georgia, serif;
   --font-body: "Jost", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ── Toolbar height shorthand ─────────────────────────────────────────────── */
@@ -130,6 +133,37 @@ body {
 .ss-popover-in { animation: ss-popover-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .ss-modal-in   { animation: ss-modal-in   180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .ss-fade-in    { animation: ss-fade-in    160ms ease both; }
+
+/* ── Premium feel polish ─────────────────────────────────────────────────── */
+
+/* Smooth all transitions globally */
+*, *::before, *::after {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Selection color */
+.proposal-canvas ::selection {
+  background: rgba(201, 168, 76, 0.2);
+  color: inherit;
+}
+
+/* Better focus states — no jarring browser defaults */
+.proposal-canvas *:focus-visible {
+  outline: none;
+}
+
+/* Smooth image loading */
+.proposal-canvas img {
+  transition: opacity 300ms ease;
+}
+
+/* Line clamp utility */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* ── Print / PDF export ───────────────────────────────────────────────────── */
 @media print {

@@ -88,7 +88,9 @@ export function ProposalCanvas() {
           sorted
             .filter((s) => s.visible)
             .map((section) => (
-              <SectionRenderer key={section.id} section={section} />
+              <div key={section.id} id={`section-${section.id}`}>
+                <SectionRenderer section={section} />
+              </div>
             ))
         )}
       </div>
