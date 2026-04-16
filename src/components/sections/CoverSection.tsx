@@ -283,6 +283,88 @@ export function CoverSection({ section }: { section: Section }) {
     );
   }
 
+  // ── Flip-split — image left, text right ──────────────────────────────────────
+  if (variant === "flip-split") {
+    return (
+      <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
+        {/* Full-bleed image */}
+        <div className="absolute inset-0">
+          {heroUrl ? (
+            <img src={heroUrl} alt="Cover" className="w-full h-full object-cover" />
+          ) : isEditor ? (
+            <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer" style={{ background: tokens.accent }}>
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+              <div className="text-white/30 text-center"><div className="text-5xl mb-3">+</div><div className="text-sm">Add hero image</div></div>
+            </label>
+          ) : (
+            <div style={{ background: tokens.accent, width: "100%", height: "100%" }} />
+          )}
+          {/* Gradient: right coverage */}
+          <div className="absolute inset-0" style={{
+            background: `linear-gradient(255deg, ${tokens.accent} 0%, ${tokens.accent} 38%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.2) 100%)`,
+          }} />
+        </div>
+
+        {/* Right: text column */}
+        <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
+          <div className="flex items-center justify-end gap-3">
+            {operator.logoUrl ? (
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-8 object-contain" />
+            ) : (
+              <span className="text-white/60 text-xs uppercase tracking-[0.25em] font-semibold">{operator.companyName}</span>
+            )}
+          </div>
+
+          <div className="space-y-6 text-right">
+            {trip.destinations.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-2">
+                {trip.destinations.map((d) => (
+                  <span key={d} className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)", border: "1px solid rgba(255,255,255,0.18)" }}>
+                    {d}
+                  </span>
+                ))}
+              </div>
+            )}
+            <h1 className="text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold text-white leading-[1.0] outline-none"
+              style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 20px rgba(0,0,0,0.2)" }}
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}>
+              {trip.title}
+            </h1>
+            <p className="text-white/60 text-[15px] leading-relaxed max-w-sm ml-auto outline-none"
+              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}>
+              {(section.content.tagline as string) || trip.subtitle}
+            </p>
+          </div>
+
+          <div className="text-right" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+            <div className="w-8 mb-5 ml-auto" style={{ height: "1px", background: "rgba(255,255,255,0.25)" }} />
+            <div className="text-lg font-semibold text-white mb-1 outline-none"
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}>
+              {client.guestNames}
+            </div>
+            <div className="text-white/55 text-sm outline-none"
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}>
+              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}{client.pax ? ` · ${client.pax}` : ""}
+            </div>
+          </div>
+        </div>
+
+        {heroUrl && isEditor && (
+          <label className="absolute bottom-5 left-5 z-20 cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change image
+          </label>
+        )}
+      </div>
+    );
+  }
+
   // ── Cinematic-split (default) ───────────────────────────────────────────────
   return (
     <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>

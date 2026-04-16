@@ -1,6 +1,7 @@
 "use client";
 
 import type { Section } from "@/lib/types";
+import { OperatorHeaderSection } from "@/components/sections/OperatorHeaderSection";
 import { CoverSection } from "@/components/sections/CoverSection";
 import { GreetingSection } from "@/components/sections/GreetingSection";
 import { TripSummarySection } from "@/components/sections/TripSummarySection";
@@ -21,6 +22,7 @@ import { MapSection } from "@/components/sections/MapSection";
 
 export function SectionRenderer({ section }: { section: Section }) {
   switch (section.type) {
+    case "operatorHeader": return <OperatorHeaderSection section={section} />;
     case "cover": return <CoverSection section={section} />;
     case "greeting": return <GreetingSection section={section} />;
     case "tripSummary": return <TripSummarySection section={section} />;

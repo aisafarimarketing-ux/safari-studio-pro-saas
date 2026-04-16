@@ -83,6 +83,39 @@ export function ProposalSettingsPanel() {
       <div>
         <div className="text-[11px] uppercase tracking-widest text-black/40 mb-3">Operator</div>
         <div className="space-y-2.5">
+          {/* Logo upload */}
+          <div>
+            <label className="block text-[11px] text-black/40 mb-1">Logo</label>
+            <div className="flex items-center gap-2">
+              {operator.logoUrl ? (
+                <div className="flex items-center gap-2">
+                  <img src={operator.logoUrl} alt="Logo" className="h-8 object-contain rounded border border-black/10 px-2 py-1 bg-white" />
+                  <button onClick={() => updateOperator({ logoUrl: "" })}
+                    className="text-[10px] text-red-400 hover:text-red-600 transition">Remove</button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-black/15 cursor-pointer hover:bg-black/3 text-[11px] text-black/40 transition">
+                  <input type="file" accept="image/*,.svg" className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) updateOperator({ logoUrl: URL.createObjectURL(file) });
+                    }} />
+                  + Upload logo
+                </label>
+              )}
+            </div>
+            {/* URL paste fallback */}
+            {!operator.logoUrl && (
+              <input
+                placeholder="or paste image URL"
+                className="w-full border border-black/8 rounded-lg px-3 py-1.5 text-xs bg-white/50 focus:outline-none focus:border-[#1b3a2d] mt-1.5"
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v) updateOperator({ logoUrl: v });
+                }}
+              />
+            )}
+          </div>
           {field("Company name", operator.companyName, (v) => updateOperator({ companyName: v }))}
           {field("Consultant name", operator.consultantName, (v) => updateOperator({ consultantName: v }))}
           {field("Email", operator.email, (v) => updateOperator({ email: v }))}

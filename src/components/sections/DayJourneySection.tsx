@@ -56,6 +56,8 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
     "stacked-image-text": "stacked",
     "compact-timeline": "compact",
     "magazine-spread": "magazine",
+    "flip-split": "flip",
+    "full-image-overlay": "overlay",
   };
   const layoutType = layoutMap[variant] ?? "split";
 
@@ -95,7 +97,11 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
         </div>
       )}
 
-      {layoutType === "stacked" ? (
+      {layoutType === "flip" ? (
+        <FlipSplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+      ) : layoutType === "overlay" ? (
+        <FullOverlayLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+      ) : layoutType === "stacked" ? (
         <StackedLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
       ) : layoutType === "compact" ? (
         <CompactLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
@@ -375,6 +381,122 @@ function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers
               </div>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Flip-split: content left, image right ────────────────────────────────────
+
+function FlipSplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+  day: Day; isEditor: boolean; tokens: ThemeTokens;
+  theme: ProposalTheme;
+  activeTier: string; visibleTiers: Record<string, boolean>;
+  tierColors: Record<string, string>;
+  handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateDay: (id: string, patch: Partial<Day>) => void;
+}) {
+  return (
+    <div className="grid md:grid-cols-[3fr_2fr] min-h-[440px]">
+      {/* Content column first */}
+      <div className="flex flex-col justify-between p-8 md:p-10 order-2 md:order-1" style={{ background: tokens.sectionSurface }}>
+        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
+      </div>
+      {/* Image column */}
+      <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden order-1 md:order-2">
+        {day.heroImageUrl ? (
+          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-3xl mb-2 opacity-30">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+        <div className="absolute bottom-0 right-0 leading-none select-none pointer-events-none"
+          style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(6rem, 18vw, 10rem)", color: "rgba(255,255,255,0.12)", lineHeight: 0.85, paddingRight: "0.1em" }}>
+          {String(day.dayNumber).padStart(2, "0")}
+        </div>
+        <div className="absolute top-4 right-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
+          Day {day.dayNumber}
+        </div>
+        {day.heroImageUrl && isEditor && (
+          <label className="absolute bottom-3 right-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Full-image-overlay: full image with all content overlaid ─────────────────
+
+function FullOverlayLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+  day: Day; isEditor: boolean; tokens: ThemeTokens;
+  theme: ProposalTheme;
+  activeTier: string; visibleTiers: Record<string, boolean>;
+  tierColors: Record<string, string>;
+  handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateDay: (id: string, patch: Partial<Day>) => void;
+}) {
+  return (
+    <div className="relative min-h-[480px]" style={{ background: tokens.cardBg }}>
+      {day.heroImageUrl ? (
+        <img src={day.heroImageUrl} alt={day.destination} className="absolute inset-0 w-full h-full object-cover" />
+      ) : isEditor ? (
+        <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
+          <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+          <div className="text-3xl mb-2 opacity-30">+</div>
+          <div className="text-sm opacity-40">Add photo</div>
+        </label>
+      ) : null}
+      {/* Heavy gradient overlay */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.15) 70%, rgba(0,0,0,0.3) 100%)" }} />
+      {/* Day badge */}
+      <div className="absolute top-4 left-4 z-10 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+        style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
+        Day {day.dayNumber}
+      </div>
+      {day.heroImageUrl && isEditor && (
+        <label className="absolute top-4 right-4 z-10 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+          <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+          Change
+        </label>
+      )}
+      {/* Content overlaid at bottom */}
+      <div className="relative z-10 flex flex-col justify-end min-h-[480px] p-8 md:p-10">
+        <div className="max-w-lg">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-white/50 mb-2">{day.country}{day.board ? ` · ${day.board}` : ""}</div>
+          <h2 className="text-[2rem] md:text-[2.8rem] font-bold text-white leading-[1.0] tracking-tight outline-none mb-4"
+            style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 16px rgba(0,0,0,0.4)" }}
+            contentEditable={isEditor} suppressContentEditableWarning
+            onBlur={(e) => updateDay(day.id, { destination: e.currentTarget.textContent ?? day.destination })}>
+            {day.destination}
+          </h2>
+          <p className="text-[13px] leading-[1.9] text-white/75 outline-none mb-5"
+            style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            contentEditable={isEditor} suppressContentEditableWarning
+            onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}>
+            {day.description}
+          </p>
+          {/* Accommodation inline */}
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+            {(["classic", "premier", "signature"] as const).map((tier) => {
+              if (!visibleTiers[tier]) return null;
+              const acc = day.tiers[tier];
+              const isActive = activeTier === tier;
+              return (
+                <div key={tier} className="text-[11px]">
+                  <span className="text-[8px] uppercase tracking-wider mr-1.5" style={{ color: isActive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)" }}>{tier}</span>
+                  <span style={{ color: isActive ? "white" : "rgba(255,255,255,0.55)" }} className={isActive ? "font-semibold" : ""}>{acc.camp}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

@@ -137,6 +137,7 @@ export interface PracticalCard {
 // ─── Section ─────────────────────────────────────────────────────────────────
 
 export type SectionType =
+  | "operatorHeader"
   | "cover"
   | "greeting"
   | "tripSummary"

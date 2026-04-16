@@ -13,12 +13,21 @@ export interface SectionDefinition {
 }
 
 export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
+  operatorHeader: {
+    type: "operatorHeader",
+    label: "Operator Header",
+    icon: "▣",
+    description: "Branded letterhead with logo, company name, and contact details",
+    variants: ["minimal", "centered-brand", "split-logo-details", "transparent-overlay"],
+    defaultVariant: "minimal",
+    defaultContent: {},
+  },
   cover: {
     type: "cover",
     label: "Cover",
     icon: "◻",
     description: "Cinematic title page with client name, dates, and hero image",
-    variants: ["cinematic-split", "centered-editorial", "minimal-type", "full-bleed-overlay"],
+    variants: ["cinematic-split", "flip-split", "centered-editorial", "minimal-type", "full-bleed-overlay"],
     defaultVariant: "cinematic-split",
     defaultContent: { heroImageUrl: "", tagline: "" },
   },
@@ -55,7 +64,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Day-by-Day Journey",
     icon: "✦",
     description: "Rich day cards with images, narratives, and camp options",
-    variants: ["split-text-image", "stacked-image-text", "compact-timeline", "magazine-spread"],
+    variants: ["split-text-image", "flip-split", "stacked-image-text", "compact-timeline", "magazine-spread", "full-image-overlay"],
     defaultVariant: "split-text-image",
     defaultContent: {},
     dataSource: "days",
@@ -65,7 +74,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Property Showcase",
     icon: "⌂",
     description: "Camp and lodge detail cards",
-    variants: ["image-left-details-right", "large-image-detail-block", "card-grid", "full-bleed"],
+    variants: ["image-left-details-right", "large-image-detail-block", "hero-thumbnails", "card-grid", "full-bleed"],
     defaultVariant: "image-left-details-right",
     defaultContent: {},
     dataSource: "properties",
@@ -178,6 +187,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
 };
 
 export const ADDABLE_SECTIONS: SectionType[] = [
+  "operatorHeader",
   "cover",
   "greeting",
   "tripSummary",

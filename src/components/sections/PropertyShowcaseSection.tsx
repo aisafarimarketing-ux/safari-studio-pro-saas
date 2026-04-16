@@ -57,6 +57,8 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
 
       {variant === "large-image-detail-block" ? (
         <LargeImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
+      ) : variant === "hero-thumbnails" ? (
+        <HeroThumbnailsLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : variant === "card-grid" ? (
         <CardGridLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : variant === "full-bleed" ? (
@@ -213,6 +215,108 @@ function SplitImageLayout({ property, isEditor, tokens, theme, updateProperty, h
           </div>
         </div>
         <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={false} />
+      </div>
+    </div>
+  );
+}
+
+// ── Hero + thumbnails: large lead image with gallery strip ──────────────────────
+
+function HeroThumbnailsLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
+  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
+  updateProperty: (id: string, patch: Partial<Property>) => void;
+  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const galleryUrls = property.galleryUrls ?? [];
+
+  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    const urls = files.map((f) => URL.createObjectURL(f));
+    updateProperty(property.id, { galleryUrls: [...galleryUrls, ...urls] });
+  };
+
+  const removeGalleryImage = (idx: number) => {
+    updateProperty(property.id, { galleryUrls: galleryUrls.filter((_, i) => i !== idx) });
+  };
+
+  const setAsLead = (url: string) => {
+    updateProperty(property.id, { leadImageUrl: url });
+  };
+
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* Hero image */}
+      <div className="relative w-full h-[380px] overflow-hidden">
+        {property.leadImageUrl ? (
+          <>
+            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)" }} />
+            <div className="absolute bottom-0 left-0 right-0 p-8">
+              <h3 className="text-[1.8rem] font-bold text-white leading-tight outline-none"
+                style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
+                contentEditable={isEditor} suppressContentEditableWarning
+                onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}>
+                {property.name}
+              </h3>
+              <div className="text-white/70 text-sm mt-0.5">{property.location}</div>
+            </div>
+            {isEditor && (
+              <label className="absolute top-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+                Change
+              </label>
+            )}
+          </>
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image" style={{ background: tokens.cardBg }}>
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            <div className="text-3xl opacity-30 mb-1">+</div>
+            <div className="text-sm opacity-40">Add lead photo</div>
+          </label>
+        ) : (
+          <div className="w-full h-full" style={{ background: tokens.cardBg }} />
+        )}
+      </div>
+
+      {/* Thumbnail strip */}
+      {(galleryUrls.length > 0 || isEditor) && (
+        <div className="flex gap-1.5 px-4 py-3 overflow-x-auto" style={{ background: tokens.cardBg }}>
+          {galleryUrls.map((url, i) => (
+            <div key={i} className="relative shrink-0 w-[80px] h-[60px] rounded-lg overflow-hidden group cursor-pointer"
+              onClick={() => !isEditor && setAsLead(url)}>
+              <img src={url} alt="" className="w-full h-full object-cover" />
+              {isEditor && (
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1 transition">
+                  <button onClick={(e) => { e.stopPropagation(); setAsLead(url); }}
+                    className="text-white text-[8px] bg-white/20 px-1.5 py-0.5 rounded" title="Set as main">★</button>
+                  <button onClick={(e) => { e.stopPropagation(); removeGalleryImage(i); }}
+                    className="text-white text-[8px] bg-white/20 px-1.5 py-0.5 rounded" title="Remove">×</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {isEditor && (
+            <label className="shrink-0 w-[80px] h-[60px] rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer hover:bg-black/3 transition"
+              style={{ borderColor: tokens.border }}>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryUpload} />
+              <span className="text-lg opacity-30">+</span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Details */}
+      <div className="p-8 md:p-10">
+        {!property.leadImageUrl && (
+          <div className="mb-5">
+            <h3 className="text-2xl font-bold outline-none" style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}>
+              {property.name}
+            </h3>
+          </div>
+        )}
+        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={!!property.leadImageUrl} />
       </div>
     </div>
   );
