@@ -87,7 +87,7 @@ export function ColorPickerPopover({
 
       {open && (
         <div
-          className="absolute z-50 top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-black/10 p-4 w-60"
+          className="absolute z-50 top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-black/10 p-4 w-60 ss-popover-in"
           style={{ minWidth: 220 }}
         >
           {label && (

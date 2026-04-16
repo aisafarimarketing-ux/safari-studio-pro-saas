@@ -43,7 +43,7 @@ export function AddSectionInserter({ afterOrder }: Props) {
       </button>
 
       {open && (
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl border border-black/10 p-4 w-80 z-50">
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl border border-black/10 p-4 w-80 z-50 ss-popover-in">
           <div className="text-[11px] uppercase tracking-widest text-black/40 mb-3">
             Add section
           </div>

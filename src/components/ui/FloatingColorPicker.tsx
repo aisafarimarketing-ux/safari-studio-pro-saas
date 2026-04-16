@@ -71,7 +71,7 @@ export function FloatingColorPicker() {
     <div
       ref={ref}
       style={{ position: "fixed", left: clampedX, top: clampedY, zIndex: 9999 }}
-      className="bg-white rounded-2xl shadow-2xl border border-black/10 p-4"
+      className="bg-white rounded-2xl shadow-2xl border border-black/10 p-4 ss-popover-in"
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Header */}

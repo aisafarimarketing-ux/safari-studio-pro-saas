@@ -22,7 +22,14 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: property.id });
 
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: [transition, "box-shadow 200ms ease"].filter(Boolean).join(", "),
+    opacity: isDragging ? 0.4 : 1,
+    boxShadow: isSelected
+      ? "0 0 0 2px rgba(27,58,45,0.28), 0 4px 16px rgba(27,58,45,0.08)"
+      : undefined,
+  };
 
   const handleLeadImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,7 +43,7 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
       ref={setNodeRef}
       style={{ ...style, borderColor: tokens.border }}
       onClick={() => isEditor && selectProperty(property.id)}
-      className={`dm-card relative rounded-2xl overflow-hidden border transition ${isSelected ? "ring-2 ring-offset-2 ring-[#1b3a2d]/30" : ""}`}
+      className="dm-card relative rounded-2xl overflow-hidden border transition-colors duration-150"
     >
       {/* Editor controls */}
       {isEditor && (

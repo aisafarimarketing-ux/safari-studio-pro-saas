@@ -87,12 +87,12 @@ export function NewProposalDialog() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm ss-fade-in"
         onClick={closeNewProposal}
       />
 
       {/* Dialog */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden ss-modal-in">
         {/* Header */}
         <div className="px-8 pt-8 pb-4 border-b border-black/8 flex items-center justify-between shrink-0">
           <h2 className="text-xl font-semibold tracking-tight">New Proposal</h2>

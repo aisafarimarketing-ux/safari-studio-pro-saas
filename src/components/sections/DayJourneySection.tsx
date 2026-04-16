@@ -34,8 +34,11 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: [transition, "box-shadow 200ms ease"].filter(Boolean).join(", "),
     opacity: isDragging ? 0.4 : 1,
+    boxShadow: isSelected
+      ? "0 0 0 2px rgba(27,58,45,0.28), 0 4px 16px rgba(27,58,45,0.08)"
+      : undefined,
   };
 
   const handleHeroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,9 +59,7 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
       ref={setNodeRef}
       style={{ ...style, borderColor: tokens.border, background: tokens.sectionSurface }}
       onClick={() => isEditor && selectDay(day.id)}
-      className={`dm-card relative rounded-3xl overflow-hidden border transition ${
-        isSelected ? "ring-2 ring-offset-2 ring-[#1b3a2d]/30" : ""
-      }`}
+      className="dm-card relative rounded-3xl overflow-hidden border transition-colors duration-150"
     >
       {/* Editor action bar — top right */}
       {isEditor && (

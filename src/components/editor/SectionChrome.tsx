@@ -57,36 +57,44 @@ export function SectionChrome({ section, children }: Props) {
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={sortableStyle}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => { editorSelect(section.id); useEditorStore.getState().selectDay(null); useEditorStore.getState().selectProperty(null); }}
-      className={`relative transition ${isSelected ? "outline outline-2 outline-offset-0 outline-[#1b3a2d]/40" : ""}`}
-    >
-      {children}
+    <div ref={setNodeRef} style={sortableStyle} data-editor-chrome>
+      {/* Inner div handles all visual states — isolated from dnd-kit's transform/transition */}
+      <div
+        className="relative transition-shadow duration-200"
+        style={{
+          boxShadow: isSelected
+            ? "0 0 0 2px rgba(27,58,45,0.22), 0 4px 16px rgba(27,58,45,0.07)"
+            : undefined,
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => {
+          editorSelect(section.id);
+          useEditorStore.getState().selectDay(null);
+          useEditorStore.getState().selectProperty(null);
+        }}
+      >
+        {children}
 
-      {/* ── Hover / selected controls ── */}
-      {showControls && (
+        {/* ── Hover / selected controls — always mounted, fade in/out ── */}
         <div
-          className="absolute top-2 right-2 z-30 flex gap-1"
+          className={`absolute top-2 right-2 z-30 flex gap-1 transition-all duration-150 ${
+            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Drag handle */}
           <button
             {...attributes}
             {...listeners}
-            className="w-8 h-8 rounded-lg bg-white/90 border border-black/10 flex items-center justify-center text-black/50 hover:text-black/80 cursor-grab shadow-sm transition"
+            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center text-black/45 hover:text-black/75 cursor-grab shadow-sm transition-all duration-150 active:scale-95"
             title="Drag to reorder"
           >
             ⠿
           </button>
 
-          {/* Background color */}
           <button
             onClick={handleBgColorClick}
-            className="w-8 h-8 rounded-lg bg-white/90 border border-black/10 flex items-center justify-center shadow-sm transition hover:border-black/20"
+            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
             title="Edit section background"
           >
             <span
@@ -95,51 +103,46 @@ export function SectionChrome({ section, children }: Props) {
             />
           </button>
 
-          {/* Duplicate */}
           <button
             onClick={(e) => { e.stopPropagation(); duplicateSection(section.id); }}
-            className="w-8 h-8 rounded-lg bg-white/90 border border-black/10 flex items-center justify-center text-black/50 hover:text-black/80 shadow-sm transition text-sm"
+            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center text-black/45 hover:text-black/75 shadow-sm transition-all duration-150 text-sm active:scale-95"
             title="Duplicate"
           >
             ⧉
           </button>
 
-          {/* Hide / show */}
           <button
             onClick={(e) => { e.stopPropagation(); toggleSectionVisibility(section.id); }}
-            className="w-8 h-8 rounded-lg bg-white/90 border border-black/10 flex items-center justify-center text-black/50 hover:text-black/80 shadow-sm transition text-sm"
+            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center text-black/45 hover:text-black/75 shadow-sm transition-all duration-150 text-sm active:scale-95"
             title={section.visible ? "Hide section" : "Show section"}
           >
             {section.visible ? "◉" : "○"}
           </button>
 
-          {/* Delete */}
           <button
             onClick={(e) => { e.stopPropagation(); removeSection(section.id); }}
-            className="w-8 h-8 rounded-lg bg-white/90 border border-black/10 flex items-center justify-center text-black/40 hover:text-red-500 hover:border-red-200 shadow-sm transition text-sm"
+            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center text-black/35 hover:text-red-500 hover:border-red-200 shadow-sm transition-all duration-150 text-sm active:scale-95"
             title="Delete section"
           >
             ×
           </button>
         </div>
-      )}
 
-      {/* ── Inline label + layout variant switcher ── */}
-      {showControls && (
+        {/* ── Inline label + layout variant switcher ── */}
         <div
-          className="absolute top-2 left-2 z-30 flex items-center gap-1"
+          className={`absolute top-2 left-2 z-30 flex items-center gap-1 transition-all duration-150 ${
+            showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Section type chip */}
-          <div className="flex items-center gap-1.5 bg-white/90 border border-black/10 rounded-lg px-2.5 py-1 shadow-sm">
+          <div className="flex items-center gap-1.5 bg-white/92 border border-black/10 rounded-lg px-2.5 py-1 shadow-sm">
             <span className="text-[10px] font-semibold text-black/40 uppercase tracking-wider">
               {reg?.label ?? section.type}
             </span>
           </div>
 
-          {/* Layout variant quick-toggle (only if >1 variant) */}
           {variants.length > 1 && (
-            <div className="flex items-center gap-0.5 bg-white/90 border border-black/10 rounded-lg px-1 py-1 shadow-sm">
+            <div className="flex items-center gap-0.5 bg-white/92 border border-black/10 rounded-lg px-1 py-1 shadow-sm">
               {variants.map((v) => {
                 const shortLabel = v.split("-").map((w) => w[0]).join("").toUpperCase();
                 const isActive = section.layoutVariant === v;
@@ -148,7 +151,7 @@ export function SectionChrome({ section, children }: Props) {
                     key={v}
                     onClick={() => updateSectionVariant(section.id, v)}
                     title={v}
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition ${
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all duration-150 active:scale-95 ${
                       isActive
                         ? "bg-[#1b3a2d] text-white"
                         : "text-black/40 hover:text-black/70 hover:bg-black/5"
@@ -161,16 +164,16 @@ export function SectionChrome({ section, children }: Props) {
             </div>
           )}
         </div>
-      )}
 
-      {/* ── Hidden badge ── */}
-      {!section.visible && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-white/80 backdrop-blur-sm text-xs text-black/40 px-3 py-1.5 rounded-full border border-black/10">
-            Hidden in preview
+        {/* ── Hidden badge ── */}
+        {!section.visible && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="bg-white/80 backdrop-blur-sm text-xs text-black/40 px-3 py-1.5 rounded-full border border-black/10">
+              Hidden in preview
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

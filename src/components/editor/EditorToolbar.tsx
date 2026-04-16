@@ -23,7 +23,7 @@ export function EditorToolbar() {
   ];
 
   return (
-    <div className="h-13 border-b border-black/10 bg-white flex items-center justify-between px-4 shrink-0 gap-4">
+    <div className="h-13 border-b border-black/10 bg-white flex items-center justify-between px-4 shrink-0 gap-4 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
       {/* Left */}
       <div className="flex items-center gap-3 min-w-0">
         <Link
@@ -62,7 +62,7 @@ export function EditorToolbar() {
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 active:scale-95 ${
               mode === m.id ? "bg-white text-black shadow-sm" : "text-black/45 hover:text-black/70"
             }`}
           >
@@ -75,18 +75,18 @@ export function EditorToolbar() {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={openNewProposal}
-          className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition text-black/60"
+          className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition-all duration-150 active:scale-95 text-black/60"
         >
           New
         </button>
         <button
           onClick={handlePrint}
-          className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition text-black/60"
+          className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition-all duration-150 active:scale-95 text-black/60"
         >
           Export PDF
         </button>
         <button
-          className="px-4 py-1.5 text-sm bg-[#1b3a2d] text-white rounded-lg hover:bg-[#2d5a40] transition font-medium"
+          className="px-4 py-1.5 text-sm bg-[#1b3a2d] text-white rounded-lg hover:bg-[#2d5a40] transition-all duration-150 active:scale-95 font-medium"
         >
           Save
         </button>

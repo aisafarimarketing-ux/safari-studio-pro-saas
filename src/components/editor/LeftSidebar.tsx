@@ -27,18 +27,18 @@ export function LeftSidebar() {
             <button
               key={section.id}
               onClick={() => scrollTo(section.id)}
-              className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 transition text-[13px] ${
+              className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 transition-all duration-150 text-[13px] border-l-[3px] ${
                 isSelected
-                  ? "bg-[#1b3a2d] text-white"
-                  : `hover:bg-black/8 ${section.visible ? "text-black/65" : "text-black/30"}`
+                  ? "bg-[#1b3a2d] text-white border-l-[#c9a84c]"
+                  : `hover:bg-black/[0.055] border-l-transparent ${section.visible ? "text-black/65" : "text-black/30"}`
               }`}
             >
-              <span className={`text-sm shrink-0 w-5 text-center ${isSelected ? "text-white/70" : "text-black/30"}`}>
+              <span className={`text-sm shrink-0 w-5 text-center ${isSelected ? "text-white/65" : "text-black/30"}`}>
                 {def?.icon ?? "◻"}
               </span>
               <span className="truncate">{def?.label ?? section.type}</span>
               {!section.visible && (
-                <span className={`ml-auto text-[10px] shrink-0 ${isSelected ? "text-white/40" : "text-black/25"}`}>
+                <span className={`ml-auto text-[10px] shrink-0 ${isSelected ? "text-white/35" : "text-black/25"}`}>
                   hidden
                 </span>
               )}
