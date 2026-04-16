@@ -23,7 +23,7 @@ export function CoverSection({ section }: { section: Section }) {
   if (variant === "centered-editorial") {
     return (
       <div
-        className="relative w-full min-h-screen flex flex-col overflow-hidden"
+        className={`relative w-full flex flex-col overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}
         style={{ background: tokens.accent }}
       >
         {/* Full-bleed hero */}
@@ -138,7 +138,7 @@ export function CoverSection({ section }: { section: Section }) {
 
   // ── Cinematic-split (default) ───────────────────────────────────────────────
   return (
-    <div className="relative w-full min-h-screen flex overflow-hidden">
+    <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
       {/* Right: full-bleed image */}
       <div className="absolute inset-0">
         {heroUrl ? (
@@ -172,7 +172,7 @@ export function CoverSection({ section }: { section: Section }) {
       </div>
 
       {/* Left: text column */}
-      <div className="relative z-10 flex flex-col justify-between w-full md:w-[52%] min-h-screen px-10 md:px-14 py-10">
+      <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
           {operator.logoUrl ? (

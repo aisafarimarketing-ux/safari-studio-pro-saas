@@ -58,7 +58,7 @@ export function ProposalEditor() {
       <div className="flex flex-1 min-h-0">
         <LeftSidebar />
 
-        <div className="flex-1 min-w-0 proposal-canvas">
+        <div className="flex-1 min-w-0 flex flex-col proposal-canvas">
           <ProposalCanvas />
         </div>
 
