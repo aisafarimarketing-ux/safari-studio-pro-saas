@@ -1,0 +1,59 @@
+// ─── Safari Studio — Prisma Schema ──────────────────────────────────────────
+//
+// Document-store pattern: the full editor state (sections, days, properties,
+// pricing, theme, etc.) is stored as a single JSONB column.  Top-level fields
+// are extracted for listing / filtering without parsing the blob.
+//
+// User rows are created on first save, keyed by the auth provider's user ID
+// (Clerk clerkUserId).  No password or session data lives here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User ───────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  clerkUserId String   @unique
+  email       String?
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  proposals Proposal[]
+
+  @@index([clerkUserId])
+}
+
+// ─── Proposal ───────────────────────────────────────────────────────────────
+//
+// contentJson holds the entire Proposal object from src/lib/types.ts:
+//   { id, metadata, operator, client, trip, theme, activeTier, visibleTiers,
+//     sections, days, properties, pricing, inclusions, exclusions, practicalInfo }
+//
+// title and status are denormalised for queries (list proposals, filter drafts).
+
+model Proposal {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String   @default("Untitled Proposal")
+  status    String   @default("draft")       // draft | sent | accepted
+  isPublic  Boolean  @default(false)
+  shareSlug String?  @unique
+
+  contentJson Json   // Full Proposal object — see src/lib/types.ts
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([shareSlug])
+}

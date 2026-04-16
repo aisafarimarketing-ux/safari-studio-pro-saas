@@ -25,7 +25,7 @@ function makeSection(
 
 export const DEFAULT_DAYS: Day[] = [
   {
-    id: "day1",
+    id: nanoid(),
     dayNumber: 1,
     destination: "Nairobi",
     country: "Kenya",
@@ -40,7 +40,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day2",
+    id: nanoid(),
     dayNumber: 2,
     destination: "Masai Mara",
     country: "Kenya",
@@ -55,7 +55,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day3",
+    id: nanoid(),
     dayNumber: 3,
     destination: "Masai Mara",
     country: "Kenya",
@@ -70,7 +70,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day4",
+    id: nanoid(),
     dayNumber: 4,
     destination: "Amboseli",
     country: "Kenya",
@@ -85,7 +85,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day5",
+    id: nanoid(),
     dayNumber: 5,
     destination: "Amboseli",
     country: "Kenya",
@@ -100,7 +100,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day6",
+    id: nanoid(),
     dayNumber: 6,
     destination: "Tsavo East",
     country: "Kenya",
@@ -115,7 +115,7 @@ export const DEFAULT_DAYS: Day[] = [
     },
   },
   {
-    id: "day7",
+    id: nanoid(),
     dayNumber: 7,
     destination: "Nairobi",
     country: "Kenya",
@@ -135,7 +135,7 @@ export const DEFAULT_DAYS: Day[] = [
 
 export const DEFAULT_PROPERTIES: Property[] = [
   {
-    id: "prop1",
+    id: nanoid(),
     name: "Governors' Camp",
     location: "Masai Mara, Kenya",
     shortDesc: "A classic riverside camp with 37 years of Mara history",
@@ -151,7 +151,7 @@ export const DEFAULT_PROPERTIES: Property[] = [
     galleryUrls: [],
   },
   {
-    id: "prop2",
+    id: nanoid(),
     name: "Tortilis Camp",
     location: "Amboseli, Kenya",
     shortDesc: "Elegant tents beneath acacia trees with Kilimanjaro as backdrop",
@@ -262,25 +262,25 @@ export function buildDefaultProposal(): Proposal {
     ],
     practicalInfo: [
       {
-        id: "pi1",
+        id: nanoid(),
         title: "Visas",
         body: "Kenya operates an eTA (electronic Travel Authorisation) system. Apply online at etakenya.go.ke at least 72 hours before departure. Cost is USD 30 per person.",
         icon: "✈",
       },
       {
-        id: "pi2",
+        id: nanoid(),
         title: "Health",
         body: "Malaria prophylaxis is recommended. Yellow fever vaccination is required if arriving from an endemic country. Consult your GP or travel clinic 6–8 weeks before departure.",
         icon: "⚕",
       },
       {
-        id: "pi3",
+        id: nanoid(),
         title: "Climate",
         body: "July is one of Kenya's coolest and driest months — ideal for game viewing. Expect warm days (24–28°C) and cool evenings (12–16°C). Pack layers for early morning drives.",
         icon: "☀",
       },
       {
-        id: "pi4",
+        id: nanoid(),
         title: "What to pack",
         body: "Neutral earth tones (khaki, olive, sand). No white or bright colours on game drives. Comfortable walking shoes, sun hat, quality sunscreen, and a light fleece or jacket.",
         icon: "🎒",
