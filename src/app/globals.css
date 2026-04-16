@@ -1,12 +1,15 @@
+/* ── Google Fonts must come before tailwind ─────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Serif+Display:ital@0;1&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Jost:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&family=Inter:wght@300;400;500;600&family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Nunito+Sans:wght@300;400;600&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400&display=swap");
+
 @import "tailwindcss";
 
+/* ── CSS Variables ──────────────────────────────────────────────────────── */
 :root {
   --background: #f8f5ef;
   --foreground: #1a1a1a;
   --forest: #1b3a2d;
   --forest-mid: #2d5a40;
   --gold: #c9a84c;
-  --gold-light: #f0c040;
 }
 
 @theme inline {
@@ -14,21 +17,87 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-playfair);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  font-family: var(--font-geist-sans, "Jost", system-ui, sans-serif);
 }
 
-/* Smooth scrolling for anchor links */
-html {
-  scroll-behavior: smooth;
+/* ── Proposal canvas — dynamic font pair vars ─────────────────────────────── */
+.proposal-canvas {
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-body: "Jost", system-ui, sans-serif;
 }
 
-/* Apply Playfair to .font-serif */
-.font-serif {
-  font-family: var(--font-playfair, Georgia, serif);
+/* ── Toolbar height shorthand ─────────────────────────────────────────────── */
+.h-13 {
+  height: 3.25rem;
+}
+
+/* ── Subtle scrollbars ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* ── Print / PDF export ───────────────────────────────────────────────────── */
+@media print {
+  /* Hide ALL editor chrome */
+  [data-editor-chrome],
+  .editor-toolbar,
+  .editor-sidebar,
+  .context-panel,
+  .section-chrome-overlay,
+  .add-section-inserter,
+  [contenteditable]:focus {
+    display: none !important;
+  }
+
+  /* Full-width proposal, no shadows */
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .proposal-canvas {
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Page breaks */
+  .day-card,
+  .property-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Ensure colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

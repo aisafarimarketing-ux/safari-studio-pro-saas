@@ -1,0 +1,43 @@
+"use client";
+
+import { useProposalStore } from "@/store/proposalStore";
+import { useEditorStore } from "@/store/editorStore";
+import type { Section } from "@/lib/types";
+
+export function CustomTextSection({ section }: { section: Section }) {
+  const { proposal, updateSectionContent } = useProposalStore();
+  const { mode } = useEditorStore();
+  const isEditor = mode === "editor";
+  const { theme } = proposal;
+  const tokens = theme.tokens;
+  const isCentered = section.layoutVariant === "centered";
+  const heading = section.content.heading as string;
+  const body = section.content.body as string;
+
+  return (
+    <div className={`py-16 px-8 md:px-16 ${isCentered ? "text-center" : ""}`} style={{ background: tokens.sectionSurface }}>
+      <div className="max-w-3xl mx-auto space-y-4">
+        {(heading || isEditor) && (
+          <h2
+            className="text-3xl font-bold outline-none"
+            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateSectionContent(section.id, { heading: e.currentTarget.textContent ?? "" })}
+          >
+            {heading || (isEditor ? "Section heading" : "")}
+          </h2>
+        )}
+        <div
+          className="text-base leading-[1.9] outline-none whitespace-pre-line"
+          style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+        >
+          {body || (isEditor ? "Click to start typing..." : "")}
+        </div>
+      </div>
+    </div>
+  );
+}
