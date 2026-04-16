@@ -1,10 +1,29 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { HexColorPicker, HexColorInput } from "react-colorful";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
+
+/** Persist recent colors to localStorage */
+const RECENT_KEY = "ss-recent-colors";
+const MAX_RECENT = 8;
+
+function getRecentColors(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function addRecentColor(color: string) {
+  const recent = getRecentColors().filter((c) => c !== color);
+  recent.unshift(color);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+}
 
 /**
  * Portal-rendered color picker that floats at click coordinates.
@@ -12,19 +31,23 @@ import { useProposalStore } from "@/store/proposalStore";
  */
 export function FloatingColorPicker() {
   const { floatingPicker, closeFloatingPicker, setFloatingPickerColor } = useEditorStore();
-  const { updateThemeTokens, updateSectionStyleOverrides } = useProposalStore();
+  const { proposal, updateThemeTokens, updateSectionStyleOverrides } = useProposalStore();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Save to recent on close
+  const handleClose = useCallback(() => {
+    if (floatingPicker?.color) addRecentColor(floatingPicker.color);
+    closeFloatingPicker();
+  }, [floatingPicker, closeFloatingPicker]);
 
   // Close on outside click or Escape
   useEffect(() => {
     if (!floatingPicker) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        closeFloatingPicker();
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) handleClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeFloatingPicker();
+      if (e.key === "Escape") handleClose();
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -32,7 +55,7 @@ export function FloatingColorPicker() {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [floatingPicker, closeFloatingPicker]);
+  }, [floatingPicker, handleClose]);
 
   if (!floatingPicker || typeof window === "undefined") return null;
 
@@ -40,7 +63,7 @@ export function FloatingColorPicker() {
 
   // Keep picker on-screen
   const pickerW = 228;
-  const pickerH = 310;
+  const pickerH = 400;
   const clampedX = Math.min(Math.max(x, 8), window.innerWidth - pickerW - 8);
   const clampedY = Math.min(Math.max(y, 8), window.innerHeight - pickerH - 8);
 
@@ -67,6 +90,26 @@ export function FloatingColorPicker() {
     badgeBg: "Badge",
   };
 
+  // Brand colors from operator profile
+  const brandColors = [
+    proposal.operator.brandColors.primary,
+    proposal.operator.brandColors.secondary,
+  ].filter(Boolean);
+
+  // Current theme colors (useful swatches)
+  const themeSwatches = [
+    proposal.theme.tokens.pageBg,
+    proposal.theme.tokens.sectionSurface,
+    proposal.theme.tokens.accent,
+    proposal.theme.tokens.secondaryAccent,
+    proposal.theme.tokens.headingText,
+    proposal.theme.tokens.bodyText,
+  ];
+
+  // Deduplicate
+  const uniqueSwatches = [...new Set([...brandColors, ...themeSwatches])].slice(0, 8);
+  const recentColors = getRecentColors().filter((c) => !uniqueSwatches.includes(c)).slice(0, 6);
+
   return createPortal(
     <div
       ref={ref}
@@ -80,7 +123,7 @@ export function FloatingColorPicker() {
           {labelMap[token] ?? token}
         </span>
         <button
-          onClick={closeFloatingPicker}
+          onClick={handleClose}
           className="w-5 h-5 flex items-center justify-center rounded-full text-black/30 hover:text-black/70 hover:bg-black/5 text-xs transition"
         >
           ×
@@ -108,27 +151,48 @@ export function FloatingColorPicker() {
         />
       </div>
 
-      {/* Quick swatches */}
-      <div className="flex gap-1.5 mt-3 flex-wrap">
-        {["#f8f5ef", "#1b3a2d", "#c9a84c", "#ffffff", "#1a1a1a", "#e8e2d7", "#2d5a40", "#f0ebe2"].map((s) => (
-          <button
-            key={s}
-            onClick={() => handleChange(s)}
-            className="w-5 h-5 rounded-md border border-black/10 hover:scale-110 transition"
-            style={{ background: s }}
-            title={s}
-          />
-        ))}
+      {/* Brand & theme colors */}
+      <div className="mt-3">
+        <div className="text-[9px] uppercase tracking-wider text-black/30 mb-1.5">Theme colors</div>
+        <div className="flex gap-1.5 flex-wrap">
+          {uniqueSwatches.map((s) => (
+            <button
+              key={s}
+              onClick={() => handleChange(s)}
+              className={`w-5 h-5 rounded-md border hover:scale-110 transition ${color === s ? "border-black/40 ring-1 ring-black/20" : "border-black/10"}`}
+              style={{ background: s }}
+              title={s}
+            />
+          ))}
+        </div>
       </div>
+
+      {/* Recent colors */}
+      {recentColors.length > 0 && (
+        <div className="mt-2.5">
+          <div className="text-[9px] uppercase tracking-wider text-black/30 mb-1.5">Recent</div>
+          <div className="flex gap-1.5 flex-wrap">
+            {recentColors.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleChange(s)}
+                className="w-5 h-5 rounded-md border border-black/10 hover:scale-110 transition"
+                style={{ background: s }}
+                title={s}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Reset (section-level only) */}
       {sectionId && (
         <button
           onClick={() => {
             useProposalStore.getState().resetSectionOverrides(sectionId);
-            closeFloatingPicker();
+            handleClose();
           }}
-          className="mt-3 w-full text-[11px] text-black/40 hover:text-black/70 py-1 border border-black/8 rounded-lg hover:bg-black/4 transition"
+          className="mt-3 w-full text-[11px] text-black/40 hover:text-black/70 py-1.5 border border-black/8 rounded-lg hover:bg-black/4 transition"
         >
           Reset to theme
         </button>

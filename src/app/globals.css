@@ -59,39 +59,55 @@ body {
 
 /* ── Direct manipulation affordances (editor mode only) ──────────────────── */
 
-/* Text elements: blue dashed outline on hover */
+/* Text elements: subtle dashed outline on hover, solid on focus */
+.dm-editing [contenteditable="true"] {
+  transition: outline-color 120ms ease, background 120ms ease;
+  border-radius: 3px;
+}
 .dm-editing [contenteditable="true"]:hover {
-  outline: 1.5px dashed rgba(59, 130, 246, 0.45) !important;
-  outline-offset: 2px;
-  border-radius: 2px;
+  outline: 1.5px dashed rgba(59, 130, 246, 0.35) !important;
+  outline-offset: 3px;
   cursor: text;
 }
 .dm-editing [contenteditable="true"]:focus {
-  outline: 1.5px solid rgba(59, 130, 246, 0.6) !important;
-  outline-offset: 2px;
-  border-radius: 2px;
+  outline: 1.5px solid rgba(59, 130, 246, 0.55) !important;
+  outline-offset: 3px;
+  background: rgba(59, 130, 246, 0.03);
 }
 
-/* Card elements: subtle green lift on hover */
+/* Card elements: subtle lift on hover */
 .dm-editing .dm-card {
-  transition: outline 120ms ease, box-shadow 120ms ease;
+  transition: outline 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 .dm-editing .dm-card:hover {
-  outline: 2px solid rgba(27, 58, 45, 0.18) !important;
+  outline: 2px solid rgba(27, 58, 45, 0.15) !important;
   outline-offset: 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
 /* Background targets: gold dashed on hover */
 .dm-editing .dm-bg:hover {
-  outline: 2px dashed rgba(201, 168, 76, 0.55) !important;
+  outline: 2px dashed rgba(201, 168, 76, 0.45) !important;
   outline-offset: -2px;
   cursor: crosshair;
 }
 
 /* Image upload zones */
+.dm-editing .dm-image {
+  transition: outline 120ms ease, background 120ms ease;
+}
 .dm-editing .dm-image:hover {
-  outline: 2px dashed rgba(16, 185, 129, 0.5) !important;
+  outline: 2px dashed rgba(16, 185, 129, 0.4) !important;
   outline-offset: -2px;
+  background: rgba(16, 185, 129, 0.04) !important;
+}
+
+/* Section hover: subtle left accent bar */
+.dm-editing [data-editor-chrome] > div {
+  transition: box-shadow 200ms ease;
+}
+.dm-editing [data-editor-chrome] > div:hover {
+  box-shadow: inset 3px 0 0 rgba(27, 58, 45, 0.12);
 }
 
 /* ── Entrance animations ──────────────────────────────────────────────────── */
