@@ -55,8 +55,12 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
         </div>
       )}
 
-      {isLargeImage ? (
+      {variant === "large-image-detail-block" ? (
         <LargeImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
+      ) : variant === "card-grid" ? (
+        <CardGridLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
+      ) : variant === "full-bleed" ? (
+        <FullBleedLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : (
         <SplitImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       )}
@@ -214,6 +218,111 @@ function SplitImageLayout({ property, isEditor, tokens, theme, updateProperty, h
   );
 }
 
+// ── Card grid: compact vertical card ────────────────────────────────────────────
+
+function CardGridLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
+  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
+  updateProperty: (id: string, patch: Partial<Property>) => void;
+  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      <div className="relative h-[220px] overflow-hidden" style={{ background: tokens.cardBg }}>
+        {property.leadImageUrl ? (
+          <>
+            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
+            {isEditor && (
+              <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+                Change
+              </label>
+            )}
+          </>
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            <div className="text-2xl opacity-30">+</div>
+          </label>
+        ) : null}
+      </div>
+      <div className="p-6">
+        <h3
+          className="text-lg font-bold leading-tight outline-none mb-1"
+          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
+        >
+          {property.name}
+        </h3>
+        <div className="text-[11px] mb-3" style={{ color: tokens.mutedText }}>{property.location}</div>
+        <p
+          className="text-[12.5px] leading-[1.8] outline-none"
+          style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
+        >
+          {property.shortDesc || property.description}
+        </p>
+        <div className="flex gap-4 mt-4 text-[10px]" style={{ color: tokens.mutedText }}>
+          {property.nights && <span>{property.nights} nights</span>}
+          {property.mealPlan && <span>{property.mealPlan}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Full-bleed: edge-to-edge image with floating text card ──────────────────
+
+function FullBleedLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
+  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
+  updateProperty: (id: string, patch: Partial<Property>) => void;
+  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <div className="relative" style={{ background: tokens.cardBg }}>
+      <div className="relative h-[400px] overflow-hidden">
+        {property.leadImageUrl ? (
+          <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            <div className="text-3xl opacity-30 mb-1">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)" }} />
+        {property.leadImageUrl && isEditor && (
+          <label className="absolute top-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            Change
+          </label>
+        )}
+      </div>
+      {/* Floating card overlapping image */}
+      <div
+        className="relative -mt-20 mx-6 md:mx-10 p-8 rounded-xl"
+        style={{ background: tokens.sectionSurface, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+      >
+        <h3
+          className="text-[1.5rem] font-bold leading-tight outline-none mb-1"
+          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
+        >
+          {property.name}
+        </h3>
+        <div className="text-sm mb-4" style={{ color: tokens.mutedText }}>{property.location}</div>
+        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={false} />
+      </div>
+      <div className="h-6" />
+    </div>
+  );
+}
+
 // ── Shared details block ───────────────────────────────────────────────────────
 
 function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, showHeader }: {
@@ -320,7 +429,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={properties.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-6">
+            <div className={section.layoutVariant === "card-grid" ? "grid grid-cols-1 md:grid-cols-2 gap-5" : "space-y-6"}>
               {properties.map((property) => (
                 <div className="relative" key={property.id}>
                   <PropertyCard property={property} variant={section.layoutVariant} />

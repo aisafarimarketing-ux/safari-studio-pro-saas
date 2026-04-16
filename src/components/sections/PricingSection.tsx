@@ -15,6 +15,111 @@ export function PricingSection({ section }: { section: Section }) {
   const nights = days.length || proposal.trip.nights;
   const visibleKeys = TIER_KEYS.filter((t) => visibleTiers[t]);
 
+  // ── Horizontal — side-by-side tier comparison ─────────────────────────────
+  if (section.layoutVariant === "horizontal") {
+    return (
+      <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
+        <div className="max-w-5xl mx-auto">
+          <div className="text-[10px] uppercase tracking-[0.3em] mb-10" style={{ color: tokens.mutedText }}>
+            Investment
+          </div>
+          <div className="space-y-3">
+            {visibleKeys.map((tier) => {
+              const p = pricing[tier];
+              const isActive = activeTier === tier;
+              return (
+                <div
+                  key={tier}
+                  onClick={() => setActiveTier(tier)}
+                  className="flex items-center justify-between p-6 rounded-xl cursor-pointer transition-all duration-200 hover:shadow-md"
+                  style={{
+                    background: isActive ? `${tokens.accent}10` : tokens.cardBg,
+                    border: `1.5px solid ${isActive ? tokens.accent : tokens.border}`,
+                  }}
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-3 h-3 rounded-full border-2"
+                      style={{ borderColor: tokens.accent, background: isActive ? tokens.accent : "transparent" }}
+                    />
+                    <div>
+                      <div className="text-[13px] font-semibold" style={{ color: tokens.headingText }}>{p.label}</div>
+                      {p.highlighted && <span className="text-[9px] uppercase tracking-wider" style={{ color: tokens.secondaryAccent }}>Recommended</span>}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className="text-2xl font-bold outline-none"
+                      style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+                      contentEditable={isEditor}
+                      suppressContentEditableWarning
+                      onBlur={(e) => updateTierPrice(tier, e.currentTarget.textContent ?? p.pricePerPerson)}
+                    >
+                      {p.currency} {p.pricePerPerson}
+                    </span>
+                    <div className="text-[11px]" style={{ color: tokens.mutedText }}>per person · {nights} nights</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {pricing.notes && (
+            <p className="mt-8 text-sm text-center outline-none" style={{ color: tokens.mutedText }}
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updatePricingNotes(e.currentTarget.textContent ?? "")}>{pricing.notes}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Minimal — clean single-line pricing ──────────────────────────────────────
+  if (section.layoutVariant === "minimal") {
+    return (
+      <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
+            Investment
+          </div>
+          {visibleKeys.map((tier) => {
+            const p = pricing[tier];
+            const isActive = activeTier === tier;
+            return (
+              <div
+                key={tier}
+                className="flex items-baseline justify-between py-5 cursor-pointer"
+                style={{ borderBottom: `1px solid ${tokens.border}` }}
+                onClick={() => setActiveTier(tier)}
+              >
+                <div className="flex items-baseline gap-3">
+                  <span className="text-sm font-semibold" style={{ color: isActive ? tokens.accent : tokens.headingText }}>
+                    {p.label}
+                  </span>
+                  {isActive && <span className="text-[9px]" style={{ color: tokens.accent }}>Selected</span>}
+                </div>
+                <span
+                  className="text-xl font-bold outline-none"
+                  style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => updateTierPrice(tier, e.currentTarget.textContent ?? p.pricePerPerson)}
+                >
+                  {p.currency} {p.pricePerPerson}
+                </span>
+              </div>
+            );
+          })}
+          {pricing.notes && (
+            <p className="mt-8 text-[13px] outline-none" style={{ color: tokens.mutedText }}
+              contentEditable={isEditor} suppressContentEditableWarning
+              onBlur={(e) => updatePricingNotes(e.currentTarget.textContent ?? "")}>{pricing.notes}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Default — tier cards ──────────────────────────────────────────────────
   return (
     <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">

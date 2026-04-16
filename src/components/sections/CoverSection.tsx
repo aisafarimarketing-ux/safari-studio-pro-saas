@@ -136,6 +136,153 @@ export function CoverSection({ section }: { section: Section }) {
     );
   }
 
+  // ── Minimal-type — typography-focused, no hero image ─────────────────────────
+  if (variant === "minimal-type") {
+    return (
+      <div
+        className={`relative w-full flex flex-col justify-center overflow-hidden px-10 md:px-20 py-20 ${isEditor ? "min-h-[500px]" : "min-h-[80vh]"}`}
+        style={{ background: tokens.sectionSurface }}
+      >
+        {/* Operator top-left */}
+        <div className="absolute top-8 left-10">
+          {operator.logoUrl ? (
+            <img src={operator.logoUrl} alt={operator.companyName} className="h-7 object-contain" />
+          ) : (
+            <span className="text-[10px] uppercase tracking-[0.3em] font-semibold" style={{ color: tokens.mutedText }}>
+              {operator.companyName}
+            </span>
+          )}
+        </div>
+
+        <div className="max-w-3xl">
+          {/* Destinations as overline */}
+          {trip.destinations.length > 0 && (
+            <div className="text-[10px] uppercase tracking-[0.35em] mb-6" style={{ color: tokens.accent }}>
+              {trip.destinations.join(" · ")}
+            </div>
+          )}
+
+          <h1
+            className="text-[clamp(3rem,8vw,5.5rem)] font-bold leading-[0.95] tracking-tight outline-none"
+            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}
+          >
+            {trip.title}
+          </h1>
+
+          <div className="w-16 mt-8 mb-8" style={{ height: "2px", background: tokens.accent }} />
+
+          <p
+            className="text-lg leading-relaxed max-w-md outline-none"
+            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
+          >
+            {(section.content.tagline as string) || trip.subtitle}
+          </p>
+
+          <div className="mt-10 flex items-center gap-6" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+            <div
+              className="text-base font-semibold outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+            >
+              {client.guestNames}
+            </div>
+            <span style={{ color: tokens.border }}>|</span>
+            <div
+              className="text-sm outline-none"
+              style={{ color: tokens.mutedText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+            >
+              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Full-bleed-overlay — image with centered text block overlay ─────────────
+  if (variant === "full-bleed-overlay") {
+    return (
+      <div
+        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}
+        style={{ background: tokens.accent }}
+      >
+        {heroUrl ? (
+          <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 cursor-pointer flex items-center justify-center">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-white/30 text-center">
+              <div className="text-5xl mb-3">+</div>
+              <div className="text-sm">Add hero image</div>
+            </div>
+          </label>
+        ) : null}
+
+        {/* Dark overlay */}
+        <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.5)" }} />
+
+        {/* Centered card */}
+        <div className="relative z-10 flex items-center justify-center min-h-[inherit] px-8 py-16">
+          <div
+            className="max-w-lg text-center p-12 md:p-16 rounded-2xl"
+            style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)" }}
+          >
+            {operator.companyName && (
+              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 mb-8 font-semibold">
+                {operator.companyName}
+              </div>
+            )}
+            <h1
+              className="text-[clamp(2rem,5vw,3.5rem)] font-bold text-white leading-[1.05] outline-none"
+              style={{ fontFamily: `'${theme.displayFont}', serif` }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}
+            >
+              {trip.title}
+            </h1>
+            <div className="w-10 mx-auto my-6" style={{ height: "1px", background: "rgba(255,255,255,0.25)" }} />
+            <div
+              className="text-white/70 text-sm outline-none"
+              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+            >
+              {client.guestNames}
+            </div>
+            <div
+              className="text-white/45 text-xs mt-2 outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+            >
+              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+            </div>
+          </div>
+        </div>
+
+        {heroUrl && isEditor && (
+          <label className="absolute bottom-5 right-5 z-20 cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change image
+          </label>
+        )}
+      </div>
+    );
+  }
+
   // ── Cinematic-split (default) ───────────────────────────────────────────────
   return (
     <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>

@@ -87,6 +87,81 @@ export function GreetingSection({ section }: { section: Section }) {
     );
   }
 
+  // ── Centered-minimal — clean centered letter, no sidebar ────────────────────
+  if (variant === "centered-minimal") {
+    return (
+      <div className="py-28 md:py-36 px-8 md:px-20 text-center" style={{ background: tokens.sectionSurface }}>
+        <div className="max-w-[560px] mx-auto">
+          <div className="text-[10px] uppercase tracking-[0.3em] mb-10" style={{ color: tokens.accent }}>
+            Welcome
+          </div>
+          <div
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            className="text-[1.15rem] leading-[2.2] outline-none whitespace-pre-line"
+            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+            onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+          >
+            {section.content.body as string}
+          </div>
+          <div className="mt-12 inline-flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: tokens.cardBg }}>
+              {operator.consultantPhoto ? (
+                <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ color: tokens.accent }}>
+                  {operator.consultantName?.charAt(0) ?? "?"}
+                </div>
+              )}
+            </div>
+            <span className="text-sm font-medium" style={{ color: tokens.headingText }}>{operator.consultantName}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sidebar-accent — colored accent bar left, letter right ─────────────────
+  if (variant === "sidebar-accent") {
+    return (
+      <div className="flex" style={{ background: tokens.sectionSurface }}>
+        {/* Accent sidebar */}
+        <div className="hidden md:block w-2 shrink-0" style={{ background: tokens.accent }} />
+        <div className="flex-1 py-24 md:py-32 px-10 md:px-16">
+          <div className="max-w-[620px]">
+            <div className="text-[10px] uppercase tracking-[0.28em] mb-10" style={{ color: tokens.mutedText }}>
+              A personal note
+            </div>
+            <div
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              className="text-[1.05rem] leading-[2.1] outline-none whitespace-pre-line"
+              style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+            >
+              {section.content.body as string}
+            </div>
+            <div className="mt-14 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full overflow-hidden shrink-0" style={{ background: tokens.cardBg }}>
+                {operator.consultantPhoto ? (
+                  <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-sm font-bold" style={{ color: tokens.accent }}>
+                    {operator.consultantName?.charAt(0) ?? "?"}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-semibold" style={{ color: tokens.headingText }}>{operator.consultantName}</div>
+                <div className="text-xs mt-0.5" style={{ color: tokens.mutedText }}>{operator.companyName}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Editorial-letter (default) ─────────────────────────────────────────────
   return (
     <div className="py-28 md:py-36 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>

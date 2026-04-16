@@ -52,7 +52,12 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
     signature: tokens.accent,
   };
 
-  const isStacked = variant === "stacked-image-text";
+  const layoutMap: Record<string, string> = {
+    "stacked-image-text": "stacked",
+    "compact-timeline": "compact",
+    "magazine-spread": "magazine",
+  };
+  const layoutType = layoutMap[variant] ?? "split";
 
   return (
     <div
@@ -90,8 +95,12 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
         </div>
       )}
 
-      {isStacked ? (
+      {layoutType === "stacked" ? (
         <StackedLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+      ) : layoutType === "compact" ? (
+        <CompactLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+      ) : layoutType === "magazine" ? (
+        <MagazineLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
       ) : (
         <SplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
       )}
@@ -213,6 +222,160 @@ function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
       </div>
       <div className="p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
         <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
+      </div>
+    </div>
+  );
+}
+
+// ── Compact layout: small image left, tight text right ───────────────────────
+
+function CompactLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+  day: Day; isEditor: boolean; tokens: ThemeTokens;
+  theme: ProposalTheme;
+  activeTier: string; visibleTiers: Record<string, boolean>;
+  tierColors: Record<string, string>;
+  handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateDay: (id: string, patch: Partial<Day>) => void;
+}) {
+  return (
+    <div className="grid md:grid-cols-[140px_1fr] gap-0" style={{ background: tokens.sectionSurface }}>
+      {/* Small square image */}
+      <div className="relative h-[140px] md:h-auto overflow-hidden" style={{ background: tokens.cardBg }}>
+        {day.heroImageUrl ? (
+          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex items-center justify-center cursor-pointer dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-xl opacity-30">+</div>
+          </label>
+        ) : null}
+        <div
+          className="absolute bottom-2 left-2 text-[9px] font-bold text-white px-2 py-0.5 rounded-full uppercase tracking-wider"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+        >
+          Day {day.dayNumber}
+        </div>
+      </div>
+
+      {/* Compact content */}
+      <div className="p-5 md:p-6 flex flex-col gap-2">
+        <div className="flex items-baseline gap-3">
+          <h3
+            className="text-lg font-bold leading-tight outline-none"
+            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateDay(day.id, { destination: e.currentTarget.textContent ?? day.destination })}
+          >
+            {day.destination}
+          </h3>
+          <span className="text-[10px] shrink-0" style={{ color: tokens.mutedText }}>
+            {day.board}
+          </span>
+        </div>
+        <p
+          className="text-[12.5px] leading-[1.8] outline-none line-clamp-3"
+          style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
+        >
+          {day.description}
+        </p>
+        {/* Inline accommodation */}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-1">
+          {(["classic", "premier", "signature"] as const).map((tier) => {
+            if (!visibleTiers[tier]) return null;
+            const acc = day.tiers[tier];
+            const isActive = activeTier === tier;
+            return (
+              <span key={tier} className="text-[11px]" style={{ color: isActive ? tierColors[tier] : tokens.mutedText }}>
+                <span className="font-semibold">{acc.camp}</span>
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Magazine layout: alternating full-width image with text overlay ──────────
+
+function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+  day: Day; isEditor: boolean; tokens: ThemeTokens;
+  theme: ProposalTheme;
+  activeTier: string; visibleTiers: Record<string, boolean>;
+  tierColors: Record<string, string>;
+  handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateDay: (id: string, patch: Partial<Day>) => void;
+}) {
+  return (
+    <div>
+      {/* Full-width cinematic image */}
+      <div className="relative w-full h-[360px] overflow-hidden" style={{ background: tokens.cardBg }}>
+        {day.heroImageUrl ? (
+          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-3xl mb-2 opacity-30">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+        {/* Gradient overlay */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)" }} />
+        {/* Overlaid title */}
+        <div className="absolute bottom-0 left-0 right-0 p-8 md:p-10">
+          <div className="text-[9px] uppercase tracking-[0.28em] text-white/50 mb-2">
+            Day {day.dayNumber} · {day.country}
+          </div>
+          <h2
+            className="text-[2rem] md:text-[2.5rem] font-bold text-white leading-tight outline-none"
+            style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 12px rgba(0,0,0,0.3)" }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateDay(day.id, { destination: e.currentTarget.textContent ?? day.destination })}
+          >
+            {day.destination}
+          </h2>
+        </div>
+        {day.heroImageUrl && isEditor && (
+          <label className="absolute top-3 right-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change
+          </label>
+        )}
+      </div>
+      {/* Content below */}
+      <div className="p-8 md:p-10 grid md:grid-cols-[2fr_1fr] gap-8" style={{ background: tokens.sectionSurface }}>
+        <p
+          className="text-[13.5px] leading-[2.0] outline-none"
+          style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
+        >
+          {day.description}
+        </p>
+        <div className="space-y-3 pt-1" style={{ borderLeft: `1px solid ${tokens.border}`, paddingLeft: "1.5rem" }}>
+          <div className="text-[9px] uppercase tracking-[0.2em] mb-3" style={{ color: tokens.mutedText }}>
+            Where you&apos;ll stay
+          </div>
+          {(["classic", "premier", "signature"] as const).map((tier) => {
+            if (!visibleTiers[tier]) return null;
+            const acc = day.tiers[tier];
+            const isActive = activeTier === tier;
+            return (
+              <div key={tier}>
+                <div className={`text-[12px] ${isActive ? "font-semibold" : ""}`} style={{ color: isActive ? tokens.headingText : tokens.bodyText }}>
+                  {acc.camp}
+                </div>
+                <div className="text-[10px]" style={{ color: tokens.mutedText }}>{acc.location}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
