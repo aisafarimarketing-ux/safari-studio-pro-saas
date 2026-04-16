@@ -60,30 +60,30 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
         isSelected ? "ring-2 ring-offset-2 ring-[#1b3a2d]/30" : ""
       }`}
     >
-      {/* Drag handle + actions — editor only */}
+      {/* Editor action bar — top right */}
       {isEditor && (
-        <div className="absolute top-3 right-3 z-20 flex gap-1">
+        <div className="absolute top-3 right-3 z-20 flex gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             {...attributes}
             {...listeners}
-            className="w-8 h-8 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 cursor-grab transition"
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 cursor-grab transition text-xs"
             title="Drag to reorder"
           >
             ⠿
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); addDayAfter(day.id); }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 transition text-xs"
+            onClick={() => addDayAfter(day.id)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 transition text-xs"
             title="Add day after"
           >+</button>
           <button
-            onClick={(e) => { e.stopPropagation(); duplicateDay(day.id); }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 transition text-xs"
+            onClick={() => duplicateDay(day.id)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 transition text-xs"
             title="Duplicate"
           >⧉</button>
           <button
-            onClick={(e) => { e.stopPropagation(); removeDay(day.id); }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-red-500/80 transition text-xs"
+            onClick={() => removeDay(day.id)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-red-500/80 transition text-xs"
             title="Delete day"
           >×</button>
         </div>
@@ -98,6 +98,8 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
   );
 }
 
+// ── Split layout: image left, structured content right ──────────────────────
+
 function SplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
@@ -107,34 +109,58 @@ function SplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
   updateDay: (id: string, patch: Partial<Day>) => void;
 }) {
   return (
-    <div className="grid md:grid-cols-2 min-h-[420px]">
-      {/* Image */}
-      <div className="relative bg-[#e8e2d7] min-h-[300px] md:min-h-0">
+    <div className="grid md:grid-cols-[2fr_3fr] min-h-[440px]">
+      {/* Image column */}
+      <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden">
         {day.heroImageUrl ? (
           <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
         ) : (
           isEditor && (
-            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition">
+            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
               <div className="text-3xl mb-2 opacity-30">+</div>
               <div className="text-sm opacity-40">Add photo</div>
             </label>
           )
         )}
+        {/* Large typographic day number watermark */}
+        <div
+          className="absolute bottom-0 left-0 leading-none select-none pointer-events-none"
+          style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: "clamp(6rem, 18vw, 10rem)",
+            color: "rgba(255,255,255,0.12)",
+            lineHeight: 0.85,
+            paddingLeft: "0.1em",
+          }}
+        >
+          {String(day.dayNumber).padStart(2, "0")}
+        </div>
         {/* Day badge */}
-        <div className="absolute top-4 left-4 text-white text-xs font-semibold px-3 py-1 rounded-full"
-          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
+        <div
+          className="absolute top-4 left-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+        >
           Day {day.dayNumber}
         </div>
+        {/* Swap image button (editor) */}
+        {day.heroImageUrl && isEditor && (
+          <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change
+          </label>
+        )}
       </div>
 
-      {/* Content */}
-      <div className="p-8 md:p-10 flex flex-col justify-center" style={{ background: tokens.sectionSurface }}>
-        <TextContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
+      {/* Content column */}
+      <div className="flex flex-col justify-between p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
+        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
       </div>
     </div>
   );
 }
+
+// ── Stacked layout: full-width image top, content below ────────────────────
 
 function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
@@ -147,31 +173,53 @@ function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
   return (
     <div>
       {/* Full-width image */}
-      <div className="relative w-full h-[280px] bg-[#e8e2d7]">
+      <div className="relative w-full h-[300px] bg-[#e8e2d7] overflow-hidden">
         {day.heroImageUrl ? (
           <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover" />
         ) : (
           isEditor && (
-            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition">
+            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
               <div className="text-3xl mb-2 opacity-30">+</div>
               <div className="text-sm opacity-40">Add photo</div>
             </label>
           )
         )}
-        <div className="absolute top-4 left-4 text-white text-xs font-semibold px-3 py-1 rounded-full"
-          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}>
+        {/* Watermark number */}
+        <div
+          className="absolute bottom-0 right-4 leading-none select-none pointer-events-none"
+          style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: "clamp(5rem, 14vw, 8rem)",
+            color: "rgba(255,255,255,0.12)",
+            lineHeight: 0.85,
+          }}
+        >
+          {String(day.dayNumber).padStart(2, "0")}
+        </div>
+        <div
+          className="absolute top-4 left-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+        >
           Day {day.dayNumber}
         </div>
+        {day.heroImageUrl && isEditor && (
+          <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change
+          </label>
+        )}
       </div>
       <div className="p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
-        <TextContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
+        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
       </div>
     </div>
   );
 }
 
-function TextContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, updateDay }: {
+// ── Day content: destination + description + accommodation ──────────────────
+
+function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, updateDay }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
@@ -179,13 +227,14 @@ function TextContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
   updateDay: (id: string, patch: Partial<Day>) => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full gap-5">
+      {/* Header block */}
       <div>
-        <div className="text-[11px] uppercase tracking-[0.22em] mb-1" style={{ color: tokens.mutedText }}>
-          Day {day.dayNumber} · {day.country} · {day.board}
+        <div className="text-[10px] uppercase tracking-[0.22em] mb-2" style={{ color: tokens.mutedText }}>
+          {day.country}{day.board ? ` · ${day.board}` : ""}
         </div>
         <h2
-          className="text-4xl md:text-5xl font-bold leading-tight outline-none"
+          className="text-[2.1rem] md:text-[2.5rem] font-bold leading-[1.05] outline-none"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
@@ -195,7 +244,7 @@ function TextContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
         </h2>
         {day.subtitle && (
           <div
-            className="text-sm mt-1 outline-none"
+            className="text-[13px] mt-1.5 outline-none italic"
             style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
@@ -206,8 +255,9 @@ function TextContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
         )}
       </div>
 
+      {/* Description */}
       <p
-        className="text-[15px] leading-[1.85] outline-none"
+        className="text-[14px] leading-[1.9] outline-none flex-1"
         style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
         contentEditable={isEditor}
         suppressContentEditableWarning
@@ -217,38 +267,46 @@ function TextContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
       </p>
 
       {/* Accommodation tiers */}
-      <div className="pt-3 border-t space-y-2" style={{ borderColor: tokens.border }}>
-        <div className="text-[10px] uppercase tracking-widest" style={{ color: tokens.mutedText }}>
-          Accommodation options
+      <div
+        className="pt-4 border-t space-y-1.5"
+        style={{ borderColor: tokens.border }}
+      >
+        <div className="text-[9px] uppercase tracking-[0.2em] mb-2" style={{ color: tokens.mutedText }}>
+          Accommodation
         </div>
         {(["classic", "premier", "signature"] as const).map((tier) => {
           if (!visibleTiers[tier]) return null;
           const acc = day.tiers[tier];
           const isActive = activeTier === tier;
           return (
-            <div key={tier} className="flex items-start gap-3">
+            <div
+              key={tier}
+              className="flex items-center gap-3 py-1.5 px-2.5 rounded-xl transition"
+              style={{
+                background: isActive ? `${tierColors[tier]}18` : "transparent",
+                border: `1px solid ${isActive ? tierColors[tier] + "40" : "transparent"}`,
+              }}
+            >
               <span
-                className="text-[11px] font-bold uppercase px-2.5 py-1 rounded-full shrink-0 min-w-[72px] text-center"
+                className="text-[9px] font-bold uppercase tracking-wider w-[60px] shrink-0 text-center py-0.5 rounded-full"
                 style={{
                   background: isActive ? tierColors[tier] : "transparent",
                   color: isActive ? "white" : tierColors[tier],
-                  border: `1px solid ${tierColors[tier]}`,
+                  border: `1px solid ${tierColors[tier]}80`,
                 }}
               >
                 {tier}
               </span>
-              <div>
+              <div className="min-w-0">
                 <div
-                  className="text-sm font-medium outline-none"
+                  className="text-[13px] font-semibold leading-tight outline-none truncate"
                   style={{ color: tokens.headingText }}
                   contentEditable={isEditor}
                   suppressContentEditableWarning
                 >
                   {acc.camp}
                 </div>
-                <div
-                  className="text-xs outline-none"
-                  style={{ color: tokens.mutedText }}
+                <div className="text-[11px] truncate outline-none" style={{ color: tokens.mutedText }}
                   contentEditable={isEditor}
                   suppressContentEditableWarning
                 >
@@ -283,21 +341,51 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-16 px-8 md:px-16" style={{ background: tokens.pageBg }}>
+    <div className="py-20 px-8 md:px-16" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto">
-        <div
-          className="text-[11px] uppercase tracking-[0.22em] mb-10"
-          style={{ color: tokens.mutedText }}
-        >
-          Day-by-day journey
+        {/* Section header */}
+        <div className="flex items-end justify-between mb-12">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.22em] mb-2" style={{ color: tokens.mutedText }}>
+              Day-by-day
+            </div>
+            <div
+              className="text-[2.5rem] font-bold leading-none"
+              style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+            >
+              Your journey
+            </div>
+          </div>
+          <div className="text-sm pb-1" style={{ color: tokens.mutedText }}>
+            {days.length} {days.length === 1 ? "day" : "days"}
+          </div>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={days.map((d) => d.id)} strategy={verticalListSortingStrategy}>
-            <div className="space-y-6">
-              {days.map((day) => (
-                <DayCard key={day.id} day={day} variant={section.layoutVariant} />
-              ))}
+            {/* Timeline connector */}
+            <div className="relative">
+              {/* Vertical line on large screens */}
+              <div
+                className="hidden md:block absolute left-[-2rem] top-8 bottom-8 w-px"
+                style={{ background: `linear-gradient(to bottom, transparent, ${tokens.border} 15%, ${tokens.border} 85%, transparent)` }}
+              />
+
+              <div className="space-y-5">
+                {days.map((day, i) => (
+                  <div key={day.id} className="relative">
+                    {/* Timeline dot */}
+                    <div
+                      className="hidden md:flex absolute left-[-2.4rem] top-6 w-3 h-3 rounded-full border-2 items-center justify-center"
+                      style={{
+                        background: i === 0 ? tokens.accent : tokens.sectionSurface,
+                        borderColor: tokens.accent,
+                      }}
+                    />
+                    <DayCard day={day} variant={section.layoutVariant} />
+                  </div>
+                ))}
+              </div>
             </div>
           </SortableContext>
         </DndContext>

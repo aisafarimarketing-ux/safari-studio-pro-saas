@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
-import { buildGoogleFontsUrl } from "@/lib/theme";
 import { EditorToolbar } from "./EditorToolbar";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
