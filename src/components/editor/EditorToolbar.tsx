@@ -10,11 +10,12 @@ export function EditorToolbar() {
   const { proposal } = useProposalStore();
 
   const handlePrint = () => {
-    setMode("print");
+    // Switch to preview mode to strip all editor chrome before printing
+    setMode("preview");
     setTimeout(() => {
       window.print();
-      setTimeout(() => setMode("editor"), 500);
-    }, 200);
+      setTimeout(() => setMode("editor"), 600);
+    }, 300);
   };
 
   const modes: { id: EditorMode; label: string }[] = [

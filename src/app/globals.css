@@ -117,45 +117,129 @@ body {
 
 /* ── Print / PDF export ───────────────────────────────────────────────────── */
 @media print {
-  /* Hide ALL editor chrome */
+  /* Hide ALL editor chrome — comprehensive list */
   [data-editor-chrome],
   .editor-toolbar,
   .editor-sidebar,
   .context-panel,
   .section-chrome-overlay,
   .add-section-inserter,
-  [contenteditable]:focus {
+  .dm-card button,
+  .dm-image label,
+  [data-editor-only],
+  button[title="Drag to reorder"],
+  button[title="Duplicate"],
+  button[title="Delete section"],
+  button[title="Delete day"],
+  button[title="Add day after"],
+  button[title="Edit section background"],
+  button[title*="Hide"],
+  button[title*="Show"],
+  button[title="Remove"],
+  [contenteditable]:focus,
+  /* Preview exit button */
+  .fixed.top-4.right-4,
+  /* Floating UI */
+  .ss-popover-in,
+  [style*="z-index: 9999"] {
     display: none !important;
   }
 
-  /* Full-width proposal, no shadows */
-  body {
+  /* Reset page */
+  @page {
+    margin: 0.6in 0.5in;
+    size: A4;
+  }
+
+  html, body {
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    font-size: 11pt !important;
   }
 
-  .proposal-canvas {
+  /* Full-width proposal, no shadows */
+  .proposal-canvas,
+  .proposal-canvas > div {
     width: 100% !important;
     max-width: none !important;
     box-shadow: none !important;
+    margin: 0 !important;
   }
 
-  /* Page breaks */
+  /* Remove editor outlines */
+  [contenteditable] {
+    outline: none !important;
+  }
+
+  /* Page breaks — prevent splitting key blocks */
+  .dm-card,
   .day-card,
   .property-card {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  h1, h2, h3 {
-    page-break-after: avoid;
-    break-after: avoid;
+  /* Pricing cards should stay together */
+  [class*="grid"][class*="md:grid-cols-3"],
+  [class*="grid"][class*="md:grid-cols-2"] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Practical info cards */
+  .relative.p-7.rounded-xl {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Headings never orphaned */
+  h1, h2, h3, h4 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Cover gets its own page */
+  [class*="min-h-screen"],
+  [class*="min-h-\\[600px\\]"] {
+    page-break-after: always;
+    min-height: auto !important;
+    height: auto !important;
+  }
+
+  /* Section spacing — tighter for print */
+  [class*="py-24"],
+  [class*="py-28"],
+  [class*="py-20"] {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+
+  [class*="py-36"],
+  [class*="py-32"] {
+    padding-top: 2.5rem !important;
+    padding-bottom: 2.5rem !important;
+  }
+
+  /* Typography improvements for print */
+  [class*="leading-\\[2"] {
+    line-height: 1.75 !important;
   }
 
   /* Ensure colors print */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* Hide add buttons, border-dashed placeholders */
+  button[class*="border-dashed"],
+  [class*="border-dashed"]:not(img) {
+    display: none !important;
+  }
+
+  /* Images: ensure they render */
+  img {
+    max-width: 100% !important;
   }
 }
