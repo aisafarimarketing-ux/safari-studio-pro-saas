@@ -34,7 +34,7 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
       ref={setNodeRef}
       style={{ ...style, borderColor: tokens.border, background: tokens.sectionSurface }}
       onClick={() => isEditor && selectProperty(property.id)}
-      className={`rounded-2xl overflow-hidden border transition ${isSelected ? "ring-2 ring-offset-2" : ""}`}
+      className={`dm-card rounded-2xl overflow-hidden border transition ${isSelected ? "ring-2 ring-offset-2 ring-[#1b3a2d]/30" : ""}`}
     >
       {isEditor && (
         <div className="absolute top-3 right-3 z-10 flex gap-1">

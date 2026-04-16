@@ -57,6 +57,43 @@ body {
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* ── Direct manipulation affordances (editor mode only) ──────────────────── */
+
+/* Text elements: blue dashed outline on hover */
+.dm-editing [contenteditable="true"]:hover {
+  outline: 1.5px dashed rgba(59, 130, 246, 0.45) !important;
+  outline-offset: 2px;
+  border-radius: 2px;
+  cursor: text;
+}
+.dm-editing [contenteditable="true"]:focus {
+  outline: 1.5px solid rgba(59, 130, 246, 0.6) !important;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Card elements: subtle green lift on hover */
+.dm-editing .dm-card {
+  transition: outline 120ms ease, box-shadow 120ms ease;
+}
+.dm-editing .dm-card:hover {
+  outline: 2px solid rgba(27, 58, 45, 0.18) !important;
+  outline-offset: 0;
+}
+
+/* Background targets: gold dashed on hover */
+.dm-editing .dm-bg:hover {
+  outline: 2px dashed rgba(201, 168, 76, 0.55) !important;
+  outline-offset: -2px;
+  cursor: crosshair;
+}
+
+/* Image upload zones */
+.dm-editing .dm-image:hover {
+  outline: 2px dashed rgba(16, 185, 129, 0.5) !important;
+  outline-offset: -2px;
+}
+
 /* ── Print / PDF export ───────────────────────────────────────────────────── */
 @media print {
   /* Hide ALL editor chrome */

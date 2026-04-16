@@ -10,6 +10,7 @@ import { ProposalCanvas } from "./ProposalCanvas";
 import { ContextPanel } from "./ContextPanel";
 import { NewProposalDialog } from "@/components/ui/NewProposalDialog";
 import { InlineTextToolbar } from "@/components/ui/InlineTextToolbar";
+import { FloatingColorPicker } from "@/components/ui/FloatingColorPicker";
 
 export function ProposalEditor() {
   const { mode } = useEditorStore();
@@ -67,6 +68,9 @@ export function ProposalEditor() {
 
       {/* Floating inline text toolbar */}
       <InlineTextToolbar />
+
+      {/* Floating color picker (direct manipulation) */}
+      <FloatingColorPicker />
 
       {/* New Proposal dialog */}
       <NewProposalDialog />

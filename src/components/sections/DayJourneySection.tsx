@@ -56,8 +56,8 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
       ref={setNodeRef}
       style={{ ...style, borderColor: tokens.border, background: tokens.sectionSurface }}
       onClick={() => isEditor && selectDay(day.id)}
-      className={`relative rounded-3xl overflow-hidden border transition ${
-        isSelected ? "ring-2 ring-offset-2" : ""
+      className={`dm-card relative rounded-3xl overflow-hidden border transition ${
+        isSelected ? "ring-2 ring-offset-2 ring-[#1b3a2d]/30" : ""
       }`}
     >
       {/* Drag handle + actions — editor only */}
