@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 export function QuoteSection({ section }: { section: Section }) {
@@ -9,7 +10,7 @@ export function QuoteSection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   return (
     <div className="py-20 px-8 md:px-16 text-center" style={{ background: tokens.sectionSurface }}>

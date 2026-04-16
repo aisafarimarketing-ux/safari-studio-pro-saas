@@ -106,3 +106,15 @@ export function resolveToken(
 ): string {
   return overrides?.[key] ?? tokens[key];
 }
+
+/**
+ * Merge section-level style overrides over global theme tokens.
+ * Priority: section override > global token > theme default.
+ */
+export function resolveTokens(
+  tokens: ThemeTokens,
+  overrides?: Partial<ThemeTokens>
+): ThemeTokens {
+  if (!overrides || Object.keys(overrides).length === 0) return tokens;
+  return { ...tokens, ...overrides } as ThemeTokens;
+}

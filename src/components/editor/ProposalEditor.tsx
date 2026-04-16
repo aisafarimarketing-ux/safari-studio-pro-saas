@@ -12,7 +12,7 @@ import { InlineTextToolbar } from "@/components/ui/InlineTextToolbar";
 import { FloatingColorPicker } from "@/components/ui/FloatingColorPicker";
 
 export function ProposalEditor() {
-  const { mode } = useEditorStore();
+  const { mode, leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel } = useEditorStore();
   const { proposal } = useProposalStore();
   const { displayFont, bodyFont } = proposal.theme;
 
@@ -55,14 +55,38 @@ export function ProposalEditor() {
     <div className="h-screen flex flex-col overflow-hidden">
       <EditorToolbar />
 
-      <div className="flex flex-1 min-h-0">
-        <LeftSidebar />
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Left sidebar — collapsible */}
+        {leftPanelOpen && <LeftSidebar />}
+
+        {/* Left panel toggle */}
+        <button
+          onClick={toggleLeftPanel}
+          className={`absolute z-40 top-3 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-black/10 shadow-sm text-black/40 hover:text-black/70 hover:bg-black/5 text-[10px] transition-all duration-200 ${
+            leftPanelOpen ? "left-[196px]" : "left-2"
+          }`}
+          title={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          {leftPanelOpen ? "◂" : "▸"}
+        </button>
 
         <div className="flex-1 min-w-0 flex flex-col proposal-canvas">
           <ProposalCanvas />
         </div>
 
-        <ContextPanel />
+        {/* Right panel toggle */}
+        <button
+          onClick={toggleRightPanel}
+          className={`absolute z-40 top-3 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-black/10 shadow-sm text-black/40 hover:text-black/70 hover:bg-black/5 text-[10px] transition-all duration-200 ${
+            rightPanelOpen ? "right-[276px]" : "right-2"
+          }`}
+          title={rightPanelOpen ? "Collapse panel" : "Expand panel"}
+        >
+          {rightPanelOpen ? "▸" : "◂"}
+        </button>
+
+        {/* Right context panel — collapsible */}
+        {rightPanelOpen && <ContextPanel />}
       </div>
 
       {/* Floating inline text toolbar */}

@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 export function GallerySection({ section }: { section: Section }) {
@@ -9,7 +10,7 @@ export function GallerySection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const cols = section.layoutVariant === "2-column" ? 2 : section.layoutVariant === "4-column" ? 4 : 3;
   const images = (section.content.images as string[]) ?? [];

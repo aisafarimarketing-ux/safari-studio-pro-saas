@@ -1,12 +1,13 @@
 "use client";
 
 import { useProposalStore } from "@/store/proposalStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
-export function ItineraryTableSection({ section: _section }: { section: Section }) {
+export function ItineraryTableSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const { days, activeTier, theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   return (
     <div className="py-20 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>

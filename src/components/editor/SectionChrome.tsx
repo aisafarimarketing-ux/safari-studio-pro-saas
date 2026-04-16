@@ -39,10 +39,9 @@ export function SectionChrome({ section, children }: Props) {
   const reg = SECTION_REGISTRY[section.type];
   const variants = reg?.variants ?? [];
 
-  // Resolve current background for the floating picker
-  const currentBg =
-    (section.styleOverrides as Record<string, string>)?.sectionSurface ??
-    proposal.theme.tokens.sectionSurface;
+  // Resolve the actual section background: override > global token
+  const overrides = section.styleOverrides as Record<string, string>;
+  const resolvedBg = overrides?.sectionSurface ?? proposal.theme.tokens.sectionSurface;
 
   const handleBgColorClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -50,11 +49,20 @@ export function SectionChrome({ section, children }: Props) {
     openFloatingPicker({
       x: rect.left,
       y: rect.bottom + 6,
-      color: currentBg,
+      color: resolvedBg,
       token: "sectionSurface",
       sectionId: section.id,
     });
   };
+
+  // Build CSS custom properties from section overrides so child components
+  // can pick them up via var(--ss-sectionSurface) etc.
+  const cssVars: Record<string, string> = {};
+  if (overrides) {
+    for (const [key, val] of Object.entries(overrides)) {
+      if (val) cssVars[`--ss-${key}`] = val;
+    }
+  }
 
   return (
     <div ref={setNodeRef} style={sortableStyle} data-editor-chrome id={`section-${section.id}`}>
@@ -62,6 +70,7 @@ export function SectionChrome({ section, children }: Props) {
       <div
         className="relative transition-shadow duration-200"
         style={{
+          ...cssVars,
           boxShadow: isSelected
             ? "0 0 0 2px rgba(27,58,45,0.22), 0 4px 16px rgba(27,58,45,0.07)"
             : undefined,
@@ -95,11 +104,11 @@ export function SectionChrome({ section, children }: Props) {
           <button
             onClick={handleBgColorClick}
             className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
-            title="Edit section background"
+            title="Section background"
           >
             <span
               className="w-4 h-4 rounded-sm border border-black/15"
-              style={{ background: currentBg }}
+              style={{ background: resolvedBg }}
             />
           </button>
 
@@ -170,6 +179,15 @@ export function SectionChrome({ section, children }: Props) {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="bg-white/80 backdrop-blur-sm text-xs text-black/40 px-3 py-1.5 rounded-full border border-black/10">
               Hidden in preview
+            </div>
+          </div>
+        )}
+
+        {/* ── Selection indicator label ── */}
+        {isSelected && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <div className="bg-[#1b3a2d] text-white text-[9px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg">
+              Editing: {reg?.label ?? section.type}
             </div>
           </div>
         )}

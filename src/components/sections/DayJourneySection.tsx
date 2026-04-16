@@ -1,6 +1,7 @@
 "use client";
 
 import type { ThemeTokens, ProposalTheme } from "@/lib/types";
+import { resolveTokens } from "@/lib/theme";
 import {
   DndContext,
   closestCenter,
@@ -604,7 +605,7 @@ export function DayJourneySection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { days, theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 

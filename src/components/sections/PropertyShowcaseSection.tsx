@@ -7,6 +7,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Property, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // ── Property card ──────────────────────────────────────────────────────────────
@@ -498,7 +499,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { properties, theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 

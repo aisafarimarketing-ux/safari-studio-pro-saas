@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 const HEIGHTS: Record<string, number> = { sm: 40, md: 80, lg: 120, xl: 200 };
@@ -10,7 +11,7 @@ export function SpacerSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const tokens = proposal.theme.tokens;
+  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
   const height = HEIGHTS[section.layoutVariant] ?? 80;
 
   return (

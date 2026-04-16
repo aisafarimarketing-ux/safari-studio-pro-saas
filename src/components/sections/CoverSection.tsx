@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 export function CoverSection({ section }: { section: Section }) {
@@ -10,7 +11,7 @@ export function CoverSection({ section }: { section: Section }) {
   const isEditor = mode === "editor";
 
   const { client, trip, operator, theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const heroUrl = section.content.heroImageUrl as string | undefined;
   const variant = section.layoutVariant;
 

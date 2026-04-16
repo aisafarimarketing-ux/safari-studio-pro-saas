@@ -20,6 +20,8 @@ interface EditorState {
   newProposalOpen: boolean;
   addSectionAfterOrder: number | null;
   floatingPicker: FloatingPickerState | null;
+  leftPanelOpen: boolean;
+  rightPanelOpen: boolean;
 
   setMode: (mode: EditorMode) => void;
   selectSection: (id: string | null) => void;
@@ -32,6 +34,8 @@ interface EditorState {
   openFloatingPicker: (opts: Omit<FloatingPickerState, "sectionId"> & { sectionId?: string | null }) => void;
   closeFloatingPicker: () => void;
   setFloatingPickerColor: (color: string) => void;
+  toggleLeftPanel: () => void;
+  toggleRightPanel: () => void;
 }
 
 export const useEditorStore = create<EditorState>()((set) => ({
@@ -43,6 +47,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   newProposalOpen: false,
   addSectionAfterOrder: null,
   floatingPicker: null,
+  leftPanelOpen: true,
+  rightPanelOpen: true,
 
   setMode: (mode) => set({ mode }),
   selectSection: (id) => set({ selectedSectionId: id, selectedDayId: null, selectedPropertyId: null }),
@@ -57,4 +63,6 @@ export const useEditorStore = create<EditorState>()((set) => ({
   closeFloatingPicker: () => set({ floatingPicker: null }),
   setFloatingPickerColor: (color) =>
     set((s) => s.floatingPicker ? { floatingPicker: { ...s.floatingPicker, color } } : {}),
+  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
 }));

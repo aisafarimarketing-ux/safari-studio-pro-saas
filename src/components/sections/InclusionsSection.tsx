@@ -2,14 +2,15 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
-export function InclusionsSection({ section: _section }: { section: Section }) {
+export function InclusionsSection({ section }: { section: Section }) {
   const { proposal, updateInclusions, updateExclusions } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { inclusions, exclusions, theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const handleInclusionBlur = (index: number, value: string) => {
     const updated = [...inclusions];

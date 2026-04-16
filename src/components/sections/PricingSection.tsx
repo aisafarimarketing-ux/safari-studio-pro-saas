@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section, TierKey } from "@/lib/types";
 
 const TIER_KEYS: TierKey[] = ["classic", "premier", "signature"];
@@ -11,7 +12,7 @@ export function PricingSection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { pricing, activeTier, visibleTiers, days, theme, client } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const nights = days.length || proposal.trip.nights;
   const visibleKeys = TIER_KEYS.filter((t) => visibleTiers[t]);
 

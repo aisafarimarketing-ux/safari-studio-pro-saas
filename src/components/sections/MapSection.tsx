@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 export function MapSection({ section }: { section: Section }) {
@@ -9,7 +10,7 @@ export function MapSection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { theme } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const embedUrl = section.content.embedUrl as string;
   const caption = section.content.caption as string;
   const isFullWidth = section.layoutVariant === "full-width";

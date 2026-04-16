@@ -1,12 +1,13 @@
 "use client";
 
 import { useProposalStore } from "@/store/proposalStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
-export function TripSummarySection({ section: _section }: { section: Section }) {
+export function TripSummarySection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const { client, trip, theme, days, pricing, activeTier } = proposal;
-  const tokens = theme.tokens;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const destinations = [...new Set(days.map((d) => d.destination))];
 

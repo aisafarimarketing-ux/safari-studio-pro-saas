@@ -1,11 +1,12 @@
 "use client";
 
 import { useProposalStore } from "@/store/proposalStore";
+import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 export function DividerSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
-  const tokens = proposal.theme.tokens;
+  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
   if (section.layoutVariant === "ornamental") {
     return (
