@@ -18,8 +18,9 @@ for (const name of [".env", ".env.local"]) {
   }
 }
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) throw new Error("DATABASE_URL missing after .env/.env.local load");
+// `prisma generate` doesn't need a reachable DB — just a syntactically valid URL.
+// At runtime, migrations/db-push will fail loudly if DATABASE_URL is actually missing.
+const DATABASE_URL = process.env.DATABASE_URL || "postgresql://placeholder:placeholder@localhost:5432/placeholder";
 
 export default defineConfig({
   schema: path.join(__dirname, "prisma", "schema.prisma"),
