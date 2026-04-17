@@ -11,11 +11,14 @@ export function EditorToolbar() {
   const { mode, setMode, openNewProposal } = useEditorStore();
   const { proposal } = useProposalStore();
   const [aiBusy, setAiBusy] = useState(false);
-  const [saving, setSaving] = useState(false);
+  type SaveState = "idle" | "saving" | "saved" | "error";
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (saving) return;
-    setSaving(true);
+    if (saveState === "saving") return;
+    setSaveState("saving");
+    setSaveError(null);
     try {
       const res = await fetch("/api/proposals", {
         method: "POST",
@@ -27,10 +30,13 @@ export function EditorToolbar() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || `HTTP ${res.status}`);
       }
+      setSaveState("saved");
+      setTimeout(() => setSaveState("idle"), 2000);
     } catch (err) {
       console.error("[Save] failed:", err);
-    } finally {
-      setSaving(false);
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+      setSaveState("error");
+      setTimeout(() => { setSaveState("idle"); setSaveError(null); }, 4000);
     }
   };
 
@@ -149,15 +155,42 @@ export function EditorToolbar() {
         </button>
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-1.5 text-sm bg-[#1b3a2d] text-white rounded-lg hover:bg-[#2d5a40] transition-all duration-150 active:scale-95 font-medium disabled:opacity-60"
+          disabled={saveState === "saving"}
+          className={`px-4 py-1.5 text-sm rounded-lg transition-all duration-150 active:scale-95 font-medium disabled:opacity-60 ${
+            saveState === "saved"
+              ? "bg-[#2d5a40] text-white"
+              : saveState === "error"
+                ? "bg-[#b34334] text-white hover:bg-[#c4543f]"
+                : "bg-[#1b3a2d] text-white hover:bg-[#2d5a40]"
+          }`}
         >
-          {saving ? "Saving…" : "Save"}
+          {saveState === "saving" && "Saving…"}
+          {saveState === "saved" && "Saved ✓"}
+          {saveState === "error" && "Retry"}
+          {saveState === "idle" && "Save"}
         </button>
         <div className="ml-1 pl-2 border-l border-black/10 flex items-center">
           <UserButton />
         </div>
       </div>
+
+      {/* Error toast */}
+      {saveState === "error" && saveError && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#b34334] text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3">
+          <div className="text-lg leading-none">⚠</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">Save failed</div>
+            <div className="text-[13px] text-white/85 mt-0.5 break-words">{saveError}</div>
+          </div>
+          <button
+            onClick={() => { setSaveState("idle"); setSaveError(null); }}
+            className="text-white/60 hover:text-white text-lg leading-none pl-1"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
