@@ -16,6 +16,51 @@ export function ProposalEditor() {
   const { proposal } = useProposalStore();
   const { displayFont, bodyFont } = proposal.theme;
 
+  // On mount, try to restore the last-saved proposal for this user.
+  // 1) If localStorage has activeProposalId, fetch it.
+  // 2) Otherwise list the user's proposals and pick the newest.
+  // Falls through to the default proposal if none exist.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOne(id: string) {
+      const res = await fetch(`/api/proposals/${id}`);
+      if (res.status === 404 || res.status === 403) {
+        localStorage.removeItem("activeProposalId");
+        return false;
+      }
+      if (!res.ok) return false;
+      const data = await res.json();
+      const content = data?.proposal?.contentJson;
+      if (content && typeof content === "object" && !cancelled) {
+        useProposalStore.getState().hydrateProposal(content as typeof proposal);
+        return true;
+      }
+      return false;
+    }
+
+    (async () => {
+      try {
+        const stored = localStorage.getItem("activeProposalId");
+        if (stored && (await loadOne(stored))) return;
+
+        const list = await fetch("/api/proposals");
+        if (!list.ok) return;
+        const { proposals } = await list.json();
+        const latest = Array.isArray(proposals) && proposals[0]?.id;
+        if (latest) {
+          localStorage.setItem("activeProposalId", latest);
+          await loadOne(latest);
+        }
+      } catch (err) {
+        console.warn("[ProposalEditor] load failed:", err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Inject dynamic font CSS variables on font change
   useEffect(() => {
     let styleEl = document.getElementById("ss-font-vars");

@@ -24,6 +24,7 @@ interface ProposalState {
   loadTemplate: (id: string) => void;
   loadBlank: () => void;
   createFromQuickStart: (form: QuickStartForm) => void;
+  hydrateProposal: (proposal: Proposal) => void;
   updateMetadata: (title: string) => void;
   updateClient: (patch: Partial<Proposal["client"]>) => void;
   updateOperator: (patch: Partial<Proposal["operator"]>) => void;
@@ -82,6 +83,11 @@ export const useProposalStore = create<ProposalState>()(
     proposal: buildDefaultProposal(),
 
     // ── Proposal-level ────────────────────────────────────────────────────────
+
+    hydrateProposal: (proposal) =>
+      set((state) => {
+        state.proposal = proposal;
+      }),
 
     loadTemplate: (id) =>
       set((state) => {

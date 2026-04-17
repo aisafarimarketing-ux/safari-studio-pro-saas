@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, ClerkLoaded, ClerkLoading } from "@clerk/nextjs";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import type { EditorMode } from "@/store/editorStore";
@@ -30,6 +30,8 @@ export function EditorToolbar() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || `HTTP ${res.status}`);
       }
+      // Persist active proposal id so we re-load it on refresh.
+      try { localStorage.setItem("activeProposalId", useProposalStore.getState().proposal.id); } catch {}
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2000);
     } catch (err) {
@@ -169,8 +171,15 @@ export function EditorToolbar() {
           {saveState === "error" && "Retry"}
           {saveState === "idle" && "Save"}
         </button>
-        <div className="ml-1 pl-2 border-l border-black/10 flex items-center">
-          <UserButton />
+        <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
+          <ClerkLoading>
+            <div className="w-8 h-8 rounded-full bg-black/10 animate-pulse" />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <UserButton
+              appearance={{ elements: { avatarBox: "w-8 h-8" } }}
+            />
+          </ClerkLoaded>
         </div>
       </div>
 
