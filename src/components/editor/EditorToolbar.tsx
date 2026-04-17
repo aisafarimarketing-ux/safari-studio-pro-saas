@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { UserButton } from "@clerk/nextjs";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import type { EditorMode } from "@/store/editorStore";
@@ -8,6 +10,36 @@ import type { EditorMode } from "@/store/editorStore";
 export function EditorToolbar() {
   const { mode, setMode, openNewProposal } = useEditorStore();
   const { proposal } = useProposalStore();
+  const [aiBusy, setAiBusy] = useState(false);
+
+  const handleAIGenerate = async () => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: "title",
+          context: {
+            client: proposal.client,
+            trip: proposal.trip,
+            currentTitle: proposal.metadata.title,
+          },
+        }),
+      });
+      if (res.status === 401) {
+        window.location.href = "/sign-in";
+        return;
+      }
+      const data = await res.json();
+      if (data?.text) useProposalStore.getState().updateMetadata(String(data.text).trim());
+    } catch (err) {
+      console.error("[AI] generate failed:", err);
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const handlePrint = () => {
     // Switch to preview mode to strip all editor chrome before printing
@@ -75,6 +107,13 @@ export function EditorToolbar() {
       {/* Right */}
       <div className="flex items-center gap-2 shrink-0">
         <button
+          onClick={handleAIGenerate}
+          disabled={aiBusy}
+          className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition-all duration-150 active:scale-95 text-black/60 disabled:opacity-50"
+        >
+          {aiBusy ? "…" : "AI ✦"}
+        </button>
+        <button
           onClick={openNewProposal}
           className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition-all duration-150 active:scale-95 text-black/60"
         >
@@ -91,6 +130,9 @@ export function EditorToolbar() {
         >
           Save
         </button>
+        <div className="ml-1 pl-2 border-l border-black/10 flex items-center">
+          <UserButton />
+        </div>
       </div>
     </div>
   );
