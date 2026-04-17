@@ -1,6 +1,7 @@
 "use client";
 
 import { useProposalStore } from "@/store/proposalStore";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 
 export function ProposalSettingsPanel() {
   const { proposal, updateClient, updateOperator, updateTrip, updateTierLabel, toggleTierVisibility, setActiveTier } = useProposalStore();
@@ -96,9 +97,15 @@ export function ProposalSettingsPanel() {
               ) : (
                 <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-black/15 cursor-pointer hover:bg-black/3 text-[11px] text-black/40 transition">
                   <input type="file" accept="image/*,.svg" className="hidden"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) updateOperator({ logoUrl: URL.createObjectURL(file) });
+                      if (!file) return;
+                      try {
+                        const dataUrl = await fileToOptimizedDataUrl(file, { maxDimension: 800 });
+                        updateOperator({ logoUrl: dataUrl });
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Logo upload failed");
+                      }
                     }} />
                   + Upload logo
                 </label>

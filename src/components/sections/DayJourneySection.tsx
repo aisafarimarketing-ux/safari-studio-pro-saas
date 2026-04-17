@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 import type { Day, Section } from "@/lib/types";
 
 // ─── Day card ─────────────────────────────────────────────────────────────────
@@ -42,9 +43,15 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
       : undefined,
   };
 
-  const handleHeroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) updateDay(day.id, { heroImageUrl: URL.createObjectURL(file) });
+    if (!file) return;
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      updateDay(day.id, { heroImageUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    }
   };
 
   const tierColors: Record<string, string> = {

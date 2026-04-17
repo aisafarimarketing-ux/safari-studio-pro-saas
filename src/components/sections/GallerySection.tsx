@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 import type { Section } from "@/lib/types";
 
 export function GallerySection({ section }: { section: Section }) {
@@ -15,10 +16,15 @@ export function GallerySection({ section }: { section: Section }) {
   const cols = section.layoutVariant === "2-column" ? 2 : section.layoutVariant === "4-column" ? 4 : 3;
   const images = (section.content.images as string[]) ?? [];
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    const urls = files.map((f) => URL.createObjectURL(f));
-    updateSectionContent(section.id, { images: [...images, ...urls] });
+    if (!files.length) return;
+    try {
+      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      updateSectionContent(section.id, { images: [...images, ...urls] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    }
   };
 
   const removeImage = (idx: number) => {

@@ -8,6 +8,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 import type { Property, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // ── Property card ──────────────────────────────────────────────────────────────
@@ -32,9 +33,15 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
       : undefined,
   };
 
-  const handleLeadImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLeadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) updateProperty(property.id, { leadImageUrl: URL.createObjectURL(file) });
+    if (!file) return;
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      updateProperty(property.id, { leadImageUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    }
   };
 
   const isLargeImage = variant === "large-image-detail-block";
@@ -230,10 +237,15 @@ function HeroThumbnailsLayout({ property, isEditor, tokens, theme, updatePropert
 }) {
   const galleryUrls = property.galleryUrls ?? [];
 
-  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    const urls = files.map((f) => URL.createObjectURL(f));
-    updateProperty(property.id, { galleryUrls: [...galleryUrls, ...urls] });
+    if (!files.length) return;
+    try {
+      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      updateProperty(property.id, { galleryUrls: [...galleryUrls, ...urls] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gallery upload failed");
+    }
   };
 
   const removeGalleryImage = (idx: number) => {

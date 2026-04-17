@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 import type { Section } from "@/lib/types";
 
 export function CoverSection({ section }: { section: Section }) {
@@ -15,9 +16,15 @@ export function CoverSection({ section }: { section: Section }) {
   const heroUrl = section.content.heroImageUrl as string | undefined;
   const variant = section.layoutVariant;
 
-  const handleHeroUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) updateSectionContent(section.id, { heroImageUrl: URL.createObjectURL(file) });
+    if (!file) return;
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file);
+      updateSectionContent(section.id, { heroImageUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    }
   };
 
   // ── Centered-editorial ─────────────────────────────────────────────────────

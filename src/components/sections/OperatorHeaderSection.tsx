@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
 import type { Section } from "@/lib/types";
 
 export function OperatorHeaderSection({ section }: { section: Section }) {
@@ -13,9 +14,15 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) updateOperator({ logoUrl: URL.createObjectURL(file) });
+    if (!file) return;
+    try {
+      const dataUrl = await fileToOptimizedDataUrl(file, { maxDimension: 800 });
+      updateOperator({ logoUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Logo upload failed");
+    }
   };
 
   const LogoBlock = ({ maxH = "h-10", className = "" }: { maxH?: string; className?: string }) => (
