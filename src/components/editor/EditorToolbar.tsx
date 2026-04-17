@@ -11,6 +11,28 @@ export function EditorToolbar() {
   const { mode, setMode, openNewProposal } = useEditorStore();
   const { proposal } = useProposalStore();
   const [aiBusy, setAiBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposal: useProposalStore.getState().proposal }),
+      });
+      if (res.status === 401) { window.location.href = "/sign-in"; return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.error("[Save] failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleAIGenerate = async () => {
     if (aiBusy) return;
@@ -126,9 +148,11 @@ export function EditorToolbar() {
           Export PDF
         </button>
         <button
-          className="px-4 py-1.5 text-sm bg-[#1b3a2d] text-white rounded-lg hover:bg-[#2d5a40] transition-all duration-150 active:scale-95 font-medium"
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-1.5 text-sm bg-[#1b3a2d] text-white rounded-lg hover:bg-[#2d5a40] transition-all duration-150 active:scale-95 font-medium disabled:opacity-60"
         >
-          Save
+          {saving ? "Saving…" : "Save"}
         </button>
         <div className="ml-1 pl-2 border-l border-black/10 flex items-center">
           <UserButton />
