@@ -1,23 +1,68 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
-import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
-import type { Section } from "@/lib/types";
+import type { Proposal, Section } from "@/lib/types";
 
-export default function ClientProposalPage() {
+export default function ClientProposalPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const { proposal } = useProposalStore();
-  const { setMode } = useEditorStore();
-  const [mounted, setMounted] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Force preview mode — no editor UI
   useEffect(() => {
-    setMode("preview");
-    setMounted(true);
-  }, [setMode]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/public/proposals/${id}`);
+        if (res.status === 404) {
+          if (!cancelled) setError("Proposal not found");
+          return;
+        }
+        if (!res.ok) {
+          if (!cancelled) setError(`Error ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        const content = data?.proposal?.contentJson as Proposal | undefined;
+        if (!cancelled && content) {
+          // Hydrate the global store so section components can read it.
+          useProposalStore.getState().hydrateProposal(content);
+          setLoaded(true);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Load failed");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
 
-  if (!mounted) return null;
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f5ef]">
+        <div className="text-center">
+          <div className="text-2xl font-semibold text-black/70 mb-2">{error}</div>
+          <div className="text-sm text-black/45">This proposal link may have expired or been removed.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8f5ef] text-black/50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-black/15 border-t-[#1b3a2d] animate-spin" />
+          <div className="text-sm tracking-wide">Loading proposal…</div>
+        </div>
+      </div>
+    );
+  }
 
   const { theme, operator } = proposal;
   const sorted = [...proposal.sections]
@@ -26,7 +71,6 @@ export default function ClientProposalPage() {
 
   return (
     <div className="min-h-screen proposal-canvas" style={{ background: theme.tokens.pageBg }}>
-      {/* Dynamic font injection */}
       <style>{`
         .proposal-canvas {
           --font-display: '${theme.displayFont}', Georgia, serif;
@@ -34,26 +78,18 @@ export default function ClientProposalPage() {
         }
       `}</style>
 
-      {/* Clean proposal document */}
       <div className="max-w-[900px] mx-auto" style={{ background: theme.tokens.pageBg }}>
         {sorted.map((section: Section) => (
           <SectionRenderer key={section.id} section={section} />
         ))}
       </div>
 
-      {/* Optional operator footer */}
       {operator.companyName && (
         <footer
           className="border-t py-8 px-6 text-center"
-          style={{
-            background: theme.tokens.pageBg,
-            borderColor: theme.tokens.border,
-          }}
+          style={{ background: theme.tokens.pageBg, borderColor: theme.tokens.border }}
         >
-          <div
-            className="text-xs tracking-wide"
-            style={{ color: theme.tokens.mutedText }}
-          >
+          <div className="text-xs tracking-wide" style={{ color: theme.tokens.mutedText }}>
             Proposal by{" "}
             <span style={{ color: theme.tokens.bodyText, fontWeight: 500 }}>
               {operator.companyName}
@@ -71,18 +107,10 @@ export default function ClientProposalPage() {
                 </a>
               </>
             )}
-            {operator.phone && (
-              <>
-                {" "}
-                &middot; {operator.phone}
-              </>
-            )}
+            {operator.phone && <> &middot; {operator.phone}</>}
           </div>
           {operator.website && (
-            <div
-              className="text-[11px] mt-1"
-              style={{ color: theme.tokens.mutedText }}
-            >
+            <div className="text-[11px] mt-1" style={{ color: theme.tokens.mutedText }}>
               {operator.website}
             </div>
           )}

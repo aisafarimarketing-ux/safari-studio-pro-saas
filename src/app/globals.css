@@ -323,3 +323,9 @@ body {
     display: none !important;
   }
 }
+
+/* Clerk UserButton popover — force above editor overlays / portals */
+.cl-userButtonPopoverCard,
+.cl-userButtonPopoverRootBox {
+  z-index: 9999 !important;
+}

@@ -14,6 +14,20 @@ export function EditorToolbar() {
   type SaveState = "idle" | "saving" | "saved" | "error";
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "error">("idle");
+
+  const handleShare = async () => {
+    const id = useProposalStore.getState().proposal.id;
+    const url = `${window.location.origin}/p/${id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareState("copied");
+      setTimeout(() => setShareState("idle"), 2000);
+    } catch {
+      setShareState("error");
+      setTimeout(() => setShareState("idle"), 2000);
+    }
+  };
 
   const handleSave = async () => {
     if (saveState === "saving") return;
@@ -150,6 +164,21 @@ export function EditorToolbar() {
           New
         </button>
         <button
+          onClick={handleShare}
+          className={`px-3 py-1.5 text-sm border border-black/12 rounded-lg transition-all duration-150 active:scale-95 ${
+            shareState === "copied"
+              ? "bg-[#2d5a40] text-white border-[#2d5a40]"
+              : shareState === "error"
+                ? "bg-[#b34334] text-white border-[#b34334]"
+                : "hover:bg-black/5 text-black/60"
+          }`}
+          title="Copy shareable link"
+        >
+          {shareState === "copied" && "Link copied ✓"}
+          {shareState === "error" && "Copy failed"}
+          {shareState === "idle" && "Share link"}
+        </button>
+        <button
           onClick={handlePrint}
           className="px-3 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 transition-all duration-150 active:scale-95 text-black/60"
         >
@@ -177,7 +206,14 @@ export function EditorToolbar() {
           </ClerkLoading>
           <ClerkLoaded>
             <UserButton
-              appearance={{ elements: { avatarBox: "w-8 h-8" } }}
+              appearance={{
+                elements: {
+                  avatarBox: "w-8 h-8",
+                  userButtonPopoverCard: "z-[9999] shadow-xl",
+                  userButtonPopoverRootBox: "z-[9999]",
+                  userButtonPopoverMain: "z-[9999]",
+                },
+              }}
             />
           </ClerkLoaded>
         </div>

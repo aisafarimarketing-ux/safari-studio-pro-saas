@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { EditorToolbar } from "./EditorToolbar";
@@ -15,6 +15,7 @@ export function ProposalEditor() {
   const { mode, leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel } = useEditorStore();
   const { proposal } = useProposalStore();
   const { displayFont, bodyFont } = proposal.theme;
+  const [hydrated, setHydrated] = useState(false);
 
   // On mount, try to restore the last-saved proposal for this user.
   // 1) If localStorage has activeProposalId, fetch it.
@@ -54,6 +55,8 @@ export function ProposalEditor() {
         }
       } catch (err) {
         console.warn("[ProposalEditor] load failed:", err);
+      } finally {
+        if (!cancelled) setHydrated(true);
       }
     })();
 
@@ -76,6 +79,18 @@ export function ProposalEditor() {
       }
     `;
   }, [displayFont, bodyFont]);
+
+  // Block first paint until the DB load settles — avoids flashing the default proposal.
+  if (!hydrated) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#f8f5ef] text-black/50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-black/15 border-t-[#1b3a2d] animate-spin" />
+          <div className="text-sm tracking-wide">Loading proposal…</div>
+        </div>
+      </div>
+    );
+  }
 
   if (mode === "preview") {
     return (
