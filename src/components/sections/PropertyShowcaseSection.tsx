@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from "@dnd-kit/core";
@@ -9,6 +10,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { LibraryPicker } from "@/components/properties/LibraryPicker";
 import type { Property, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // ── Property card ──────────────────────────────────────────────────────────────
@@ -507,11 +509,12 @@ function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, sh
 // ─── Section wrapper ───────────────────────────────────────────────────────────
 
 export function PropertyShowcaseSection({ section }: { section: Section }) {
-  const { proposal, moveProperty, addProperty } = useProposalStore();
+  const { proposal, moveProperty, addProperty, addPropertyFromLibrary } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { properties, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -563,15 +566,32 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
         )}
 
         {isEditor && (
-          <button
-            onClick={addProperty}
-            className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed text-sm font-medium transition hover:opacity-80"
-            style={{ borderColor: tokens.accent, color: tokens.accent }}
-          >
-            + Add property
-          </button>
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="py-4 rounded-2xl text-sm font-semibold transition hover:opacity-90 active:scale-[0.99]"
+              style={{ background: tokens.accent, color: tokens.pageBg }}
+            >
+              ◇ Browse my properties
+            </button>
+            <button
+              onClick={addProperty}
+              className="py-4 rounded-2xl border-2 border-dashed text-sm font-medium transition hover:opacity-80"
+              style={{ borderColor: tokens.accent, color: tokens.accent }}
+            >
+              + Add blank property
+            </button>
+          </div>
         )}
       </div>
+
+      <LibraryPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(snapshots) => {
+          for (const snap of snapshots) addPropertyFromLibrary(snap);
+        }}
+      />
     </div>
   );
 }

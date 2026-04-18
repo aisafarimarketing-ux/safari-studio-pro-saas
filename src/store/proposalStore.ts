@@ -64,6 +64,7 @@ interface ProposalState {
 
   // ── Properties ──────────────────────────────────────────────────────────────
   addProperty: () => void;
+  addPropertyFromLibrary: (snapshot: Partial<Property>) => void;
   removeProperty: (id: string) => void;
   moveProperty: (fromIndex: number, toIndex: number) => void;
   updateProperty: (id: string, patch: Partial<Property>) => void;
@@ -389,6 +390,30 @@ export const useProposalStore = create<ProposalState>()(
           roomType: "Standard tent",
           nights: 2,
           galleryUrls: [],
+        });
+      }),
+
+    // Insert a property snapshot from the library. We always assign a fresh
+    // proposal-local id and fill any missing fields with sensible defaults
+    // so downstream renderers never see undefined. The snapshot is a copy —
+    // the proposal stays stable if the source library property is later
+    // edited or deleted.
+    addPropertyFromLibrary: (snapshot) =>
+      set((state) => {
+        state.proposal.properties.push({
+          id: nanoid(),
+          name: snapshot.name ?? "Property",
+          location: snapshot.location ?? "",
+          shortDesc: snapshot.shortDesc ?? "",
+          description: snapshot.description ?? "",
+          whyWeChoseThis: snapshot.whyWeChoseThis ?? "",
+          amenities: snapshot.amenities ?? [],
+          mealPlan: snapshot.mealPlan ?? "Full board",
+          roomType: snapshot.roomType ?? "Standard tent",
+          nights: snapshot.nights ?? 2,
+          tier: snapshot.tier,
+          leadImageUrl: snapshot.leadImageUrl,
+          galleryUrls: snapshot.galleryUrls ?? [],
         });
       }),
 
