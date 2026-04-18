@@ -7,7 +7,8 @@ import { useOrganization } from "@clerk/nextjs";
 import { AppHeader } from "@/components/properties/AppHeader";
 import { CompletionRing } from "@/components/brand-dna/CompletionRing";
 import type { BrandDNACompletion } from "@/lib/brandDNA";
-import { buildBlankProposal } from "@/lib/defaults";
+import { buildBlankProposal, buildDefaultProposal } from "@/lib/defaults";
+import { nanoid } from "@/lib/nanoid";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -39,6 +40,7 @@ export function DashboardWorkspace() {
   const [locationCount, setLocationCount] = useState<number | null>(null);
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,16 +90,48 @@ export function DashboardWorkspace() {
     }
   };
 
+  // Import-sample uses the existing Family Safari template — fully populated
+  // with days, properties, pricing, inclusions. Onboarding (Part 5) replaces
+  // this with a richer "Best of Kenya" demo + checklist.
+  const handleImportSample = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const sample = buildDefaultProposal();
+      // Always assign a fresh id so re-importing creates a new copy.
+      sample.id = nanoid();
+      sample.metadata = {
+        ...sample.metadata,
+        title: `${sample.metadata.title} (sample)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposal: sample }),
+      });
+      if (res.status === 409) { window.location.href = "/select-organization"; return; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      try { localStorage.setItem("activeProposalId", sample.id); } catch {}
+      router.push("/studio");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import sample");
+      setImporting(false);
+    }
+  };
+
   const orgName = organization?.name ?? "your workspace";
   const activeProposal = proposals?.[0] ?? null;
   const recentProposals = proposals?.slice(1, 4) ?? [];
   const propertyCount = properties?.length ?? null;
 
   return (
-    <div className="min-h-screen text-[#1a1a1a]" style={{ background: "#f8f5ef" }}>
+    <div className="min-h-screen text-[#1a1a1a] relative overflow-hidden" style={{ background: "#f8f5ef" }}>
+      <DashboardBackdrop />
       <AppHeader />
 
-      <main className="max-w-6xl mx-auto px-6 py-10 md:py-12">
+      <main className="max-w-6xl mx-auto px-6 py-10 md:py-12 relative">
         {/* Welcome */}
         <header className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-black/85">
@@ -126,7 +160,13 @@ export function DashboardWorkspace() {
 
         {/* Triple snapshot row */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <QuickActionsCard onNew={handleNewProposal} creating={creating} />
+          <QuickActionsCard
+            onNew={handleNewProposal}
+            creating={creating}
+            onImportSample={handleImportSample}
+            importing={importing}
+            hasProposals={(proposals?.length ?? 0) > 0}
+          />
           <PropertiesCard
             count={propertyCount}
             locations={locationCount}
@@ -286,7 +326,19 @@ function ActiveProposalCard({
 
 // ─── Snapshot cards ─────────────────────────────────────────────────────────
 
-function QuickActionsCard({ onNew, creating }: { onNew: () => void; creating: boolean }) {
+function QuickActionsCard({
+  onNew,
+  creating,
+  onImportSample,
+  importing,
+  hasProposals,
+}: {
+  onNew: () => void;
+  creating: boolean;
+  onImportSample: () => void;
+  importing: boolean;
+  hasProposals: boolean;
+}) {
   return (
     <div className="rounded-2xl bg-white border border-black/8 p-5 flex flex-col">
       <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
@@ -309,13 +361,52 @@ function QuickActionsCard({ onNew, creating }: { onNew: () => void; creating: bo
         >
           + Add property
         </Link>
-        <Link
-          href="/settings/brand"
-          className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 transition active:scale-95"
+        <button
+          onClick={onImportSample}
+          disabled={importing}
+          className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60 text-left"
+          title={hasProposals ? "Import the Family Safari template as a new proposal" : "Drop in a fully-built sample proposal to explore"}
         >
-          Refine brand voice
-        </Link>
+          {importing ? "Importing…" : hasProposals ? "Import sample" : "✦ Import sample proposal"}
+        </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Subtle safari backdrop ─────────────────────────────────────────────────
+//
+// CSS-only ambience. No imagery dependency. Two heavily-blurred forest blobs
+// (top-right + bottom-left) plus a faint gold dot pattern. Sits at z-0 with
+// pointer-events: none so it never interferes with content.
+
+function DashboardBackdrop() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+      {/* Top-right forest halo */}
+      <div
+        className="absolute -top-40 -right-40 w-[640px] h-[640px] rounded-full opacity-[0.08]"
+        style={{
+          background: "radial-gradient(circle, #1b3a2d 0%, transparent 65%)",
+          filter: "blur(40px)",
+        }}
+      />
+      {/* Bottom-left gold halo — softer */}
+      <div
+        className="absolute -bottom-60 -left-40 w-[700px] h-[700px] rounded-full opacity-[0.07]"
+        style={{
+          background: "radial-gradient(circle, #c9a84c 0%, transparent 60%)",
+          filter: "blur(50px)",
+        }}
+      />
+      {/* Faint gold dot pattern across the page */}
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, #1b3a2d 1px, transparent 0)",
+          backgroundSize: "32px 32px",
+        }}
+      />
     </div>
   );
 }
