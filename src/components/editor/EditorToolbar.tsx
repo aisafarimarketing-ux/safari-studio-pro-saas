@@ -208,10 +208,11 @@ export function EditorToolbar() {
             <UserButton
               appearance={{
                 elements: {
-                  avatarBox: "w-8 h-8",
-                  userButtonPopoverCard: "z-[9999] shadow-xl",
-                  userButtonPopoverRootBox: "z-[9999]",
-                  userButtonPopoverMain: "z-[9999]",
+                  avatarBox: { width: "2rem", height: "2rem" },
+                  userButtonTrigger: { pointerEvents: "auto" },
+                  userButtonPopoverCard: { zIndex: 9999, boxShadow: "0 12px 40px rgba(0,0,0,0.18)" },
+                  userButtonPopoverRootBox: { zIndex: 9999 },
+                  userButtonPopoverMain: { zIndex: 9999 },
                 },
               }}
             />

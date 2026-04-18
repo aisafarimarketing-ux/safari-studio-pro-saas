@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
         <body className="min-h-full flex flex-col">{children}</body>
       </html>

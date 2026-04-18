@@ -326,6 +326,18 @@ body {
 
 /* Clerk UserButton popover — force above editor overlays / portals */
 .cl-userButtonPopoverCard,
-.cl-userButtonPopoverRootBox {
+.cl-userButtonPopoverRootBox,
+.cl-userButtonPopoverMain,
+.cl-rootBox.cl-userButton-root {
   z-index: 9999 !important;
+}
+
+/* Avatar + trigger must always be interactive and visible */
+.cl-userButtonTrigger,
+.cl-userButtonAvatarBox,
+.cl-avatarBox,
+.cl-userButtonAvatarImage {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
