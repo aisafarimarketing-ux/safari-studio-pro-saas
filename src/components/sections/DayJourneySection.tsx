@@ -28,13 +28,38 @@ import type { Day, Section } from "@/lib/types";
 // ─── Day card ─────────────────────────────────────────────────────────────────
 
 function DayCard({ day, variant }: { day: Day; variant: string }) {
-  const { proposal, updateDay, addDayAfter, duplicateDay, removeDay } = useProposalStore();
+  const { proposal, updateDay, addDayAfter, duplicateDay, removeDay, addPropertyFromLibrary } = useProposalStore();
   const { mode, selectDay, selectedDayId } = useEditorStore();
   const isEditor = mode === "editor";
   const { activeTier, visibleTiers, theme } = proposal;
   const tokens = theme.tokens;
   const isSelected = selectedDayId === day.id;
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [propPickerOpen, setPropPickerOpen] = useState(false);
+
+  // Assign a library property to this day — lifted up to DayCard so both
+  // DayContent (inline mode) and the mirror-row layouts (Split/FlipSplit)
+  // can share the same opener and handler.
+  const handleAssignProperty = (snapshot: Partial<ProposalProperty>) => {
+    if (!snapshot.name) return;
+    const nameLc = snapshot.name.trim().toLowerCase();
+    const already = proposal.properties.some((p) => p.name.trim().toLowerCase() === nameLc);
+    if (!already) addPropertyFromLibrary(snapshot);
+
+    const tier = activeTier as TierKey;
+    updateDay(day.id, {
+      tiers: {
+        ...day.tiers,
+        [tier]: {
+          ...day.tiers[tier],
+          camp: snapshot.name,
+          location: snapshot.location || day.tiers[tier].location,
+          note: "",
+        },
+      },
+    });
+    setPropPickerOpen(false);
+  };
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: day.id });
@@ -126,94 +151,145 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
         onSelect={(c) => updateDay(day.id, { heroImageUrl: c.url })}
       />
 
+      {/* Property picker — opened by SplitLayout / FlipSplitLayout's
+          "Browse my properties" affordance alongside the mirror row, or
+          by DayContent's inline button for non-mirror layouts. */}
+      {propPickerOpen && (
+        <DayPropertyPicker
+          dayDestination={day.destination}
+          onClose={() => setPropPickerOpen(false)}
+          onSelect={handleAssignProperty}
+        />
+      )}
+
       {layoutType === "flip" ? (
-        <FlipSplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <FlipSplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : layoutType === "overlay" ? (
-        <FullOverlayLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <FullOverlayLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : layoutType === "stacked" ? (
-        <StackedLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <StackedLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : layoutType === "compact" ? (
-        <CompactLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <CompactLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : layoutType === "magazine" ? (
-        <MagazineLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <MagazineLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : (
-        <SplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />
+        <SplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       )}
     </div>
   );
 }
 
-// ── Split layout: image left, structured content right ──────────────────────
+// ── Split layout: image LEFT, content RIGHT. Two-row structure when a
+//    property is in scope — the property image sits on the OPPOSITE side,
+//    same proportion as the day image, creating the editorial ping-pong.
 
-function SplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+function SplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay, onOpenPicker }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
+  const { proposal } = useProposalStore();
   return (
-    <div className="grid md:grid-cols-[2fr_3fr] min-h-[440px]">
-      {/* Image column */}
-      <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden">
-        {day.heroImageUrl ? (
-          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
-        ) : (
-          isEditor && (
-            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+    <div>
+      {/* Row 1 — Day image left (2fr), Day narrative right (3fr) */}
+      <div className="grid md:grid-cols-[2fr_3fr] min-h-[440px]">
+        <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden">
+          {day.heroImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
+          ) : (
+            isEditor && (
+              <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+                <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+                <div className="text-3xl mb-2 opacity-30">+</div>
+                <div className="text-sm opacity-40">Add photo</div>
+              </label>
+            )
+          )}
+          <div
+            className="absolute bottom-0 left-0 leading-none select-none pointer-events-none"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: "clamp(6rem, 18vw, 10rem)",
+              color: "rgba(255,255,255,0.12)",
+              lineHeight: 0.85,
+              paddingLeft: "0.1em",
+            }}
+          >
+            {String(day.dayNumber).padStart(2, "0")}
+          </div>
+          <div
+            className="absolute top-4 left-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+          >
+            Day {day.dayNumber}
+          </div>
+          {day.heroImageUrl && isEditor && (
+            <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
-              <div className="text-3xl mb-2 opacity-30">+</div>
-              <div className="text-sm opacity-40">Add photo</div>
+              Change
             </label>
-          )
-        )}
-        {/* Large typographic day number watermark */}
-        <div
-          className="absolute bottom-0 left-0 leading-none select-none pointer-events-none"
-          style={{
-            fontFamily: "'Playfair Display', serif",
-            fontSize: "clamp(6rem, 18vw, 10rem)",
-            color: "rgba(255,255,255,0.12)",
-            lineHeight: 0.85,
-            paddingLeft: "0.1em",
-          }}
-        >
-          {String(day.dayNumber).padStart(2, "0")}
+          )}
         </div>
-        {/* Day badge */}
-        <div
-          className="absolute top-4 left-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
-          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
-        >
-          Day {day.dayNumber}
+
+        <div className="flex flex-col justify-between p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
+          <DayContent
+            day={day}
+            isEditor={isEditor}
+            tokens={tokens}
+            theme={theme}
+            activeTier={activeTier}
+            visibleTiers={visibleTiers}
+            tierColors={tierColors}
+            updateDay={updateDay}
+            embedStayPreview={false}
+          />
         </div>
-        {/* Swap image button (editor) */}
-        {day.heroImageUrl && isEditor && (
-          <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
-            Change
-          </label>
-        )}
       </div>
 
-      {/* Content column */}
-      <div className="flex flex-col justify-between p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
-        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
-      </div>
+      {/* Row 2 — mirror. Property text LEFT (3fr), property image RIGHT (2fr).
+          Together with Row 1 this forms a cross-pattern ping-pong. */}
+      <DayStayPreview
+        mode="mirror-right"
+        day={day}
+        activeTier={activeTier}
+        visibleTiers={visibleTiers}
+        tokens={tokens}
+        theme={theme}
+        properties={proposal.properties}
+      />
+
+      {isEditor && onOpenPicker && (
+        <div className="px-8 md:px-10 py-3" style={{ background: tokens.sectionSurface }}>
+          <button
+            type="button"
+            onClick={onOpenPicker}
+            className="inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
+            style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
+          >
+            <span aria-hidden>◇</span>
+            <span>Browse my properties</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Stacked layout: full-width image top, content below ────────────────────
 
-function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay, onOpenPicker }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
   return (
     <div>
@@ -256,7 +332,7 @@ function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
         )}
       </div>
       <div className="p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
-        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
+        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} onOpenPicker={onOpenPicker} />
       </div>
     </div>
   );
@@ -271,6 +347,7 @@ function CompactLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
   return (
     <div className="grid md:grid-cols-[140px_1fr] gap-0" style={{ background: tokens.sectionSurface }}>
@@ -344,6 +421,7 @@ function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
   return (
     <div>
@@ -416,48 +494,87 @@ function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers
   );
 }
 
-// ── Flip-split: content left, image right ────────────────────────────────────
+// ── Flip-split: content left, image right. Mirror row flips too. ────────────
 
-function FlipSplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay }: {
+function FlipSplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, handleHeroUpload, updateDay, onOpenPicker }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
+  const { proposal } = useProposalStore();
   return (
-    <div className="grid md:grid-cols-[3fr_2fr] min-h-[440px]">
-      {/* Content column first */}
-      <div className="flex flex-col justify-between p-8 md:p-10 order-2 md:order-1" style={{ background: tokens.sectionSurface }}>
-        <DayContent day={day} isEditor={isEditor} tokens={tokens} theme={theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} updateDay={updateDay} />
-      </div>
-      {/* Image column */}
-      <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden order-1 md:order-2">
-        {day.heroImageUrl ? (
-          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
-            <div className="text-3xl mb-2 opacity-30">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : null}
-        <div className="absolute bottom-0 right-0 leading-none select-none pointer-events-none"
-          style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(6rem, 18vw, 10rem)", color: "rgba(255,255,255,0.12)", lineHeight: 0.85, paddingRight: "0.1em" }}>
-          {String(day.dayNumber).padStart(2, "0")}
+    <div>
+      {/* Row 1 — Day content LEFT (3fr), day image RIGHT (2fr) */}
+      <div className="grid md:grid-cols-[3fr_2fr] min-h-[440px]">
+        <div className="flex flex-col justify-between p-8 md:p-10 order-2 md:order-1" style={{ background: tokens.sectionSurface }}>
+          <DayContent
+            day={day}
+            isEditor={isEditor}
+            tokens={tokens}
+            theme={theme}
+            activeTier={activeTier}
+            visibleTiers={visibleTiers}
+            tierColors={tierColors}
+            updateDay={updateDay}
+            embedStayPreview={false}
+          />
         </div>
-        <div className="absolute top-4 right-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
-          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
-          Day {day.dayNumber}
+        <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden order-1 md:order-2">
+          {day.heroImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
+          ) : isEditor ? (
+            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+              <div className="text-3xl mb-2 opacity-30">+</div>
+              <div className="text-sm opacity-40">Add photo</div>
+            </label>
+          ) : null}
+          <div className="absolute bottom-0 right-0 leading-none select-none pointer-events-none"
+            style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(6rem, 18vw, 10rem)", color: "rgba(255,255,255,0.12)", lineHeight: 0.85, paddingRight: "0.1em" }}>
+            {String(day.dayNumber).padStart(2, "0")}
+          </div>
+          <div className="absolute top-4 right-4 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
+            Day {day.dayNumber}
+          </div>
+          {day.heroImageUrl && isEditor && (
+            <label className="absolute bottom-3 right-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+              Change
+            </label>
+          )}
         </div>
-        {day.heroImageUrl && isEditor && (
-          <label className="absolute bottom-3 right-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
-            Change
-          </label>
-        )}
       </div>
+
+      {/* Row 2 — mirror. Property image LEFT (2fr), property text RIGHT (3fr). */}
+      <DayStayPreview
+        mode="mirror-left"
+        day={day}
+        activeTier={activeTier}
+        visibleTiers={visibleTiers}
+        tokens={tokens}
+        theme={theme}
+        properties={proposal.properties}
+      />
+
+      {isEditor && onOpenPicker && (
+        <div className="px-8 md:px-10 py-3" style={{ background: tokens.sectionSurface }}>
+          <button
+            type="button"
+            onClick={onOpenPicker}
+            className="inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
+            style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
+          >
+            <span aria-hidden>◇</span>
+            <span>Browse my properties</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -471,6 +588,7 @@ function FullOverlayLayout({ day, isEditor, tokens, theme, activeTier, visibleTi
   tierColors: Record<string, string>;
   handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
 }) {
   return (
     <div className="relative min-h-[480px]" style={{ background: tokens.cardBg }}>
@@ -534,40 +652,19 @@ function FullOverlayLayout({ day, isEditor, tokens, theme, activeTier, visibleTi
 
 // ── Day content: destination + description + accommodation ──────────────────
 
-function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, updateDay }: {
+function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, updateDay, embedStayPreview = true, onOpenPicker }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
   tierColors: Record<string, string>;
   updateDay: (id: string, patch: Partial<Day>) => void;
+  // When false, DayContent omits the "Stay at" block — the parent layout
+  // renders DayStayPreview as a sibling row in mirror mode instead.
+  embedStayPreview?: boolean;
+  onOpenPicker?: () => void;
 }) {
   // Read proposal here so we can resolve property previews.
-  const { proposal, addPropertyFromLibrary } = useProposalStore();
-  const [propPickerOpen, setPropPickerOpen] = useState(false);
-
-  // Assign a library property to this day:
-  //  - snapshot into proposal.properties if not already there
-  //  - set day.tiers[activeTier].camp/location to the picked property
-  //  - clear the tier.note so stale tier-specific text doesn't linger
-  const handleAssignProperty = (snapshot: Partial<ProposalProperty>) => {
-    if (!snapshot.name) return;
-    const nameLc = snapshot.name.trim().toLowerCase();
-    const already = proposal.properties.some((p) => p.name.trim().toLowerCase() === nameLc);
-    if (!already) addPropertyFromLibrary(snapshot);
-
-    const tier = activeTier as TierKey;
-    updateDay(day.id, {
-      tiers: {
-        ...day.tiers,
-        [tier]: {
-          ...day.tiers[tier],
-          camp: snapshot.name,
-          location: snapshot.location || day.tiers[tier].location,
-          note: "",
-        },
-      },
-    });
-  };
+  const { proposal } = useProposalStore();
 
   return (
     // Editorial rhythm from the brief: image lives in the parent layout,
@@ -616,37 +713,32 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
         {day.description}
       </p>
 
-      {/* 24px gap → "Stay at" property block (DayStayPreview already
-          provides its own pt-6 separator; mt-6 here keeps the visual
-          rhythm consistent across layouts that lack the separator). */}
-      <div className="mt-6">
-        <DayStayPreview
-          day={day}
-          activeTier={activeTier}
-          visibleTiers={visibleTiers}
-          tokens={tokens}
-          theme={theme}
-          properties={proposal.properties}
-        />
-        {isEditor && (
-          <button
-            type="button"
-            onClick={() => setPropPickerOpen(true)}
-            className="mt-3 inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
-            style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
-          >
-            <span aria-hidden>◇</span>
-            <span>Browse my properties</span>
-          </button>
-        )}
-      </div>
-
-      {propPickerOpen && (
-        <DayPropertyPicker
-          dayDestination={day.destination}
-          onClose={() => setPropPickerOpen(false)}
-          onSelect={handleAssignProperty}
-        />
+      {/* Inline mode: "Stay at" block rendered within the content column.
+          Layouts that render a mirror-mode sibling row pass
+          embedStayPreview={false} and handle the button themselves. */}
+      {embedStayPreview && (
+        <div className="mt-6">
+          <DayStayPreview
+            mode="inline"
+            day={day}
+            activeTier={activeTier}
+            visibleTiers={visibleTiers}
+            tokens={tokens}
+            theme={theme}
+            properties={proposal.properties}
+          />
+          {isEditor && onOpenPicker && (
+            <button
+              type="button"
+              onClick={onOpenPicker}
+              className="mt-3 inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
+              style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
+            >
+              <span aria-hidden>◇</span>
+              <span>Browse my properties</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
