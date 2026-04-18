@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   OrganizationSwitcher,
   SignOutButton,
@@ -8,9 +9,18 @@ import {
   useUser,
 } from "@clerk/nextjs";
 
-// Shared header for the property pages — matches the patterns used on
-// /proposals and /settings/brand. Pulled into its own file because it's
-// repeated on the list + editor pages.
+// Shared chrome for the authenticated app surface — Dashboard, Proposals,
+// Properties, Brand DNA. The active route is highlighted via the URL.
+//
+// (Lives under /components/properties/ for historical reasons; pulled
+// across pages without further moves to keep import paths stable.)
+
+const NAV: { href: string; label: string; matches: (pathname: string) => boolean }[] = [
+  { href: "/dashboard", label: "Overview", matches: (p) => p === "/dashboard" },
+  { href: "/proposals", label: "Proposals", matches: (p) => p.startsWith("/proposals") },
+  { href: "/properties", label: "Properties", matches: (p) => p.startsWith("/properties") },
+  { href: "/settings/brand", label: "Brand DNA", matches: (p) => p.startsWith("/settings/brand") },
+];
 
 export function AppHeader({
   middleSlot,
@@ -20,7 +30,7 @@ export function AppHeader({
   return (
     <header className="h-14 border-b border-black/10 bg-white flex items-center justify-between px-6 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-4 min-w-0">
-        <Link href="/proposals" className="flex items-center gap-2 group shrink-0">
+        <Link href="/dashboard" className="flex items-center gap-2 group shrink-0">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center text-[#c9a84c] font-bold text-base"
             style={{ background: "rgba(201,168,76,0.15)" }}
@@ -37,8 +47,8 @@ export function AppHeader({
       <div className="flex items-center gap-3">
         <OrganizationSwitcher
           hidePersonal
-          afterSelectOrganizationUrl="/proposals"
-          afterCreateOrganizationUrl="/proposals"
+          afterSelectOrganizationUrl="/dashboard"
+          afterCreateOrganizationUrl="/dashboard"
           afterLeaveOrganizationUrl="/select-organization"
           appearance={{
             elements: {
@@ -60,23 +70,27 @@ export function AppHeader({
 }
 
 function Nav() {
+  const pathname = usePathname() || "";
   return (
     <nav className="flex items-center gap-1 ml-2">
-      <NavLink href="/proposals">Proposals</NavLink>
-      <NavLink href="/properties">Properties</NavLink>
-      <NavLink href="/settings/brand">Brand DNA</NavLink>
+      {NAV.map((item) => {
+        const active = item.matches(pathname);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`px-2.5 py-1 rounded-md text-[13px] transition ${
+              active
+                ? "text-[#1b3a2d] font-medium bg-[#1b3a2d]/[0.07]"
+                : "text-black/55 hover:text-black/85 hover:bg-black/[0.04]"
+            }`}
+            aria-current={active ? "page" : undefined}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="px-2.5 py-1 rounded-md text-[13px] text-black/55 hover:text-black/85 hover:bg-black/[0.04] transition"
-    >
-      {children}
-    </Link>
   );
 }
 
