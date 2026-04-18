@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  UserButton,
-  ClerkLoaded,
-  ClerkLoading,
-  Show,
-  SignOutButton,
-  useUser,
-} from "@clerk/nextjs";
+import { UserButton, SignOutButton, useUser } from "@clerk/nextjs";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import type { EditorMode } from "@/store/editorStore";
@@ -233,62 +226,76 @@ export function EditorToolbar() {
 
 // ─── User menu slot ─────────────────────────────────────────────────────────
 //
-// Renders Clerk's <UserButton> when signed in + shows initials as a bulletproof
-// fallback while clerk-js is still booting (or if it never loads, so the user
-// always has a visible, clickable sign-out).
+// Pure client-side: decides what to render from the `useUser` hook so we're
+// not dependent on Clerk's <Show> / <ClerkLoaded> resolving correctly in the
+// RSC + client-bundle split.  We always render *something* clickable: the
+// Clerk <UserButton> (which opens the real account popover) layered on top
+// of a static initials+sign-out fallback so a sign-out is always reachable.
 function UserMenuSlot() {
-  return (
-    <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
-      <Show when="signed-out">
+  const { isLoaded, isSignedIn, user } = useUser();
+
+  if (!isLoaded) {
+    return (
+      <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
+        <div className="w-8 h-8 rounded-full bg-black/10 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
         <Link
           href="/sign-in"
           className="px-3 py-1.5 text-sm rounded-lg border border-black/12 text-black/60 hover:bg-black/5 transition"
         >
           Sign in
         </Link>
-      </Show>
-      <Show when="signed-in">
-        <div className="relative flex items-center">
-          <ClerkLoading>
-            <InitialsFallback />
-          </ClerkLoading>
-          <ClerkLoaded>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: "2rem", height: "2rem" },
-                  userButtonTrigger: { pointerEvents: "auto" },
-                  userButtonPopoverCard: {
-                    zIndex: 9999,
-                    boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
-                  },
-                  userButtonPopoverRootBox: { zIndex: 9999 },
-                  userButtonPopoverMain: { zIndex: 9999 },
-                },
-              }}
-            />
-          </ClerkLoaded>
-        </div>
-      </Show>
-    </div>
-  );
-}
+      </div>
+    );
+  }
 
-function InitialsFallback() {
-  const { user } = useUser();
-  const initials =
+  const initials = (
     (user?.firstName?.[0] ?? "") +
-    (user?.lastName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0] ?? "");
+    (user?.lastName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0] ?? "")
+  ).toUpperCase();
+
   return (
-    <SignOutButton redirectUrl="/">
-      <button
-        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white bg-[#1b3a2d] hover:bg-[#2d5a40] transition"
-        title="Sign out"
-        aria-label="Sign out"
-      >
-        {initials.toUpperCase() || "•"}
-      </button>
-    </SignOutButton>
+    <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
+      <div className="relative w-8 h-8">
+        {/* Fallback initials button underneath — always clickable even if
+            UserButton fails to render its avatar (e.g. clerk-js blocked). */}
+        <SignOutButton redirectUrl="/">
+          <button
+            type="button"
+            className="absolute inset-0 rounded-full flex items-center justify-center text-xs font-semibold text-white bg-[#1b3a2d] hover:bg-[#2d5a40] transition"
+            title={`Sign out (${user?.primaryEmailAddress?.emailAddress ?? ""})`}
+            aria-label="Sign out"
+          >
+            {initials || "•"}
+          </button>
+        </SignOutButton>
+
+        {/* UserButton on top — takes over the hit area when clerk-js is up. */}
+        <div className="absolute inset-0">
+          <UserButton
+            appearance={{
+              elements: {
+                rootBox: { width: "2rem", height: "2rem" },
+                avatarBox: { width: "2rem", height: "2rem" },
+                userButtonTrigger: { pointerEvents: "auto" },
+                userButtonPopoverCard: {
+                  zIndex: 9999,
+                  boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
+                },
+                userButtonPopoverRootBox: { zIndex: 9999 },
+                userButtonPopoverMain: { zIndex: 9999 },
+              },
+            }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
