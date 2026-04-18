@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { getAuthContext } from "@/lib/currentUser";
+import { prisma } from "@/lib/prisma";
+import { buildBrandDNAPromptSection, brandDNAHasContent } from "@/lib/brandDNAPrompt";
 
-// Writing-style contract enforced on every AI response.
-const STYLE_RULES = `Writing rules (non-negotiable):
+// ─── Default style — applies whether or not Brand DNA is set ────────────────
+//
+// These rules are the floor. Brand DNA *layers on top* of them via the system
+// prompt; when a Brand DNA voice signal contradicts a default rule, the Brand
+// DNA wins (the layering text is explicit about that). When Brand DNA is
+// absent, generation behaves exactly as it did before this integration.
+
+const STYLE_RULES = `Writing rules (non-negotiable defaults):
 - Never use "stunning", "breathtaking", "amazing", "world-class", "luxurious", "incredible", or "unforgettable".
 - Be specific and location-aware. Name the region, the camp, the road, the season, the wildlife behaviour — not generic adjectives.
 - Warm, expert tone: like a seasoned East African guide writing to a guest. Confident, grounded, never salesy.
@@ -48,8 +56,11 @@ ${ctx}`;
 }
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) {
+  // Tenant context — needed to resolve the org's Brand DNA. We don't 409 here
+  // (org-less users shouldn't reach this route under normal middleware), but
+  // we tolerate a missing org and fall back to the default style.
+  const ctx = await getAuthContext();
+  if (!ctx) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -68,24 +79,75 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // Brand DNA — best-effort. A DB error here must not break generation.
+  let brandDNASection = "";
+  let brandDNAUsed = false;
+  if (ctx.organization) {
+    try {
+      const profile = await prisma.brandDNAProfile.findUnique({
+        where: { organizationId: ctx.organization.id },
+      });
+      brandDNASection = buildBrandDNAPromptSection(profile);
+      brandDNAUsed = brandDNAHasContent(profile);
+    } catch (err) {
+      console.warn("[AI] Brand DNA load failed; falling back to defaults:", err);
+    }
+  }
+
+  const systemText = STYLE_RULES + brandDNASection;
+
   const client = new Anthropic({ apiKey });
+
+  // Build the system block. We always pass the array form so we can attach
+  // cache_control — the Brand DNA section is per-org and stable, so a single
+  // breakpoint here gives us a high cache-hit rate for repeat generations
+  // from the same org. Empty / tiny Brand DNA won't actually cache (below
+  // the model's minimum), and that's fine — there's nothing to amortise.
+  const system: Anthropic.TextBlockParam[] = [
+    {
+      type: "text",
+      text: systemText,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
 
   try {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: STYLE_RULES,
+      system,
       messages: [{ role: "user", content: buildPrompt(body) }],
     });
+
     const text = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n")
       .trim();
-    return NextResponse.json({ text });
+
+    return NextResponse.json({
+      text,
+      meta: {
+        brandDNA: brandDNAUsed,
+        cacheRead: msg.usage.cache_read_input_tokens ?? 0,
+        cacheWrite: msg.usage.cache_creation_input_tokens ?? 0,
+        inputTokens: msg.usage.input_tokens,
+        outputTokens: msg.usage.output_tokens,
+      },
+    });
   } catch (err) {
+    if (err instanceof Anthropic.RateLimitError) {
+      return NextResponse.json(
+        { error: "AI is rate-limited; please retry in a moment." },
+        { status: 429 },
+      );
+    }
+    if (err instanceof Anthropic.APIError) {
+      console.error("[AI] Anthropic error:", err.status, err.message);
+      return NextResponse.json({ error: err.message }, { status: err.status ?? 500 });
+    }
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[AI] Anthropic error:", message);
+    console.error("[AI] Unexpected error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
