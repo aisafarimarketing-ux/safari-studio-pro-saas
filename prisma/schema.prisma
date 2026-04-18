@@ -31,6 +31,26 @@ model User {
   @@index([clerkUserId])
 }
 
+// ─── Organization ───────────────────────────────────────────────────────────
+//
+// One row per Clerk organization. Each organization is the tenant scope for
+// Proposals, BrandDNA, and other per-workspace data. Organizations represent
+// a travel business — tour operator, DMC, agent, camp, lodge, safari brand.
+// Row is upserted on first authenticated request that carries an orgId.
+
+model Organization {
+  id         String   @id @default(cuid())
+  clerkOrgId String   @unique
+  name       String?
+  slug       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  proposals Proposal[]
+
+  @@index([clerkOrgId])
+}
+
 // ─── Proposal ───────────────────────────────────────────────────────────────
 //
 // contentJson holds the entire Proposal object from src/lib/types.ts:
@@ -44,6 +64,12 @@ model Proposal {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Tenant scope. Nullable to survive the schema migration for any pre-org
+  // rows, but every new proposal is created with this set; queries always
+  // filter by organizationId so pre-org rows are invisible until backfilled.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   title     String   @default("Untitled Proposal")
   status    String   @default("draft")       // draft | sent | accepted
   isPublic  Boolean  @default(false)
@@ -55,5 +81,6 @@ model Proposal {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([organizationId])
   @@index([shareSlug])
 }

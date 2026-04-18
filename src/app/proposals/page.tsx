@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { UserButton, SignOutButton, useUser } from "@clerk/nextjs";
+import {
+  OrganizationSwitcher,
+  SignOutButton,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 import { buildBlankProposal } from "@/lib/defaults";
 
 type ProposalSummary = {
@@ -32,6 +37,7 @@ export default function ProposalsPage() {
     try {
       const res = await fetch("/api/proposals", { cache: "no-store" });
       if (res.status === 401) { window.location.href = "/sign-in?redirect_url=/proposals"; return; }
+      if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setProposals(Array.isArray(data.proposals) ? data.proposals : []);
@@ -55,6 +61,7 @@ export default function ProposalsPage() {
         body: JSON.stringify({ proposal: blank }),
       });
       if (res.status === 401) { window.location.href = "/sign-in?redirect_url=/proposals"; return; }
+      if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       try { localStorage.setItem("activeProposalId", blank.id); } catch {}
       router.push("/studio");
@@ -104,7 +111,27 @@ export default function ProposalsPage() {
             Safari Studio
           </span>
         </Link>
-        <DashboardUserSlot />
+        <div className="flex items-center gap-3">
+          <OrganizationSwitcher
+            hidePersonal
+            afterSelectOrganizationUrl="/proposals"
+            afterCreateOrganizationUrl="/proposals"
+            afterLeaveOrganizationUrl="/select-organization"
+            appearance={{
+              elements: {
+                organizationSwitcherTrigger: {
+                  padding: "4px 10px",
+                  borderRadius: "0.5rem",
+                  fontSize: "13px",
+                  maxWidth: "220px",
+                },
+                organizationSwitcherPopoverCard: { zIndex: 9999, boxShadow: "0 12px 40px rgba(0,0,0,0.18)" },
+                organizationSwitcherPopoverRootBox: { zIndex: 9999 },
+              },
+            }}
+          />
+          <DashboardUserSlot />
+        </div>
       </header>
 
       {/* ── Content ────────────────────────────────────────────────── */}

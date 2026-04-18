@@ -26,6 +26,7 @@ export function ProposalEditor() {
 
     async function loadOne(id: string) {
       const res = await fetch(`/api/proposals/${id}`);
+      if (res.status === 409) { window.location.href = "/select-organization"; return false; }
       if (res.status === 404 || res.status === 403) {
         localStorage.removeItem("activeProposalId");
         return false;
@@ -46,6 +47,7 @@ export function ProposalEditor() {
         if (stored && (await loadOne(stored))) return;
 
         const list = await fetch("/api/proposals");
+        if (list.status === 409) { window.location.href = "/select-organization"; return; }
         if (!list.ok) return;
         const { proposals } = await list.json();
         const latest = Array.isArray(proposals) && proposals[0]?.id;

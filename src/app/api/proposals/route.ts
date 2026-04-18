@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
-import { getOrCreateUser } from "@/lib/currentUser";
+import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/proposals — list current user's proposals (newest first)
+// GET /api/proposals — list proposals for the caller's active organization
+// (newest first). 409 if the caller has no active organization; the UI
+// routes through /select-organization in that case.
 export async function GET() {
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (!ctx.organization) {
+    return NextResponse.json({ error: "No active organization" }, { status: 409 });
+  }
 
   const rows = await prisma.proposal.findMany({
-    where: { userId: user.id },
+    where: { organizationId: ctx.organization.id },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -34,12 +39,16 @@ export async function GET() {
   return NextResponse.json({ proposals });
 }
 
-// POST /api/proposals — upsert by client-provided proposal.id
+// POST /api/proposals — upsert by client-provided proposal.id within the
+// caller's active organization.
 //   Body: { proposal: <full Proposal object> }
-//   Create if new; update (ownership-checked) if existing.
+//   Create if new; update (ownership + tenant-scoped) if existing.
 export async function POST(req: Request) {
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (!ctx.organization) {
+    return NextResponse.json({ error: "No active organization" }, { status: 409 });
+  }
 
   let body: { proposal?: { id?: string; metadata?: { title?: string; status?: string } } };
   try {
@@ -56,12 +65,12 @@ export async function POST(req: Request) {
   const title = proposal.metadata?.title || "Untitled Proposal";
   const status = proposal.metadata?.status || "draft";
 
-  // Ownership check before upsert — don't let user A overwrite user B's row.
+  // Tenant guard: reject if an existing row belongs to a different org.
   const existing = await prisma.proposal.findUnique({
     where: { id: proposal.id },
-    select: { userId: true },
+    select: { userId: true, organizationId: true },
   });
-  if (existing && existing.userId !== user.id) {
+  if (existing && existing.organizationId && existing.organizationId !== ctx.organization.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -69,7 +78,8 @@ export async function POST(req: Request) {
     where: { id: proposal.id },
     create: {
       id: proposal.id,
-      userId: user.id,
+      userId: ctx.user.id,
+      organizationId: ctx.organization.id,
       title,
       status,
       contentJson: proposal as object,
@@ -77,6 +87,7 @@ export async function POST(req: Request) {
     update: {
       title,
       status,
+      organizationId: ctx.organization.id,
       contentJson: proposal as object,
     },
     select: { id: true, title: true, updatedAt: true },

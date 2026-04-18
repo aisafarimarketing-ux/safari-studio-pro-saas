@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { UserButton, SignOutButton, useUser } from "@clerk/nextjs";
+import {
+  OrganizationSwitcher,
+  SignOutButton,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import type { EditorMode } from "@/store/editorStore";
@@ -40,6 +45,7 @@ export function EditorToolbar() {
         body: JSON.stringify({ proposal: useProposalStore.getState().proposal }),
       });
       if (res.status === 401) { window.location.href = "/sign-in"; return; }
+      if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || `HTTP ${res.status}`);
@@ -261,7 +267,25 @@ function UserMenuSlot() {
   ).toUpperCase();
 
   return (
-    <div className="ml-1 pl-2 border-l border-black/10 flex items-center min-w-[40px] justify-center">
+    <div className="ml-1 pl-2 border-l border-black/10 flex items-center gap-2 min-w-[40px]">
+      <OrganizationSwitcher
+        hidePersonal
+        afterSelectOrganizationUrl="/proposals"
+        afterCreateOrganizationUrl="/proposals"
+        afterLeaveOrganizationUrl="/select-organization"
+        appearance={{
+          elements: {
+            organizationSwitcherTrigger: {
+              padding: "4px 10px",
+              borderRadius: "0.5rem",
+              fontSize: "13px",
+              maxWidth: "180px",
+            },
+            organizationSwitcherPopoverCard: { zIndex: 9999, boxShadow: "0 12px 40px rgba(0,0,0,0.18)" },
+            organizationSwitcherPopoverRootBox: { zIndex: 9999 },
+          },
+        }}
+      />
       <div className="relative w-8 h-8">
         {/* Fallback initials button underneath — always clickable even if
             UserButton fails to render its avatar (e.g. clerk-js blocked). */}
