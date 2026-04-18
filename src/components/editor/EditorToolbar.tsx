@@ -137,19 +137,13 @@ export function EditorToolbar() {
       <div className="flex items-center gap-3 min-w-0">
         <Link
           href="/dashboard"
-          className="text-sm text-black/35 hover:text-black/60 transition shrink-0"
+          className="text-sm text-black/40 hover:text-black/70 transition shrink-0"
         >
           ← Dashboard
         </Link>
-        <span className="text-black/15">|</span>
+        <span className="text-black/15" aria-hidden>/</span>
         <div
-          className="w-6 h-6 rounded-md flex items-center justify-center text-[#c9a84c] font-bold text-sm shrink-0"
-          style={{ background: "rgba(201,168,76,0.15)" }}
-        >
-          S
-        </div>
-        <div
-          className="text-sm font-semibold text-black/75 outline-none truncate max-w-[260px]"
+          className="text-sm font-semibold text-black/80 outline-none truncate max-w-[320px]"
           contentEditable
           suppressContentEditableWarning
           onBlur={(e) => {

@@ -57,7 +57,7 @@ export function TripMetaStrip() {
   return (
     <div
       ref={rootRef}
-      className="border-b border-black/8 bg-[#faf8f3] px-4 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar print:hidden"
+      className="border-b border-black/8 bg-[#faf8f3] px-4 h-9 flex items-center gap-1 overflow-x-auto no-scrollbar print:hidden"
     >
       {/* Dates */}
       <MetaPill
@@ -188,16 +188,19 @@ function MetaPill({
       <button
         type="button"
         onClick={onClick}
-        className={`inline-flex items-baseline gap-1.5 px-3 py-1 rounded-md text-small transition ${
+        className={`inline-flex items-baseline gap-1.5 px-2.5 py-1 rounded-md text-[12.5px] transition ${
           active
             ? "bg-[#1b3a2d]/[0.08] text-[#1b3a2d]"
-            : "text-black/70 hover:bg-black/[0.04]"
+            : "text-black/65 hover:bg-black/[0.04]"
         }`}
       >
-        <span className="text-label ed-label" style={{ color: active ? "#1b3a2d" : "rgba(0,0,0,0.4)" }}>
+        <span
+          className="text-[10px] uppercase font-semibold"
+          style={{ color: active ? "#1b3a2d" : "rgba(0,0,0,0.38)", letterSpacing: "0.14em" }}
+        >
           {label}
         </span>
-        <span className="font-medium truncate max-w-[180px]">{value}</span>
+        <span className="font-medium truncate max-w-[160px]">{value}</span>
       </button>
       {children}
     </div>
@@ -206,8 +209,11 @@ function MetaPill({
 
 function DerivedPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="shrink-0 inline-flex items-baseline gap-1.5 px-3 py-1 rounded-md text-small text-black/55">
-      <span className="text-label ed-label" style={{ color: "rgba(0,0,0,0.35)" }}>
+    <div className="shrink-0 inline-flex items-baseline gap-1.5 px-2.5 py-1 rounded-md text-[12.5px] text-black/50">
+      <span
+        className="text-[10px] uppercase font-semibold"
+        style={{ color: "rgba(0,0,0,0.32)", letterSpacing: "0.14em" }}
+      >
         {label}
       </span>
       <span className="font-medium tabular-nums">{value}</span>
