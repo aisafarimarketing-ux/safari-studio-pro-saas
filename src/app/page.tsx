@@ -59,6 +59,7 @@ function Nav() {
           <a href="#how" className="hover:text-white transition">How it works</a>
           <a href="#different" className="hover:text-white transition">Why it&apos;s different</a>
           <a href="#brand" className="hover:text-white transition">Brand DNA</a>
+          <Link href="/pricing" className="hover:text-white transition">Pricing</Link>
         </div>
 
         <div className="flex items-center gap-2">
@@ -693,7 +694,7 @@ function Footer() {
         <div className="flex gap-6">
           <a href="#how" className="hover:text-white/70 transition">How it works</a>
           <a href="#different" className="hover:text-white/70 transition">Why different</a>
-          <a href="#brand" className="hover:text-white/70 transition">Brand DNA</a>
+          <Link href="/pricing" className="hover:text-white/70 transition">Pricing</Link>
           <Link href="/sign-up" className="hover:text-white/70 transition">Open Studio</Link>
         </div>
         <div>&copy; {new Date().getFullYear()} Safari Studio · Nairobi</div>
