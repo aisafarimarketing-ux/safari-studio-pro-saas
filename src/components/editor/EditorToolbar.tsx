@@ -10,6 +10,7 @@ import {
   useUser,
 } from "@clerk/nextjs";
 import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
+import { CommentsDrawer } from "./CommentsDrawer";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -165,9 +166,11 @@ export function EditorToolbar() {
         <BrandDNAHint />
       </div>
 
-      {/* Right: action stack — Save · ⋯ · Preview · SHARE (primary) */}
+      {/* Right: action stack — Save · Comments · ⋯ · Preview · SHARE (primary) */}
       <div className="flex items-center gap-2 shrink-0">
         <SaveBadge state={saveState} onSave={handleSave} />
+
+        <CommentsDrawer proposalId={proposal.id} />
 
         <ActionsMenu
           open={menuOpen}

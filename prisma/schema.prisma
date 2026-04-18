@@ -220,9 +220,51 @@ model Proposal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  comments ProposalComment[]
+
   @@index([userId])
   @@index([organizationId])
   @@index([shareSlug])
+}
+
+// ─── Client interaction (lightweight) ───────────────────────────────────────
+//
+// Anonymous-friendly: a client visiting /p/[id] can leave a note without
+// signing in (we capture name + email at the form level). Comments are
+// proposal-scoped; the optional sectionId / dayId / propertyId let the UI
+// anchor a comment to a specific moment without modelling a full thread.
+//
+// Status flips between "open" and "resolved" so the operator can clear
+// out handled requests without losing history.
+
+model ProposalComment {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // Optional anchors — set at most one to scope the comment to a part of
+  // the proposal. Reserved for future inline-comment UI; for v1 the comment
+  // form posts proposal-level and these stay null.
+  sectionId  String?
+  dayId      String?
+  propertyId String?
+
+  // Anonymous client identity, captured at submission time. Both optional —
+  // some clients prefer to stay anonymous; we still accept the comment.
+  authorName  String?
+  authorEmail String?
+  // operator: when an operator replies the future inline-thread UI will
+  // set this so the bubble renders on the right side.
+  authorIsOperator Boolean @default(false)
+
+  body   String
+  status String @default("open")  // open | resolved
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([proposalId, status])
+  @@index([proposalId, createdAt])
 }
 
 // ─── Property System ────────────────────────────────────────────────────────

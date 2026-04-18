@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
+import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import type { Proposal, Section } from "@/lib/types";
 
 export default function ClientProposalPage({
@@ -116,6 +117,8 @@ export default function ClientProposalPage({
           )}
         </footer>
       )}
+
+      <CommentPanel proposalId={id} />
     </div>
   );
 }
