@@ -5,6 +5,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { EditorToolbar } from "./EditorToolbar";
 import { EditorDayNav } from "./EditorDayNav";
+import { TripMetaStrip } from "./TripMetaStrip";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
 import { ContextPanel } from "./ContextPanel";
@@ -117,6 +118,7 @@ export function ProposalEditor() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <EditorToolbar />
+      <TripMetaStrip />
 
       <div className="flex flex-1 min-h-0 relative">
         {/* Left sidebar — collapsible */}
