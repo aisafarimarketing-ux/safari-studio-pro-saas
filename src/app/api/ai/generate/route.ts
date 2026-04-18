@@ -11,12 +11,33 @@ import { buildBrandDNAPromptSection, brandDNAHasContent } from "@/lib/brandDNAPr
 // DNA wins (the layering text is explicit about that). When Brand DNA is
 // absent, generation behaves exactly as it did before this integration.
 
-const STYLE_RULES = `Writing rules (non-negotiable defaults):
-- Never use "stunning", "breathtaking", "amazing", "world-class", "luxurious", "incredible", or "unforgettable".
-- Be specific and location-aware. Name the region, the camp, the road, the season, the wildlife behaviour — not generic adjectives.
-- Warm, expert tone: like a seasoned East African guide writing to a guest. Confident, grounded, never salesy.
-- Prefer concrete sensory detail (light, sound, smell, terrain) over abstract praise.
-- Keep copy tight. No filler. No exclamation marks.`;
+const STYLE_RULES = `Operator copy rules (non-negotiable — these are the floor; brand voice may shift register but never relaxes these bans):
+
+BAN — never use these words, or any close variant:
+- Adjective clichés: stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, awe-inspiring, world-class, luxurious, luxe, iconic, ultimate, lush, vibrant, verdant, pristine, picturesque, idyllic.
+- Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge, "experience the magic", "step into".
+- Brochure phrases: nestled in, tucked away, hidden gem, dotted with, paradise, rolling savannahs, rich biodiversity, "sights and sounds", "the perfect blend of", "a true testament to".
+- AI tells: "Whether you're…", "From X to Y, …", "ensures", openings that introduce the destination as the hero ("The Masai Mara is…").
+- Closers: "memories to last a lifetime", "a journey to remember", "your dream safari awaits", any flourish ending.
+- No exclamation marks. No rhetorical questions.
+
+VOICE:
+- Operator brief, not brochure. Like writing to a colleague who already knows the ground.
+- Confident, specific, unfussy. Plain English over poetic English.
+- One adjective per noun, max. Cut the second.
+- Lead with a fact — a place name, a time, a distance, a named feature, a behaviour, a season. Adjectives are only allowed after a fact has earned them.
+- Default to short, declarative sentences. Vary rhythm only when the content earns it.
+
+GROUND IT:
+- Use the names and specifics in the provided context: camp, region, conservancy, road, season, guide, client, dates, activities. Pull from the context, never invent.
+- Operator-trust details (board basis, flight time, vehicle, tent count, head guide name) are gold when the context has them — use them.
+- If the context is thin, write less rather than fill space with praise. Two grounded sentences beat four padded ones.
+
+DON'T:
+- Don't moralise about wildlife or culture.
+- Don't open with the destination as hero.
+- Don't end with a flourish.
+- Don't address the reader as "you'll discover" / "you'll experience" / "you'll find".`;
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
@@ -32,20 +53,26 @@ function buildPrompt(body: Body): string {
 
   switch (task) {
     case "title":
-      return `Write a single short proposal title (max 8 words) for this safari.
+      return `Write a single short proposal title for this safari (max 8 words).
+Use a specific anchor — client name, destination, season, or trip style. Avoid generic phrasing like "Safari Adventure", "African Dream Trip", "East African Escape".
 Return ONLY the title text. No quotes, no preamble, no explanation.
 
 Context:
 ${ctx}`;
     case "day":
       return `Write a 2-3 sentence day narrative for a safari proposal.
-Ground it in the specific destination and activities in the context.
+Open with a concrete observation — a time, terrain feature, season, conservancy/region name, or wildlife behaviour. Not the destination as hero, not an adjective.
+Use named camps, regions, conservancies, board basis, and activities from the context. Skip what isn't there. Don't fabricate camp names, guides, or experiences.
+If the context is thin, write less.
 Return ONLY the narrative paragraph.
 
 Context:
 ${ctx}`;
     case "greeting":
-      return `Write a warm 3-4 sentence greeting paragraph to open a safari proposal for this client.
+      return `Write a 3-4 sentence opening greeting for a safari proposal.
+Address the named guests directly. State what the proposal is — destination(s), nights, season — using only what the context provides.
+Sound like an operator who already knows the trip and the client, not a sales letter. One welcome line is enough; the rest is anchor and intent.
+End on a human note (e.g. invite their notes), not a flourish.
 Return ONLY the greeting paragraph.
 
 Context:
