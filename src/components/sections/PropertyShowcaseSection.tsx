@@ -15,7 +15,7 @@ import type { Property, Section, ThemeTokens, ProposalTheme } from "@/lib/types"
 
 // ── Property card ──────────────────────────────────────────────────────────────
 
-function PropertyCard({ property, variant }: { property: Property; variant: string }) {
+function PropertyCard({ property, variant, index = 0 }: { property: Property; variant: string; index?: number }) {
   const { proposal, updateProperty, removeProperty } = useProposalStore();
   const { mode, selectProperty, selectedPropertyId } = useEditorStore();
   const isEditor = mode === "editor";
@@ -46,14 +46,20 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
     }
   };
 
-  const isLargeImage = variant === "large-image-detail-block";
+  const isEditorial = variant === "editorial";
+  const isFullBleed = variant === "full-bleed";
+  // Editorial + full-bleed are flush with the page — no harsh card border /
+  // rounded corners. Other variants keep the framed card treatment.
+  const wrapperClass = isEditorial || isFullBleed
+    ? "dm-card relative transition-colors duration-150"
+    : "dm-card relative rounded-2xl overflow-hidden border transition-colors duration-150";
 
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, borderColor: tokens.border }}
+      style={{ ...style, borderColor: isEditorial || isFullBleed ? "transparent" : tokens.border }}
       onClick={() => isEditor && selectProperty(property.id)}
-      className="dm-card relative rounded-2xl overflow-hidden border transition-colors duration-150"
+      className={wrapperClass}
     >
       {/* Editor controls */}
       {isEditor && (
@@ -65,7 +71,9 @@ function PropertyCard({ property, variant }: { property: Property; variant: stri
         </div>
       )}
 
-      {variant === "large-image-detail-block" ? (
+      {variant === "editorial" ? (
+        <EditorialLayout property={property} index={index} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
+      ) : variant === "large-image-detail-block" ? (
         <LargeImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : variant === "hero-thumbnails" ? (
         <HeroThumbnailsLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
@@ -444,6 +452,179 @@ function FullBleedLayout({ property, isEditor, tokens, theme, updateProperty, ha
 
 // ── Shared details block ───────────────────────────────────────────────────────
 
+// ── Editorial alternating layout — image side flips per property index ──────
+//
+// The default since this commit: a luxury-brochure feel. No card border,
+// no rounded frame on the wrapper — just a tall image (4:5 aspect) on
+// one side and a generous typography column on the other, alternating
+// position by index so the spread breathes.
+
+function EditorialLayout({
+  property,
+  index,
+  isEditor,
+  tokens,
+  theme,
+  updateProperty,
+  handleLeadImage,
+}: {
+  property: Property;
+  index: number;
+  isEditor: boolean;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  updateProperty: (id: string, patch: Partial<Property>) => void;
+  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const imageRight = index % 2 === 1;
+  return (
+    <div
+      className={`grid md:grid-cols-2 gap-10 md:gap-14 items-center ${
+        imageRight ? "md:[&>*:first-child]:order-2" : ""
+      }`}
+    >
+      {/* Image */}
+      <div
+        className="relative aspect-[4/5] md:aspect-[5/6] overflow-hidden rounded-sm"
+        style={{ background: tokens.cardBg }}
+      >
+        {property.leadImageUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={property.leadImageUrl}
+              alt={property.name}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {isEditor && (
+              <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
+                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+                Change
+              </label>
+            )}
+          </>
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            <div className="text-3xl opacity-30 mb-1">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+      </div>
+
+      {/* Detail column — generous spacing, no boxes */}
+      <div className="px-2 md:px-0">
+        <div
+          className="text-[10px] uppercase tracking-[0.28em] mb-3 font-semibold"
+          style={{ color: tokens.mutedText }}
+        >
+          {property.location || "The stay"}
+        </div>
+        <h3
+          className="text-[2.4rem] md:text-[2.8rem] font-bold leading-[1.05] tracking-tight outline-none"
+          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
+        >
+          {property.name}
+        </h3>
+        {property.shortDesc && (
+          <p
+            className="mt-3 text-[14px] italic outline-none"
+            style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
+          >
+            {property.shortDesc}
+          </p>
+        )}
+
+        {/* Description */}
+        {property.description && (
+          <p
+            className="mt-6 text-[14px] leading-[1.85] outline-none"
+            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateProperty(property.id, { description: e.currentTarget.textContent ?? property.description })}
+          >
+            {property.description}
+          </p>
+        )}
+
+        {/* Why we chose this — pull-quote treatment */}
+        {property.whyWeChoseThis && (
+          <div className="mt-7 pl-5 border-l-2" style={{ borderColor: tokens.accent }}>
+            <div
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
+              style={{ color: tokens.accent }}
+            >
+              Why we chose this
+            </div>
+            <p
+              className="text-[15px] leading-[1.7] outline-none italic"
+              style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
+            >
+              {property.whyWeChoseThis}
+            </p>
+          </div>
+        )}
+
+        {/* Stay details — meal plan / room / nights as a quiet inline row */}
+        {(property.mealPlan || property.roomType || property.nights) && (
+          <div className="mt-7 pt-5 flex flex-wrap gap-x-8 gap-y-3 border-t" style={{ borderColor: tokens.border }}>
+            {[
+              { label: "Meal plan", value: property.mealPlan },
+              { label: "Room", value: property.roomType },
+              { label: "Nights", value: property.nights ? `${property.nights} nights` : undefined },
+            ].map((item) =>
+              item.value ? (
+                <div key={item.label}>
+                  <div className="text-[9px] uppercase tracking-[0.24em] mb-1" style={{ color: tokens.mutedText }}>
+                    {item.label}
+                  </div>
+                  <div className="text-[13px] font-semibold" style={{ color: tokens.headingText }}>
+                    {item.value}
+                  </div>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+
+        {/* Amenities — chips */}
+        {property.amenities.length > 0 && (
+          <div className="mt-6">
+            <div className="text-[9px] uppercase tracking-[0.24em] mb-2.5" style={{ color: tokens.mutedText }}>
+              Amenities
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {property.amenities.map((a) => (
+                <span
+                  key={a}
+                  className="px-2.5 py-1 rounded-full text-[11.5px]"
+                  style={{
+                    background: tokens.cardBg,
+                    color: tokens.bodyText,
+                    border: `1px solid ${tokens.border}`,
+                  }}
+                >
+                  {a}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, showHeader }: {
   property: Property;
   isEditor: boolean;
@@ -549,10 +730,10 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={properties.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-            <div className={section.layoutVariant === "card-grid" ? "grid grid-cols-1 md:grid-cols-2 gap-5" : "space-y-6"}>
-              {properties.map((property) => (
+            <div className={section.layoutVariant === "card-grid" ? "grid grid-cols-1 md:grid-cols-2 gap-5" : section.layoutVariant === "editorial" ? "space-y-20 md:space-y-28" : "space-y-6"}>
+              {properties.map((property, i) => (
                 <div className="relative" key={property.id}>
-                  <PropertyCard property={property} variant={section.layoutVariant} />
+                  <PropertyCard property={property} variant={section.layoutVariant} index={i} />
                 </div>
               ))}
             </div>
