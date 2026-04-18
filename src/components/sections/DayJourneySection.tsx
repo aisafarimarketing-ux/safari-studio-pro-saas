@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { ThemeTokens, ProposalTheme } from "@/lib/types";
+import type { ThemeTokens, ProposalTheme, Property as ProposalProperty, TierKey } from "@/lib/types";
 import { DestinationImagePicker } from "@/components/editor/DestinationImagePicker";
+import { DayPropertyPicker } from "@/components/editor/DayPropertyPicker";
 import { DayStayPreview } from "./DayStayPreview";
 import { resolveTokens } from "@/lib/theme";
 import {
@@ -541,7 +542,33 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
   updateDay: (id: string, patch: Partial<Day>) => void;
 }) {
   // Read proposal here so we can resolve property previews.
-  const { proposal } = useProposalStore();
+  const { proposal, addPropertyFromLibrary } = useProposalStore();
+  const [propPickerOpen, setPropPickerOpen] = useState(false);
+
+  // Assign a library property to this day:
+  //  - snapshot into proposal.properties if not already there
+  //  - set day.tiers[activeTier].camp/location to the picked property
+  //  - clear the tier.note so stale tier-specific text doesn't linger
+  const handleAssignProperty = (snapshot: Partial<ProposalProperty>) => {
+    if (!snapshot.name) return;
+    const nameLc = snapshot.name.trim().toLowerCase();
+    const already = proposal.properties.some((p) => p.name.trim().toLowerCase() === nameLc);
+    if (!already) addPropertyFromLibrary(snapshot);
+
+    const tier = activeTier as TierKey;
+    updateDay(day.id, {
+      tiers: {
+        ...day.tiers,
+        [tier]: {
+          ...day.tiers[tier],
+          camp: snapshot.name,
+          location: snapshot.location || day.tiers[tier].location,
+          note: "",
+        },
+      },
+    });
+  };
+
   return (
     // Editorial rhythm from the brief: image lives in the parent layout,
     // then 32 → title → 16 → text → 24 → "Stay at" property block.
@@ -601,7 +628,26 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
           theme={theme}
           properties={proposal.properties}
         />
+        {isEditor && (
+          <button
+            type="button"
+            onClick={() => setPropPickerOpen(true)}
+            className="mt-3 inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
+            style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
+          >
+            <span aria-hidden>◇</span>
+            <span>Browse my properties</span>
+          </button>
+        )}
       </div>
+
+      {propPickerOpen && (
+        <DayPropertyPicker
+          dayDestination={day.destination}
+          onClose={() => setPropPickerOpen(false)}
+          onSelect={handleAssignProperty}
+        />
+      )}
     </div>
   );
 }
