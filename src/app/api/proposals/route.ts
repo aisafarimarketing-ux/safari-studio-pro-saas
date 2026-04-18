@@ -7,10 +7,29 @@ export async function GET() {
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const proposals = await prisma.proposal.findMany({
+  const rows = await prisma.proposal.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, title: true, status: true, updatedAt: true, createdAt: true },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      updatedAt: true,
+      createdAt: true,
+      contentJson: true,
+    },
+  });
+
+  const proposals = rows.map((r) => {
+    const json = r.contentJson as { client?: { guestNames?: string } } | null;
+    return {
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      updatedAt: r.updatedAt,
+      createdAt: r.createdAt,
+      clientName: json?.client?.guestNames?.trim() || null,
+    };
   });
   return NextResponse.json({ proposals });
 }

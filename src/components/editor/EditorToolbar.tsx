@@ -104,10 +104,10 @@ export function EditorToolbar() {
       {/* Left */}
       <div className="flex items-center gap-3 min-w-0">
         <Link
-          href="/"
+          href="/proposals"
           className="text-sm text-black/35 hover:text-black/60 transition shrink-0"
         >
-          ← Home
+          ← Proposals
         </Link>
         <span className="text-black/15">|</span>
 
