@@ -512,17 +512,24 @@ function EditorialLayout({
         ) : null}
       </div>
 
-      {/* Detail column — generous spacing, no boxes */}
+      {/* Detail column — strict editorial type scale, generous rhythm */}
       <div className="px-2 md:px-0">
         <div
-          className="text-[10px] uppercase tracking-[0.28em] mb-3 font-semibold"
+          className="text-label ed-label mb-4"
           style={{ color: tokens.mutedText }}
         >
           {property.location || "The stay"}
         </div>
         <h3
-          className="text-[2.4rem] md:text-[2.8rem] font-bold leading-[1.05] tracking-tight outline-none"
-          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+          className="text-display font-bold tracking-tight outline-none"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+            // Drop a notch on small screens so the display size doesn't
+            // overflow narrow viewports.
+            fontSize: "clamp(2.5rem, 6vw, 4rem)",
+            lineHeight: 1.05,
+          }}
           contentEditable={isEditor}
           suppressContentEditableWarning
           onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
@@ -531,7 +538,7 @@ function EditorialLayout({
         </h3>
         {property.shortDesc && (
           <p
-            className="mt-3 text-[14px] italic outline-none"
+            className="text-body-lg italic mt-4 outline-none"
             style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
@@ -541,10 +548,9 @@ function EditorialLayout({
           </p>
         )}
 
-        {/* Description */}
         {property.description && (
           <p
-            className="mt-6 text-[14px] leading-[1.85] outline-none"
+            className="text-body mt-8 outline-none"
             style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
@@ -554,17 +560,16 @@ function EditorialLayout({
           </p>
         )}
 
-        {/* Why we chose this — pull-quote treatment */}
         {property.whyWeChoseThis && (
-          <div className="mt-7 pl-5 border-l-2" style={{ borderColor: tokens.accent }}>
+          <div className="mt-8 pl-6 border-l-2" style={{ borderColor: tokens.accent }}>
             <div
-              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
+              className="text-label ed-label mb-2"
               style={{ color: tokens.accent }}
             >
               Why we chose this
             </div>
             <p
-              className="text-[15px] leading-[1.7] outline-none italic"
+              className="text-body-lg italic outline-none"
               style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
               contentEditable={isEditor}
               suppressContentEditableWarning
@@ -575,9 +580,11 @@ function EditorialLayout({
           </div>
         )}
 
-        {/* Stay details — meal plan / room / nights as a quiet inline row */}
         {(property.mealPlan || property.roomType || property.nights) && (
-          <div className="mt-7 pt-5 flex flex-wrap gap-x-8 gap-y-3 border-t" style={{ borderColor: tokens.border }}>
+          <div
+            className="mt-8 pt-6 flex flex-wrap gap-x-12 gap-y-4 border-t"
+            style={{ borderColor: tokens.border }}
+          >
             {[
               { label: "Meal plan", value: property.mealPlan },
               { label: "Room", value: property.roomType },
@@ -585,10 +592,10 @@ function EditorialLayout({
             ].map((item) =>
               item.value ? (
                 <div key={item.label}>
-                  <div className="text-[9px] uppercase tracking-[0.24em] mb-1" style={{ color: tokens.mutedText }}>
+                  <div className="text-label ed-label mb-1" style={{ color: tokens.mutedText }}>
                     {item.label}
                   </div>
-                  <div className="text-[13px] font-semibold" style={{ color: tokens.headingText }}>
+                  <div className="text-small font-semibold" style={{ color: tokens.headingText }}>
                     {item.value}
                   </div>
                 </div>
@@ -597,21 +604,23 @@ function EditorialLayout({
           </div>
         )}
 
-        {/* Amenities — chips */}
         {property.amenities.length > 0 && (
-          <div className="mt-6">
-            <div className="text-[9px] uppercase tracking-[0.24em] mb-2.5" style={{ color: tokens.mutedText }}>
+          <div className="mt-8">
+            <div className="text-label ed-label mb-3" style={{ color: tokens.mutedText }}>
               Amenities
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {property.amenities.map((a) => (
                 <span
                   key={a}
-                  className="px-2.5 py-1 rounded-full text-[11.5px]"
+                  className="px-3 py-1 rounded-full text-label"
                   style={{
                     background: tokens.cardBg,
                     color: tokens.bodyText,
                     border: `1px solid ${tokens.border}`,
+                    textTransform: "none",
+                    letterSpacing: "0",
+                    fontWeight: 400,
                   }}
                 >
                   {a}
@@ -708,22 +717,22 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.pageBg }}>
-      <div className="max-w-5xl mx-auto">
+    <div className="py-24" style={{ background: tokens.pageBg }}>
+      <div className="ed-wide">
         {/* Section header */}
-        <div className="flex items-end justify-between mb-14">
+        <div className="flex items-end justify-between mb-16">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.28em] mb-3" style={{ color: tokens.mutedText }}>
+            <div className="text-label ed-label mb-3" style={{ color: tokens.mutedText }}>
               Where you&apos;ll stay
             </div>
             <div
-              className="text-[2.75rem] md:text-[3rem] font-bold leading-[1.0] tracking-tight"
+              className="text-h1 font-bold tracking-tight"
               style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             >
               Your properties
             </div>
           </div>
-          <div className="text-[12px] pb-1" style={{ color: tokens.mutedText }}>
+          <div className="text-small pb-1" style={{ color: tokens.mutedText }}>
             {properties.length} {properties.length === 1 ? "property" : "properties"}
           </div>
         </div>
