@@ -7,8 +7,9 @@ import { useOrganization } from "@clerk/nextjs";
 import { AppHeader } from "@/components/properties/AppHeader";
 import { CompletionRing } from "@/components/brand-dna/CompletionRing";
 import type { BrandDNACompletion } from "@/lib/brandDNA";
-import { buildBlankProposal, buildDefaultProposal } from "@/lib/defaults";
+import { buildBlankProposal, buildDemoProposal } from "@/lib/defaults";
 import { nanoid } from "@/lib/nanoid";
+import { OnboardingChecklist } from "./OnboardingChecklist";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -97,12 +98,11 @@ export function DashboardWorkspace() {
     if (importing) return;
     setImporting(true);
     try {
-      const sample = buildDefaultProposal();
+      const sample = buildDemoProposal();
       // Always assign a fresh id so re-importing creates a new copy.
       sample.id = nanoid();
       sample.metadata = {
         ...sample.metadata,
-        title: `${sample.metadata.title} (sample)`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -150,12 +150,26 @@ export function DashboardWorkspace() {
           </div>
         )}
 
+        {/* Onboarding checklist — derived from real workspace data, auto-
+            disappears once everything's done. Dismissible per session. */}
+        {proposals !== null && properties !== null && (
+          <OnboardingChecklist
+            progress={{
+              hasProperties: (properties?.length ?? 0) > 0,
+              hasProposals: (proposals?.length ?? 0) > 0,
+              brandDNAComplete: (completion?.overall ?? 0) >= 60,
+            }}
+          />
+        )}
+
         {/* Active proposal hero */}
         <ActiveProposalCard
           loaded={proposals !== null}
           proposal={activeProposal}
           onNew={handleNewProposal}
           creating={creating}
+          onImportSample={handleImportSample}
+          importing={importing}
         />
 
         {/* Triple snapshot row */}
@@ -225,11 +239,15 @@ function ActiveProposalCard({
   proposal,
   onNew,
   creating,
+  onImportSample,
+  importing,
 }: {
   loaded: boolean;
   proposal: ProposalRow | null;
   onNew: () => void;
   creating: boolean;
+  onImportSample: () => void;
+  importing: boolean;
 }) {
   const router = useRouter();
 
@@ -248,16 +266,26 @@ function ActiveProposalCard({
         </div>
         <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
         <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
-          The editor opens with a blank canvas, your brand DNA layered in, and
-          your property library one click away.
+          Open the editor with a blank canvas, or load a fully-built sample
+          proposal to explore the product end-to-end.
         </p>
-        <button
-          onClick={onNew}
-          disabled={creating}
-          className="mt-6 px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
-        >
-          {creating ? "Creating…" : "+ New proposal"}
-        </button>
+        <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+          <button
+            onClick={onImportSample}
+            disabled={importing}
+            className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
+            style={{ background: "#c9a84c", color: "#1b3a2d" }}
+          >
+            {importing ? "Loading sample…" : "✦ Open a sample proposal"}
+          </button>
+          <button
+            onClick={onNew}
+            disabled={creating}
+            className="px-5 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-semibold hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
+          >
+            {creating ? "Creating…" : "+ Start blank"}
+          </button>
+        </div>
       </div>
     );
   }

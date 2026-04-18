@@ -289,6 +289,24 @@ export function buildDefaultProposal(): Proposal {
   };
 }
 
+// ─── Demo proposal — onboarding ────────────────────────────────────────────
+//
+// Wraps buildDefaultProposal so onboarding always lands on a fully-populated,
+// realistic 7-day Kenya itinerary. We retitle to "Best of Kenya" so it reads
+// as a sample and not an actual client proposal. The defaults already hit
+// every section the editor renders (days, properties, pricing, inclusions,
+// practical info), so first-time users see the product at full fidelity in
+// one click.
+
+export function buildDemoProposal(): Proposal {
+  const base = buildDefaultProposal();
+  base.metadata.title = "Best of Kenya — sample";
+  base.trip.title = "Best of Kenya";
+  base.trip.subtitle = "7 days · Kenya · sample itinerary";
+  base.client.guestNames = "Sample client";
+  return base;
+}
+
 // ─── Blank proposal ───────────────────────────────────────────────────────────
 
 export function buildBlankProposal(): Proposal {
