@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type { ThemeTokens, ProposalTheme } from "@/lib/types";
+import { DestinationImagePicker } from "@/components/editor/DestinationImagePicker";
 import { resolveTokens } from "@/lib/theme";
 import {
   DndContext,
@@ -30,6 +32,7 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
   const { activeTier, visibleTiers, theme } = proposal;
   const tokens = theme.tokens;
   const isSelected = selectedDayId === day.id;
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: day.id });
@@ -91,6 +94,11 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
             ⠿
           </button>
           <button
+            onClick={() => setImagePickerOpen(true)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-[#c9a84c] hover:bg-black/60 transition text-xs"
+            title="Find a destination image"
+          >✦</button>
+          <button
             onClick={() => addDayAfter(day.id)}
             className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/40 text-white/70 hover:bg-black/60 transition text-xs"
             title="Add day after"
@@ -107,6 +115,14 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
           >×</button>
         </div>
       )}
+
+      {/* Destination image picker — pre-filtered by this day's destination */}
+      <DestinationImagePicker
+        open={imagePickerOpen}
+        onClose={() => setImagePickerOpen(false)}
+        defaultLocation={day.destination}
+        onSelect={(c) => updateDay(day.id, { heroImageUrl: c.url })}
+      />
 
       {layoutType === "flip" ? (
         <FlipSplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} />

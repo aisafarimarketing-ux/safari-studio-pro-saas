@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { rankMediaCandidates } from "@/lib/destinationMedia";
 
 // GET /api/media
 //   Query params (all optional):
-//     location, category, animalType, experienceType, tag, limit
+//     location, category, animalType, experienceType, tag, propertyId, limit
 //
-// Returns destination media assets matching the filters, scoped to:
-//   (organizationId = caller's org) ∪ (organizationId IS NULL, i.e. global)
+// Returns context-aware media candidates ranked by:
+//   property images > org assets > global assets
 //
-// Ordering: org-owned first, then priority_score desc, then recent.
-// This endpoint is the single read path the editor / generator will call to
-// resolve context-aware images ("elephant in Tarangire", "arrival Nairobi",
-// "beach Zanzibar") so we never fall back on random photography.
+// Within each tier, score is computed from location/animal/experience/category
+// matches plus the asset's stored priorityScore. See src/lib/destinationMedia.ts.
 export async function GET(req: Request) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -23,42 +22,56 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = url.searchParams;
 
-  const location = q.get("location")?.trim() || undefined;
+  const locationName = q.get("location")?.trim() || undefined;
   const category = q.get("category")?.trim() || undefined;
   const animalType = q.get("animalType")?.trim() || undefined;
   const experienceType = q.get("experienceType")?.trim() || undefined;
   const tag = q.get("tag")?.trim() || undefined;
+  const propertyId = q.get("propertyId")?.trim() || undefined;
   const limit = clampInt(parseInt(q.get("limit") ?? "24", 10), 1, 100, 24);
 
-  const whereCommon: Record<string, unknown> = {};
-  if (location) whereCommon.locationName = { equals: location, mode: "insensitive" };
-  if (category) whereCommon.category = category;
-  if (animalType) whereCommon.animalType = animalType;
-  if (experienceType) whereCommon.experienceType = experienceType;
-  if (tag) whereCommon.tags = { has: tag };
+  // Pre-filter at the DB layer — keeps payload small. The ranker re-applies
+  // scoring (DB filter is "must match", scoring is "weight against").
+  const where: Record<string, unknown> = {};
+  if (locationName) where.locationName = { equals: locationName, mode: "insensitive" };
+  if (category) where.category = category;
+  if (animalType) where.animalType = animalType;
+  if (experienceType) where.experienceType = experienceType;
+  if (tag) where.tags = { has: tag };
 
-  const assets = await prisma.destinationMediaAsset.findMany({
-    where: {
-      AND: [
-        whereCommon,
-        {
-          OR: [
-            { organizationId: ctx.organization.id },
-            { organizationId: null },
-          ],
-        },
-      ],
+  const [assets, propertyImages] = await Promise.all([
+    prisma.destinationMediaAsset.findMany({
+      where: {
+        AND: [
+          where,
+          { OR: [{ organizationId: ctx.organization.id }, { organizationId: null }] },
+        ],
+      },
+      take: 200, // ranker trims after scoring
+    }),
+    propertyId
+      ? prisma.propertyImage.findMany({
+          where: { property: { id: propertyId, organizationId: ctx.organization.id } },
+          orderBy: [{ isCover: "desc" }, { order: "asc" }],
+          select: { id: true, url: true, caption: true, isCover: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const ranked = rankMediaCandidates({
+    orgId: ctx.organization.id,
+    assets,
+    propertyImages,
+    context: {
+      locationName,
+      animalType,
+      experienceType,
+      category,
+      tags: tag ? [tag] : [],
     },
-    orderBy: [
-      // Org-owned first (null last), then highest priority, then newest
-      { organizationId: "desc" },
-      { priorityScore: "desc" },
-      { createdAt: "desc" },
-    ],
-    take: limit,
   });
 
-  return NextResponse.json({ assets });
+  return NextResponse.json({ candidates: ranked.slice(0, limit) });
 }
 
 function clampInt(v: number, min: number, max: number, fallback: number) {
