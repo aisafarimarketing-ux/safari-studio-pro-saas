@@ -3,13 +3,42 @@
 
 @import "tailwindcss";
 
-/* ── CSS Variables ──────────────────────────────────────────────────────── */
+/* ── Design tokens ──────────────────────────────────────────────────────── */
+/* Single source of truth for the Safari Studio palette + type stack. UI       */
+/* components reference these via CSS custom properties or hard-coded hex      */
+/* (kept in sync with this file). Don't introduce ad-hoc colours.              */
 :root {
-  --background: #f8f5ef;
-  --foreground: #1a1a1a;
-  --forest: #1b3a2d;
-  --forest-mid: #2d5a40;
-  --gold: #c9a84c;
+  /* Surfaces */
+  --bone:        #f8f5ef;  /* page background — warm cream */
+  --bone-2:      #f3f0ea;  /* alternating section */
+  --bone-3:      #ede8e0;  /* tertiary surface */
+  --paper:       #ffffff;  /* cards on bone */
+
+  /* Brand */
+  --forest:      #1b3a2d;  /* primary surface, dark sections, primary CTA */
+  --forest-mid:  #2d5a40;  /* hover */
+  --forest-deep: #142a20;  /* darker accent for depth */
+  --gold:        #c9a84c;  /* accent, CTAs on forest */
+  --gold-soft:   rgba(201,168,76,0.15);
+
+  /* Ink (text) */
+  --ink:         #1a1a1a;
+  --ink-2:       rgba(0,0,0,0.55);
+  --ink-3:       rgba(0,0,0,0.40);
+  --ink-4:       rgba(0,0,0,0.25);
+
+  /* Lines */
+  --divider:     rgba(0,0,0,0.08);
+  --divider-2:   rgba(0,0,0,0.12);
+
+  /* Status */
+  --danger:      #b34334;
+  --success:     #2d5a40;
+  --warn:        #8a7125;
+
+  /* Legacy aliases — kept for files that still reference these names */
+  --background:  var(--bone);
+  --foreground:  var(--ink);
 }
 
 @theme inline {
