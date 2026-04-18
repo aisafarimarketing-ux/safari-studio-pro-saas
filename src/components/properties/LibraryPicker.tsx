@@ -38,11 +38,14 @@ export function LibraryPicker({
   onSelect: (snapshots: Partial<ProposalProperty>[]) => void;
 }) {
   const [properties, setProperties] = useState<LibraryProperty[]>([]);
+  // signals carries Brand DNA explanation pills when sortMode === "smart"
+  const [signals, setSignals] = useState<Map<string, string[]>>(new Map());
   const [locations, setLocations] = useState<LocationLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<"recent" | "smart">("recent");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -52,25 +55,47 @@ export function LibraryPicker({
     setSelected(new Set());
     (async () => {
       try {
-        const [propRes, locRes] = await Promise.all([
-          fetch("/api/properties", { cache: "no-store" }),
-          fetch("/api/locations", { cache: "no-store" }),
-        ]);
-        if (!propRes.ok) throw new Error(`HTTP ${propRes.status}`);
-        const [propData, locData] = await Promise.all([propRes.json(), locRes.json()]);
-        // The list API includes only the cover image; for a full snapshot we'd
-        // need a per-property fetch. The picker is fine with cover only —
-        // additional gallery images can be added in the proposal itself, or
-        // we extend later to pull on selection.
-        setProperties(propData.properties ?? []);
-        setLocations(locData.locations ?? []);
+        const locsP = fetch("/api/locations", { cache: "no-store" });
+
+        if (sortMode === "smart") {
+          // Server-side ranking — applies Brand DNA preferences + biases.
+          const [rankRes, locRes] = await Promise.all([
+            fetch("/api/properties/rank", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                locationId: locationFilter ?? undefined,
+                limit: 50,
+              }),
+            }),
+            locsP,
+          ]);
+          if (!rankRes.ok) throw new Error(`HTTP ${rankRes.status}`);
+          const [rankData, locData] = await Promise.all([rankRes.json(), locRes.json()]);
+          type Ranked = { property: LibraryProperty; matchedSignals: string[] };
+          const ranked: Ranked[] = rankData.ranked ?? [];
+          setProperties(ranked.map((r) => r.property));
+          setSignals(new Map(ranked.map((r) => [r.property.id, r.matchedSignals])));
+          setLocations(locData.locations ?? []);
+        } else {
+          const [propRes, locRes] = await Promise.all([
+            fetch("/api/properties", { cache: "no-store" }),
+            locsP,
+          ]);
+          if (!propRes.ok) throw new Error(`HTTP ${propRes.status}`);
+          const [propData, locData] = await Promise.all([propRes.json(), locRes.json()]);
+          // List API returns cover-only; we re-fetch full payloads on Insert.
+          setProperties(propData.properties ?? []);
+          setSignals(new Map());
+          setLocations(locData.locations ?? []);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load library");
       } finally {
         setLoading(false);
       }
     })();
-  }, [open]);
+  }, [open, sortMode, locationFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -167,6 +192,20 @@ export function LibraryPicker({
               </option>
             ))}
           </select>
+
+          {/* Sort mode — Recent (default) vs Smart (Brand-DNA-aware ranking). */}
+          <div className="ml-auto inline-flex items-center gap-0.5 bg-black/[0.05] rounded-lg p-0.5">
+            <SortChip active={sortMode === "recent"} onClick={() => setSortMode("recent")}>
+              Recent
+            </SortChip>
+            <SortChip
+              active={sortMode === "smart"}
+              onClick={() => setSortMode("smart")}
+              accent
+            >
+              Smart sort ✦
+            </SortChip>
+          </div>
         </div>
 
         {/* Body */}
@@ -199,6 +238,7 @@ export function LibraryPicker({
               {filtered.map((p) => {
                 const isSel = selected.has(p.id);
                 const cover = p.images[0]?.url ?? null;
+                const matched = sortMode === "smart" ? signals.get(p.id) ?? [] : [];
                 return (
                   <li key={p.id}>
                     <button
@@ -235,6 +275,24 @@ export function LibraryPicker({
                         {p.shortSummary && (
                           <div className="text-[12px] text-black/55 mt-1 line-clamp-1">
                             {p.shortSummary}
+                          </div>
+                        )}
+                        {matched.length > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                            {matched.slice(0, 3).map((sig) => (
+                              <span
+                                key={sig}
+                                className="px-1.5 py-0.5 rounded-full text-[10px] font-medium tracking-wide"
+                                style={{
+                                  background: sig === "avoided"
+                                    ? "rgba(179,67,52,0.10)"
+                                    : "rgba(201,168,76,0.16)",
+                                  color: sig === "avoided" ? "#b34334" : "#8a7125",
+                                }}
+                              >
+                                {sig}
+                              </span>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -312,4 +370,34 @@ function snapshotFromLibrary(p: LibraryProperty & {
 function mealPlanLabel(id: string | null): string {
   if (!id) return "Full board";
   return MEAL_PLANS.find((m) => m.id === id)?.label ?? id;
+}
+
+// ─── Sort chip ─────────────────────────────────────────────────────────────
+
+function SortChip({
+  active,
+  onClick,
+  accent = false,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition ${
+        active
+          ? accent
+            ? "bg-[#c9a84c] text-[#1b3a2d] shadow-sm"
+            : "bg-white text-black/85 shadow-sm"
+          : "text-black/50 hover:text-black/75"
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
