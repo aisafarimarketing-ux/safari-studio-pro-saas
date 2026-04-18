@@ -5,6 +5,8 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
+// Greeting — 4 layout variants, all on the editorial scale.
+
 export function GreetingSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
@@ -12,75 +14,45 @@ export function GreetingSection({ section }: { section: Section }) {
   const { operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
+  const body = section.content.body as string;
+
+  const onBodyBlur = (e: React.FocusEvent<HTMLDivElement>) =>
+    updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" });
 
   // ── Two-column-consultant ──────────────────────────────────────────────────
   if (variant === "two-column-consultant") {
     return (
-      <div className="py-28 md:py-36 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
-        <div className="max-w-4xl mx-auto grid md:grid-cols-[200px_1fr] gap-16 items-start">
-
+      <div className="py-24" style={{ background: tokens.sectionSurface }}>
+        <div className="ed-wide grid md:grid-cols-[200px_1fr] gap-16 items-start">
           {/* Consultant sidebar */}
           <div className="md:pt-12">
-            <div
-              className="w-20 h-20 rounded-2xl overflow-hidden mb-5"
-              style={{ background: tokens.cardBg }}
-            >
-              {operator.consultantPhoto ? (
-                <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
-              ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
-                  style={{ color: tokens.accent }}
-                >
-                  {operator.consultantName?.charAt(0) ?? "?"}
-                </div>
-              )}
-            </div>
-            <div className="text-sm font-semibold mb-0.5" style={{ color: tokens.headingText }}>
+            <ConsultantAvatar operator={operator} tokens={tokens} size={80} />
+            <div className="mt-6 text-small font-semibold" style={{ color: tokens.headingText }}>
               {operator.consultantName}
             </div>
-            <div className="text-xs leading-relaxed" style={{ color: tokens.mutedText }}>
+            <div className="text-small" style={{ color: tokens.mutedText }}>
               {operator.companyName}
             </div>
-            {/* Thin accent rule */}
-            <div
-              className="mt-8 w-8"
-              style={{ height: "2px", background: tokens.accent, opacity: 0.3 }}
-            />
+            <div className="mt-8 w-8" style={{ height: "2px", background: tokens.accent, opacity: 0.3 }} />
           </div>
 
           {/* Letter body */}
           <div>
-            <div className="text-[10px] uppercase tracking-[0.28em] mb-10" style={{ color: tokens.mutedText }}>
+            <div
+              className="text-label ed-label mb-12"
+              style={{ color: tokens.mutedText }}
+            >
               A note from your consultant
             </div>
-
-            {/* Decorative opening quote */}
-            <div
-              className="select-none mb-[-1.2rem]"
-              aria-hidden="true"
-              style={{
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "7rem",
-                lineHeight: 1,
-                color: tokens.accent,
-                opacity: 0.12,
-              }}
-            >
-              &#8220;
-            </div>
-
+            <BigQuote theme={theme} tokens={tokens} />
             <div
               contentEditable={isEditor}
               suppressContentEditableWarning
-              className="text-[1.1rem] leading-[2.15] outline-none whitespace-pre-line relative z-10"
-              style={{
-                color: tokens.bodyText,
-                fontFamily: `'${theme.displayFont}', serif`,
-              }}
-              onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+              className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
+              style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
+              onBlur={onBodyBlur}
             >
-              {section.content.body as string}
+              {body}
             </div>
           </div>
         </div>
@@ -88,73 +60,68 @@ export function GreetingSection({ section }: { section: Section }) {
     );
   }
 
-  // ── Centered-minimal — clean centered letter, no sidebar ────────────────────
+  // ── Centered-minimal ───────────────────────────────────────────────────────
   if (variant === "centered-minimal") {
     return (
-      <div className="py-28 md:py-36 px-8 md:px-20 text-center" style={{ background: tokens.sectionSurface }}>
-        <div className="max-w-[560px] mx-auto">
-          <div className="text-[10px] uppercase tracking-[0.3em] mb-10" style={{ color: tokens.accent }}>
+      <div className="py-24 text-center" style={{ background: tokens.sectionSurface }}>
+        <div className="ed-narrow">
+          <div
+            className="text-label ed-label mb-12"
+            style={{ color: tokens.accent }}
+          >
             Welcome
           </div>
           <div
             contentEditable={isEditor}
             suppressContentEditableWarning
-            className="text-[1.15rem] leading-[2.2] outline-none whitespace-pre-line"
+            className="text-body-lg leading-loose whitespace-pre-line outline-none"
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+            onBlur={onBodyBlur}
           >
-            {section.content.body as string}
+            {body}
           </div>
           <div className="mt-12 inline-flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: tokens.cardBg }}>
-              {operator.consultantPhoto ? (
-                <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ color: tokens.accent }}>
-                  {operator.consultantName?.charAt(0) ?? "?"}
-                </div>
-              )}
-            </div>
-            <span className="text-sm font-medium" style={{ color: tokens.headingText }}>{operator.consultantName}</span>
+            <ConsultantAvatar operator={operator} tokens={tokens} size={32} textSize="text-small" />
+            <span className="text-small font-medium" style={{ color: tokens.headingText }}>
+              {operator.consultantName}
+            </span>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Sidebar-accent — colored accent bar left, letter right ─────────────────
+  // ── Sidebar-accent ─────────────────────────────────────────────────────────
   if (variant === "sidebar-accent") {
     return (
       <div className="flex" style={{ background: tokens.sectionSurface }}>
-        {/* Accent sidebar */}
         <div className="hidden md:block w-2 shrink-0" style={{ background: tokens.accent }} />
-        <div className="flex-1 py-24 md:py-32 px-10 md:px-16">
-          <div className="max-w-[620px]">
-            <div className="text-[10px] uppercase tracking-[0.28em] mb-10" style={{ color: tokens.mutedText }}>
+        <div className="flex-1 py-24">
+          <div className="ed-narrow !mx-0 md:!mx-[clamp(2rem,8vw,6rem)] !max-w-[620px]">
+            <div
+              className="text-label ed-label mb-12"
+              style={{ color: tokens.mutedText }}
+            >
               A personal note
             </div>
             <div
               contentEditable={isEditor}
               suppressContentEditableWarning
-              className="text-[1.05rem] leading-[2.1] outline-none whitespace-pre-line"
+              className="text-body-lg leading-loose whitespace-pre-line outline-none"
               style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+              onBlur={onBodyBlur}
             >
-              {section.content.body as string}
+              {body}
             </div>
-            <div className="mt-14 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full overflow-hidden shrink-0" style={{ background: tokens.cardBg }}>
-                {operator.consultantPhoto ? (
-                  <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-sm font-bold" style={{ color: tokens.accent }}>
-                    {operator.consultantName?.charAt(0) ?? "?"}
-                  </div>
-                )}
-              </div>
+            <div className="mt-12 flex items-center gap-4">
+              <ConsultantAvatar operator={operator} tokens={tokens} size={40} textSize="text-small" />
               <div>
-                <div className="text-sm font-semibold" style={{ color: tokens.headingText }}>{operator.consultantName}</div>
-                <div className="text-xs mt-0.5" style={{ color: tokens.mutedText }}>{operator.companyName}</div>
+                <div className="text-small font-semibold" style={{ color: tokens.headingText }}>
+                  {operator.consultantName}
+                </div>
+                <div className="text-label" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
+                  {operator.companyName}
+                </div>
               </div>
             </div>
           </div>
@@ -165,76 +132,99 @@ export function GreetingSection({ section }: { section: Section }) {
 
   // ── Editorial-letter (default) ─────────────────────────────────────────────
   return (
-    <div className="py-28 md:py-36 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
-      <div className="max-w-[620px] mx-auto">
-
-        {/* Overline */}
+    <div className="py-24" style={{ background: tokens.sectionSurface }}>
+      <div className="ed-narrow">
         <div
-          className="text-[10px] uppercase tracking-[0.3em] mb-12"
+          className="text-label ed-label mb-12"
           style={{ color: tokens.accent }}
         >
           A personal note
         </div>
 
-        {/* Opening quote mark — large, barely visible */}
-        <div
-          aria-hidden="true"
-          className="select-none mb-[-1.8rem]"
-          style={{
-            fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "7.5rem",
-            lineHeight: 1,
-            color: tokens.accent,
-            opacity: 0.13,
-          }}
-        >
-          &#8220;
-        </div>
+        <BigQuote theme={theme} tokens={tokens} />
 
-        {/* Letter body */}
         <div
           contentEditable={isEditor}
           suppressContentEditableWarning
-          className="text-[1.1rem] md:text-[1.2rem] leading-[2.2] outline-none whitespace-pre-line relative z-10"
-          style={{
-            color: tokens.headingText,
-            fontFamily: `'${theme.displayFont}', serif`,
-          }}
-          onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
+          className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
+          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+          onBlur={onBodyBlur}
         >
-          {section.content.body as string}
+          {body}
         </div>
 
-        {/* Consultant sign-off */}
         <div
-          className="mt-20 pt-10 flex items-center gap-5"
+          className="mt-16 pt-12 flex items-center gap-6"
           style={{ borderTop: `1px solid ${tokens.border}` }}
         >
-          <div
-            className="w-11 h-11 rounded-full overflow-hidden shrink-0"
-            style={{ background: tokens.cardBg }}
-          >
-            {operator.consultantPhoto ? (
-              <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-sm font-bold"
-                style={{ color: tokens.accent }}
-              >
-                {operator.consultantName?.charAt(0) ?? "?"}
-              </div>
-            )}
-          </div>
+          <ConsultantAvatar operator={operator} tokens={tokens} size={44} textSize="text-small" />
           <div>
-            <div className="text-sm font-semibold tracking-wide" style={{ color: tokens.headingText }}>
+            <div className="text-small font-semibold" style={{ color: tokens.headingText }}>
               {operator.consultantName}
             </div>
-            <div className="text-xs mt-0.5" style={{ color: tokens.mutedText }}>
+            <div className="text-label" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
               {operator.companyName}
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Shared bits ────────────────────────────────────────────────────────────
+
+function ConsultantAvatar({
+  operator,
+  tokens,
+  size,
+  textSize = "text-h3",
+}: {
+  operator: { consultantName: string; consultantPhoto?: string };
+  tokens: { cardBg: string; accent: string };
+  size: number;
+  textSize?: string;
+}) {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden shrink-0"
+      style={{ background: tokens.cardBg, width: size, height: size }}
+    >
+      {operator.consultantPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
+      ) : (
+        <div
+          className={`w-full h-full flex items-center justify-center font-bold ${textSize}`}
+          style={{ color: tokens.accent }}
+        >
+          {operator.consultantName?.charAt(0) ?? "?"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BigQuote({
+  theme,
+  tokens,
+}: {
+  theme: { displayFont: string };
+  tokens: { accent: string };
+}) {
+  return (
+    <div
+      aria-hidden
+      className="select-none -mb-8"
+      style={{
+        fontFamily: `'${theme.displayFont}', serif`,
+        fontSize: "7rem",
+        lineHeight: 1,
+        color: tokens.accent,
+        opacity: 0.13,
+      }}
+    >
+      &#8220;
     </div>
   );
 }

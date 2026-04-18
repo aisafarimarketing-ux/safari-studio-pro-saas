@@ -4,9 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
-// "At a glance" — the 4-card editorial grid. The brief is explicit:
-// duration / destinations / guests / style. We render each in the same
-// hierarchy: tiny label, then a one-line value in display font.
+// "At a glance" — 4-card editorial grid, on the strict editorial type scale.
 
 export function TripSummarySection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
@@ -31,34 +29,33 @@ export function TripSummarySection({ section }: { section: Section }) {
   ];
 
   return (
-    <div className="px-8 md:px-16 py-20 md:py-24" style={{ background: tokens.pageBg }}>
-      <div className="max-w-5xl mx-auto">
-        {/* Section label */}
+    <div className="py-24" style={{ background: tokens.pageBg }}>
+      <div className="ed-wide">
         <div
-          className="text-[10px] uppercase tracking-[0.3em] mb-10 font-semibold text-center"
+          className="text-label ed-label text-center mb-12"
           style={{ color: tokens.mutedText }}
         >
           At a glance
         </div>
 
-        {/* Four-card grid — borderless, generous spacing, faint dividers */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px overflow-hidden"
+        <div
+          className="grid grid-cols-2 md:grid-cols-4 gap-px overflow-hidden"
           style={{ background: tokens.border }}
         >
           {cards.map((card) => (
             <div
               key={card.label}
-              className="px-6 md:px-8 py-8 text-center"
+              className="px-8 py-8 text-center"
               style={{ background: tokens.sectionSurface }}
             >
               <div
-                className="text-[9px] uppercase tracking-[0.28em] mb-3 font-semibold"
+                className="text-label ed-label mb-3"
                 style={{ color: tokens.mutedText }}
               >
                 {card.label}
               </div>
               <div
-                className="text-[1.1rem] md:text-[1.2rem] font-semibold leading-snug"
+                className="text-h3 font-semibold"
                 style={{
                   color: tokens.headingText,
                   fontFamily: `'${theme.displayFont}', serif`,

@@ -543,14 +543,21 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
   // Read proposal here so we can resolve property previews.
   const { proposal } = useProposalStore();
   return (
-    <div className="flex flex-col h-full gap-5">
-      {/* Header block */}
+    // Editorial rhythm from the brief: image lives in the parent layout,
+    // then 32 → title → 16 → text → 24 → "Stay at" property block.
+    // The image-edge-to-title gap is enforced by the layout (padding around
+    // this DayContent block); within DayContent we control title→text→stay.
+    <div className="flex flex-col h-full">
+      {/* Header (title + meta) */}
       <div>
-        <div className="text-[9px] uppercase tracking-[0.28em] mb-2.5" style={{ color: tokens.mutedText }}>
+        <div
+          className="text-label ed-label mb-3"
+          style={{ color: tokens.mutedText }}
+        >
           {day.country}{day.board ? ` · ${day.board}` : ""}
         </div>
         <h2
-          className="text-[2rem] md:text-[2.4rem] font-bold leading-[1.05] tracking-tight outline-none"
+          className="text-h1 font-bold tracking-tight outline-none"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
@@ -560,7 +567,7 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
         </h2>
         {day.subtitle && (
           <div
-            className="text-[12px] mt-2 outline-none italic"
+            className="text-small mt-3 italic outline-none"
             style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
@@ -571,9 +578,9 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
         )}
       </div>
 
-      {/* Description */}
+      {/* 16px gap → narrative */}
       <p
-        className="text-[13.5px] leading-[2.0] outline-none flex-1"
+        className="text-body mt-4 outline-none flex-1"
         style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
         contentEditable={isEditor}
         suppressContentEditableWarning
@@ -582,16 +589,19 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, up
         {day.description}
       </p>
 
-      {/* Where you'll stay — rich preview when the day's active-tier camp
-          matches a property in the proposal; clean text-only otherwise. */}
-      <DayStayPreview
-        day={day}
-        activeTier={activeTier}
-        visibleTiers={visibleTiers}
-        tokens={tokens}
-        theme={theme}
-        properties={proposal.properties}
-      />
+      {/* 24px gap → "Stay at" property block (DayStayPreview already
+          provides its own pt-6 separator; mt-6 here keeps the visual
+          rhythm consistent across layouts that lack the separator). */}
+      <div className="mt-6">
+        <DayStayPreview
+          day={day}
+          activeTier={activeTier}
+          visibleTiers={visibleTiers}
+          tokens={tokens}
+          theme={theme}
+          properties={proposal.properties}
+        />
+      </div>
     </div>
   );
 }
@@ -616,40 +626,42 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-24 md:py-28 px-8 md:px-16" style={{ background: tokens.pageBg }}>
-      <div className="max-w-5xl mx-auto">
+    <div className="py-24" style={{ background: tokens.pageBg }}>
+      <div className="ed-wide">
         {/* Section header */}
-        <div className="flex items-end justify-between mb-14">
+        <div className="flex items-end justify-between mb-16">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.28em] mb-3" style={{ color: tokens.mutedText }}>
+            <div
+              className="text-label ed-label mb-3"
+              style={{ color: tokens.mutedText }}
+            >
               Day-by-day
             </div>
             <div
-              className="text-[2.75rem] md:text-[3rem] font-bold leading-[1.0] tracking-tight"
+              className="text-h1 font-bold tracking-tight"
               style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             >
               Your journey
             </div>
           </div>
-          <div className="text-[12px] pb-1" style={{ color: tokens.mutedText }}>
+          <div className="text-small pb-1" style={{ color: tokens.mutedText }}>
             {days.length} {days.length === 1 ? "day" : "days"}
           </div>
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={days.map((d) => d.id)} strategy={verticalListSortingStrategy}>
-            {/* Timeline connector */}
             <div className="relative">
-              {/* Vertical line on large screens */}
+              {/* Subtle vertical timeline rule on desktop */}
               <div
                 className="hidden md:block absolute left-[-2rem] top-8 bottom-8 w-px"
                 style={{ background: `linear-gradient(to bottom, transparent, ${tokens.border} 15%, ${tokens.border} 85%, transparent)` }}
               />
 
-              <div className="space-y-5">
+              {/* 96px between day cards — the brief's editorial spacing */}
+              <div className="space-y-24">
                 {days.map((day, i) => (
                   <div key={day.id} className="relative">
-                    {/* Timeline dot */}
                     <div
                       className="hidden md:flex absolute left-[-2.4rem] top-6 w-3 h-3 rounded-full border-2 items-center justify-center"
                       style={{
@@ -667,7 +679,7 @@ export function DayJourneySection({ section }: { section: Section }) {
 
         {days.length === 0 && (
           <div
-            className="text-center py-16 rounded-2xl border-2 border-dashed"
+            className="text-center py-16 rounded-2xl border-2 border-dashed text-small"
             style={{ borderColor: tokens.border, color: tokens.mutedText }}
           >
             No days yet.
@@ -677,7 +689,7 @@ export function DayJourneySection({ section }: { section: Section }) {
         {isEditor && (
           <button
             onClick={addDay}
-            className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed text-sm font-medium transition hover:opacity-80"
+            className="mt-12 w-full py-4 rounded-2xl border-2 border-dashed text-small font-medium transition hover:opacity-80"
             style={{ borderColor: tokens.accent, color: tokens.accent }}
           >
             + Add day

@@ -48,6 +48,71 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ── Editorial type scale ──────────────────────────────────────────────────
+   Strict, fixed scale for the proposal canvas (and any UI that wants a
+   consistent magazine feel). Use the named utilities — text-display,
+   text-h1, text-h2, text-h3, text-body-lg, text-body, text-small,
+   text-label — instead of arbitrary text-[Npx] values.
+
+   Pairs come from the brief:
+     Display  64 / 72         H1   40 / 48      H2   28 / 36
+     H3       20 / 28         BodyLg 18 / 28    Body 16 / 26
+     Small    14 / 22         Label 12 / 18 (uppercase, tracked)
+*/
+@theme {
+  --text-display: 4rem;            /* 64 */
+  --text-display--line-height: 4.5rem;   /* 72 */
+  --text-display--letter-spacing: -0.02em;
+
+  --text-h1: 2.5rem;               /* 40 */
+  --text-h1--line-height: 3rem;    /* 48 */
+  --text-h1--letter-spacing: -0.015em;
+
+  --text-h2: 1.75rem;              /* 28 */
+  --text-h2--line-height: 2.25rem; /* 36 */
+  --text-h2--letter-spacing: -0.01em;
+
+  --text-h3: 1.25rem;              /* 20 */
+  --text-h3--line-height: 1.75rem; /* 28 */
+
+  --text-body-lg: 1.125rem;        /* 18 */
+  --text-body-lg--line-height: 1.75rem; /* 28 */
+
+  --text-body: 1rem;               /* 16 */
+  --text-body--line-height: 1.625rem;   /* 26 */
+
+  --text-small: 0.875rem;          /* 14 */
+  --text-small--line-height: 1.375rem;  /* 22 */
+
+  --text-label: 0.75rem;           /* 12 */
+  --text-label--line-height: 1.125rem;  /* 18 */
+  --text-label--letter-spacing: 0.18em;
+}
+
+/* Editorial content widths — text columns stay narrow (720) or
+   readable-wide (840); images/sections can extend full canvas width. */
+.ed-narrow {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.ed-wide {
+  max-width: 840px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* Label utility: paired with text-label gives full editorial small-caps
+   feel without per-element style props. */
+.ed-label {
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────────── */
 html {
   scroll-behavior: smooth;

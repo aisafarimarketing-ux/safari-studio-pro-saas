@@ -35,7 +35,7 @@ export function DayStayPreview({
   return (
     <div className="pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
       <div
-        className="text-[10px] uppercase tracking-[0.28em] mb-3.5 font-semibold"
+        className="text-label ed-label mb-4"
         style={{ color: tokens.mutedText }}
       >
         Stay at
@@ -56,8 +56,8 @@ export function DayStayPreview({
       {otherTiers.length > 0 && (
         <div className="mt-4 pt-3 border-t" style={{ borderColor: tokens.border }}>
           <div
-            className="text-[9px] uppercase tracking-[0.24em] mb-1.5"
-            style={{ color: tokens.mutedText }}
+            className="text-label ed-label mb-2"
+            style={{ color: tokens.mutedText, letterSpacing: "0.15em" }}
           >
             Or
           </div>
@@ -66,10 +66,10 @@ export function DayStayPreview({
               const a = day.tiers[t];
               if (!a) return null;
               return (
-                <div key={t} className="text-[12px] flex items-baseline gap-2">
+                <div key={t} className="text-small flex items-baseline gap-2">
                   <span
-                    className="text-[9px] uppercase tracking-[0.18em] font-semibold"
-                    style={{ color: `${tokens.mutedText}` }}
+                    className="text-label ed-label"
+                    style={{ color: tokens.mutedText, letterSpacing: "0.15em" }}
                   >
                     {t}
                   </span>
@@ -122,34 +122,37 @@ function RichPreview({
       {/* Detail */}
       <div className="min-w-0">
         <div
-          className="text-[1.1rem] leading-tight font-bold"
+          className="text-h3 font-bold"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
         >
           {property.name}
         </div>
         {location && (
-          <div className="mt-0.5 text-[11px]" style={{ color: tokens.mutedText }}>
+          <div className="text-label mt-1" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
             {location}
           </div>
         )}
         {desc && (
           <p
-            className="mt-2 text-[12.5px] leading-relaxed"
+            className="text-small mt-3"
             style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
           >
             {desc}
           </p>
         )}
         {amenities.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-wrap gap-2">
             {amenities.map((a) => (
               <span
                 key={a}
-                className="px-2 py-0.5 rounded-full text-[10.5px]"
+                className="px-3 py-1 rounded-full text-label"
                 style={{
                   background: tokens.cardBg,
                   color: tokens.bodyText,
                   border: `1px solid ${tokens.border}`,
+                  textTransform: "none",
+                  letterSpacing: "0",
+                  fontWeight: 400,
                 }}
               >
                 {a}
@@ -176,19 +179,19 @@ function TextPreview({
   return (
     <div>
       <div
-        className="text-[1.1rem] leading-tight font-bold"
+        className="text-h3 font-bold"
         style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
       >
         {acc.camp}
       </div>
       {acc.location && (
-        <div className="mt-0.5 text-[11px]" style={{ color: tokens.mutedText }}>
+        <div className="text-label mt-1" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
           {acc.location}
         </div>
       )}
       {acc.note && (
         <p
-          className="mt-2 text-[12.5px] leading-relaxed"
+          className="text-small mt-3"
           style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
         >
           {acc.note}
