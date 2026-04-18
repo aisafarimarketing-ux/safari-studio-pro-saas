@@ -49,6 +49,9 @@ model Organization {
   proposals           Proposal[]
   brandDNA            BrandDNAProfile?
   destinationMedia    DestinationMediaAsset[]
+  locations           Location[]
+  properties          Property[]
+  propertyTags        PropertyTag[]
 
   @@index([clerkOrgId])
 }
@@ -220,4 +223,137 @@ model Proposal {
   @@index([userId])
   @@index([organizationId])
   @@index([shareSlug])
+}
+
+// ─── Property System ────────────────────────────────────────────────────────
+//
+// The operator's curated library of camps, lodges, villas, etc. Properties
+// are first-class so they can be browsed, filtered, reused across proposals,
+// and (Phase 2) used to ground AI selection. When inserted into a proposal
+// the relevant fields are *snapshotted* into the proposal's contentJson so
+// the proposal stays stable if the source property is later edited.
+//
+// Locations are first-class too (not just strings on Property): canonical
+// filter values, shared with Day records, and the join point for the
+// destination-visual-intelligence layer.
+
+model Location {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name      String
+  country   String?
+  region    String?  // optional sub-grouping (e.g. "Northern Tanzania")
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  properties Property[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Property {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  // Basics
+  name          String
+  propertyClass String?  // "camp" | "lodge" | "tented_camp" | "mobile_camp" | "boutique_hotel" | "villa" | "houseboat" | "treehouse" | "other"
+
+  // Client-facing copy
+  shortSummary     String?
+  whatMakesSpecial String?
+  whyWeChoose      String?
+
+  // Amenities — chip list, free-form
+  amenities String[]
+
+  // Stay snapshot
+  mealPlan        String?  // "Full board" | "Half board" | "B&B" | "All-inclusive" | etc.
+  suggestedNights Int?
+  suitability     String[] // ["families", "honeymoon", "photography", ...]
+
+  // Internal — never rendered client-side
+  internalNotes String?
+
+  archived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images         PropertyImage[]
+  tags           PropertyTagOnProperty[]
+  customSections PropertyCustomSection[]
+
+  @@index([organizationId])
+  @@index([organizationId, archived])
+  @@index([organizationId, propertyClass])
+  @@index([organizationId, locationId])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  url     String
+  caption String?
+  order   Int     @default(0)
+  isCover Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId, order])
+}
+
+model PropertyTag {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name String
+
+  createdAt DateTime @default(now())
+
+  properties PropertyTagOnProperty[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model PropertyTagOnProperty {
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tagId String
+  tag   PropertyTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([propertyId, tagId])
+  @@index([tagId])
+}
+
+model PropertyCustomSection {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  title   String
+  body    String?
+  visible Boolean @default(true)
+  order   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, order])
 }
