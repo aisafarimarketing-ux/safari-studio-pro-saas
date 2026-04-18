@@ -8,6 +8,7 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
+import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import type { EditorMode } from "@/store/editorStore";
@@ -139,7 +140,10 @@ export function EditorToolbar() {
         </div>
       </div>
 
-      {/* Center: mode switch */}
+      {/* Center: Brand DNA hint (dismissible, non-blocking) + mode switch */}
+      <div className="hidden lg:flex items-center shrink-0 min-w-0">
+        <BrandDNAHint />
+      </div>
       <div className="flex items-center gap-0.5 bg-black/6 rounded-lg p-0.5 shrink-0">
         {modes.map((m) => (
           <button

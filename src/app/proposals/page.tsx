@@ -10,6 +10,7 @@ import {
   useUser,
 } from "@clerk/nextjs";
 import { buildBlankProposal } from "@/lib/defaults";
+import { BrandDNADashboardCard } from "@/components/brand-dna/BrandDNADashboardCard";
 
 type ProposalSummary = {
   id: string;
@@ -152,6 +153,10 @@ export default function ProposalsPage() {
           >
             {creating ? "Creating…" : "+ New proposal"}
           </button>
+        </div>
+
+        <div className="mb-8">
+          <BrandDNADashboardCard />
         </div>
 
         {state === "loading" && <ProposalsSkeleton />}

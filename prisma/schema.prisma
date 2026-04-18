@@ -46,9 +46,146 @@ model Organization {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  proposals Proposal[]
+  proposals           Proposal[]
+  brandDNA            BrandDNAProfile?
+  destinationMedia    DestinationMediaAsset[]
 
   @@index([clerkOrgId])
+}
+
+// ─── Brand DNA ──────────────────────────────────────────────────────────────
+//
+// One profile per organization. Every field is optional — Brand DNA is a
+// progressive enhancement, never a blocker. Completion is scored with
+// weighted sections (see src/lib/brandDNA.ts) to surface a single % and a
+// "next best action" recommendation.
+//
+// Voice sliders are stored as 0–100 ints where null means "not yet set".
+
+model BrandDNAProfile {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Brand Core
+  brandName        String?
+  logoUrl          String?
+  websiteUrl       String?
+  tagline          String?
+  shortDescription String?
+
+  // Voice & Tone — 0 is the left label, 100 is the right label
+  voiceFormality         Int?  //   0 formal          ↔ 100 conversational
+  voiceLuxury            Int?  //   0 luxury          ↔ 100 adventurous
+  voiceDensity           Int?  //   0 concise         ↔ 100 detailed
+  voiceStorytelling      Int?  //   0 storytelling    ↔ 100 informational
+  writingSample1         String?
+  writingSample2         String?
+
+  // Visual Style
+  brandColors          Json?      // [{ hex: string, role?: string }]
+  headingFont          String?
+  bodyFont             String?
+  customFontUrl        String?
+  preferredImageStyles String[]   // e.g. "wildlife_closeup", "landscape", "lodge_interior", "guest_experience", "beach", "cultural"
+  imageLibrary         Json?      // [{ url: string, caption?: string, tags?: string[] }]
+
+  // Property preferences — global biases (per-property rows live in
+  // BrandDNAPropertyPreference).
+  tierBias             String?    // "luxury" | "mid_range" | "value"
+  styleBias            String[]   // e.g. "honeymoon", "family", "adventure", "eco_luxury"
+
+  // Free-text AI instructions
+  aiInstructions       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  propertyPreferences BrandDNAPropertyPreference[]
+  suggestions         BrandDNASuggestion[]
+}
+
+// Per-property entries (preferred or avoided), optionally scoped by location.
+
+model BrandDNAPropertyPreference {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   BrandDNAProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  kind         String   // "preferred" | "avoided"
+  location     String?
+  propertyName String
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([profileId, kind])
+}
+
+// Self-building: rows are generated from observed user behaviour. They are
+// *suggestions only* and must never auto-apply.
+
+model BrandDNASuggestion {
+  id         String   @id @default(cuid())
+  profileId  String
+  profile    BrandDNAProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  kind       String   // "voice" | "property" | "visual"
+  title      String
+  rationale  String?
+  payload    Json?    // applicable patch if the user accepts
+  status     String   @default("pending")  // pending | accepted | dismissed
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId, status])
+}
+
+// ─── Destination Visual Intelligence ────────────────────────────────────────
+//
+// Context-aware image library. Rows can be global (organizationId null) or
+// per-organization. Selection priority is property images → org images →
+// global images; filtering uses tags + category + animalType + experienceType.
+
+model DestinationMediaAsset {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Location — free-form for now; upgrades to a FK when the Location model
+  // lands in a later phase.
+  locationId    String?
+  locationName  String?
+  country       String?
+
+  imageUrl      String
+  thumbnailUrl  String?
+  width         Int?
+  height        Int?
+
+  provider         String?  // "unsplash" | "pexels" | "upload" | "custom"
+  photographerName String?
+  photographerUrl  String?
+  attributionText  String?
+
+  tags           String[]
+  category       String?  // "wildlife" | "landscape" | "lodge" | "people" | "beach" | "city" | "airport"
+  animalType     String?  // "elephant" | "lion" | "giraffe" | ...
+  experienceType String?  // "game_drive" | "beach" | "arrival" | "hot_air_balloon" | ...
+
+  priorityScore  Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([locationName])
+  @@index([category])
+  @@index([animalType])
+  @@index([experienceType])
 }
 
 // ─── Proposal ───────────────────────────────────────────────────────────────
