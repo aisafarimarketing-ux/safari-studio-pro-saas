@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { EditorToolbar } from "./EditorToolbar";
+import { EditorDayNav } from "./EditorDayNav";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
 import { ContextPanel } from "./ContextPanel";
@@ -133,6 +134,7 @@ export function ProposalEditor() {
         </button>
 
         <div className="flex-1 min-w-0 flex flex-col proposal-canvas">
+          <EditorDayNav />
           <ProposalCanvas />
         </div>
 

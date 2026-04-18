@@ -73,6 +73,15 @@ body {
   height: 3.25rem;
 }
 
+/* Hide horizontal scrollbar in nav strips */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Subtle scrollbars ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;

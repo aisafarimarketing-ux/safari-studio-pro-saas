@@ -72,9 +72,12 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
   return (
     <div
       ref={setNodeRef}
+      id={`day-${day.id}`}
+      data-nav-anchor="day"
+      data-nav-day-id={day.id}
       style={{ ...style, borderColor: tokens.border, background: tokens.sectionSurface }}
       onClick={() => isEditor && selectDay(day.id)}
-      className="dm-card relative rounded-3xl overflow-hidden border transition-colors duration-150"
+      className="dm-card relative rounded-3xl overflow-hidden border transition-colors duration-150 scroll-mt-32"
     >
       {/* Editor action bar — top right */}
       {isEditor && (
