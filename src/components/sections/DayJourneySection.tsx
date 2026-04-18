@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ThemeTokens, ProposalTheme } from "@/lib/types";
 import { DestinationImagePicker } from "@/components/editor/DestinationImagePicker";
+import { DayStayPreview } from "./DayStayPreview";
 import { resolveTokens } from "@/lib/theme";
 import {
   DndContext,
@@ -532,13 +533,15 @@ function FullOverlayLayout({ day, isEditor, tokens, theme, activeTier, visibleTi
 
 // ── Day content: destination + description + accommodation ──────────────────
 
-function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, tierColors, updateDay }: {
+function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, updateDay }: {
   day: Day; isEditor: boolean; tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: string; visibleTiers: Record<string, boolean>;
   tierColors: Record<string, string>;
   updateDay: (id: string, patch: Partial<Day>) => void;
 }) {
+  // Read proposal here so we can resolve property previews.
+  const { proposal } = useProposalStore();
   return (
     <div className="flex flex-col h-full gap-5">
       {/* Header block */}
@@ -579,47 +582,16 @@ function DayContent({ day, isEditor, tokens, theme, activeTier, visibleTiers, ti
         {day.description}
       </p>
 
-      {/* Accommodation tiers */}
-      <div className="pt-5" style={{ borderTop: `1px solid ${tokens.border}` }}>
-        <div className="text-[9px] uppercase tracking-[0.28em] mb-3.5" style={{ color: tokens.mutedText }}>
-          Where you&apos;ll stay
-        </div>
-        <div className="space-y-2.5">
-          {(["classic", "premier", "signature"] as const).map((tier) => {
-            if (!visibleTiers[tier]) return null;
-            const acc = day.tiers[tier];
-            const isActive = activeTier === tier;
-            return (
-              <div key={tier} className="flex items-baseline gap-3">
-                <span
-                  className="text-[8px] uppercase tracking-[0.18em] font-semibold shrink-0 w-[48px]"
-                  style={{ color: isActive ? tierColors[tier] : `${tierColors[tier]}60` }}
-                >
-                  {tier}
-                </span>
-                <div className="min-w-0 flex flex-col">
-                  <span
-                    className={`leading-snug outline-none truncate ${isActive ? "text-[13px] font-semibold" : "text-[12px]"}`}
-                    style={{ color: isActive ? tokens.headingText : tokens.bodyText }}
-                    contentEditable={isEditor}
-                    suppressContentEditableWarning
-                  >
-                    {acc.camp}
-                  </span>
-                  <span
-                    className="text-[10.5px] truncate outline-none"
-                    style={{ color: tokens.mutedText }}
-                    contentEditable={isEditor}
-                    suppressContentEditableWarning
-                  >
-                    {acc.location}{acc.note ? ` · ${acc.note}` : ""}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Where you'll stay — rich preview when the day's active-tier camp
+          matches a property in the proposal; clean text-only otherwise. */}
+      <DayStayPreview
+        day={day}
+        activeTier={activeTier}
+        visibleTiers={visibleTiers}
+        tokens={tokens}
+        theme={theme}
+        properties={proposal.properties}
+      />
     </div>
   );
 }
