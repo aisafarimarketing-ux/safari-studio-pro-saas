@@ -7,9 +7,10 @@ import { useOrganization } from "@clerk/nextjs";
 import { AppHeader } from "@/components/properties/AppHeader";
 import { CompletionRing } from "@/components/brand-dna/CompletionRing";
 import type { BrandDNACompletion } from "@/lib/brandDNA";
-import { buildBlankProposal, buildDemoProposal } from "@/lib/defaults";
+import { buildDemoProposal } from "@/lib/defaults";
 import { nanoid } from "@/lib/nanoid";
 import { OnboardingChecklist } from "./OnboardingChecklist";
+import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -42,6 +43,7 @@ export function DashboardWorkspace() {
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [tripSetupOpen, setTripSetupOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,19 +73,23 @@ export function DashboardWorkspace() {
     })();
   }, []);
 
-  const handleNewProposal = async () => {
+  // New proposal now runs through Trip Setup — a fast structured entry flow.
+  // Click "+ New proposal" → modal opens → submit builds a configured
+  // proposal and POSTs it, then routes to /studio.
+  const openNewProposal = () => setTripSetupOpen(true);
+
+  const handleTripSetupSubmit = async ({ proposal }: TripSetupResult) => {
     if (creating) return;
     setCreating(true);
     try {
-      const blank = buildBlankProposal();
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposal: blank }),
+        body: JSON.stringify({ proposal }),
       });
       if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      try { localStorage.setItem("activeProposalId", blank.id); } catch {}
+      try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
       router.push("/studio");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create proposal");
@@ -166,7 +172,7 @@ export function DashboardWorkspace() {
         <ActiveProposalCard
           loaded={proposals !== null}
           proposal={activeProposal}
-          onNew={handleNewProposal}
+          onNew={openNewProposal}
           creating={creating}
           onImportSample={handleImportSample}
           importing={importing}
@@ -175,7 +181,7 @@ export function DashboardWorkspace() {
         {/* Triple snapshot row */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
           <QuickActionsCard
-            onNew={handleNewProposal}
+            onNew={openNewProposal}
             creating={creating}
             onImportSample={handleImportSample}
             importing={importing}
@@ -228,6 +234,14 @@ export function DashboardWorkspace() {
           </section>
         )}
       </main>
+
+      {tripSetupOpen && (
+        <TripSetupDialog
+          onClose={() => { if (!creating) setTripSetupOpen(false); }}
+          onSubmit={handleTripSetupSubmit}
+          submitting={creating}
+        />
+      )}
     </div>
   );
 }

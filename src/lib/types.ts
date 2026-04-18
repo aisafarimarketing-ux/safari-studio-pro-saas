@@ -42,6 +42,11 @@ export interface ClientDetails {
   guestNames: string;
   email?: string;
   pax: string;
+  /** Structured breakdown — optional; falls back to free-form `pax` when absent. */
+  adults?: number;
+  children?: number;
+  /** Country of origin for the travellers (e.g. "United Kingdom", "United States"). */
+  origin?: string;
   rooming?: string;
   arrivalFlight?: string;
   departureFlight?: string;
@@ -54,8 +59,12 @@ export interface ClientDetails {
 export interface TripDetails {
   title: string;
   subtitle: string;
+  /** Free-form display string, e.g. "5 – 12 July 2025". */
   dates: string;
   nights: number;
+  /** ISO dates (YYYY-MM-DD), optional — set by Trip Setup, falls back to `dates`. */
+  arrivalDate?: string;
+  departureDate?: string;
   tripStyle?: string;
   destinations: string[];
   highlights?: string;
