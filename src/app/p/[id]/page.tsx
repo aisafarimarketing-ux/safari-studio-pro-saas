@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
+import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
 import type { Proposal, Section } from "@/lib/types";
 
 export default function ClientProposalPage({
@@ -78,6 +79,8 @@ export default function ClientProposalPage({
           --font-body: '${theme.bodyFont}', system-ui, sans-serif;
         }
       `}</style>
+
+      <ShareViewHeader proposal={proposal} />
 
       <div className="max-w-[900px] mx-auto" style={{ background: theme.tokens.pageBg }}>
         {sorted.map((section: Section) => (

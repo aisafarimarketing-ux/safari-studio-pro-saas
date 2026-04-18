@@ -4,64 +4,72 @@ import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
+// "At a glance" — the 4-card editorial grid. The brief is explicit:
+// duration / destinations / guests / style. We render each in the same
+// hierarchy: tiny label, then a one-line value in display font.
+
 export function TripSummarySection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
-  const { client, trip, theme, days, pricing, activeTier } = proposal;
+  const { client, trip, theme, days } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   const destinations = [...new Set(days.map((d) => d.destination))];
+  const destinationsLine = destinations.length
+    ? destinations.join(" · ")
+    : trip.destinations.join(" · ");
+  const duration = trip.nights
+    ? `${trip.nights} nights`
+    : days.length
+      ? `${days.length} nights`
+      : trip.dates;
 
-  const stats = [
-    { label: "Guests", value: client.guestNames, large: true },
-    { label: "Dates", value: trip.dates },
-    { label: "Duration", value: trip.nights ? `${trip.nights} nights` : days.length ? `${days.length} nights` : undefined },
-    { label: "Destinations", value: destinations.length ? destinations.join(" · ") : trip.destinations.join(" · ") || undefined },
-    { label: "Trip style", value: trip.tripStyle },
-    { label: "Investment from", value: `${pricing[activeTier].currency} ${pricing[activeTier].pricePerPerson} pp`, accent: true },
-  ].filter((s) => !!s.value) as { label: string; value: string; large?: boolean; accent?: boolean }[];
+  const cards: { label: string; value: string }[] = [
+    { label: "Duration", value: duration || "—" },
+    { label: "Destinations", value: destinationsLine || "—" },
+    { label: "Guests", value: client.guestNames || "—" },
+    { label: "Style", value: trip.tripStyle || trip.subtitle || "—" },
+  ];
 
   return (
-    <div style={{ background: tokens.pageBg }}>
-      {/* Overline */}
-      <div className="px-8 md:px-20 pt-20 pb-10 max-w-5xl mx-auto">
-        <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: tokens.mutedText }}>
+    <div className="px-8 md:px-16 py-20 md:py-24" style={{ background: tokens.pageBg }}>
+      <div className="max-w-5xl mx-auto">
+        {/* Section label */}
+        <div
+          className="text-[10px] uppercase tracking-[0.3em] mb-10 font-semibold text-center"
+          style={{ color: tokens.mutedText }}
+        >
           At a glance
         </div>
-      </div>
 
-      {/* Stats strip — full-bleed border-collapse grid */}
-      <div
-        className="grid grid-cols-2 md:grid-cols-3 gap-px"
-        style={{ background: tokens.border }}
-      >
-        {stats.map((stat, i) => (
-          <div
-            key={stat.label}
-            className={`px-8 md:px-10 py-9 ${i === 0 ? "col-span-2 md:col-span-1" : ""}`}
-            style={{ background: tokens.sectionSurface }}
-          >
+        {/* Four-card grid — borderless, generous spacing, faint dividers */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px overflow-hidden"
+          style={{ background: tokens.border }}
+        >
+          {cards.map((card) => (
             <div
-              className="text-[9px] uppercase tracking-[0.28em] mb-3"
-              style={{ color: tokens.mutedText }}
+              key={card.label}
+              className="px-6 md:px-8 py-8 text-center"
+              style={{ background: tokens.sectionSurface }}
             >
-              {stat.label}
+              <div
+                className="text-[9px] uppercase tracking-[0.28em] mb-3 font-semibold"
+                style={{ color: tokens.mutedText }}
+              >
+                {card.label}
+              </div>
+              <div
+                className="text-[1.1rem] md:text-[1.2rem] font-semibold leading-snug"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                }}
+              >
+                {card.value}
+              </div>
             </div>
-            <div
-              className={`font-semibold leading-snug ${stat.large ? "text-[1.25rem]" : "text-[14px]"}`}
-              style={{
-                color: stat.accent ? tokens.accent : tokens.headingText,
-                fontFamily: stat.large
-                  ? `'${theme.displayFont}', serif`
-                  : `'${theme.bodyFont}', sans-serif`,
-              }}
-            >
-              {stat.value}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-
-      <div className="h-px" style={{ background: tokens.border }} />
     </div>
   );
 }
