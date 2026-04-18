@@ -4,9 +4,13 @@ import { NextResponse } from "next/server";
 const isProtectedRoute = createRouteMatcher([
   "/studio(.*)",
   "/proposals(.*)",
+  "/properties(.*)",
   "/settings(.*)",
   "/api/ai(.*)",
   "/api/proposals(.*)",
+  "/api/properties(.*)",
+  "/api/locations(.*)",
+  "/api/property-tags(.*)",
   "/api/brand-dna(.*)",
   "/api/media(.*)",
 ]);
