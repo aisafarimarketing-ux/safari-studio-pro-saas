@@ -67,6 +67,20 @@ export function useAutoSaveProposal(enabled: boolean): {
       if (serialized === lastSerializedRef.current) {
         return; // nothing to save
       }
+      // Pre-flight payload-size guard. Vercel/edge proxies truncate bodies
+      // at ~10MB, which produces an unparseable JSON tail on the server.
+      // Catching it here gives the user an actionable message instead of
+      // an opaque "Unterminated string at position N" later. Threshold is
+      // a touch under the platform cap so headers + form overhead fit.
+      const MAX_PAYLOAD_BYTES = 9 * 1024 * 1024;
+      if (payload.length > MAX_PAYLOAD_BYTES) {
+        const mb = (payload.length / 1024 / 1024).toFixed(1);
+        setError(
+          `Proposal is ${mb}MB — too big to auto-save. Remove or replace some uploaded images, then try again. (Image uploads are stored inline; we're moving them to cloud storage to lift this limit.)`,
+        );
+        setState("error");
+        return;
+      }
       inFlightRef.current = true;
       setState("saving");
       setError(null);
