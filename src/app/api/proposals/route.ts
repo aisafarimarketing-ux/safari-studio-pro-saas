@@ -56,11 +56,41 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account suspended", code: "ORG_SUSPENDED" }, { status: 402 });
   }
 
+  // Read the raw body so we can a) report size in diagnostics and b)
+  // surface the real parse failure instead of a generic "Invalid JSON".
+  let raw = "";
+  try {
+    raw = await req.text();
+  } catch (err) {
+    console.error("[proposals.POST] body read failed:", err);
+    return NextResponse.json(
+      { error: "Could not read request body" },
+      { status: 400 },
+    );
+  }
+
   let body: { proposal?: { id?: string; metadata?: { title?: string; status?: string } } };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    body = JSON.parse(raw);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[proposals.POST] JSON parse failed:",
+      detail,
+      "· size=",
+      raw.length,
+      "bytes · first 200 chars:",
+      raw.slice(0, 200),
+    );
+    return NextResponse.json(
+      {
+        error: `Invalid JSON: ${detail}`,
+        bytes: raw.length,
+        // Hint the caller to inspect the payload shape — useful when
+        // images or long narratives push the body over a proxy limit.
+      },
+      { status: 400 },
+    );
   }
 
   const proposal = body?.proposal;

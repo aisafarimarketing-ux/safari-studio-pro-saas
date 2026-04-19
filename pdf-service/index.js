@@ -116,18 +116,44 @@ app.post("/pdf", async (req, res) => {
     return res.status(400).json({ error: "url is required (http/https)" });
   }
 
-  const browser = await getBrowser();
-  const context = await browser.newContext({
-    // A4 at ~100dpi so Chromium doesn't allocate 4x the pixel buffer.
-    // Tagged PDF output still scales vectors + fonts correctly, and
-    // raster images remain sharp at 2x via deviceScaleFactor.
-    viewport: { width: 1024, height: 1440 },
-    deviceScaleFactor: 2,
-    colorScheme: "light",
-    reducedMotion: "reduce",
-    locale: "en-US",
-    javaScriptEnabled: true,
+  // Handler-level watchdog — if something hangs (Chromium wedged, a
+  // content script stalls, anything) we return a clear message instead
+  // of letting Railway's proxy time us out with a generic 502.
+  const WATCHDOG_MS = 90_000;
+  let watchdog;
+  const watchdogPromise = new Promise((_, reject) => {
+    watchdog = setTimeout(
+      () => reject(new Error(`watchdog: render exceeded ${WATCHDOG_MS}ms`)),
+      WATCHDOG_MS,
+    );
   });
+
+  let browser;
+  try {
+    browser = await getBrowser();
+  } catch (err) {
+    console.error("[pdf] browser launch failed:", err);
+    return res.status(500).json({ error: `browser launch failed: ${err?.message || err}` });
+  }
+
+  let context;
+  try {
+    context = await browser.newContext({
+      viewport: { width: 1024, height: 1440 },
+      deviceScaleFactor: 2,
+      colorScheme: "light",
+      reducedMotion: "reduce",
+      locale: "en-US",
+      javaScriptEnabled: true,
+    });
+  } catch (err) {
+    console.error("[pdf] newContext failed (likely dead browser):", err);
+    // Force relaunch on next request.
+    browserPromise = null;
+    return res.status(500).json({
+      error: `browser context failed: ${err?.message || err}. A fresh browser will launch on the next retry.`,
+    });
+  }
   const page = await context.newPage();
   await page.emulateMedia({ media: "print" });
 
@@ -145,42 +171,43 @@ app.post("/pdf", async (req, res) => {
   let navigationStatus = null;
 
   try {
-    // domcontentloaded + explicit readiness flag + fonts wait is much
-    // lighter than networkidle — avoids holding a heavy page open while
-    // third-party analytics / Clerk scripts keep the network "busy".
-    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
-    navigationStatus = response?.status() ?? null;
+    const render = (async () => {
+      const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      navigationStatus = response?.status() ?? null;
 
-    if (navigationStatus && (navigationStatus < 200 || navigationStatus >= 400)) {
-      throw new Error(
-        `print page responded ${navigationStatus} at ${page.url()}`,
-      );
-    }
+      if (navigationStatus && (navigationStatus < 200 || navigationStatus >= 400)) {
+        throw new Error(
+          `print page responded ${navigationStatus} at ${page.url()}`,
+        );
+      }
 
-    // The print page sets window.__SS_READY__ after hydration, font load,
-    // and image decode. That's all we need to know it's safe to capture.
-    await page
-      .waitForFunction(() => Boolean(window.__SS_READY__), { timeout: 25_000 })
-      .catch(() => page.waitForTimeout(1200));
+      await page
+        .waitForFunction(() => Boolean(window.__SS_READY__), { timeout: 25_000 })
+        .catch(() => page.waitForTimeout(1200));
 
-    await page.evaluate(async () => {
-      try { if (document.fonts?.ready) await document.fonts.ready; } catch {}
-    });
+      await page.evaluate(async () => {
+        try { if (document.fonts?.ready) await document.fonts.ready; } catch {}
+      });
 
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: { top: "0", right: "0", bottom: "0", left: "0" },
-      tagged: true,
-      outline: true,
-    });
+      return page.pdf({
+        format: "A4",
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        tagged: true,
+        outline: true,
+      });
+    })();
+
+    const pdf = await Promise.race([render, watchdogPromise]);
+    clearTimeout(watchdog);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Cache-Control", "private, no-store");
     res.send(pdf);
   } catch (err) {
+    clearTimeout(watchdog);
     console.error("[pdf] render failed:", {
       url,
       navigationStatus,
@@ -197,6 +224,10 @@ app.post("/pdf", async (req, res) => {
       requestErrors: requestErrors.slice(0, 5),
       finalUrl: page.url(),
     });
+    // Crash-class errors → force a fresh browser on the next request.
+    if (/Target closed|Navigation|watchdog|browser/i.test(err?.message || "")) {
+      browserPromise = null;
+    }
   } finally {
     await context.close().catch(() => {});
   }

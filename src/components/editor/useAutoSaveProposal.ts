@@ -50,6 +50,19 @@ export function useAutoSaveProposal(enabled: boolean): {
         return;
       }
       const current = useProposalStore.getState().proposal;
+      // Serialise defensively. If the proposal contains anything that
+      // can't be stringified (circular ref, function, BigInt), surface
+      // that as the save error instead of letting fetch see an empty body.
+      let payload: string;
+      try {
+        payload = JSON.stringify({ proposal: current });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Could not serialise proposal";
+        console.error("[autoSave] JSON.stringify failed:", err);
+        setError(msg);
+        setState("error");
+        return;
+      }
       const serialized = JSON.stringify(current);
       if (serialized === lastSerializedRef.current) {
         return; // nothing to save
@@ -61,7 +74,7 @@ export function useAutoSaveProposal(enabled: boolean): {
         const res = await fetch("/api/proposals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ proposal: current }),
+          body: payload,
         });
         if (res.status === 401) { window.location.href = "/sign-in"; return; }
         if (res.status === 402) { window.location.href = "/account-suspended"; return; }

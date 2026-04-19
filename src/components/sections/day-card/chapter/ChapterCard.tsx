@@ -114,23 +114,28 @@ export function ChapterCard({
         <DestinationPropertyChapter {...chapterProps} />
       )}
 
-      <DestinationImagePicker
-        open={imagePickerOpen}
-        onClose={() => setImagePickerOpen(false)}
-        defaultLocation={chapter.destinationName}
-        onSelect={(c) => {
-          if (activeDayForPicker) {
-            updateDay(activeDayForPicker, { heroImageUrl: c.url });
-          }
-        }}
-      />
-
-      {propPickerOpen && (
-        <DayPropertyPicker
-          dayDestination={chapter.destinationName}
-          onClose={() => setPropPickerOpen(false)}
-          onSelect={onAssignProperty}
-        />
+      {/* Pickers are editor-only; skip mounting entirely in preview/share
+          so they never fire network calls during PDF capture. */}
+      {isEditor && (
+        <>
+          <DestinationImagePicker
+            open={imagePickerOpen}
+            onClose={() => setImagePickerOpen(false)}
+            defaultLocation={chapter.destinationName}
+            onSelect={(c) => {
+              if (activeDayForPicker) {
+                updateDay(activeDayForPicker, { heroImageUrl: c.url });
+              }
+            }}
+          />
+          {propPickerOpen && (
+            <DayPropertyPicker
+              dayDestination={chapter.destinationName}
+              onClose={() => setPropPickerOpen(false)}
+              onSelect={onAssignProperty}
+            />
+          )}
+        </>
       )}
     </div>
   );
