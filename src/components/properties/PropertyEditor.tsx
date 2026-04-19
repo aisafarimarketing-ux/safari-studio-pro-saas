@@ -46,6 +46,8 @@ export function PropertyEditor({ propertyId }: { propertyId: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [aiFilling, setAiFilling] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Active anchor for the section nav highlight.
   const [activeSection, setActiveSection] = useState<string>("basics");
@@ -163,6 +165,79 @@ export function PropertyEditor({ propertyId }: { propertyId: string }) {
     setActionsOpen(false);
   };
 
+  // ── AI fill — Generate story + amenities from the property name + location
+  //    + class. Only enabled once the user has given us a name to go on; falls
+  //    back gracefully if any field comes back empty. Never overwrites text
+  //    the user has already written unless they confirm.
+  const handleAIFill = async () => {
+    if (aiFilling) return;
+    const name = form.name?.trim();
+    if (!name) {
+      setAiError("Add a property name first.");
+      return;
+    }
+    // Warn before overwriting existing text.
+    const hasText = [form.shortSummary, form.whatMakesSpecial, form.whyWeChoose].some(
+      (s) => s && s.trim().length > 0,
+    );
+    if (hasText) {
+      const ok = window.confirm(
+        "This property already has story text. Replace it with AI-generated content? (Amenities will be merged.)",
+      );
+      if (!ok) return;
+    }
+    const loc = locations.find((l) => l.id === form.locationId);
+    setAiFilling(true);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai/property-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyName: name,
+          propertyClass: form.propertyClass,
+          locationName: loc?.name,
+          country: loc?.country,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      const { content } = await res.json() as {
+        content: {
+          shortSummary: string;
+          whatMakesSpecial: string;
+          whyWeChoose: string;
+          amenities: string[];
+          suggestedSuitability: string[];
+          suggestedNights: number;
+        };
+      };
+      // Merge amenities (case-insensitive dedupe) so the user keeps theirs.
+      const existingAm = form.amenities.map((a) => a.toLowerCase());
+      const mergedAmenities = [
+        ...form.amenities,
+        ...content.amenities.filter((a) => !existingAm.includes(a.toLowerCase())),
+      ];
+      update({
+        shortSummary: content.shortSummary || form.shortSummary,
+        whatMakesSpecial: content.whatMakesSpecial || form.whatMakesSpecial,
+        whyWeChoose: content.whyWeChoose || form.whyWeChoose,
+        amenities: mergedAmenities,
+        suggestedNights: form.suggestedNights || content.suggestedNights,
+        suitability: form.suitability.length
+          ? form.suitability
+          : content.suggestedSuitability,
+      });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI fill failed");
+    } finally {
+      setAiFilling(false);
+      setTimeout(() => setAiError(null), 4000);
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f8f5ef] text-[#1a1a1a]">
@@ -234,8 +309,27 @@ export function PropertyEditor({ propertyId }: { propertyId: string }) {
                 <PhotosSection images={form.images} onChange={updateImages} />
               </SectionCard>
 
-              <SectionCard id="story" title="Client-facing story" registerRef={registerSection}>
+              <SectionCard
+                id="story"
+                title="Client-facing story"
+                registerRef={registerSection}
+                action={
+                  <button
+                    type="button"
+                    onClick={handleAIFill}
+                    disabled={aiFilling || !form.name?.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-[#1b3a2d]/20 text-[#1b3a2d] hover:bg-[#1b3a2d]/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={!form.name?.trim() ? "Add a property name first" : "Generate story + amenities from the property name"}
+                  >
+                    <span className="text-[#c9a84c]">✦</span>
+                    <span>{aiFilling ? "Generating…" : "Generate with AI"}</span>
+                  </button>
+                }
+              >
                 <StorySection form={form} update={update} />
+                {aiError && (
+                  <div className="mt-3 text-[12px] text-[#b34334]">{aiError}</div>
+                )}
               </SectionCard>
 
               <SectionCard id="amenities" title="Amenities" registerRef={registerSection}>
@@ -465,12 +559,14 @@ function SectionCard({
   id,
   title,
   hint,
+  action,
   children,
   registerRef,
 }: {
   id: string;
   title: string;
   hint?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
   registerRef: (id: string, el: HTMLElement | null) => void;
 }) {
@@ -480,9 +576,12 @@ function SectionCard({
       ref={(el) => registerRef(id, el)}
       className="bg-white rounded-2xl border border-black/8 p-6 md:p-7 scroll-mt-24"
     >
-      <div className="mb-4">
-        <h2 className="text-[16px] font-semibold text-black/85">{title}</h2>
-        {hint && <p className="mt-0.5 text-[12px] text-black/45">{hint}</p>}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[16px] font-semibold text-black/85">{title}</h2>
+          {hint && <p className="mt-0.5 text-[12px] text-black/45">{hint}</p>}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </section>
