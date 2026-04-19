@@ -13,11 +13,11 @@ import type { Day, Property as ProposalProperty, TierKey, Section, Proposal } fr
 import { DayCardChrome } from "./DayCardChrome";
 import { resolveDayCard } from "./resolve";
 import { pickAutoLayoutForDay } from "./rotation";
-import { SplitEditorialCard } from "./layouts/SplitEditorial";
-import { CinematicHeroCard } from "./layouts/CinematicHero";
-import { StackedStoryCard } from "./layouts/StackedStory";
-import { PropertyLedCard } from "./layouts/PropertyLed";
-import { CollageHybridCard } from "./layouts/CollageHybrid";
+import { TwinFrameCard } from "./layouts/TwinFrame";
+import { HeroThumbsCard } from "./layouts/HeroThumbs";
+import { HeroInsetCard } from "./layouts/HeroInset";
+import { HeroPairCard } from "./layouts/HeroPair";
+import type { DayCardLayoutProps, DayCardLayoutVariant } from "./types";
 
 // The single entry point for a day card. Handles:
 //   - drag + drop (dnd-kit)
@@ -204,26 +204,23 @@ export function DayCard({
   );
 }
 
-function renderLayout(
-  variant: ReturnType<typeof pickConcreteLayout>,
-  props: Parameters<typeof SplitEditorialCard>[0],
-) {
+type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto">;
+
+function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
   switch (variant) {
-    case "cinematic-hero":
-      return <CinematicHeroCard {...props} />;
-    case "stacked-story":
-      return <StackedStoryCard {...props} />;
-    case "property-led":
-      return <PropertyLedCard {...props} />;
-    case "collage-hybrid":
-      return <CollageHybridCard {...props} />;
-    case "split-editorial":
+    case "hero-thumbs":
+      return <HeroThumbsCard {...props} />;
+    case "hero-inset":
+      return <HeroInsetCard {...props} />;
+    case "hero-pair":
+      return <HeroPairCard {...props} />;
+    case "twin-frame":
     default:
-      return <SplitEditorialCard {...props} />;
+      return <TwinFrameCard {...props} />;
   }
 }
 
-// Map the section-level variant (which can be "auto" or one of the five)
+// Map the section-level variant (which can be "auto" or one of the four)
 // to the concrete layout used for this specific day. Called at render
 // time so rotation is always in sync with the current proposal state.
 function pickConcreteLayout(
@@ -233,12 +230,12 @@ function pickConcreteLayout(
   proposal: Proposal,
   activeTier: TierKey,
   sectionVariant: string,
-): "split-editorial" | "cinematic-hero" | "stacked-story" | "property-led" | "collage-hybrid" {
+): ConcreteLayoutVariant {
   if (sectionVariant === "auto" || !sectionVariant) {
     return pickAutoLayoutForDay(day, index, totalDays, proposal, activeTier);
   }
-  const allowed = ["split-editorial", "cinematic-hero", "stacked-story", "property-led", "collage-hybrid"] as const;
+  const allowed = ["twin-frame", "hero-thumbs", "hero-inset", "hero-pair"] as const;
   return (allowed as readonly string[]).includes(sectionVariant)
-    ? (sectionVariant as (typeof allowed)[number])
-    : "split-editorial";
+    ? (sectionVariant as ConcreteLayoutVariant)
+    : "twin-frame";
 }

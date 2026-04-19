@@ -12,11 +12,10 @@ import type { Day, Property, Proposal, TierKey, ThemeTokens, ProposalTheme } fro
 
 export type DayCardLayoutVariant =
   | "auto"
-  | "split-editorial"
-  | "cinematic-hero"
-  | "stacked-story"
-  | "property-led"
-  | "collage-hybrid";
+  | "twin-frame"
+  | "hero-thumbs"
+  | "hero-inset"
+  | "hero-pair";
 
 export type ResolvedProperty = {
   id: string;
@@ -80,11 +79,10 @@ export function getDayCardVariant(raw: string | undefined): DayCardLayoutVariant
   const v = (raw ?? "auto") as DayCardLayoutVariant;
   const allowed: DayCardLayoutVariant[] = [
     "auto",
-    "split-editorial",
-    "cinematic-hero",
-    "stacked-story",
-    "property-led",
-    "collage-hybrid",
+    "twin-frame",
+    "hero-thumbs",
+    "hero-inset",
+    "hero-pair",
   ];
   return allowed.includes(v) ? v : "auto";
 }

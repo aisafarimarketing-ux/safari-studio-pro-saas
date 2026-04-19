@@ -1,10 +1,11 @@
-import type { DayCardLayoutVariant } from "./types";
 import type { Day, Proposal, TierKey } from "@/lib/types";
+import type { DayCardLayoutVariant } from "./types";
 
 // Picks a concrete layout for a day when the section variant is "auto".
 // Goal: the proposal should feel designed, not templated — no two
-// identical layouts back to back, signature moments for arrival and for
-// premium stays.
+// identical layouts back to back. The four new editorial layouts each
+// depend on different amounts of property imagery, so we pick what looks
+// fullest given the property that's actually assigned.
 
 export function pickAutoLayoutForDay(
   day: Day,
@@ -13,24 +14,25 @@ export function pickAutoLayoutForDay(
   proposal: Proposal,
   activeTier: TierKey,
 ): Exclude<DayCardLayoutVariant, "auto"> {
-  // Day 1 → cinematic arrival.
-  if (index === 0) return "cinematic-hero";
+  // Day 1 → twin-frame (sets the tone with two images).
+  if (index === 0) return "twin-frame";
 
-  // Last day → stacked-story reads as "wind-down" — restrained.
-  if (index === totalDays - 1) return "stacked-story";
-
-  // Multi-night stay at a premium property → property-led.
+  // Look at what property imagery we have for this day.
   const campName = day.tiers?.[activeTier]?.camp?.trim().toLowerCase();
-  if (campName) {
-    const sameCampCount = proposal.days.filter(
-      (d) => d.tiers?.[activeTier]?.camp?.trim().toLowerCase() === campName,
-    ).length;
-    if (sameCampCount >= 3) return "property-led";
+  const property = campName
+    ? proposal.properties.find((p) => p.name.trim().toLowerCase() === campName)
+    : null;
+  const galleryCount = property?.galleryUrls?.filter(Boolean).length ?? 0;
+
+  // Highly-photographed property → thumbs layout (shows off the gallery).
+  if (galleryCount >= 2) {
+    // Alternate thumbs / pair / inset by position so the same property
+    // across multiple days doesn't repeat the exact composition.
+    const phase = index % 3;
+    if (phase === 0) return "hero-thumbs";
+    if (phase === 1) return "hero-pair";
+    return "hero-inset";
   }
-
-  // Day has ≥ 2 highlights → collage (it's a signature day).
-  if ((day.highlights ?? []).length >= 2) return "collage-hybrid";
-
-  // Otherwise alternate split-editorial ↔ stacked-story for rhythm.
-  return index % 2 === 0 ? "split-editorial" : "stacked-story";
+  if (galleryCount === 1) return "hero-pair";
+  return "hero-inset";
 }
