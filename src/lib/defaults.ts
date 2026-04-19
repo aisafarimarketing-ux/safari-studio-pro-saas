@@ -198,7 +198,7 @@ function buildDefaultSections(): Section[] {
     makeSection("tripSummary", 3, "default"),
     makeSection("itineraryTable", 4, "default"),
     makeSection("map", 5, "route", { coords: [] }),
-    makeSection("dayJourney", 6, "magazine-feature"),
+    makeSection("dayJourney", 6, "auto"),
     makeSection("propertyShowcase", 7, "field-notes"),
     makeSection("pricing", 8, "tiered-rail"),
     makeSection("inclusions", 9, "default"),
