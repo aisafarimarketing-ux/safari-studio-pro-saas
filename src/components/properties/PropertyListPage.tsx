@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppHeader } from "./AppHeader";
+import { CSVImportDialog } from "./CSVImportDialog";
 import { PROPERTY_CLASSES, classLabel } from "@/lib/properties";
 
 type LocationLite = { id: string; name: string; country: string | null };
@@ -35,6 +36,8 @@ export function PropertyListPage() {
     q: "",
   });
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -107,13 +110,22 @@ export function PropertyListPage() {
               Camps and lodges you trust. Reuse them across proposals.
             </p>
           </div>
-          <button
-            onClick={handleNew}
-            disabled={creating}
-            className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition shadow-sm disabled:opacity-60"
-          >
-            {creating ? "Creating…" : "+ Add property"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setImportOpen(true)}
+              className="px-3.5 py-2 rounded-lg text-sm text-black/70 hover:bg-black/[0.04] border border-black/12 transition"
+              title="Bulk-import from a CSV"
+            >
+              ↓ Import CSV
+            </button>
+            <button
+              onClick={handleNew}
+              disabled={creating}
+              className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition shadow-sm disabled:opacity-60"
+            >
+              {creating ? "Creating…" : "+ Add property"}
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -140,7 +152,26 @@ export function PropertyListPage() {
           </div>
         )}
         {state === "ready" && properties.length === 0 && !filtersActive && (
-          <EmptyState onNew={handleNew} creating={creating} />
+          <EmptyState
+            onNew={handleNew}
+            creating={creating}
+            onImport={() => setImportOpen(true)}
+            onSeed={async () => {
+              if (seeding) return;
+              setSeeding(true);
+              try {
+                const res = await fetch("/api/properties/seed-starter", { method: "POST" });
+                if (res.status === 409) { window.location.href = "/select-organization"; return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Seed failed");
+              } finally {
+                setSeeding(false);
+              }
+            }}
+            seeding={seeding}
+          />
         )}
         {state === "ready" && properties.length === 0 && filtersActive && (
           <div className="rounded-2xl border border-dashed border-black/15 bg-white p-10 text-center text-black/55">
@@ -161,6 +192,15 @@ export function PropertyListPage() {
           </div>
         )}
       </main>
+
+      <CSVImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onComplete={() => {
+          setImportOpen(false);
+          void load();
+        }}
+      />
     </div>
   );
 }
@@ -353,7 +393,19 @@ function PropertiesSkeleton() {
   );
 }
 
-function EmptyState({ onNew, creating }: { onNew: () => void; creating: boolean }) {
+function EmptyState({
+  onNew,
+  creating,
+  onImport,
+  onSeed,
+  seeding,
+}: {
+  onNew: () => void;
+  creating: boolean;
+  onImport: () => void;
+  onSeed: () => void;
+  seeding: boolean;
+}) {
   return (
     <div className="bg-white rounded-2xl border border-dashed border-black/15 p-14 text-center">
       <div
@@ -368,13 +420,32 @@ function EmptyState({ onNew, creating }: { onNew: () => void; creating: boolean 
         you can drop them straight into proposals — and the AI will know to
         prefer them over anything else.
       </p>
-      <button
-        onClick={onNew}
-        disabled={creating}
-        className="mt-6 px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
-      >
-        {creating ? "Creating…" : "+ Add your first property"}
-      </button>
+      <div className="mt-7 flex items-center justify-center gap-2 flex-wrap">
+        <button
+          onClick={onNew}
+          disabled={creating}
+          className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
+        >
+          {creating ? "Creating…" : "+ Add your first property"}
+        </button>
+        <button
+          onClick={onImport}
+          className="px-4 py-2.5 rounded-xl border border-black/12 text-sm font-medium text-black/70 hover:bg-black/[0.04] transition"
+        >
+          ↓ Import CSV
+        </button>
+        <button
+          onClick={onSeed}
+          disabled={seeding}
+          className="px-4 py-2.5 rounded-xl border border-[#c9a84c]/40 text-sm font-medium text-[#8a7230] hover:bg-[#c9a84c]/10 transition disabled:opacity-60"
+          title="Seed the library with 10 famous East African camps — you can archive or edit them after."
+        >
+          {seeding ? "Seeding…" : "✦ Seed starter library"}
+        </button>
+      </div>
+      <p className="mt-4 text-[11.5px] text-black/40 max-w-md mx-auto">
+        Not sure where to begin? The starter library gives you 10 famous East African camps you can edit or archive.
+      </p>
     </div>
   );
 }
