@@ -41,8 +41,10 @@ export default function HomePage() {
 
 function Nav() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-md"
-      style={{ background: "rgba(27,58,45,0.94)", borderColor: "rgba(255,255,255,0.08)" }}>
+    <nav
+      className="fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-xl"
+      style={{ background: "rgba(20,42,32,0.86)", borderColor: "rgba(255,255,255,0.06)" }}
+    >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
           <div
@@ -51,32 +53,35 @@ function Nav() {
           >
             S
           </div>
-          <span className="text-white font-semibold text-[16px] tracking-tight">
+          <span className="text-white font-semibold text-[15px] tracking-tight">
             Safari Studio
           </span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-8 text-sm text-white/70">
+        <div className="hidden md:flex items-center gap-7 text-[13.5px] text-white/60">
           <a href="#how" className="hover:text-white transition">How it works</a>
-          <a href="#different" className="hover:text-white transition">Why it&apos;s different</a>
+          <a href="#different" className="hover:text-white transition">Why different</a>
           <a href="#brand" className="hover:text-white transition">Brand DNA</a>
           <a href="#pricing" className="hover:text-white transition">Pricing</a>
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
+          {/* Native anchors (not next/link) so the Clerk widget always
+              mounts cleanly with a fresh document — avoids the empty-on-
+              first-load behaviour that a client-side transition can trigger. */}
+          <a
             href="/sign-in"
             className="hidden sm:inline-block px-3 py-1.5 text-sm text-white/70 hover:text-white transition"
           >
             Sign in
-          </Link>
-          <Link
+          </a>
+          <a
             href="/sign-up"
             className="px-4 py-2 rounded-lg text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
             style={{ background: GOLD, color: FOREST }}
           >
             Open Studio
-          </Link>
+          </a>
         </div>
       </div>
     </nav>
@@ -103,49 +108,64 @@ function Hero() {
       />
 
       <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-32 md:pt-32 md:pb-40 text-center">
-        <Eyebrow color={GOLD}>Built for safari businesses</Eyebrow>
+        <Eyebrow color={GOLD}>A proposal studio for safari operators</Eyebrow>
 
         <h1
-          className="mt-7 text-5xl md:text-7xl font-bold text-white leading-[1.05] tracking-tight max-w-4xl mx-auto"
-          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+          className="mt-7 font-bold text-white leading-[0.98] tracking-tight max-w-5xl mx-auto"
+          style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: "clamp(2.8rem, 7vw, 5.6rem)",
+          }}
         >
-          Proposals your clients
+          A proposal in <em className="not-italic" style={{ color: GOLD }}>thirty seconds</em>.
           <br />
-          can <em className="not-italic" style={{ color: GOLD }}>feel</em> — in a fraction of the time.
+          Your voice. Your camps. Your clients.
         </h1>
 
-        <p className="mt-7 text-[17px] md:text-[19px] text-white/60 max-w-2xl mx-auto leading-relaxed">
-          A proposal builder for tour operators, DMCs, and lodges. Pulls from
-          your trusted properties, your brand voice, and your photography.
-          Not a template generator.
+        <p className="mt-7 text-[17px] md:text-[19px] text-white/65 max-w-2xl mx-auto leading-relaxed">
+          Tell the AI who&apos;s travelling and where. It drafts every section —
+          greeting, day-by-day, pricing, sign-off — in your brand voice, using
+          only the camps in your library. You polish and send.
         </p>
 
-        <div
-          className="mt-8 inline-flex items-center px-4 py-2 rounded-full text-[13px] font-medium"
-          style={{ color: GOLD, background: "rgba(201,168,76,0.10)", border: `1px solid rgba(201,168,76,0.28)` }}
-        >
-          No generic AI. No random camps. Just your trusted properties — faster.
-        </div>
-
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-          <Link
+          <a
             href="/sign-up"
             className="px-7 py-3.5 rounded-xl font-semibold text-[15px] transition hover:brightness-110 active:scale-95 shadow-lg"
             style={{ background: GOLD, color: FOREST }}
           >
-            Create your first proposal
-          </Link>
+            Start free — no card
+          </a>
           <a
             href="#how"
             className="px-7 py-3.5 rounded-xl font-semibold text-white/85 text-[15px] transition hover:text-white hover:bg-white/[0.04]"
             style={{ border: "1px solid rgba(255,255,255,0.18)" }}
           >
-            See how it works
+            See it in action →
           </a>
         </div>
 
-        <p className="mt-8 text-white/35 text-[13px]">
-          Trusted by operators in Kenya · Tanzania · Uganda · Rwanda · Botswana
+        {/* Value strip — three sharp claims replacing the old tag. */}
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-0 sm:divide-x divide-white/10 max-w-3xl mx-auto">
+          {[
+            { k: "30s", v: "First draft, every section filled" },
+            { k: "£50/mo", v: "Operator tier — 4× cheaper than Wetu" },
+            { k: "100%", v: "Your library, your voice, your photos" },
+          ].map((item) => (
+            <div key={item.k} className="px-4 py-4 sm:py-0">
+              <div
+                className="font-bold text-white"
+                style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", lineHeight: 1 }}
+              >
+                {item.k}
+              </div>
+              <div className="text-[12.5px] mt-2 text-white/55 leading-relaxed">{item.v}</div>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-12 text-white/35 text-[12px] tracking-[0.18em] uppercase">
+          Kenya · Tanzania · Uganda · Rwanda · Botswana · Namibia
         </p>
       </div>
 
@@ -723,7 +743,7 @@ function PricingCard({
       <p className="mt-3 text-[14px] leading-relaxed" style={{ color: sub }}>
         {tagline}
       </p>
-      <Link
+      <a
         href="/sign-up"
         className="mt-6 block w-full py-3 rounded-xl text-center text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
         style={
@@ -733,7 +753,7 @@ function PricingCard({
         }
       >
         {cta}
-      </Link>
+      </a>
       <ul className="mt-7 space-y-2.5 pt-5 border-t" style={{ borderColor: divider }}>
         {features.map((f) => (
           <li key={f} className="flex items-start gap-2.5 text-[14px]" style={{ color: sub }}>
@@ -806,13 +826,13 @@ function FinalCTA() {
           Open the Studio, add a property, draft a proposal. Free to try.
           No credit card.
         </p>
-        <Link
+        <a
           href="/sign-up"
           className="inline-flex mt-10 px-9 py-4 rounded-xl font-bold text-[16px] transition hover:brightness-110 active:scale-95 shadow-xl"
           style={{ background: GOLD, color: FOREST }}
         >
           Open Safari Studio
-        </Link>
+        </a>
       </div>
     </section>
   );
@@ -840,7 +860,7 @@ function Footer() {
           <a href="#how" className="hover:text-white/70 transition">How it works</a>
           <a href="#different" className="hover:text-white/70 transition">Why different</a>
           <Link href="/pricing" className="hover:text-white/70 transition">Pricing</Link>
-          <Link href="/sign-up" className="hover:text-white/70 transition">Open Studio</Link>
+          <a href="/sign-up" className="hover:text-white/70 transition">Open Studio</a>
         </div>
         <div>&copy; {new Date().getFullYear()} Safari Studio · Nairobi</div>
       </div>

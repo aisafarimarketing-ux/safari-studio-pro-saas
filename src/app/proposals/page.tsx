@@ -9,8 +9,9 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
-import { buildBlankProposal } from "@/lib/defaults";
 import { BrandDNADashboardCard } from "@/components/brand-dna/BrandDNADashboardCard";
+import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
+import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 
 type ProposalSummary = {
   id: string;
@@ -31,6 +32,7 @@ export default function ProposalsPage() {
   const [deleteTarget, setDeleteTarget] = useState<ProposalSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [tripSetupOpen, setTripSetupOpen] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -51,20 +53,49 @@ export default function ProposalsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleNew = async () => {
+  // Proposal creation always runs through Trip Setup so the AI has the facts
+  // it needs to draft a personalised proposal. The in-line handler below
+  // mirrors the dashboard's flow: save blank → autopilot → merge → /studio.
+  const handleNew = () => {
+    if (creating) return;
+    setTripSetupOpen(true);
+  };
+
+  const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
     if (creating) return;
     setCreating(true);
     try {
-      const blank = buildBlankProposal();
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposal: blank }),
+        body: JSON.stringify({ proposal }),
       });
       if (res.status === 401) { window.location.href = "/sign-in?redirect_url=/proposals"; return; }
+      if (res.status === 402) { window.location.href = "/account-suspended"; return; }
       if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      try { localStorage.setItem("activeProposalId", blank.id); } catch {}
+      try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
+
+      if (autopilot) {
+        try {
+          const ai = await fetch("/api/ai/autopilot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ proposal }),
+          });
+          if (ai.ok) {
+            const draft = (await ai.json()) as AutopilotResult;
+            const merged = mergeAutopilotIntoProposal(proposal, draft);
+            await fetch("/api/proposals", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proposal: merged }),
+            });
+          }
+        } catch (err) {
+          console.warn("[autopilot] soft-fail; opening editor anyway:", err);
+        }
+      }
       router.push("/studio");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create proposal");
@@ -232,6 +263,14 @@ export default function ProposalsPage() {
           </div>
         )}
       </main>
+
+      {tripSetupOpen && (
+        <TripSetupDialog
+          onClose={() => { if (!creating) setTripSetupOpen(false); }}
+          onSubmit={handleTripSetupSubmit}
+          submitting={creating}
+        />
+      )}
 
       {/* ── Delete confirm modal ────────────────────────────────── */}
       {deleteTarget && (
