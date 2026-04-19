@@ -36,12 +36,25 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Full-bleed hero */}
         {heroUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
         ) : isEditor ? (
-          <label className="absolute inset-0 cursor-pointer">
+          <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-white/85 text-center transition group-hover:scale-105">
+              <div className="text-5xl mb-3 opacity-60">+</div>
+              <div className="text-[13px] font-semibold uppercase tracking-[0.2em]">Click to upload cover image</div>
+              <div className="text-[11px] mt-2 opacity-60">JPG, PNG, or SVG</div>
+            </div>
           </label>
         ) : null}
+        {/* Change-image button — visible only when hero is set, editor only */}
+        {heroUrl && isEditor && (
+          <label className="absolute top-4 right-4 z-30 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change image
+          </label>
+        )}
 
         {/* Deep gradient overlay — heavier at top and bottom */}
         <div

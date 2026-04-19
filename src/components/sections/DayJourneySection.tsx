@@ -197,7 +197,7 @@ function SplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, t
     <div>
       {/* Row 1 — Day image left (2fr), Day narrative right (3fr) */}
       <div className="grid md:grid-cols-[2fr_3fr] min-h-[440px]">
-        <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden">
+        <div className="relative min-h-[280px] md:min-h-0 overflow-hidden" style={{ background: tokens.cardBg }}>
           {day.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
@@ -294,7 +294,7 @@ function StackedLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
   return (
     <div>
       {/* Full-width image */}
-      <div className="relative w-full h-[300px] bg-[#e8e2d7] overflow-hidden">
+      <div className="relative w-full h-[300px] overflow-hidden" style={{ background: tokens.cardBg }}>
         {day.heroImageUrl ? (
           <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover" />
         ) : (
@@ -523,7 +523,7 @@ function FlipSplitLayout({ day, isEditor, tokens, theme, activeTier, visibleTier
             embedStayPreview={false}
           />
         </div>
-        <div className="relative bg-[#e8e2d7] min-h-[280px] md:min-h-0 overflow-hidden order-1 md:order-2">
+        <div className="relative min-h-[280px] md:min-h-0 overflow-hidden order-1 md:order-2" style={{ background: tokens.cardBg }}>
           {day.heroImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover absolute inset-0" />
