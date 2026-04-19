@@ -179,10 +179,10 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "map",
     label: "Map",
     icon: "◎",
-    description: "Route map placeholder",
-    variants: ["default", "full-width"],
-    defaultVariant: "default",
-    defaultContent: { embedUrl: "", caption: "Kenya Safari Route" },
+    description: "Interactive route map with pins for each day",
+    variants: ["route", "default", "full-width"],
+    defaultVariant: "route",
+    defaultContent: { caption: "", coords: [] },
   },
 };
 

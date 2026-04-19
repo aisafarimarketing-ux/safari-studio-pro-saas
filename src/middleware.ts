@@ -16,6 +16,8 @@ const isProtectedRoute = createRouteMatcher([
   "/api/brand-dna(.*)",
   "/api/media(.*)",
   "/api/admin(.*)",
+  "/api/workspace(.*)",
+  "/api/geocode(.*)",
 ]);
 
 // Routes that a signed-in user without an active organization may still visit
