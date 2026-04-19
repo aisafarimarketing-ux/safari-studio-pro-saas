@@ -47,6 +47,8 @@ export function EditorToolbar({
   const [shareState, setShareState] = useState<ShareState>("idle");
   const [menuOpen, setMenuOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [pdfState, setPdfState] = useState<"idle" | "rendering" | "error">("idle");
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   // ── Share (= Copy link, with primary affordance) ──
   const handleShare = async () => {
@@ -62,14 +64,53 @@ export function EditorToolbar({
     }
   };
 
-  // ── Print → PDF ──
-  const handlePrint = () => {
+  // ── PDF export — calls the server-side render endpoint backed by the
+  // Playwright pdf-service sidecar. Falls back to the browser's native
+  // print dialog when the service isn't configured (HTTP 503 with code
+  // PDF_NOT_CONFIGURED) so you always have a path to a PDF.
+  const handleDownloadPDF = async () => {
     setMenuOpen(false);
-    setMode("preview");
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setMode("editor"), 600);
-    }, 300);
+    if (pdfState === "rendering") return;
+    setPdfState("rendering");
+    setPdfError(null);
+    const id = useProposalStore.getState().proposal.id;
+    const title = useProposalStore.getState().proposal.metadata.title || "proposal";
+    try {
+      const res = await fetch(`/api/proposals/${id}/pdf`, { method: "POST" });
+      if (res.status === 503) {
+        // Server doesn't have the renderer configured yet — fall back to
+        // browser print so the user is never stuck.
+        const data = await res.json().catch(() => ({}));
+        console.warn("[pdf] service not configured, falling back to print:", data?.error);
+        setMode("preview");
+        setTimeout(() => {
+          window.print();
+          setTimeout(() => setMode("editor"), 600);
+          setPdfState("idle");
+        }, 300);
+        return;
+      }
+      if (res.status === 401) { window.location.href = "/sign-in"; return; }
+      if (res.status === 402) { window.location.href = "/account-suspended"; return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title.replace(/[^a-zA-Z0-9._-]+/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setPdfState("idle");
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "PDF export failed");
+      setPdfState("error");
+      setTimeout(() => setPdfState("idle"), 4000);
+    }
   };
 
   // ── Duplicate proposal ──
@@ -152,7 +193,8 @@ export function EditorToolbar({
           open={menuOpen}
           setOpen={setMenuOpen}
           onCopyLink={handleShare}
-          onDownloadPDF={handlePrint}
+          onDownloadPDF={handleDownloadPDF}
+          pdfState={pdfState}
           onDuplicate={handleDuplicate}
           duplicating={duplicating}
         />
@@ -196,6 +238,16 @@ export function EditorToolbar({
             <div className="text-[13px] text-white/85 mt-0.5 break-words">
               {autoSaveError} — your next change will retry automatically.
             </div>
+          </div>
+        </div>
+      )}
+
+      {pdfState === "error" && pdfError && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#b34334] text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3">
+          <div className="text-lg leading-none">⚠</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm">PDF export failed</div>
+            <div className="text-[13px] text-white/85 mt-0.5 break-words">{pdfError}</div>
           </div>
         </div>
       )}
@@ -255,6 +307,7 @@ function ActionsMenu({
   setOpen,
   onCopyLink,
   onDownloadPDF,
+  pdfState,
   onDuplicate,
   duplicating,
 }: {
@@ -262,6 +315,7 @@ function ActionsMenu({
   setOpen: (v: boolean) => void;
   onCopyLink: () => void;
   onDownloadPDF: () => void;
+  pdfState: "idle" | "rendering" | "error";
   onDuplicate: () => void;
   duplicating: boolean;
 }) {
@@ -295,7 +349,9 @@ function ActionsMenu({
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-white border border-black/10 rounded-xl shadow-xl py-1 ss-popover-in">
           <MenuItem onClick={() => { setOpen(false); onCopyLink(); }}>Copy link</MenuItem>
-          <MenuItem onClick={onDownloadPDF}>Download PDF</MenuItem>
+          <MenuItem onClick={onDownloadPDF} disabled={pdfState === "rendering"}>
+            {pdfState === "rendering" ? "Rendering PDF…" : pdfState === "error" ? "PDF failed — retry" : "Download PDF"}
+          </MenuItem>
           <MenuItem onClick={onDuplicate} disabled={duplicating}>
             {duplicating ? "Duplicating…" : "Duplicate"}
           </MenuItem>
