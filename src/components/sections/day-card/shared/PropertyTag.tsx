@@ -60,6 +60,11 @@ export function PropertyTag({
   }
 
   const chips = highlights.slice(0, 3);
+  // A "phantom" property is one fabricated by resolveDayCard when the day's
+  // camp string doesn't match any library entry — useful for showing the
+  // typed-in name, but the operator still needs an obvious way to swap it
+  // for a real library property so that imagery + content flow through.
+  const isPhantom = property.id.startsWith("phantom-");
   return (
     <div
       className="grid grid-cols-[auto_1fr_auto] items-center gap-5 px-5 py-3.5"
@@ -75,7 +80,7 @@ export function PropertyTag({
           >
             {property.name}
           </div>
-          {(property.summary || property.location) && (
+          {(property.summary || property.location || isPhantom) && (
             <div
               className="text-[11.5px] italic mt-0.5 truncate"
               style={{
@@ -83,7 +88,9 @@ export function PropertyTag({
                 fontFamily: `'${theme.displayFont}', serif`,
               }}
             >
-              {property.summary || property.location}
+              {isPhantom && isEditor
+                ? "Free-text stay — link to a library property for imagery"
+                : property.summary || property.location}
             </div>
           )}
         </div>
@@ -92,31 +99,44 @@ export function PropertyTag({
       {/* Spacer */}
       <div />
 
-      {/* Amenity chips (aligned right) */}
-      {chips.length > 0 ? (
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {chips.map((label, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap"
-              style={{
-                color: tokens.bodyText,
-                background: `${tokens.accent}10`,
-                border: `1px solid ${tokens.accent}22`,
-              }}
-            >
-              <span style={{ color: tokens.accent }}>
-                <AmenityIcon label={label} />
+      {/* Right column — chips above, Swap CTA below in editor mode */}
+      <div className="flex flex-col items-end gap-1.5">
+        {chips.length > 0 ? (
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {chips.map((label, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap"
+                style={{
+                  color: tokens.bodyText,
+                  background: `${tokens.accent}10`,
+                  border: `1px solid ${tokens.accent}22`,
+                }}
+              >
+                <span style={{ color: tokens.accent }}>
+                  <AmenityIcon label={label} />
+                </span>
+                <span>{label}</span>
               </span>
-              <span>{label}</span>
-            </span>
-          ))}
-        </div>
-      ) : (
-        <div className="text-[11px] italic" style={{ color: tokens.mutedText }}>
-          {isEditor ? "Add a day highlight to see a chip here" : ""}
-        </div>
-      )}
+            ))}
+          </div>
+        ) : isEditor ? (
+          <div className="text-[11px] italic" style={{ color: tokens.mutedText }}>
+            Add a day highlight to see a chip here
+          </div>
+        ) : null}
+
+        {isEditor && (
+          <button
+            type="button"
+            onClick={onChoose}
+            className="text-[11px] font-semibold uppercase tracking-[0.2em] hover:opacity-85 transition"
+            style={{ color: isPhantom ? tokens.accent : tokens.mutedText }}
+          >
+            {isPhantom ? "◇ Pick from library →" : "Swap property →"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

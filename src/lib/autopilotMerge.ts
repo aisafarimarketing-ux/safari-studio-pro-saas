@@ -13,6 +13,7 @@ export type AutopilotResult = {
   greeting?: { body?: string };
   closing?: { quote?: string; signOff?: string };
   map?: { caption?: string };
+  quote?: { quote?: string; attribution?: string };
   days?: Day[];
   inclusions?: string[];
   exclusions?: string[];
@@ -84,6 +85,13 @@ export function mergeAutopilotIntoProposal(
           ...section,
           content: { ...section.content, caption: draft.map.caption },
         };
+      case "quote": {
+        if (!draft.quote?.quote && !draft.quote?.attribution) return section;
+        const content = { ...section.content };
+        if (draft.quote?.quote) content.quote = draft.quote.quote;
+        if (draft.quote?.attribution) content.attribution = draft.quote.attribution;
+        return { ...section, content };
+      }
       default:
         return section;
     }

@@ -83,6 +83,7 @@ type AutopilotResponse = {
   greeting?: { body?: string };
   closing?: { quote?: string; signOff?: string };
   map?: { caption?: string };
+  quote?: { quote?: string; attribution?: string };
   days?: AutopilotDayOut[];
   inclusions?: string[];
   exclusions?: string[];
@@ -219,7 +220,11 @@ The JSON shape (all keys required unless marked optional):
     "quote": "One short, grounded line — not a cliché, not a flourish. ≤ 14 words.",
     "signOff": "3-4 sentences, personal. Addresses the guests by name. Invites their notes / feedback. Ends on a next step (e.g., 'tell me what to adjust' / 'I'll hold these dates for 7 days')."
   },
-  "map": { "caption": "Short caption for the route map, ≤ 10 words." }
+  "map": { "caption": "Short caption for the route map, ≤ 10 words." },
+  "quote": {
+    "quote": "A pull-quote for a standalone quote block. Different from the closing quote — grounded in a specific place or moment from THIS itinerary. One sentence, ≤ 18 words. No clichés.",
+    "attribution": "Guide, camp, or destination the line is rooted in — e.g. 'Angama Mara' or 'A Kenyan proverb'. Short."
+  }
 }
 
 PRICING ESTIMATION:
@@ -344,12 +349,17 @@ ${JSON.stringify(userPayload, null, 2)}`;
     signOff: stringOr(parsed.closing?.signOff, "").slice(0, 800),
   };
   const map = { caption: stringOr(parsed.map?.caption, "").slice(0, 80) };
+  const quote = {
+    quote: stringOr(parsed.quote?.quote, "").slice(0, 200),
+    attribution: stringOr(parsed.quote?.attribution, "").slice(0, 80),
+  };
 
   return NextResponse.json({
     cover,
     greeting,
     closing,
     map,
+    quote,
     days,
     inclusions,
     exclusions,

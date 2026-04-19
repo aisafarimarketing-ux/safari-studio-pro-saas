@@ -223,6 +223,18 @@ function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps)
 // Map the section-level variant (which can be "auto" or one of the four)
 // to the concrete layout used for this specific day. Called at render
 // time so rotation is always in sync with the current proposal state.
+//
+// Legacy aliases: proposals saved before the layout swap stored the old
+// names ("split-editorial" etc.). Map them onto the closest new layout
+// so existing work doesn't all collapse to the same fallback.
+const LEGACY_VARIANT_ALIASES: Record<string, ConcreteLayoutVariant> = {
+  "split-editorial": "hero-inset",
+  "cinematic-hero": "hero-thumbs",
+  "stacked-story": "hero-pair",
+  "property-led": "hero-inset",
+  "collage-hybrid": "twin-frame",
+};
+
 function pickConcreteLayout(
   day: Day,
   index: number,
@@ -235,7 +247,8 @@ function pickConcreteLayout(
     return pickAutoLayoutForDay(day, index, totalDays, proposal, activeTier);
   }
   const allowed = ["twin-frame", "hero-thumbs", "hero-inset", "hero-pair"] as const;
-  return (allowed as readonly string[]).includes(sectionVariant)
-    ? (sectionVariant as ConcreteLayoutVariant)
-    : "twin-frame";
+  if ((allowed as readonly string[]).includes(sectionVariant)) {
+    return sectionVariant as ConcreteLayoutVariant;
+  }
+  return LEGACY_VARIANT_ALIASES[sectionVariant] ?? "twin-frame";
 }

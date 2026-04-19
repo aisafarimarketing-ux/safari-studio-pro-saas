@@ -12,7 +12,7 @@ import type {
   TierKey,
   PracticalCard,
 } from "@/lib/types";
-import { buildDefaultProposal, buildBlankProposal } from "@/lib/defaults";
+import { buildDefaultProposal, buildBlankProposal, migrateLoadedProposal } from "@/lib/defaults";
 import { COLOR_PRESETS } from "@/lib/theme";
 import { SECTION_REGISTRY } from "@/lib/sectionRegistry";
 import { nanoid } from "@/lib/nanoid";
@@ -87,7 +87,7 @@ export const useProposalStore = create<ProposalState>()(
 
     hydrateProposal: (proposal) =>
       set((state) => {
-        state.proposal = proposal;
+        state.proposal = migrateLoadedProposal(proposal);
       }),
 
     loadTemplate: (id) =>

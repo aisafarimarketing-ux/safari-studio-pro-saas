@@ -324,6 +324,61 @@ export function buildDemoProposal(): Proposal {
   return base;
 }
 
+// ─── Migration — bring loaded proposals up to the current section shape ──
+//
+// Proposals saved before a section type was introduced won't have it in
+// their sections[] array. Rather than force a manual "add section" dance
+// for every user, we inject missing critical sections on load with the
+// same defaults the builder above uses, placed at a sensible order.
+//
+// Also normalises legacy dayJourney variant strings to the new names so
+// the next save cleans the data (the renderer has an alias fallback, but
+// persisting the new names avoids that dance forever).
+
+const LEGACY_DAY_VARIANTS: Record<string, string> = {
+  "split-editorial": "hero-inset",
+  "cinematic-hero": "hero-thumbs",
+  "stacked-story": "hero-pair",
+  "property-led": "hero-inset",
+  "collage-hybrid": "twin-frame",
+};
+
+export function migrateLoadedProposal(proposal: Proposal): Proposal {
+  const sections = [...proposal.sections];
+  let changed = false;
+
+  // ── 1. Ensure a map section exists ──────────────────────────────────────
+  const hasMap = sections.some((s) => s.type === "map");
+  if (!hasMap) {
+    // Insert right after the itinerary table if present, else after the
+    // greeting, else append.
+    const anchor = sections.findIndex((s) => s.type === "itineraryTable");
+    const insertAt =
+      anchor >= 0
+        ? anchor + 1
+        : sections.findIndex((s) => s.type === "greeting") + 1 || sections.length;
+    const map = makeSection("map", insertAt, "route", { coords: [] });
+    sections.splice(insertAt, 0, map);
+    changed = true;
+  }
+
+  // ── 2. Normalise legacy dayJourney variants ─────────────────────────────
+  const normalised = sections.map((s) => {
+    if (s.type !== "dayJourney") return s;
+    const mapped = LEGACY_DAY_VARIANTS[s.layoutVariant];
+    if (!mapped) return s;
+    changed = true;
+    return { ...s, layoutVariant: mapped };
+  });
+
+  // ── 3. Re-number order to stay contiguous ──────────────────────────────
+  const ordered = normalised.map((s, i) => (s.order === i ? s : { ...s, order: i }));
+  if (ordered.some((s, i) => s !== normalised[i])) changed = true;
+
+  if (!changed) return proposal;
+  return { ...proposal, sections: ordered };
+}
+
 // ─── Blank proposal ───────────────────────────────────────────────────────────
 
 export function buildBlankProposal(): Proposal {
