@@ -73,7 +73,13 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     );
   }
 
-  const printUrl = `${base.replace(/\/$/, "")}/p/${id}/print`;
+  // Normalise: tolerate operators who set PUBLIC_BASE_URL without the
+  // protocol (Railway's settings page shows hostnames that way). Strip
+  // trailing slashes in case they copied it with one.
+  const normalisedBase = /^https?:\/\//i.test(base)
+    ? base.replace(/\/$/, "")
+    : `https://${base.replace(/\/$/, "")}`;
+  const printUrl = `${normalisedBase}/p/${id}/print`;
 
   const filename = sanitizeFilename(`${proposal.title || "proposal"}.pdf`);
 
