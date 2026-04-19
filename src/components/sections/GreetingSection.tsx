@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import type { Section } from "@/lib/types";
 
 // Greeting — 4 layout variants, all on the editorial scale.
@@ -11,7 +12,7 @@ export function GreetingSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const { operator, theme } = proposal;
+  const { operator, theme, client, trip } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
   const body = section.content.body as string;
@@ -19,10 +20,30 @@ export function GreetingSection({ section }: { section: Section }) {
   const onBodyBlur = (e: React.FocusEvent<HTMLDivElement>) =>
     updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" });
 
+  const aiButton = isEditor ? (
+    <div className="absolute top-4 right-4 z-20">
+      <AIWriteButton
+        kind="greeting"
+        currentText={body ?? ""}
+        context={{
+          clientName: client.guestNames,
+          consultantName: operator.consultantName,
+          destinations: trip.destinations,
+          nights: trip.nights,
+          dates: trip.dates,
+          tripStyle: trip.tripStyle,
+        }}
+        onResult={(text) => updateSectionContent(section.id, { body: text })}
+        compact
+      />
+    </div>
+  ) : null;
+
   // ── Two-column-consultant ──────────────────────────────────────────────────
   if (variant === "two-column-consultant") {
     return (
-      <div className="py-24" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+        {aiButton}
         <div className="ed-wide grid md:grid-cols-[200px_1fr] gap-16 items-start">
           {/* Consultant sidebar */}
           <div className="md:pt-12">
@@ -48,6 +69,7 @@ export function GreetingSection({ section }: { section: Section }) {
             <div
               contentEditable={isEditor}
               suppressContentEditableWarning
+              data-ai-editable="greeting"
               className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
               style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
               onBlur={onBodyBlur}
@@ -63,7 +85,8 @@ export function GreetingSection({ section }: { section: Section }) {
   // ── Centered-minimal ───────────────────────────────────────────────────────
   if (variant === "centered-minimal") {
     return (
-      <div className="py-24 text-center" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 text-center relative" style={{ background: tokens.sectionSurface }}>
+        {aiButton}
         <div className="ed-narrow">
           <div
             className="text-label ed-label mb-12"
@@ -74,6 +97,7 @@ export function GreetingSection({ section }: { section: Section }) {
           <div
             contentEditable={isEditor}
             suppressContentEditableWarning
+            data-ai-editable="greeting"
             className="text-body-lg leading-loose whitespace-pre-line outline-none"
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             onBlur={onBodyBlur}
@@ -94,7 +118,8 @@ export function GreetingSection({ section }: { section: Section }) {
   // ── Sidebar-accent ─────────────────────────────────────────────────────────
   if (variant === "sidebar-accent") {
     return (
-      <div className="flex" style={{ background: tokens.sectionSurface }}>
+      <div className="flex relative" style={{ background: tokens.sectionSurface }}>
+        {aiButton}
         <div className="hidden md:block w-2 shrink-0" style={{ background: tokens.accent }} />
         <div className="flex-1 py-24">
           <div className="ed-narrow !mx-0 md:!mx-[clamp(2rem,8vw,6rem)] !max-w-[620px]">
@@ -132,7 +157,8 @@ export function GreetingSection({ section }: { section: Section }) {
 
   // ── Editorial-letter (default) ─────────────────────────────────────────────
   return (
-    <div className="py-24" style={{ background: tokens.sectionSurface }}>
+    <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+      {aiButton}
       <div className="ed-narrow">
         <div
           className="text-label ed-label mb-12"
@@ -146,6 +172,7 @@ export function GreetingSection({ section }: { section: Section }) {
         <div
           contentEditable={isEditor}
           suppressContentEditableWarning
+          data-ai-editable="greeting"
           className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
           onBlur={onBodyBlur}

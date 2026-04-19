@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import type { Section } from "@/lib/types";
 
 // Closing — 4 layout variants on the editorial scale.
@@ -11,7 +12,7 @@ export function ClosingSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const { operator, theme } = proposal;
+  const { operator, theme, client, trip } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
   const quote = section.content.quote as string;
@@ -22,10 +23,33 @@ export function ClosingSection({ section }: { section: Section }) {
   const onQuote = (e: React.FocusEvent<HTMLElement>) =>
     updateSectionContent(section.id, { quote: e.currentTarget.textContent ?? quote });
 
+  const aiButtons = isEditor ? (
+    <div className="absolute top-4 right-4 z-20 flex items-center gap-2" data-editor-chrome>
+      <AIWriteButton
+        kind="closing-quote"
+        currentText={quote ?? ""}
+        context={{ clientName: client.guestNames, destinations: trip.destinations }}
+        onResult={(text) => updateSectionContent(section.id, { quote: text })}
+        compact
+      />
+      <AIWriteButton
+        kind="closing-signoff"
+        currentText={signOff ?? ""}
+        context={{
+          clientName: client.guestNames,
+          consultantName: operator.consultantName,
+        }}
+        onResult={(text) => updateSectionContent(section.id, { signOff: text })}
+        compact
+      />
+    </div>
+  ) : null;
+
   // ── Centered-minimal ──────────────────────────────────────────────────────
   if (variant === "centered-minimal") {
     return (
-      <div className="py-24 text-center" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 text-center relative" style={{ background: tokens.sectionSurface }}>
+        {aiButtons}
         <div className="ed-narrow" style={{ maxWidth: 480 }}>
           <div className="w-12 mx-auto mb-8" style={{ height: "2px", background: tokens.accent }} />
           <p
@@ -33,6 +57,7 @@ export function ClosingSection({ section }: { section: Section }) {
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
+            data-ai-editable="closing"
             onBlur={onSignOff}
           >
             {signOff}
@@ -51,7 +76,8 @@ export function ClosingSection({ section }: { section: Section }) {
   // ── CTA-card ──────────────────────────────────────────────────────────────
   if (variant === "cta-card") {
     return (
-      <div className="py-24" style={{ background: tokens.pageBg }}>
+      <div className="py-24 relative" style={{ background: tokens.pageBg }}>
+        {aiButtons}
         <div className="ed-narrow">
           <div
             className="p-12 md:p-16 rounded-2xl text-center"
@@ -62,6 +88,7 @@ export function ClosingSection({ section }: { section: Section }) {
               style={{ color: "rgba(255,255,255,0.92)", fontFamily: `'${theme.displayFont}', serif` }}
               contentEditable={isEditor}
               suppressContentEditableWarning
+              data-ai-editable="closing"
               onBlur={onQuote}
             >
               {quote}
@@ -101,13 +128,15 @@ export function ClosingSection({ section }: { section: Section }) {
   // ── Letter-style ──────────────────────────────────────────────────────────
   if (variant === "letter-style") {
     return (
-      <div className="py-24" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+        {aiButtons}
         <div className="ed-narrow space-y-8" style={{ maxWidth: 580 }}>
           <p
             className="text-body leading-loose whitespace-pre-line outline-none"
             style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
+            data-ai-editable="closing"
             onBlur={onSignOff}
           >
             {signOff}
@@ -128,7 +157,8 @@ export function ClosingSection({ section }: { section: Section }) {
 
   // ── Quote-led (default) ──────────────────────────────────────────────────
   return (
-    <div className="py-24 text-center" style={{ background: tokens.accent }}>
+    <div className="py-24 text-center relative" style={{ background: tokens.accent }}>
+      {aiButtons}
       <div className="ed-narrow">
         <div
           aria-hidden
@@ -149,6 +179,7 @@ export function ClosingSection({ section }: { section: Section }) {
           style={{ color: "rgba(255,255,255,0.92)", fontFamily: `'${theme.displayFont}', serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
+          data-ai-editable="closing"
           onBlur={onQuote}
         >
           {quote}
@@ -160,6 +191,7 @@ export function ClosingSection({ section }: { section: Section }) {
             style={{ color: "rgba(255,255,255,0.6)", fontFamily: `'${theme.displayFont}', serif` }}
             contentEditable={isEditor}
             suppressContentEditableWarning
+            data-ai-editable="closing"
             onBlur={onSignOff}
           >
             {signOff}

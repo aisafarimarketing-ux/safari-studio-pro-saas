@@ -9,6 +9,7 @@ import { EditorDayNav } from "./EditorDayNav";
 import { TripMetaStrip } from "./TripMetaStrip";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
+import { AISelectionToolbar } from "./AISelectionToolbar";
 import { ContextPanel } from "./ContextPanel";
 import { useAutoSaveProposal } from "./useAutoSaveProposal";
 import { NewProposalDialog } from "@/components/ui/NewProposalDialog";
@@ -210,7 +211,7 @@ export function ProposalEditor() {
         <button
           onClick={toggleLeftPanel}
           className={`absolute z-40 top-3 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-black/10 shadow-sm text-black/40 hover:text-black/70 hover:bg-black/5 text-[10px] transition-all duration-200 ${
-            leftPanelOpen ? "left-[196px]" : "left-2"
+            leftPanelOpen ? "left-[212px]" : "left-2"
           }`}
           title={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
         >
@@ -220,6 +221,7 @@ export function ProposalEditor() {
         <div className="flex-1 min-w-0 flex flex-col proposal-canvas">
           <EditorDayNav />
           <ProposalCanvas />
+          <AISelectionToolbar />
         </div>
 
         {/* Right panel toggle */}

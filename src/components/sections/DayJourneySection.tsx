@@ -84,6 +84,34 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
     }
   };
 
+  // Right-click anywhere on this day card's image opens a native file
+  // picker. The handler is mounted on the card root and only fires when
+  // the target is actually an <img> (or the empty image placeholder).
+  const handleImageContextMenu = (e: React.MouseEvent) => {
+    if (!isEditor) return;
+    const el = e.target as HTMLElement;
+    const isImageSlot =
+      el.tagName === "IMG" ||
+      !!el.closest(".dm-image") ||
+      !!el.closest("[data-day-image]");
+    if (!isImageSlot) return;
+    e.preventDefault();
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await fileToOptimizedDataUrl(file);
+        updateDay(day.id, { heroImageUrl: dataUrl });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Image upload failed");
+      }
+    };
+    input.click();
+  };
+
   const tierColors: Record<string, string> = {
     classic: tokens.mutedText,
     premier: tokens.secondaryAccent,
@@ -108,6 +136,7 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
       data-nav-day-id={day.id}
       style={{ ...style, borderColor: tokens.border, background: tokens.sectionSurface }}
       onClick={() => isEditor && selectDay(day.id)}
+      onContextMenu={handleImageContextMenu}
       className="dm-card relative rounded-3xl overflow-hidden border transition-colors duration-150 scroll-mt-32"
     >
       {/* Editor action bar — top right */}
@@ -393,6 +422,7 @@ function CompactLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
           style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
+          data-ai-editable="day"
           onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
         >
           {day.description}
@@ -470,6 +500,7 @@ function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers
           style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
           contentEditable={isEditor}
           suppressContentEditableWarning
+          data-ai-editable="day"
           onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
         >
           {day.description}
@@ -597,6 +628,7 @@ function FeatureLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers,
           }}
           contentEditable={isEditor}
           suppressContentEditableWarning
+          data-ai-editable="day"
           onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
         >
           {description ? (
@@ -846,6 +878,7 @@ function FullOverlayLayout({ day, isEditor, tokens, theme, activeTier, visibleTi
           <p className="text-[13px] leading-[1.9] text-white/75 outline-none mb-5"
             style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
             contentEditable={isEditor} suppressContentEditableWarning
+            data-ai-editable="day"
             onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}>
             {day.description}
           </p>
