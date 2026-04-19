@@ -21,13 +21,38 @@ let browserPromise = null;
 function getBrowser() {
   if (!browserPromise) {
     browserPromise = chromium.launch({
+      // Aggressive memory-conservation flags. Railway's entry-tier plans
+      // give a service ~512MB of RAM; Chromium with a heavy SPA + fonts
+      // will OOM without these. --single-process puts everything in one
+      // process (lower memory, slightly less stable but fine for a
+      // single-request-at-a-time PDF worker).
       args: [
         "--no-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-default-apps",
+        "--disable-sync",
+        "--disable-translate",
+        "--hide-scrollbars",
+        "--metrics-recording-only",
+        "--mute-audio",
+        "--no-first-run",
+        "--safebrowsing-disable-auto-update",
         "--font-render-hinting=none",
+        "--single-process",
+        "--memory-pressure-off",
       ],
     });
+    // Restart on unexpected close — lets us self-heal after OOM.
+    browserPromise.then((b) =>
+      b.on("disconnected", () => {
+        console.warn("[pdf] browser disconnected; will relaunch on next request");
+        browserPromise = null;
+      }),
+    );
   }
   return browserPromise;
 }
@@ -97,11 +122,15 @@ app.post("/pdf", async (req, res) => {
 
   const browser = await getBrowser();
   const context = await browser.newContext({
-    viewport: { width: 1240, height: 1754 },
+    // A4 at ~100dpi so Chromium doesn't allocate 4x the pixel buffer.
+    // Tagged PDF output still scales vectors + fonts correctly, and
+    // raster images remain sharp at 2x via deviceScaleFactor.
+    viewport: { width: 1024, height: 1440 },
     deviceScaleFactor: 2,
     colorScheme: "light",
     reducedMotion: "reduce",
     locale: "en-US",
+    javaScriptEnabled: true,
   });
   const page = await context.newPage();
   await page.emulateMedia({ media: "print" });
@@ -120,21 +149,23 @@ app.post("/pdf", async (req, res) => {
   let navigationStatus = null;
 
   try {
-    const response = await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
+    // domcontentloaded + explicit readiness flag + fonts wait is much
+    // lighter than networkidle — avoids holding a heavy page open while
+    // third-party analytics / Clerk scripts keep the network "busy".
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
     navigationStatus = response?.status() ?? null;
 
-    // If the print page itself returned a non-2xx (proposal 404, server
-    // error, redirect to sign-in), bail with a clear message before we
-    // try to rasterise an error page.
     if (navigationStatus && (navigationStatus < 200 || navigationStatus >= 400)) {
       throw new Error(
         `print page responded ${navigationStatus} at ${page.url()}`,
       );
     }
 
+    // The print page sets window.__SS_READY__ after hydration, font load,
+    // and image decode. That's all we need to know it's safe to capture.
     await page
-      .waitForFunction(() => Boolean(window.__SS_READY__), { timeout: 20_000 })
-      .catch(() => page.waitForTimeout(1500));
+      .waitForFunction(() => Boolean(window.__SS_READY__), { timeout: 25_000 })
+      .catch(() => page.waitForTimeout(1200));
 
     await page.evaluate(async () => {
       try { if (document.fonts?.ready) await document.fonts.ready; } catch {}
