@@ -12,6 +12,7 @@ import { nanoid } from "@/lib/nanoid";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { TierBanner } from "./TierBanner";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
+import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -96,8 +97,9 @@ export function DashboardWorkspace() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
 
-      // 2. Optional AI draft — enrich days, inclusions, exclusions in place.
-      //    Soft-fails: if the model errors out, we still open the editor.
+      // 2. Optional AI draft — fills every section of the proposal from the
+      //    Trip Setup facts. Soft-fails: if the model errors out, we still
+      //    open the editor with the blank-but-configured proposal.
       if (autopilot) {
         try {
           const ai = await fetch("/api/ai/autopilot", {
@@ -106,17 +108,8 @@ export function DashboardWorkspace() {
             body: JSON.stringify({ proposal }),
           });
           if (ai.ok) {
-            const draft = await ai.json() as {
-              days?: typeof proposal.days;
-              inclusions?: string[];
-              exclusions?: string[];
-            };
-            const merged = {
-              ...proposal,
-              days: Array.isArray(draft.days) && draft.days.length ? draft.days : proposal.days,
-              inclusions: draft.inclusions?.length ? draft.inclusions : proposal.inclusions,
-              exclusions: draft.exclusions?.length ? draft.exclusions : proposal.exclusions,
-            };
+            const draft = (await ai.json()) as AutopilotResult;
+            const merged = mergeAutopilotIntoProposal(proposal, draft);
             await fetch("/api/proposals", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -322,24 +315,24 @@ function ActiveProposalCard({
         </div>
         <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
         <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
-          Open the editor with a blank canvas, or load a fully-built sample
-          proposal to explore the product end-to-end.
+          Fill in a few facts about your guests and the trip, and the AI will draft a fully-personalised proposal in seconds.
         </p>
         <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
           <button
-            onClick={onImportSample}
-            disabled={importing}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
-            style={{ background: "#c9a84c", color: "#1b3a2d" }}
-          >
-            {importing ? "Loading sample…" : "✦ Open a sample proposal"}
-          </button>
-          <button
             onClick={onNew}
             disabled={creating}
-            className="px-5 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-semibold hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
+            className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
+            style={{ background: "#1b3a2d", color: "white" }}
           >
-            {creating ? "Creating…" : "+ Start blank"}
+            {creating ? "Creating…" : "+ New proposal"}
+          </button>
+          <button
+            onClick={onImportSample}
+            disabled={importing}
+            className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
+            title="Load a pre-filled demo proposal for exploration only — not a real trip"
+          >
+            {importing ? "Loading…" : "Try demo"}
           </button>
         </div>
       </div>
@@ -449,9 +442,9 @@ function QuickActionsCard({
           onClick={onImportSample}
           disabled={importing}
           className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60 text-left"
-          title={hasProposals ? "Import the Family Safari template as a new proposal" : "Drop in a fully-built sample proposal to explore"}
+          title="Load a pre-filled demo proposal for exploration only — not a real trip"
         >
-          {importing ? "Importing…" : hasProposals ? "Import sample" : "✦ Import sample proposal"}
+          {importing ? "Loading…" : "Try demo proposal"}
         </button>
       </div>
     </div>

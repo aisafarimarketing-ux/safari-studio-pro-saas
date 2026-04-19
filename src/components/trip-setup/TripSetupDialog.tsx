@@ -134,12 +134,24 @@ export function TripSetupDialog({
 
         {/* Body */}
         <div className="flex-1 overflow-auto px-7 py-6 space-y-6">
-          {/* Name */}
-          <Field label="Trip name">
+          {/* Guest name(s) — required, drives personalisation everywhere */}
+          <Field
+            label="Guest name(s)"
+            hint="Used in the greeting, closing, and throughout"
+          >
+            <TextInput
+              value={form.guestNames}
+              onChange={(v) => update("guestNames", v)}
+              placeholder="e.g. The Anderson Family · Sarah & Michael · Priya"
+            />
+          </Field>
+
+          {/* Trip name — optional; defaults to '<Guest> Safari' */}
+          <Field label="Trip name" hint="Optional — defaults to '{guests} Safari'">
             <TextInput
               value={form.title}
               onChange={(v) => update("title", v)}
-              placeholder="e.g. Anderson Family Safari"
+              placeholder={form.guestNames ? `${form.guestNames} Safari` : "e.g. Anderson Family Safari"}
             />
           </Field>
 
@@ -363,8 +375,15 @@ export function TripSetupDialog({
             </button>
             <button
               type="submit"
-              disabled={submitting || !form.title.trim()}
+              disabled={submitting || !form.guestNames.trim() || form.destinations.length === 0}
               className="px-5 py-2 text-small rounded-lg bg-[#1b3a2d] text-white font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
+              title={
+                !form.guestNames.trim()
+                  ? "Add guest name(s) first"
+                  : form.destinations.length === 0
+                    ? "Pick at least one destination"
+                    : undefined
+              }
             >
               {submitting
                 ? autopilot ? "Drafting…" : "Creating…"
@@ -479,6 +498,7 @@ function NumberInput({
 
 type FormShape = {
   title: string;
+  guestNames: string;
   arrivalDate: string;
   departureDate: string;
   adults: number;
@@ -492,8 +512,10 @@ type FormShape = {
 function buildProposalFromForm(form: FormShape, nights: number): Proposal {
   const base = buildBlankProposal();
 
-  // Metadata + trip
-  const title = form.title.trim() || "New safari";
+  // Metadata + trip — fall back to guest-derived title if left blank.
+  const guestNames = form.guestNames.trim();
+  const inferredTitle = guestNames ? `${guestNames} Safari` : "New safari";
+  const title = form.title.trim() || inferredTitle;
   base.metadata.title = title;
   base.trip.title = title;
   base.trip.arrivalDate = form.arrivalDate || undefined;
@@ -515,6 +537,7 @@ function buildProposalFromForm(form: FormShape, nights: number): Proposal {
   const guestLine = form.children > 0
     ? `${form.adults} adults · ${form.children} children`
     : `${form.adults} ${form.adults === 1 ? "adult" : "adults"}`;
+  base.client.guestNames = guestNames || "Your Guests";
   base.client.pax = guestLine;
   base.client.adults = form.adults;
   base.client.children = form.children;
@@ -565,7 +588,8 @@ function buildDefaultForm(): FormShape {
   const arrival = new Date(Date.now() + 30 * 86400000);
   const departure = new Date(arrival.getTime() + 7 * 86400000);
   return {
-    title: "New safari",
+    title: "",
+    guestNames: "",
     arrivalDate: isoDate(arrival),
     departureDate: isoDate(departure),
     adults: 2,

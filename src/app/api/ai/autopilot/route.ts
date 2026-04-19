@@ -6,17 +6,21 @@ import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
 import { nanoid } from "@/lib/nanoid";
 import type { Day, TierKey } from "@/lib/types";
 
-// AI autopilot — given a Trip Setup proposal (title, dates, nights,
+// AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
 // destinations, style, notes) plus the org's property library + Brand DNA,
-// returns a complete draft: per-day destinations + narratives + per-tier
-// camp picks chosen from the library only. The caller merges the result
-// into the proposal it just created and saves again before routing the user
-// into the editor.
+// returns a complete, personalised draft for every section of the proposal:
+//
+//   cover tagline · greeting body · closing quote + sign-off ·
+//   map caption · per-day destinations + narratives + tier picks ·
+//   inclusions / exclusions · practical-info cards · pricing tiers.
+//
+// Personalisation is explicit — every paragraph must address the named
+// guests directly, reference the real destinations, use the travel style,
+// and (when provided) the guest's origin to shape practical advice.
 //
 // Library-only guarantee: Claude is shown the property list with stable
 // integer slots and must return slot indices, not free-form names. We map
-// indices back to library properties on the server. Anything out of range
-// is dropped.
+// indices back to library properties on the server. Out-of-range → dropped.
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
@@ -27,10 +31,18 @@ BAN — never use these words, or any close variant:
 - Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge, "experience the magic", "step into".
 - Brochure phrases: nestled in, tucked away, hidden gem, dotted with, paradise, rolling savannahs, rich biodiversity, "sights and sounds", "the perfect blend of".
 - AI tells: "Whether you're…", "From X to Y, …", "ensures", openings that introduce the destination as the hero.
-- Closers: "memories to last a lifetime", "a journey to remember".
+- Closers: "memories to last a lifetime", "a journey to remember", any flourish ending.
 - No exclamation marks. No rhetorical questions.
 
-VOICE: Operator brief, not brochure. Confident, specific, unfussy. Lead with a fact (place name, time, distance, season, behaviour). Default to short, declarative sentences. One adjective per noun, max.`;
+VOICE: Operator brief, not brochure. Confident, specific, unfussy. Lead with a fact. Short declarative sentences. One adjective per noun, max.`;
+
+const PERSONALISATION_RULES = `PERSONALISATION — every section below must feel hand-written for these specific guests:
+- Address the guests by their exact name as given (never "dear guest" or "dear traveller").
+- Reference the real destinations and real nights by name, not generic language.
+- Use the trip style (luxury / mid-range / classic) to shape tone and detail depth.
+- If origin country is given, use it to shape practical-info cards (flight time, jetlag, visa advice that actually applies).
+- If the operator note mentions an occasion (anniversary, honeymoon, kids, first safari) — weave it in naturally, once, without overdoing.
+- Write for conversion. The greeting and closing are the two highest-stakes paragraphs — make them warm, specific, and end the sale quietly with a clear next step or invitation.`;
 
 type LibraryProperty = {
   slot: number;
@@ -53,10 +65,34 @@ type AutopilotDayOut = {
   tiers?: Partial<Record<TierKey, { slot?: number; note?: string }>>;
 };
 
+type AutopilotPracticalCard = {
+  title?: string;
+  body?: string;
+  icon?: string;
+};
+
+type AutopilotPricingTier = {
+  label?: string;
+  pricePerPerson?: string;
+  currency?: string;
+  highlighted?: boolean;
+};
+
 type AutopilotResponse = {
+  cover?: { tagline?: string };
+  greeting?: { body?: string };
+  closing?: { quote?: string; signOff?: string };
+  map?: { caption?: string };
   days?: AutopilotDayOut[];
   inclusions?: string[];
   exclusions?: string[];
+  practicalInfo?: AutopilotPracticalCard[];
+  pricing?: {
+    classic?: AutopilotPricingTier;
+    premier?: AutopilotPricingTier;
+    signature?: AutopilotPricingTier;
+    notes?: string;
+  };
 };
 
 export async function POST(req: Request) {
@@ -93,6 +129,8 @@ export async function POST(req: Request) {
   const adults = Number(proposal.client?.adults ?? 0) || 0;
   const children = Number(proposal.client?.children ?? 0) || 0;
   const origin = proposal.client?.origin?.trim() || "";
+  const consultantName = proposal.operator?.consultantName?.trim() || "";
+  const companyName = proposal.operator?.companyName?.trim() || "";
 
   // ── Library snapshot ────────────────────────────────────────────────────
   const properties = await prisma.property.findMany({
@@ -127,20 +165,31 @@ export async function POST(req: Request) {
     console.warn("[AUTOPILOT] Brand DNA load failed:", err);
   }
 
-  const systemText = STYLE_RULES + brandDNASection + `
+  const systemText =
+    STYLE_RULES +
+    "\n\n" +
+    PERSONALISATION_RULES +
+    brandDNASection +
+    `
 
-You are drafting a full safari itinerary for a travel operator. Output JSON only — no preamble, no markdown fences, no commentary.
+You are drafting a COMPLETE, personalised safari proposal. Fill every section listed below. Output JSON only — no preamble, no markdown fences, no commentary.
 
-You MUST pick camps only from the property library provided in the user message. Refer to each pick by its integer "slot" number, never by name. If the library is empty for a tier, omit that tier — do not invent.
+You MUST pick camps only from the property library provided. Refer to each pick by its integer "slot" number, never by name. If the library is empty for a tier, set that tier to {"slot": -1} — do not invent.
 
-The JSON shape:
+The JSON shape (all keys required unless marked optional):
 {
+  "cover": {
+    "tagline": "One sentence. Names the destinations or the trip's signature. 8-14 words. Not a cliché."
+  },
+  "greeting": {
+    "body": "3-4 sentences. OPEN with the guests' names. Reference one specific destination or activity. Mention the nights. End on an invitation — not a sales pitch. Never generic."
+  },
   "days": [
     {
       "destination": "Place name",
       "country": "Country",
-      "subtitle": "One short line (≤8 words) — optional",
-      "description": "2-3 grounded sentences. No clichés.",
+      "subtitle": "One short line (≤8 words) — optional, can be empty string",
+      "description": "2-3 grounded sentences. Open with a fact: a distance, a time, a named feature. No clichés.",
       "board": "Full board" | "Half board" | "B&B" | "All inclusive",
       "highlights": ["short bullet", "short bullet"],
       "tiers": {
@@ -150,16 +199,46 @@ The JSON shape:
       }
     }
   ],
-  "inclusions": ["short line", "short line", ...],
-  "exclusions": ["short line", "short line", ...]
+  "inclusions": ["short line", …],        // 5-9 items
+  "exclusions": ["short line", …],        // 4-7 items
+  "practicalInfo": [
+    { "title": "Visas", "body": "2-3 sentence note — use the guests' origin country if given.", "icon": "🛂" },
+    { "title": "Flights", "body": "…", "icon": "✈" },
+    { "title": "Health & vaccinations", "body": "…", "icon": "💉" },
+    { "title": "Packing", "body": "…", "icon": "🎒" },
+    { "title": "Climate & season", "body": "…", "icon": "☀" },
+    { "title": "Currency & tipping", "body": "…", "icon": "💳" }
+  ],
+  "pricing": {
+    "classic":   { "label": "Classic",   "pricePerPerson": "4,500", "currency": "USD", "highlighted": false },
+    "premier":   { "label": "Premier",   "pricePerPerson": "6,800", "currency": "USD", "highlighted": true  },
+    "signature": { "label": "Signature", "pricePerPerson": "9,200", "currency": "USD", "highlighted": false },
+    "notes": "Short 1-2 sentence note about validity, deposit, or what affects price. No exclamation marks."
+  },
+  "closing": {
+    "quote": "One short, grounded line — not a cliché, not a flourish. ≤ 14 words.",
+    "signOff": "3-4 sentences, personal. Addresses the guests by name. Invites their notes / feedback. Ends on a next step (e.g., 'tell me what to adjust' / 'I'll hold these dates for 7 days')."
+  },
+  "map": { "caption": "Short caption for the route map, ≤ 10 words." }
 }
 
-Rules:
+PRICING ESTIMATION:
+- Estimate per-person prices in whole hundreds (USD). Base it on the trip style and the typical rack rate of the picked camps:
+  - classic (value): roughly $300-$500/night base range × nights × 1.35
+  - mid-range / premier: roughly $550-$900/night × nights × 1.4
+  - luxury / signature: roughly $1,000-$2,000/night × nights × 1.4
+- Format as "4,500" with a comma — no currency symbol in the string.
+- Mark "highlighted": true on the tier that matches the trip style the operator asked for.
+
+DAYS:
 - Generate exactly the number of days the user asks for.
-- Spread destinations across the days sensibly (no single-night camps unless the trip demands it; transit days OK).
+- Spread the destinations across the days sensibly (no single-night stops unless the trip demands it).
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
-- inclusions / exclusions: 4-8 short lines each, drawn from typical East African operator lists.`;
+
+PRACTICAL INFO:
+- Use real facts: Kenya and Tanzania e-visa, yellow-fever certificate rules, typical Nairobi/Dar flights from the guest's origin when known, season-specific packing.
+- Short, specific. 2-3 sentences each. No filler.`;
 
   const userPayload = {
     trip: {
@@ -172,21 +251,22 @@ Rules:
       departureDate: proposal.trip?.departureDate,
     },
     client: { guestNames, adults, children, origin },
+    operator: { consultantName, companyName },
     library,
   };
 
-  const userText = `Generate a complete draft for this trip. Return ONLY the JSON object described in the system prompt.
+  const userText = `Generate the complete personalised proposal draft for these guests. Use every detail. Return ONLY the JSON object described in the system prompt.
 
 Input:
 ${JSON.stringify(userPayload, null, 2)}`;
 
-  const client = new Anthropic({ apiKey });
+  const anth = new Anthropic({ apiKey });
 
   let raw = "";
   try {
-    const msg = await client.messages.create({
+    const msg = await anth.messages.create({
       model: MODEL,
-      max_tokens: 8192,
+      max_tokens: 12000,
       system: [
         { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
       ],
@@ -218,7 +298,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     return NextResponse.json({ error: "AI returned malformed output. Try again." }, { status: 502 });
   }
 
-  // ── Map Claude's draft → real Day[] / Property[] using the library ──────
+  // ── Map Claude's draft → concrete shapes the proposal store consumes ────
   const draftDays = Array.isArray(parsed.days) ? parsed.days.slice(0, nights) : [];
   while (draftDays.length < nights) draftDays.push({});
 
@@ -230,7 +310,9 @@ ${JSON.stringify(userPayload, null, 2)}`;
     subtitle: stringOr(d.subtitle, "") || undefined,
     description: stringOr(d.description, ""),
     board: stringOr(d.board, "Full board"),
-    highlights: Array.isArray(d.highlights) ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5) : undefined,
+    highlights: Array.isArray(d.highlights)
+      ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5)
+      : undefined,
     tiers: {
       classic: pickTier(d.tiers?.classic, library),
       premier: pickTier(d.tiers?.premier, library),
@@ -238,14 +320,42 @@ ${JSON.stringify(userPayload, null, 2)}`;
     },
   }));
 
-  const inclusions = Array.isArray(parsed.inclusions)
-    ? parsed.inclusions.filter((s): s is string => typeof s === "string").slice(0, 12)
-    : [];
-  const exclusions = Array.isArray(parsed.exclusions)
-    ? parsed.exclusions.filter((s): s is string => typeof s === "string").slice(0, 12)
+  const inclusions = stringArray(parsed.inclusions, 12);
+  const exclusions = stringArray(parsed.exclusions, 12);
+
+  const practicalInfo = Array.isArray(parsed.practicalInfo)
+    ? parsed.practicalInfo
+        .slice(0, 8)
+        .map((c) => ({
+          id: nanoid(),
+          title: stringOr(c.title, "").slice(0, 60) || "Topic",
+          body: stringOr(c.body, "").slice(0, 800),
+          icon: stringOr(c.icon, "ℹ").slice(0, 4),
+        }))
+        .filter((c) => c.body.length > 0)
     : [];
 
-  return NextResponse.json({ days, inclusions, exclusions });
+  const pricing = normalisePricing(parsed.pricing, tripStyle);
+
+  const cover = { tagline: stringOr(parsed.cover?.tagline, "").slice(0, 160) };
+  const greeting = { body: stringOr(parsed.greeting?.body, "").slice(0, 1200) };
+  const closing = {
+    quote: stringOr(parsed.closing?.quote, "").slice(0, 160),
+    signOff: stringOr(parsed.closing?.signOff, "").slice(0, 800),
+  };
+  const map = { caption: stringOr(parsed.map?.caption, "").slice(0, 80) };
+
+  return NextResponse.json({
+    cover,
+    greeting,
+    closing,
+    map,
+    days,
+    inclusions,
+    exclusions,
+    practicalInfo,
+    pricing,
+  });
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -267,15 +377,25 @@ type ProposalInput = {
     children?: number;
     origin?: string;
   };
+  operator?: {
+    consultantName?: string;
+    companyName?: string;
+  };
 };
 
 function stringOr(v: unknown, fallback: string): string {
   return typeof v === "string" && v.trim() ? v.trim() : fallback;
 }
 
+function stringArray(v: unknown, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .map((s) => s.trim().slice(0, 200))
+    .slice(0, max);
+}
+
 function stripFences(text: string): string {
-  // Tolerate the occasional stray ```json … ``` fence even with strict
-  // instructions otherwise.
   const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(text.trim());
   return fence ? fence[1].trim() : text.trim();
 }
@@ -291,5 +411,51 @@ function pickTier(
     camp: prop.name,
     location: prop.location || prop.country || "",
     note: typeof pick?.note === "string" ? pick.note : "",
+  };
+}
+
+function normalisePricing(
+  raw: AutopilotResponse["pricing"] | undefined,
+  tripStyle: string,
+): {
+  classic: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
+  premier: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
+  signature: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
+  notes?: string;
+} {
+  const styleLower = tripStyle.toLowerCase();
+  const highlightedTier: TierKey = styleLower.includes("luxury")
+    ? "signature"
+    : styleLower.includes("classic")
+      ? "classic"
+      : "premier";
+  const tiers: TierKey[] = ["classic", "premier", "signature"];
+  const defaults: Record<TierKey, string> = { classic: "Classic", premier: "Premier", signature: "Signature" };
+
+  const built = {
+    classic: normaliseTier(raw?.classic, defaults.classic, highlightedTier === "classic"),
+    premier: normaliseTier(raw?.premier, defaults.premier, highlightedTier === "premier"),
+    signature: normaliseTier(raw?.signature, defaults.signature, highlightedTier === "signature"),
+  };
+
+  // Enforce exactly one highlighted tier — the style-matched one.
+  for (const t of tiers) built[t].highlighted = t === highlightedTier;
+
+  return {
+    ...built,
+    notes: stringOr(raw?.notes, "").slice(0, 500) || undefined,
+  };
+}
+
+function normaliseTier(
+  raw: AutopilotPricingTier | undefined,
+  defaultLabel: string,
+  highlighted: boolean,
+): { label: string; pricePerPerson: string; currency: string; highlighted: boolean } {
+  return {
+    label: stringOr(raw?.label, defaultLabel).slice(0, 40),
+    pricePerPerson: stringOr(raw?.pricePerPerson, "").slice(0, 20),
+    currency: stringOr(raw?.currency, "USD").slice(0, 6),
+    highlighted,
   };
 }
