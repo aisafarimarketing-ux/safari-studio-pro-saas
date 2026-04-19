@@ -18,6 +18,7 @@ const isProtectedRoute = createRouteMatcher([
   "/api/admin(.*)",
   "/api/workspace(.*)",
   "/api/geocode(.*)",
+  "/api/pdf(.*)",
 ]);
 
 // Routes that a signed-in user without an active organization may still visit

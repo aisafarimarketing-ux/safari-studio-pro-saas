@@ -49,6 +49,10 @@ export function EditorToolbar({
   const [duplicating, setDuplicating] = useState(false);
   const [pdfState, setPdfState] = useState<"idle" | "rendering" | "error">("idle");
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfConfigDialog, setPdfConfigDialog] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: "" });
 
   // ── Share (= Copy link, with primary affordance) ──
   const handleShare = async () => {
@@ -65,9 +69,11 @@ export function EditorToolbar({
   };
 
   // ── PDF export — calls the server-side render endpoint backed by the
-  // Playwright pdf-service sidecar. Falls back to the browser's native
-  // print dialog when the service isn't configured (HTTP 503 with code
-  // PDF_NOT_CONFIGURED) so you always have a path to a PDF.
+  // Playwright pdf-service sidecar. On 503 (sidecar not configured) we
+  // open the dedicated /p/[id]/print route in a new tab so the user gets
+  // a chrome-free magazine layout and can use the browser's native
+  // print-to-PDF. We explicitly tell them why instead of silently
+  // falling back to a broken `window.print()` on the editor DOM.
   const handleDownloadPDF = async () => {
     setMenuOpen(false);
     if (pdfState === "rendering") return;
@@ -78,16 +84,17 @@ export function EditorToolbar({
     try {
       const res = await fetch(`/api/proposals/${id}/pdf`, { method: "POST" });
       if (res.status === 503) {
-        // Server doesn't have the renderer configured yet — fall back to
-        // browser print so the user is never stuck.
+        // Server doesn't have the renderer configured yet — open the clean
+        // print view in a new tab so the user can "Save as PDF" via the
+        // browser. Show a clear explanation; never silently redirect.
         const data = await res.json().catch(() => ({}));
-        console.warn("[pdf] service not configured, falling back to print:", data?.error);
-        setMode("preview");
-        setTimeout(() => {
-          window.print();
-          setTimeout(() => setMode("editor"), 600);
-          setPdfState("idle");
-        }, 300);
+        setPdfConfigDialog({
+          open: true,
+          message:
+            data?.error ||
+            "The high-fidelity PDF renderer isn't configured on this deployment.",
+        });
+        setPdfState("idle");
         return;
       }
       if (res.status === 401) { window.location.href = "/sign-in"; return; }
@@ -111,6 +118,18 @@ export function EditorToolbar({
       setPdfState("error");
       setTimeout(() => setPdfState("idle"), 4000);
     }
+  };
+
+  // Opens the clean print view in a new tab and auto-triggers print. The
+  // print page sets window.__SS_READY__ once hydrated so we can wait for it.
+  const openPrintView = () => {
+    const id = useProposalStore.getState().proposal.id;
+    const win = window.open(`/p/${id}/print?autoPrint=1`, "_blank");
+    // Fallback if popup is blocked.
+    if (!win) {
+      window.location.href = `/p/${id}/print?autoPrint=1`;
+    }
+    setPdfConfigDialog({ open: false, message: "" });
   };
 
   // ── Duplicate proposal ──
@@ -251,6 +270,13 @@ export function EditorToolbar({
           </div>
         </div>
       )}
+
+      <PDFConfigDialog
+        open={pdfConfigDialog.open}
+        message={pdfConfigDialog.message}
+        onClose={() => setPdfConfigDialog({ open: false, message: "" })}
+        onUsePrintView={openPrintView}
+      />
     </div>
   );
 }
@@ -455,6 +481,73 @@ function UserMenuSlot() {
               },
             }}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PDF service config dialog ─────────────────────────────────────────────
+
+function PDFConfigDialog({
+  open,
+  message,
+  onClose,
+  onUsePrintView,
+}: {
+  open: boolean;
+  message: string;
+  onClose: () => void;
+  onUsePrintView: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 ss-fade-in"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg ss-modal-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-7 py-6">
+          <div className="text-[10px] uppercase tracking-[0.22em] font-semibold text-[#1b3a2d] mb-2">
+            PDF export
+          </div>
+          <h3 className="text-xl font-bold tracking-tight text-black/85">
+            High-fidelity renderer not deployed
+          </h3>
+          <p className="mt-3 text-[14px] text-black/65 leading-relaxed">
+            {message}
+          </p>
+          <div className="mt-5 rounded-xl border border-black/10 bg-black/[0.02] p-4 space-y-2">
+            <div className="text-[12px] font-semibold text-black/75">To enable Download PDF:</div>
+            <ol className="text-[13px] text-black/65 list-decimal pl-5 space-y-1">
+              <li>Deploy <code className="font-mono text-[12px] bg-black/[0.05] px-1 rounded">pdf-service/</code> as a separate Railway service.</li>
+              <li>On the main app, set <code className="font-mono text-[12px] bg-black/[0.05] px-1 rounded">PDF_RENDER_URL</code>, <code className="font-mono text-[12px] bg-black/[0.05] px-1 rounded">PDF_SHARED_SECRET</code>, and <code className="font-mono text-[12px] bg-black/[0.05] px-1 rounded">PUBLIC_BASE_URL</code>.</li>
+              <li>Redeploy.</li>
+            </ol>
+          </div>
+          <div className="mt-5 text-[13px] text-black/60 leading-relaxed">
+            <strong className="text-black/75">For now:</strong> open the clean print view in a new tab and use your browser&apos;s <em>Print → Save as PDF</em>. The print page is already magazine-quality — chrome-free, A4-paginated, with print-specific typography.
+          </div>
+        </div>
+        <div className="px-7 py-4 border-t border-black/8 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg text-black/60 hover:bg-black/5 transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onUsePrintView}
+            className="px-4 py-2 text-sm rounded-lg bg-[#1b3a2d] text-white font-semibold hover:bg-[#2d5a40] transition"
+          >
+            Open print view →
+          </button>
         </div>
       </div>
     </div>

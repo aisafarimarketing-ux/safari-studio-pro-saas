@@ -33,26 +33,46 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const renderUrl = process.env.PDF_RENDER_URL;
-  const secret = process.env.PDF_SHARED_SECRET;
-  if (!renderUrl || !secret) {
+  const renderUrl = process.env.PDF_RENDER_URL?.trim();
+  const secret = process.env.PDF_SHARED_SECRET?.trim();
+  const base =
+    process.env.PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_BASE_URL?.trim() ||
+    "";
+
+  // Helpful, specific 503s so the UI can say exactly what's missing.
+  if (!renderUrl) {
+    return NextResponse.json(
+      {
+        error: "PDF_RENDER_URL is not set on this deployment.",
+        code: "PDF_NOT_CONFIGURED",
+        missing: "PDF_RENDER_URL",
+      },
+      { status: 503 },
+    );
+  }
+  if (!secret) {
+    return NextResponse.json(
+      {
+        error: "PDF_SHARED_SECRET is not set on this deployment.",
+        code: "PDF_NOT_CONFIGURED",
+        missing: "PDF_SHARED_SECRET",
+      },
+      { status: 503 },
+    );
+  }
+  if (!base) {
     return NextResponse.json(
       {
         error:
-          "PDF export is not configured on this server. Deploy the pdf-service sidecar and set PDF_RENDER_URL + PDF_SHARED_SECRET.",
+          "PUBLIC_BASE_URL is not set — the sidecar wouldn't know which URL to render.",
         code: "PDF_NOT_CONFIGURED",
+        missing: "PUBLIC_BASE_URL",
       },
       { status: 503 },
     );
   }
 
-  // Resolve the absolute public URL of the print page. Prefer an explicit
-  // PUBLIC_BASE_URL (Railway/Vercel deployments often need it), then fall
-  // back to the request origin.
-  const base =
-    process.env.PUBLIC_BASE_URL ||
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    new URL(_req.url).origin;
   const printUrl = `${base.replace(/\/$/, "")}/p/${id}/print`;
 
   const filename = sanitizeFilename(`${proposal.title || "proposal"}.pdf`);
