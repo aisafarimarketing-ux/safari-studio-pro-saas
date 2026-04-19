@@ -10,6 +10,7 @@ import { TripMetaStrip } from "./TripMetaStrip";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
 import { ContextPanel } from "./ContextPanel";
+import { useAutoSaveProposal } from "./useAutoSaveProposal";
 import { NewProposalDialog } from "@/components/ui/NewProposalDialog";
 import { InlineTextToolbar } from "@/components/ui/InlineTextToolbar";
 import { FloatingColorPicker } from "@/components/ui/FloatingColorPicker";
@@ -26,6 +27,9 @@ export function ProposalEditor() {
   const { proposal } = useProposalStore();
   const { displayFont, bodyFont } = proposal.theme;
   const [outcome, setOutcome] = useState<LoadOutcome | null>(null);
+
+  // Auto-save once loaded. Debounces proposal-store changes by 800ms.
+  const autoSave = useAutoSaveProposal(outcome?.kind === "loaded");
 
   // On mount, try to restore the last-saved proposal for this user.
   // 1) If localStorage has activeProposalId, fetch it.
@@ -191,7 +195,11 @@ export function ProposalEditor() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <EditorToolbar />
+      <EditorToolbar
+        autoSaveState={autoSave.state}
+        autoSaveError={autoSave.error}
+        lastSavedAt={autoSave.lastSavedAt}
+      />
       <TripMetaStrip />
 
       <div className="flex flex-1 min-h-0 relative">

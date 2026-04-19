@@ -18,56 +18,34 @@ import { nanoid } from "@/lib/nanoid";
 // ─── Editor toolbar ─────────────────────────────────────────────────────────
 //
 // Action hierarchy (right-to-left):
-//   SHARE  — primary, gold pill. Copies the public link.
-//   PREVIEW — secondary, outline. Switches to preview mode.
-//   ⋯       — menu: Copy link · Download PDF · Duplicate.
-//   SAVE    — small secondary; auto-save is a future commit, the explicit
-//             Save remains visible so users always know how to commit edits.
+//   SHARE          — primary, gold pill. Copies the public link.
+//   PREVIEW        — secondary, outline. Switches to preview mode.
+//   ⋯ menu         — Copy link · Download PDF · Duplicate.
+//   Save indicator — read-only. Auto-save runs in ProposalEditor via
+//                    useAutoSaveProposal; this is just the visual state.
 //
 // Brand DNA hint chip lives in the centre; only renders when Brand DNA is
 // incomplete and the user hasn't dismissed it for the session.
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+type AutoSaveState = "idle" | "saving" | "saved" | "error";
 type ShareState = "idle" | "copied" | "error";
 
-export function EditorToolbar() {
+export function EditorToolbar({
+  autoSaveState,
+  autoSaveError,
+  lastSavedAt,
+}: {
+  autoSaveState: AutoSaveState;
+  autoSaveError: string | null;
+  lastSavedAt: Date | null;
+}) {
   const router = useRouter();
   const { setMode } = useEditorStore();
   const { proposal } = useProposalStore();
 
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [shareState, setShareState] = useState<ShareState>("idle");
   const [menuOpen, setMenuOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
-
-  // ── Save ──
-  const handleSave = async () => {
-    if (saveState === "saving") return;
-    setSaveState("saving");
-    setSaveError(null);
-    try {
-      const res = await fetch("/api/proposals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proposal: useProposalStore.getState().proposal }),
-      });
-      if (res.status === 401) { window.location.href = "/sign-in"; return; }
-      if (res.status === 409) { window.location.href = "/select-organization"; return; }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || `HTTP ${res.status}`);
-      }
-      try { localStorage.setItem("activeProposalId", useProposalStore.getState().proposal.id); } catch {}
-      setSaveState("saved");
-      setTimeout(() => setSaveState((s) => (s === "saved" ? "idle" : s)), 2000);
-    } catch (err) {
-      console.error("[Save] failed:", err);
-      setSaveError(err instanceof Error ? err.message : "Save failed");
-      setSaveState("error");
-      setTimeout(() => { setSaveState((s) => (s === "error" ? "idle" : s)); setSaveError(null); }, 4000);
-    }
-  };
 
   // ── Share (= Copy link, with primary affordance) ──
   const handleShare = async () => {
@@ -122,7 +100,8 @@ export function EditorToolbar() {
       setTimeout(() => window.location.reload(), 50);
     } catch (err) {
       console.error("[Duplicate] failed:", err);
-      setSaveError(err instanceof Error ? err.message : "Duplicate failed");
+      // Duplicate failures are rare and the router.push is aborted above
+      // when the fetch throws. Surface via console; no dedicated UI state.
     } finally {
       setDuplicating(false);
     }
@@ -160,9 +139,9 @@ export function EditorToolbar() {
         <BrandDNAHint />
       </div>
 
-      {/* Right: action stack — Save · Comments · ⋯ · Preview · SHARE (primary) */}
+      {/* Right: action stack — Save indicator · Comments · ⋯ · Preview · SHARE */}
       <div className="flex items-center gap-2 shrink-0">
-        <SaveBadge state={saveState} onSave={handleSave} />
+        <AutoSaveIndicator state={autoSaveState} error={autoSaveError} lastSavedAt={lastSavedAt} />
 
         <CommentsDrawer proposalId={proposal.id} />
 
@@ -206,47 +185,64 @@ export function EditorToolbar() {
         <UserMenuSlot />
       </div>
 
-      {saveState === "error" && saveError && (
+      {autoSaveState === "error" && autoSaveError && (
         <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#b34334] text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3">
           <div className="text-lg leading-none">⚠</div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Save failed</div>
-            <div className="text-[13px] text-white/85 mt-0.5 break-words">{saveError}</div>
+            <div className="font-semibold text-sm">Auto-save failed</div>
+            <div className="text-[13px] text-white/85 mt-0.5 break-words">
+              {autoSaveError} — your next change will retry automatically.
+            </div>
           </div>
-          <button
-            onClick={() => { setSaveState("idle"); setSaveError(null); }}
-            className="text-white/60 hover:text-white text-lg leading-none pl-1"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
         </div>
       )}
     </div>
   );
 }
 
-// ─── Save badge — clickable when there's something to do ───────────────────
+// ─── Auto-save indicator — read-only status chip ───────────────────────────
 
-function SaveBadge({ state, onSave }: { state: SaveState; onSave: () => void }) {
+function AutoSaveIndicator({
+  state,
+  error,
+  lastSavedAt,
+}: {
+  state: AutoSaveState;
+  error: string | null;
+  lastSavedAt: Date | null;
+}) {
   const label =
-    state === "saving" ? "Saving…" :
-    state === "saved" ? "Saved ✓" :
-    state === "error" ? "Retry save" :
-    "Save";
+    state === "saving"
+      ? "Saving…"
+      : state === "error"
+        ? "Save failed"
+        : state === "saved"
+          ? "Saved just now"
+          : lastSavedAt
+            ? `Saved ${formatRelative(lastSavedAt)}`
+            : "All changes saved";
   const color =
-    state === "saved" ? "text-[#1b3a2d]" :
-    state === "error" ? "text-[#b34334]" :
-    "text-black/55";
+    state === "error" ? "text-[#b34334]" : state === "saved" ? "text-[#1b3a2d]" : "text-black/45";
   return (
-    <button
-      onClick={onSave}
-      disabled={state === "saving"}
-      className={`px-3 py-1.5 text-[13px] rounded-lg hover:bg-black/[0.04] transition active:scale-95 disabled:opacity-60 font-medium ${color}`}
+    <span
+      className={`px-2 py-1 text-[12px] font-medium tabular-nums ${color}`}
+      title={state === "error" && error ? `Auto-save failed: ${error}` : undefined}
+      aria-live="polite"
     >
       {label}
-    </button>
+    </span>
   );
+}
+
+function formatRelative(d: Date): string {
+  const diffSec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 // ─── Actions menu ──────────────────────────────────────────────────────────
