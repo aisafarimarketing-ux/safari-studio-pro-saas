@@ -4,7 +4,33 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
-import type { Section } from "@/lib/types";
+import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
+
+function CoverMeta({
+  label,
+  tokens,
+  theme,
+  children,
+}: {
+  label: string;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+      <div
+        className="text-[10px] uppercase tracking-[0.28em] mb-1.5"
+        style={{ color: tokens.mutedText }}
+      >
+        {label}
+      </div>
+      <div className="text-[14px] font-medium" style={{ color: tokens.headingText }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function CoverSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent, updateTrip, updateClient } = useProposalStore();
@@ -26,6 +52,161 @@ export function CoverSection({ section }: { section: Section }) {
       alert(err instanceof Error ? err.message : "Image upload failed");
     }
   };
+
+  // ── Editorial Magazine ─────────────────────────────────────────────────────
+  // Kinfolk / Cereal / Wallpaper aesthetic. Full-bleed image with a paper-
+  // band masthead in the lower third — issue line, big serif title, sub deck.
+  if (variant === "editorial-magazine") {
+    const issue = (section.content.issue as string) || `Issue No. ${String(trip.nights ?? 1).padStart(2, "0")}`;
+    return (
+      <div
+        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[640px]" : "min-h-screen"}`}
+        style={{ background: tokens.headingText }}
+      >
+        {/* Hero */}
+        {heroUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group bg-black/30">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-white/85 text-center transition group-hover:scale-105">
+              <div className="text-5xl mb-3 opacity-60">+</div>
+              <div className="text-[13px] font-semibold uppercase tracking-[0.2em]">Click to upload cover image</div>
+              <div className="text-[11px] mt-2 opacity-60">JPG, PNG, or SVG · 16:9 or wider works best</div>
+            </div>
+          </label>
+        ) : null}
+
+        {/* Top vignette */}
+        <div
+          className="absolute inset-x-0 top-0 h-44"
+          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)" }}
+        />
+
+        {/* Masthead row — operator left, edition right */}
+        <div className="relative z-10 flex items-center justify-between px-10 md:px-14 pt-10">
+          <div className="flex items-center gap-3">
+            {operator.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-9 object-contain" />
+            ) : (
+              <span
+                className="text-[11px] uppercase tracking-[0.32em] font-semibold text-white/85"
+                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {operator.companyName || "Safari Studio"}
+              </span>
+            )}
+          </div>
+          <div className="text-right text-white/75" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+            <div className="text-[10px] uppercase tracking-[0.32em]">{issue}</div>
+            <div className="text-[10px] tracking-[0.2em] mt-1 text-white/55">
+              {trip.dates || (trip.arrivalDate ?? "")}
+            </div>
+          </div>
+        </div>
+
+        {/* Lower paper band — masthead-style title block */}
+        <div className="absolute inset-x-0 bottom-0 z-10">
+          <div
+            className="px-10 md:px-16 pt-10 pb-12"
+            style={{
+              background: tokens.pageBg,
+              borderTop: `1px solid ${tokens.border}`,
+            }}
+          >
+            <div className="max-w-[820px]">
+              {trip.destinations.length > 0 && (
+                <div
+                  className="text-[10px] uppercase tracking-[0.36em] mb-5"
+                  style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  {trip.destinations.slice(0, 4).join("  ·  ")}
+                </div>
+              )}
+
+              <h1
+                className="font-bold leading-[0.95] tracking-tight outline-none"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontSize: "clamp(2.6rem, 6.4vw, 5.2rem)",
+                }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}
+              >
+                {trip.title}
+              </h1>
+
+              <div
+                className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-2"
+                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                <span
+                  className="text-[16px] outline-none"
+                  style={{ color: tokens.bodyText }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
+                >
+                  {(section.content.tagline as string) || trip.subtitle || "A draft itinerary, in detail"}
+                </span>
+              </div>
+
+              {/* Hairline + meta strip */}
+              <div className="mt-8 pt-6 grid grid-cols-2 md:grid-cols-4 gap-6"
+                style={{ borderTop: `1px solid ${tokens.border}` }}>
+                <CoverMeta label="For" tokens={tokens} theme={theme}>
+                  <span
+                    className="outline-none"
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+                  >
+                    {client.guestNames || "Your Guests"}
+                  </span>
+                </CoverMeta>
+                <CoverMeta label="Dates" tokens={tokens} theme={theme}>
+                  <span
+                    className="outline-none"
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+                  >
+                    {trip.dates || "—"}
+                  </span>
+                </CoverMeta>
+                <CoverMeta label="Duration" tokens={tokens} theme={theme}>
+                  {trip.nights ? `${trip.nights} nights` : "—"}
+                </CoverMeta>
+                <CoverMeta label="Party" tokens={tokens} theme={theme}>
+                  {client.pax || "—"}
+                </CoverMeta>
+              </div>
+
+              {operator.consultantName && (
+                <div
+                  className="mt-6 text-[11px] uppercase tracking-[0.28em]"
+                  style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  Prepared by {operator.consultantName}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {heroUrl && isEditor && (
+          <label className="absolute top-4 right-4 z-30 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change image
+          </label>
+        )}
+      </div>
+    );
+  }
 
   // ── Centered-editorial ─────────────────────────────────────────────────────
   if (variant === "centered-editorial") {

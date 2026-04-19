@@ -94,6 +94,7 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
     "stacked-image-text": "stacked",
     "compact-timeline": "compact",
     "magazine-spread": "magazine",
+    "magazine-feature": "feature",
     "flip-split": "flip",
     "full-image-overlay": "overlay",
   };
@@ -172,6 +173,8 @@ function DayCard({ day, variant }: { day: Day; variant: string }) {
         <CompactLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : layoutType === "magazine" ? (
         <MagazineLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
+      ) : layoutType === "feature" ? (
+        <FeatureLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       ) : (
         <SplitLayout day={day} isEditor={isEditor} tokens={tokens} theme={proposal.theme} activeTier={activeTier} visibleTiers={visibleTiers} tierColors={tierColors} handleHeroUpload={handleHeroUpload} updateDay={updateDay} onOpenPicker={() => setPropPickerOpen(true)} />
       )}
@@ -490,6 +493,222 @@ function MagazineLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Feature: NYT 36 Hours / Cereal magazine spread. Massive day numeral as
+//    decorative anchor, hero image dominant, single editorial column with a
+//    drop-cap, where-you-stay rail across the bottom showing all three tiers.
+
+function FeatureLayout({ day, isEditor, tokens, theme, activeTier, visibleTiers, handleHeroUpload, updateDay, onOpenPicker }: {
+  day: Day; isEditor: boolean; tokens: ThemeTokens;
+  theme: ProposalTheme;
+  activeTier: string; visibleTiers: Record<string, boolean>;
+  tierColors: Record<string, string>;
+  handleHeroUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateDay: (id: string, patch: Partial<Day>) => void;
+  onOpenPicker?: () => void;
+}) {
+  const { proposal } = useProposalStore();
+  const description = day.description?.trim() ?? "";
+  const firstChar = description.charAt(0) || "—";
+  const rest = description.slice(1);
+
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* Top header row — anchored numeral + meta */}
+      <div className="px-8 md:px-12 pt-10 md:pt-14 pb-4 flex items-end justify-between gap-6 flex-wrap">
+        <div className="flex items-end gap-6 min-w-0">
+          <div
+            className="leading-none select-none shrink-0"
+            style={{
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(5rem, 11vw, 8rem)",
+              color: tokens.accent,
+              letterSpacing: "-0.04em",
+            }}
+          >
+            {String(day.dayNumber).padStart(2, "0")}
+          </div>
+          <div className="pb-3 min-w-0">
+            <div
+              className="text-[10px] uppercase tracking-[0.3em] mb-2"
+              style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              Day {day.dayNumber} · {day.country}{day.board ? ` · ${day.board}` : ""}
+            </div>
+            <h2
+              className="text-h1 font-bold tracking-tight outline-none"
+              style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateDay(day.id, { destination: e.currentTarget.textContent ?? day.destination })}
+            >
+              {day.destination}
+            </h2>
+            {day.subtitle && (
+              <div
+                className="text-small mt-2 italic outline-none"
+                style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateDay(day.id, { subtitle: e.currentTarget.textContent ?? day.subtitle })}
+              >
+                {day.subtitle}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Hairline */}
+      <div className="mx-8 md:mx-12 h-px" style={{ background: tokens.border }} />
+
+      {/* Image — dominant, full bleed inside the card */}
+      <div className="relative w-full overflow-hidden mt-6" style={{ background: tokens.cardBg, aspectRatio: "16 / 9" }}>
+        {day.heroImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={day.heroImageUrl} alt={day.destination} className="w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            <div className="text-3xl mb-2 opacity-30">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+        {day.heroImageUrl && isEditor && (
+          <label className="absolute bottom-3 right-3 cursor-pointer bg-black/55 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/75 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+            Change
+          </label>
+        )}
+      </div>
+
+      {/* Editorial column — single column, drop-cap, generous rhythm */}
+      <div className="px-8 md:px-12 py-12 md:py-16 max-w-[680px] mx-auto">
+        <p
+          className="outline-none"
+          style={{
+            color: tokens.bodyText,
+            fontFamily: `'${theme.bodyFont}', sans-serif`,
+            fontSize: "16.5px",
+            lineHeight: 1.85,
+          }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateDay(day.id, { description: e.currentTarget.textContent ?? day.description })}
+        >
+          {description ? (
+            <>
+              <span
+                className="float-left mr-3 mt-1 leading-none"
+                style={{
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  color: tokens.headingText,
+                  fontSize: "4.2rem",
+                  lineHeight: 0.85,
+                }}
+              >
+                {firstChar}
+              </span>
+              {rest}
+            </>
+          ) : (
+            "Describe this day…"
+          )}
+        </p>
+
+        {day.highlights && day.highlights.length > 0 && (
+          <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
+            <div
+              className="text-[10px] uppercase tracking-[0.28em] mb-3"
+              style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              Highlights
+            </div>
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+              {day.highlights.slice(0, 6).map((h, i) => (
+                <li
+                  key={i}
+                  className="text-[14px] flex gap-2"
+                  style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  <span style={{ color: tokens.accent }}>·</span>
+                  <span>{h}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Where you stay — three-column rail across the bottom */}
+      <div
+        className="px-8 md:px-12 py-8 grid grid-cols-1 md:grid-cols-3 gap-6"
+        style={{ background: tokens.cardBg, borderTop: `1px solid ${tokens.border}` }}
+      >
+        {(["classic", "premier", "signature"] as const).map((tier) => {
+          if (!visibleTiers[tier]) return null;
+          const acc = day.tiers[tier];
+          const isActive = activeTier === tier;
+          // Resolve property image from library if available
+          const matched = proposal.properties.find(
+            (p) => p.name?.trim().toLowerCase() === acc.camp?.trim().toLowerCase(),
+          );
+          return (
+            <div
+              key={tier}
+              className="flex gap-3"
+              style={{ opacity: isActive ? 1 : 0.55 }}
+            >
+              {matched?.leadImageUrl && (
+                <div className="w-14 h-14 rounded-md overflow-hidden shrink-0" style={{ background: tokens.sectionSurface }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={matched.leadImageUrl} alt={acc.camp} className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <div
+                  className="text-[10px] uppercase tracking-[0.24em] mb-1"
+                  style={{
+                    color: isActive ? tokens.accent : tokens.mutedText,
+                    fontFamily: `'${theme.bodyFont}', sans-serif`,
+                  }}
+                >
+                  {tier}{isActive ? " · selected" : ""}
+                </div>
+                <div
+                  className="text-[14px] font-semibold truncate"
+                  style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  {acc.camp || "—"}
+                </div>
+                <div
+                  className="text-[12px] truncate"
+                  style={{ color: tokens.mutedText }}
+                >
+                  {acc.location}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {isEditor && onOpenPicker && (
+        <div className="px-8 md:px-12 py-3" style={{ background: tokens.sectionSurface }}>
+          <button
+            type="button"
+            onClick={onOpenPicker}
+            className="inline-flex items-center gap-1.5 text-label font-semibold transition hover:opacity-80"
+            style={{ color: tokens.accent, textTransform: "none", letterSpacing: "0.02em" }}
+          >
+            <span aria-hidden>◇</span>
+            <span>Browse my properties</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,16 +48,18 @@ function PropertyCard({ property, variant, index = 0 }: { property: Property; va
 
   const isEditorial = variant === "editorial";
   const isFullBleed = variant === "full-bleed";
-  // Editorial + full-bleed are flush with the page — no harsh card border /
-  // rounded corners. Other variants keep the framed card treatment.
-  const wrapperClass = isEditorial || isFullBleed
+  const isFieldNotes = variant === "field-notes";
+  // Editorial / full-bleed / field-notes are flush with the page — no harsh
+  // card border / rounded corners. Other variants keep the framed card.
+  const flush = isEditorial || isFullBleed || isFieldNotes;
+  const wrapperClass = flush
     ? "dm-card relative transition-colors duration-150"
     : "dm-card relative rounded-2xl overflow-hidden border transition-colors duration-150";
 
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, borderColor: isEditorial || isFullBleed ? "transparent" : tokens.border }}
+      style={{ ...style, borderColor: flush ? "transparent" : tokens.border }}
       onClick={() => isEditor && selectProperty(property.id)}
       className={wrapperClass}
     >
@@ -81,6 +83,8 @@ function PropertyCard({ property, variant, index = 0 }: { property: Property; va
         <CardGridLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : variant === "full-bleed" ? (
         <FullBleedLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
+      ) : variant === "field-notes" ? (
+        <FieldNotesLayout property={property} index={index} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       ) : (
         <SplitImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
       )}
@@ -630,6 +634,217 @@ function EditorialLayout({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Field Notes: Magnum / Wallpaper-style. Hero image, then a two-column body
+//    (description + the "why we chose this" + amenities). Gallery strip below.
+//    Everything visible at once — no progressive disclosure.
+
+function FieldNotesLayout({ property, index = 0, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
+  property: Property;
+  index?: number;
+  isEditor: boolean;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  updateProperty: (id: string, patch: Partial<Property>) => void;
+  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const gallery = (property.galleryUrls ?? []).filter(Boolean);
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* Header strip — folio number + name + location */}
+      <div className="px-8 md:px-12 pt-12 pb-6 flex items-end justify-between gap-6 flex-wrap">
+        <div className="flex items-end gap-5 min-w-0">
+          <div
+            className="text-[10px] uppercase tracking-[0.32em] pb-2"
+            style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          >
+            Property No. {String(index + 1).padStart(2, "0")}
+          </div>
+        </div>
+        {property.tier && (
+          <div
+            className="text-[10px] uppercase tracking-[0.28em] pb-2"
+            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          >
+            {property.tier}
+          </div>
+        )}
+      </div>
+
+      <div className="px-8 md:px-12 pb-2">
+        <h3
+          className="font-bold leading-[1.0] tracking-tight outline-none"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+            fontSize: "clamp(2rem, 4.4vw, 3rem)",
+          }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
+        >
+          {property.name}
+        </h3>
+        <div
+          className="mt-2 text-[14px] outline-none"
+          style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => updateProperty(property.id, { location: e.currentTarget.textContent ?? property.location })}
+        >
+          {property.location}
+        </div>
+        {property.shortDesc && (
+          <div
+            className="mt-3 text-[15px] italic outline-none max-w-[640px]"
+            style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
+          >
+            {property.shortDesc}
+          </div>
+        )}
+      </div>
+
+      {/* Hero image */}
+      <div className="relative w-full overflow-hidden mt-8" style={{ background: tokens.cardBg, aspectRatio: "16 / 9" }}>
+        {property.leadImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            <div className="text-3xl opacity-30 mb-1">+</div>
+            <div className="text-sm opacity-40">Add photo</div>
+          </label>
+        ) : null}
+        {property.leadImageUrl && isEditor && (
+          <label className="absolute bottom-3 right-3 cursor-pointer bg-black/55 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/75 transition backdrop-blur-sm">
+            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
+            Change
+          </label>
+        )}
+      </div>
+
+      {/* Two-column body */}
+      <div className="px-8 md:px-12 py-12 grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-10 md:gap-14">
+        {/* Left — narrative */}
+        <div>
+          <div
+            className="text-[10px] uppercase tracking-[0.28em] mb-4"
+            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          >
+            About
+          </div>
+          <p
+            className="text-[15px] leading-[1.85] outline-none"
+            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => updateProperty(property.id, { description: e.currentTarget.textContent ?? property.description })}
+          >
+            {property.description || "Describe this property…"}
+          </p>
+
+          {property.whyWeChoseThis && (
+            <div className="mt-8 pl-5" style={{ borderLeft: `2px solid ${tokens.accent}` }}>
+              <div
+                className="text-[10px] uppercase tracking-[0.28em] mb-2"
+                style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                Why we chose this
+              </div>
+              <p
+                className="text-[14.5px] italic leading-[1.7] outline-none"
+                style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
+              >
+                {property.whyWeChoseThis}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Right — fact sheet */}
+        <aside style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+          <div
+            className="text-[10px] uppercase tracking-[0.28em] mb-4"
+            style={{ color: tokens.mutedText }}
+          >
+            At a glance
+          </div>
+          <dl className="space-y-3.5">
+            {[
+              { label: "Meal plan", value: property.mealPlan },
+              { label: "Room type", value: property.roomType },
+              { label: "Stay", value: property.nights ? `${property.nights} night${property.nights === 1 ? "" : "s"}` : undefined },
+            ]
+              .filter((row) => row.value)
+              .map((row) => (
+                <div key={row.label} className="flex justify-between gap-3 pb-3" style={{ borderBottom: `1px solid ${tokens.border}` }}>
+                  <dt className="text-[12px]" style={{ color: tokens.mutedText }}>{row.label}</dt>
+                  <dd className="text-[13px] font-semibold text-right" style={{ color: tokens.headingText }}>{row.value}</dd>
+                </div>
+              ))}
+          </dl>
+
+          {property.amenities.length > 0 && (
+            <div className="mt-6">
+              <div
+                className="text-[10px] uppercase tracking-[0.28em] mb-3"
+                style={{ color: tokens.mutedText }}
+              >
+                Amenities
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {property.amenities.map((a, i) => (
+                  <span
+                    key={i}
+                    className="text-[11.5px] px-2.5 py-1 rounded-full"
+                    style={{
+                      color: tokens.bodyText,
+                      background: tokens.cardBg,
+                      border: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* Gallery strip */}
+      {gallery.length > 0 && (
+        <div className="px-8 md:px-12 pb-12">
+          <div
+            className="text-[10px] uppercase tracking-[0.28em] mb-4"
+            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          >
+            Plates
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {gallery.slice(0, 8).map((url, i) => (
+              <div
+                key={i}
+                className="relative overflow-hidden rounded-md"
+                style={{ background: tokens.cardBg, aspectRatio: "1 / 1" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`${property.name} ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
