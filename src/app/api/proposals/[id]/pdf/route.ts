@@ -98,8 +98,22 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   if (!pdfRes.ok) {
     const text = await pdfRes.text().catch(() => "");
     console.error("[pdf] render failed:", pdfRes.status, text.slice(0, 400));
+    // Forward the sidecar's actual error message so the UI can show
+    // something more useful than "PDF render failed (500)".
+    let detail = "";
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      detail = parsed.error ?? "";
+    } catch {
+      detail = text.slice(0, 200);
+    }
     return NextResponse.json(
-      { error: `PDF render failed (${pdfRes.status})` },
+      {
+        error: `PDF render failed (${pdfRes.status})${detail ? `: ${detail}` : ""}`,
+        sidecarStatus: pdfRes.status,
+        sidecarMessage: detail || undefined,
+        printUrl,
+      },
       { status: 502 },
     );
   }
