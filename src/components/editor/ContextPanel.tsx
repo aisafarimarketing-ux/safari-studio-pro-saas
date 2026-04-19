@@ -184,7 +184,7 @@ export function ContextPanel() {
     : "Proposal";
 
   return (
-    <div className="w-72 border-l border-black/8 bg-[#f7f4ee] flex flex-col shrink-0 overflow-hidden">
+    <div className="w-80 border-l border-black/8 bg-[#f7f4ee] flex flex-col shrink-0 overflow-hidden">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-black/8 shrink-0">
         <div className="font-semibold text-sm text-black/70 truncate">{headerLabel}</div>

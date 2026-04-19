@@ -143,7 +143,7 @@ function Plans() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <PlanCard
             tier="Explorer"
-            price="$49"
+            price="$50"
             cadence="/ month"
             tagline="For solo operators sending proposals weekly."
             features={EXPLORER_FEATURES}
@@ -152,7 +152,7 @@ function Plans() {
           />
           <PlanCard
             tier="Operator"
-            price="$99"
+            price="$100"
             cadence="/ month"
             tagline="For tour operators, DMCs, and lodges who sell every day."
             features={OPERATOR_FEATURES}

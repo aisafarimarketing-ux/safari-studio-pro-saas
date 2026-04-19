@@ -29,6 +29,7 @@ export default function HomePage() {
       <Showcase />
       <BrandDNATease />
       <SpeedControl />
+      <Pricing />
       <SocialProof />
       <FinalCTA />
       <Footer />
@@ -59,7 +60,7 @@ function Nav() {
           <a href="#how" className="hover:text-white transition">How it works</a>
           <a href="#different" className="hover:text-white transition">Why it&apos;s different</a>
           <a href="#brand" className="hover:text-white transition">Brand DNA</a>
-          <Link href="/pricing" className="hover:text-white transition">Pricing</Link>
+          <a href="#pricing" className="hover:text-white transition">Pricing</a>
         </div>
 
         <div className="flex items-center gap-2">
@@ -598,6 +599,150 @@ function SpeedControl() {
         </div>
       </div>
     </section>
+  );
+}
+
+// ─── Pricing teaser on the landing page ────────────────────────────────────
+//
+// Two-tier strip ($50 / $100) that lives alongside the editorial body. Full
+// comparison is still on /pricing — this is the "before they leave the
+// landing page" confidence card. The CTAs point at /sign-up; the detailed
+// side-by-side table lives on /pricing.
+
+function Pricing() {
+  return (
+    <section id="pricing" className="py-28" style={{ background: BONE }}>
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="text-center mb-14">
+          <Eyebrow>Pricing</Eyebrow>
+          <h2
+            className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            Two tiers. No free plan.
+          </h2>
+          <p className="mt-5 text-[16px] text-black/55 max-w-xl mx-auto leading-relaxed">
+            Close one safari and Safari Studio pays for itself for the year.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto">
+          <PricingCard
+            tier="Explorer"
+            price="$50"
+            cadence="/ month"
+            tagline="For solo operators sending proposals weekly."
+            features={[
+              "Up to 5 proposals / month",
+              "Property library",
+              "AI generation (basic)",
+              "Web view sharing",
+              "PDF export",
+            ]}
+            cta="Start Explorer"
+            featured={false}
+          />
+          <PricingCard
+            tier="Operator"
+            price="$100"
+            cadence="/ month"
+            tagline="For DMCs and lodges who sell every day."
+            features={[
+              "Unlimited proposals",
+              "Full property system",
+              "Brand DNA — tone control",
+              "Priority AI",
+              "Advanced exports + 5 seats",
+            ]}
+            cta="Start Operator"
+            featured
+          />
+        </div>
+
+        <p className="mt-8 text-center text-[13px] text-black/50">
+          <Link href="/pricing" className="underline hover:text-[#1b3a2d] transition">
+            Full comparison →
+          </Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PricingCard({
+  tier,
+  price,
+  cadence,
+  tagline,
+  features,
+  cta,
+  featured,
+}: {
+  tier: string;
+  price: string;
+  cadence: string;
+  tagline: string;
+  features: string[];
+  cta: string;
+  featured: boolean;
+}) {
+  const text = featured ? "white" : "rgba(0,0,0,0.85)";
+  const sub = featured ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)";
+  const divider = featured ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
+  return (
+    <div
+      className="relative rounded-2xl p-7 md:p-8 border-2 shadow-sm transition hover:shadow-md"
+      style={{
+        background: featured ? FOREST : "white",
+        borderColor: featured ? GOLD : "rgba(0,0,0,0.06)",
+      }}
+    >
+      {featured && (
+        <div
+          className="absolute -top-3 right-7 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.18em] font-bold"
+          style={{ background: GOLD, color: FOREST }}
+        >
+          Most popular
+        </div>
+      )}
+      <div
+        className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
+        style={{ color: featured ? GOLD : FOREST }}
+      >
+        {tier}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <div
+          className="text-5xl font-bold tabular-nums"
+          style={{ color: text, fontFamily: "'Playfair Display', serif" }}
+        >
+          {price}
+        </div>
+        <div className="text-[14px]" style={{ color: sub }}>{cadence}</div>
+      </div>
+      <p className="mt-3 text-[14px] leading-relaxed" style={{ color: sub }}>
+        {tagline}
+      </p>
+      <Link
+        href="/sign-up"
+        className="mt-6 block w-full py-3 rounded-xl text-center text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
+        style={
+          featured
+            ? { background: GOLD, color: FOREST }
+            : { background: FOREST, color: "white" }
+        }
+      >
+        {cta}
+      </Link>
+      <ul className="mt-7 space-y-2.5 pt-5 border-t" style={{ borderColor: divider }}>
+        {features.map((f) => (
+          <li key={f} className="flex items-start gap-2.5 text-[14px]" style={{ color: sub }}>
+            <span style={{ color: GOLD }} aria-hidden>✓</span>
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

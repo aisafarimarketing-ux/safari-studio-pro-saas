@@ -218,7 +218,7 @@ export function ProposalEditor() {
         <button
           onClick={toggleRightPanel}
           className={`absolute z-40 top-3 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-black/10 shadow-sm text-black/40 hover:text-black/70 hover:bg-black/5 text-[10px] transition-all duration-200 ${
-            rightPanelOpen ? "right-[276px]" : "right-2"
+            rightPanelOpen ? "right-[308px]" : "right-2"
           }`}
           title={rightPanelOpen ? "Collapse panel" : "Expand panel"}
         >

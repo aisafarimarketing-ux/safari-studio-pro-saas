@@ -38,10 +38,25 @@ export function ColorPickerPopover({
 }: ColorPickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
+  // Default align-left; flips to align-right if the popover would overflow.
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) setRecent(getRecent());
+  }, [open]);
+
+  // Viewport-aware positioning — flip the popover to right-aligned when the
+  // trigger sits too close to the right edge (typical on the right context
+  // panel inside the editor).
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const POPOVER_WIDTH = 260; // matches min-w below
+    const rect = ref.current.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const spaceToRight = viewportW - rect.left;
+    setAlignRight(spaceToRight < POPOVER_WIDTH + 16);
   }, [open]);
 
   useEffect(() => {
@@ -87,8 +102,11 @@ export function ColorPickerPopover({
 
       {open && (
         <div
-          className="absolute z-50 top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-black/10 p-4 w-60 ss-popover-in"
-          style={{ minWidth: 220 }}
+          ref={popoverRef}
+          className={`absolute z-50 top-full mt-2 bg-white rounded-xl shadow-xl border border-black/10 p-4 w-64 ss-popover-in ${
+            alignRight ? "right-0" : "left-0"
+          }`}
+          style={{ minWidth: 240 }}
         >
           {label && (
             <div className="text-[11px] uppercase tracking-widest text-black/40 mb-3">
