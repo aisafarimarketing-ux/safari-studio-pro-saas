@@ -66,34 +66,39 @@ export default async function AdminPage() {
           Manual account control. {active} active · {suspended} suspended.
         </p>
 
-        <div className="mt-8 bg-white rounded-2xl border border-black/8 overflow-hidden">
-          <div className="grid grid-cols-[1.2fr_1fr_0.6fr_0.6fr_auto] gap-3 px-5 py-3 border-b border-black/8 text-label ed-label" style={{ color: "rgba(0,0,0,0.4)" }}>
-            <div>Organization</div>
-            <div>Clerk id</div>
-            <div className="text-right tabular-nums">Proposals</div>
-            <div className="text-right tabular-nums">Properties</div>
-            <div className="text-right pl-3">Status</div>
-          </div>
-          {orgs.length === 0 && (
-            <div className="px-5 py-10 text-center text-small text-black/40">
-              No organizations yet.
+        <div className="mt-8 bg-white rounded-2xl border border-black/8 overflow-x-auto">
+          <div className="min-w-[1000px]">
+            <div className="grid grid-cols-[1.2fr_1fr_0.5fr_0.5fr_auto_auto] gap-3 px-5 py-3 border-b border-black/8 text-label ed-label" style={{ color: "rgba(0,0,0,0.4)" }}>
+              <div>Organization</div>
+              <div>Clerk id</div>
+              <div className="text-right tabular-nums">Proposals</div>
+              <div className="text-right tabular-nums">Properties</div>
+              <div className="text-right pl-3">Tier</div>
+              <div className="text-right pl-3">Status</div>
             </div>
-          )}
-          <ul className="divide-y divide-black/6">
-            {orgs.map((org) => (
-              <li key={org.id}>
-                <AdminOrgRow
-                  id={org.id}
-                  name={org.name ?? "(unnamed)"}
-                  clerkOrgId={org.clerkOrgId}
-                  status={org.status}
-                  suspendedReason={org.suspendedReason}
-                  proposalCount={org._count.proposals}
-                  propertyCount={org._count.properties}
-                />
-              </li>
-            ))}
-          </ul>
+            {orgs.length === 0 && (
+              <div className="px-5 py-10 text-center text-small text-black/40">
+                No organizations yet.
+              </div>
+            )}
+            <ul className="divide-y divide-black/6">
+              {orgs.map((org) => (
+                <li key={org.id}>
+                  <AdminOrgRow
+                    id={org.id}
+                    name={org.name ?? "(unnamed)"}
+                    clerkOrgId={org.clerkOrgId}
+                    status={org.status}
+                    suspendedReason={org.suspendedReason}
+                    proposalCount={org._count.proposals}
+                    propertyCount={org._count.properties}
+                    tier={org.tier}
+                    tierExpiresAt={org.tierExpiresAt ? org.tierExpiresAt.toISOString() : null}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <p className="mt-6 text-label text-black/35" style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>

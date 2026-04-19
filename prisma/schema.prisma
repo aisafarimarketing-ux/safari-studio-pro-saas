@@ -52,6 +52,14 @@ model Organization {
   suspendedAt     DateTime?
   suspendedReason String?
 
+  // Commercial tier — mostly informational while Stripe isn't wired up.
+  // "trial" is the default for new orgs; "pilot" is a hand-picked zero-cost
+  // engagement with a `tierExpiresAt`; "paid" is what an operator becomes
+  // once they start paying (manual or Stripe later).
+  tier            String    @default("trial")    // "trial" | "pilot" | "paid"
+  tierExpiresAt   DateTime?
+  tierNote        String?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

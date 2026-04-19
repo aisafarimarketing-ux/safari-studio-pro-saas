@@ -10,6 +10,7 @@ import type { BrandDNACompletion } from "@/lib/brandDNA";
 import { buildDemoProposal } from "@/lib/defaults";
 import { nanoid } from "@/lib/nanoid";
 import { OnboardingChecklist } from "./OnboardingChecklist";
+import { TierBanner } from "./TierBanner";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
@@ -188,6 +189,8 @@ export function DashboardWorkspace() {
               : "Start your first proposal — or build out the property library that powers them."}
           </p>
         </header>
+
+        <TierBanner />
 
         {error && (
           <div className="mb-6 rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-4 text-[#b34334] text-sm">
