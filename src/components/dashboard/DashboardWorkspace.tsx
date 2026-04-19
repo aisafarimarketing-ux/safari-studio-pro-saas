@@ -79,18 +79,56 @@ export function DashboardWorkspace() {
   // proposal and POSTs it, then routes to /studio.
   const openNewProposal = () => setTripSetupOpen(true);
 
-  const handleTripSetupSubmit = async ({ proposal }: TripSetupResult) => {
+  const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
     if (creating) return;
     setCreating(true);
     try {
+      // 1. Always save the blank-but-configured proposal first. If anything
+      //    later fails the user still lands in the editor with their setup.
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposal }),
       });
       if (res.status === 409) { window.location.href = "/select-organization"; return; }
+      if (res.status === 402) { window.location.href = "/account-suspended"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
+
+      // 2. Optional AI draft — enrich days, inclusions, exclusions in place.
+      //    Soft-fails: if the model errors out, we still open the editor.
+      if (autopilot) {
+        try {
+          const ai = await fetch("/api/ai/autopilot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ proposal }),
+          });
+          if (ai.ok) {
+            const draft = await ai.json() as {
+              days?: typeof proposal.days;
+              inclusions?: string[];
+              exclusions?: string[];
+            };
+            const merged = {
+              ...proposal,
+              days: Array.isArray(draft.days) && draft.days.length ? draft.days : proposal.days,
+              inclusions: draft.inclusions?.length ? draft.inclusions : proposal.inclusions,
+              exclusions: draft.exclusions?.length ? draft.exclusions : proposal.exclusions,
+            };
+            await fetch("/api/proposals", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proposal: merged }),
+            });
+          } else {
+            console.warn("[autopilot] non-OK:", ai.status);
+          }
+        } catch (err) {
+          console.warn("[autopilot] failed; opening blank editor instead:", err);
+        }
+      }
+
       router.push("/studio");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create proposal");

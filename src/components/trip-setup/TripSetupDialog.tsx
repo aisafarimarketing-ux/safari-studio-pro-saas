@@ -38,6 +38,10 @@ const COMMON_ORIGINS = [
 
 export interface TripSetupResult {
   proposal: Proposal;
+  /** When true, the caller should run `/api/ai/autopilot` after creating
+   *  the proposal and merge the returned days/inclusions back in before
+   *  routing to /studio. */
+  autopilot: boolean;
 }
 
 // Parent controls mount/unmount — conditionally render `{open && <Dialog />}`
@@ -56,6 +60,7 @@ export function TripSetupDialog({
   // Lazy initial state — Date.now() only runs on mount.
   const [form, setForm] = useState<FormShape>(() => buildDefaultForm());
   const [customDestination, setCustomDestination] = useState("");
+  const [autopilot, setAutopilot] = useState(true);
 
   const nights = useMemo(() => {
     const a = new Date(form.arrivalDate);
@@ -90,7 +95,7 @@ export function TripSetupDialog({
     e.preventDefault();
     if (submitting) return;
     const proposal = buildProposalFromForm(form, nights);
-    onSubmit({ proposal });
+    onSubmit({ proposal, autopilot });
   };
 
   const totalGuests = form.adults + form.children;
@@ -318,11 +323,37 @@ export function TripSetupDialog({
         </div>
 
         {/* Footer */}
-        <footer className="px-7 py-4 border-t border-black/8 flex items-center justify-between gap-3 shrink-0">
-          <div className="text-label text-black/40" style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
-            You can refine everything inside the editor.
-          </div>
-          <div className="flex items-center gap-2">
+        <footer className="px-7 py-4 border-t border-black/8 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+            <span
+              className={`relative inline-flex h-5 w-9 rounded-full transition ${
+                autopilot ? "bg-[#1b3a2d]" : "bg-black/15"
+              }`}
+              aria-hidden
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition ${
+                  autopilot ? "left-[18px]" : "left-0.5"
+                }`}
+              />
+            </span>
+            <input
+              type="checkbox"
+              checked={autopilot}
+              onChange={(e) => setAutopilot(e.target.checked)}
+              className="sr-only"
+            />
+            <span className="text-small text-black/70 group-hover:text-black/90">
+              <span className="text-[#c9a84c]">✦</span> Generate draft with AI
+            </span>
+            <span
+              className="text-label text-black/40 hidden sm:inline"
+              style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}
+            >
+              uses your library &amp; brand voice
+            </span>
+          </label>
+          <div className="flex items-center gap-2 ml-auto">
             <button
               type="button"
               onClick={onClose}
@@ -335,7 +366,9 @@ export function TripSetupDialog({
               disabled={submitting || !form.title.trim()}
               className="px-5 py-2 text-small rounded-lg bg-[#1b3a2d] text-white font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
             >
-              {submitting ? "Creating…" : "Open editor →"}
+              {submitting
+                ? autopilot ? "Drafting…" : "Creating…"
+                : autopilot ? "✦ Generate & open →" : "Open editor →"}
             </button>
           </div>
         </footer>
