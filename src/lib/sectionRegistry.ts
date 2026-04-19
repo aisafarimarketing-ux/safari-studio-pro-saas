@@ -76,9 +76,11 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "dayJourney",
     label: "Day-by-Day Journey",
     icon: "✦",
-    description: "Editorial day cards — five signature layouts, image-first",
+    description: "Chapter-based magazine layouts + per-day editorial layouts",
     variants: [
       "auto",
+      "chapter-magazine",
+      "chapter-destination",
       "split-editorial",
       "cinematic-hero",
       "stacked-story",
