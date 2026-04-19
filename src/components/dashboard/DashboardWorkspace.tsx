@@ -57,6 +57,7 @@ export function DashboardWorkspace() {
         ]);
         if (propRes.status === 401) { window.location.href = "/sign-in?redirect_url=/dashboard"; return; }
         if (propRes.status === 409) { window.location.href = "/select-organization"; return; }
+        if (propRes.status === 402) { window.location.href = "/account-suspended"; return; }
 
         const propData = propRes.ok ? await propRes.json() : { proposals: [] };
         const propertyData = propertyRes.ok ? await propertyRes.json() : { properties: [] };

@@ -7,6 +7,7 @@ const isProtectedRoute = createRouteMatcher([
   "/proposals(.*)",
   "/properties(.*)",
   "/settings(.*)",
+  "/admin(.*)",
   "/api/ai(.*)",
   "/api/proposals(.*)",
   "/api/properties(.*)",
@@ -14,16 +15,20 @@ const isProtectedRoute = createRouteMatcher([
   "/api/property-tags(.*)",
   "/api/brand-dna(.*)",
   "/api/media(.*)",
+  "/api/admin(.*)",
 ]);
 
 // Routes that a signed-in user without an active organization may still visit
 // (the org-selection flow itself, the clerk auth pages, etc.).
 const isOrgAgnosticRoute = createRouteMatcher([
   "/select-organization(.*)",
+  "/account-suspended(.*)",
+  "/admin(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)",
   "/api/public(.*)",
+  "/api/admin(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

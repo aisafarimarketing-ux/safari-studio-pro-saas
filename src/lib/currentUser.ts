@@ -5,6 +5,9 @@ import type { Organization, User } from "@prisma/client";
 export type AuthContext = {
   user: User;
   organization: Organization | null;
+  /** Quick gate for kill-switch checks. True when organization is present
+   *  AND its status is "active". Suspended orgs get false. */
+  orgActive: boolean;
 };
 
 /**
@@ -32,14 +35,14 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     update: { email, name },
   });
 
-  if (!orgId) return { user, organization: null };
+  if (!orgId) return { user, organization: null, orgActive: false };
 
   // First-sight: hydrate name + slug from Clerk. Cheap because it only runs
   // the network call when we haven't seen this org before.
   const existing = await prisma.organization.findUnique({
     where: { clerkOrgId: orgId },
   });
-  if (existing) return { user, organization: existing };
+  if (existing) return { user, organization: existing, orgActive: existing.status === "active" };
 
   let orgName: string | null = null;
   let orgSlug: string | null = null;
@@ -56,7 +59,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   const organization = await prisma.organization.create({
     data: { clerkOrgId: orgId, name: orgName, slug: orgSlug },
   });
-  return { user, organization };
+  return { user, organization, orgActive: organization.status === "active" };
 }
 
 /**

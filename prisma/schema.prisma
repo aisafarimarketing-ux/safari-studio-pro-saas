@@ -43,6 +43,15 @@ model Organization {
   clerkOrgId String   @unique
   name       String?
   slug       String?
+
+  // Super-admin-controlled lifecycle. "active" = full access; "suspended" =
+  // workspace is frozen until the admin reactivates (used in lieu of billing
+  // until the Stripe integration lands). Suspended orgs can still authenticate
+  // via Clerk but every protected route gates on this flag.
+  status          String    @default("active")  // "active" | "suspended"
+  suspendedAt     DateTime?
+  suspendedReason String?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

@@ -11,6 +11,9 @@ export async function GET() {
   if (!ctx.organization) {
     return NextResponse.json({ error: "No active organization" }, { status: 409 });
   }
+  if (!ctx.orgActive) {
+    return NextResponse.json({ error: "Account suspended", code: "ORG_SUSPENDED" }, { status: 402 });
+  }
 
   const rows = await prisma.proposal.findMany({
     where: { organizationId: ctx.organization.id },
@@ -48,6 +51,9 @@ export async function POST(req: Request) {
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!ctx.organization) {
     return NextResponse.json({ error: "No active organization" }, { status: 409 });
+  }
+  if (!ctx.orgActive) {
+    return NextResponse.json({ error: "Account suspended", code: "ORG_SUSPENDED" }, { status: 402 });
   }
 
   let body: { proposal?: { id?: string; metadata?: { title?: string; status?: string } } };
