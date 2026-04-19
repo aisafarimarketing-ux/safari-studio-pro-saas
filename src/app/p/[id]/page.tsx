@@ -5,6 +5,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
+import { ViewTracker } from "@/components/proposal-share/ViewTracker";
 import type { Proposal, Section } from "@/lib/types";
 
 export default function ClientProposalPage({
@@ -122,6 +123,7 @@ export default function ClientProposalPage({
       )}
 
       <CommentPanel proposalId={id} />
+      <ViewTracker proposalId={id} />
     </div>
   );
 }

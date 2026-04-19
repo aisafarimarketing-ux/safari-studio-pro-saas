@@ -230,10 +230,59 @@ model Proposal {
   updatedAt DateTime @updatedAt
 
   comments ProposalComment[]
+  views    ProposalView[]
 
   @@index([userId])
   @@index([organizationId])
   @@index([shareSlug])
+}
+
+// ─── Engagement tracking ───────────────────────────────────────────────────
+//
+// One row per anonymous viewer "session" (generated client-side on /p/[id]
+// and stored in sessionStorage so reloads count as the same session). Each
+// session accumulates an event log: open, section dwell, close.
+//
+// The operator wants three answers: did they open it, which sections did
+// they linger on, and how long did they spend? This table answers all
+// three without building a CRM.
+
+model ProposalView {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // Anonymous viewer session id, generated client-side. Not tied to Clerk.
+  sessionId String
+
+  userAgent String?
+  referrer  String?
+  country   String?
+
+  firstViewedAt DateTime @default(now())
+  lastViewedAt  DateTime @default(now())
+  viewCount     Int      @default(1)
+  totalSeconds  Int      @default(0)
+
+  events ProposalViewEvent[]
+
+  @@unique([proposalId, sessionId])
+  @@index([proposalId, lastViewedAt])
+}
+
+model ProposalViewEvent {
+  id     String        @id @default(cuid())
+  viewId String
+  view   ProposalView  @relation(fields: [viewId], references: [id], onDelete: Cascade)
+
+  // "open" | "section" | "close"
+  kind          String
+  sectionId     String?
+  dwellSeconds  Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([viewId, createdAt])
 }
 
 // ─── Client interaction (lightweight) ───────────────────────────────────────

@@ -11,6 +11,7 @@ import {
 } from "@clerk/nextjs";
 import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
 import { CommentsDrawer } from "./CommentsDrawer";
+import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -142,6 +143,8 @@ export function EditorToolbar({
       {/* Right: action stack — Save indicator · Comments · ⋯ · Preview · SHARE */}
       <div className="flex items-center gap-2 shrink-0">
         <AutoSaveIndicator state={autoSaveState} error={autoSaveError} lastSavedAt={lastSavedAt} />
+
+        <ProposalViewsWidget proposalId={proposal.id} />
 
         <CommentsDrawer proposalId={proposal.id} />
 
