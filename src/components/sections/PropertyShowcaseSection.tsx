@@ -46,6 +46,28 @@ function PropertyCard({ property, variant, index = 0 }: { property: Property; va
     }
   };
 
+  // Right-click on any <img> inside this property card opens a file picker.
+  const handleImageContextMenu = (e: React.MouseEvent) => {
+    if (!isEditor) return;
+    const el = e.target as HTMLElement;
+    if (el.tagName !== "IMG" && !el.closest(".dm-image")) return;
+    e.preventDefault();
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await fileToOptimizedDataUrl(file);
+        updateProperty(property.id, { leadImageUrl: dataUrl });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Image upload failed");
+      }
+    };
+    input.click();
+  };
+
   const isEditorial = variant === "editorial";
   const isFullBleed = variant === "full-bleed";
   const isFieldNotes = variant === "field-notes";
@@ -61,6 +83,7 @@ function PropertyCard({ property, variant, index = 0 }: { property: Property; va
       ref={setNodeRef}
       style={{ ...style, borderColor: flush ? "transparent" : tokens.border }}
       onClick={() => isEditor && selectProperty(property.id)}
+      onContextMenu={handleImageContextMenu}
       className={wrapperClass}
     >
       {/* Editor controls */}

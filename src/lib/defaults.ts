@@ -171,26 +171,43 @@ export const DEFAULT_PROPERTIES: Property[] = [
 // ─── Default sections ─────────────────────────────────────────────────────────
 
 function buildDefaultSections(): Section[] {
+  // Section order, top-to-bottom:
+  //   0  Operator header (logo + name across the top of every page)
+  //   1  Cover (hero image + trip title)
+  //   2  Greeting (personal note from the consultant)
+  //   3  Trip summary (stats)
+  //   4  Itinerary-at-a-glance (table)
+  //   5  Map (route with day pins — placed right after the table)
+  //   6  Day-by-day journey
+  //   7  Property showcase
+  //   8  Gallery (optional visual break before pricing)
+  //   9  Pricing
+  //   10 Inclusions / exclusions
+  //   11 Practical info
+  //   12 Closing (personal sign-off)
+  //   13 Footer (operator contact)
   return [
-    makeSection("cover", 0, "cinematic-split", {
+    makeSection("operatorHeader", 0, "minimal"),
+    makeSection("cover", 1, "split-60-40-right", {
       heroImageUrl: "",
       tagline: "A family safari across Kenya's greatest parks",
     }),
-    makeSection("greeting", 1, "editorial-letter", {
+    makeSection("greeting", 2, "editorial-letter", {
       body: "Dear Anderson Family,\n\nIt is a genuine pleasure to put this proposal together for you. Seven days across the Masai Mara, Amboseli and Tsavo East will give each member of your family a completely different face of Kenya — from the drama of the Great Migration to the silence of elephant plains under Kilimanjaro.",
     }),
-    makeSection("tripSummary", 2, "default"),
-    makeSection("itineraryTable", 3, "default"),
-    makeSection("dayJourney", 4, "split-text-image"),
-    makeSection("propertyShowcase", 5, "image-left-details-right"),
-    makeSection("pricing", 6, "default"),
-    makeSection("inclusions", 7, "default"),
-    makeSection("practicalInfo", 8, "card-grid"),
-    makeSection("closing", 9, "quote-led", {
+    makeSection("tripSummary", 3, "default"),
+    makeSection("itineraryTable", 4, "default"),
+    makeSection("map", 5, "route", { coords: [] }),
+    makeSection("dayJourney", 6, "magazine-feature"),
+    makeSection("propertyShowcase", 7, "field-notes"),
+    makeSection("pricing", 8, "tiered-rail"),
+    makeSection("inclusions", 9, "default"),
+    makeSection("practicalInfo", 10, "card-grid"),
+    makeSection("closing", 11, "quote-led", {
       quote: "Africa changes you. The question is not whether you will come back — it's when.",
       signOff: "With warm regards and great excitement for your journey,",
     }),
-    makeSection("footer", 10, "default"),
+    makeSection("footer", 12, "default"),
   ];
 }
 

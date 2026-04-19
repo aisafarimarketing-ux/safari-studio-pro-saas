@@ -53,6 +53,188 @@ export function CoverSection({ section }: { section: Section }) {
     }
   };
 
+  // Right-click anywhere on the hero image opens a hidden file input. Makes
+  // uploading + replacing feel like a desktop app.
+  const handleImageContextMenu = (e: React.MouseEvent) => {
+    if (!isEditor) return;
+    e.preventDefault();
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await fileToOptimizedDataUrl(file);
+        updateSectionContent(section.id, { heroImageUrl: dataUrl });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Image upload failed");
+      }
+    };
+    input.click();
+  };
+
+  // ── Split-panel variants — clean image + text side-by-side (no overlay) ───
+  // Six variants share one renderer. The `side` argument says which side the
+  // image sits on; `ratio` sets the image/text proportion. Every field is
+  // always visible (no hidden content inside overlays).
+  const splitPanelVariants = [
+    "split-50-50-right",
+    "split-50-50-left",
+    "split-60-40-right",
+    "split-60-40-left",
+    "split-40-60-right",
+    "split-40-60-left",
+  ] as const;
+  if ((splitPanelVariants as readonly string[]).includes(variant)) {
+    const side: "left" | "right" = variant.endsWith("-right") ? "right" : "left";
+    const ratio: "50-50" | "60-40" | "40-60" = variant.includes("60-40")
+      ? "60-40"
+      : variant.includes("40-60")
+        ? "40-60"
+        : "50-50";
+    const cols =
+      ratio === "60-40"
+        ? side === "right" ? "40fr 60fr" : "60fr 40fr"
+        : ratio === "40-60"
+          ? side === "right" ? "60fr 40fr" : "40fr 60fr"
+          : "1fr 1fr";
+    const imageFirst = side === "left";
+    return (
+      <div
+        className={`relative w-full grid ${isEditor ? "min-h-[620px]" : "min-h-screen"}`}
+        style={{ gridTemplateColumns: cols, background: tokens.sectionSurface }}
+      >
+        {/* Image column */}
+        <div
+          className="relative overflow-hidden"
+          style={{ background: tokens.cardBg, order: imageFirst ? 1 : 2 }}
+          onContextMenu={handleImageContextMenu}
+        >
+          {heroUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={heroUrl}
+              alt="Cover"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : isEditor ? (
+            <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+              <div
+                className="text-center transition group-hover:scale-105"
+                style={{ color: tokens.mutedText }}
+              >
+                <div className="text-4xl mb-2 opacity-60">+</div>
+                <div className="text-[12px] font-semibold uppercase tracking-[0.2em]">Click to upload</div>
+                <div className="text-[10.5px] mt-1.5 opacity-70">or right-click to replace</div>
+              </div>
+            </label>
+          ) : null}
+          {heroUrl && isEditor && (
+            <label
+              className="absolute top-4 left-4 z-10 cursor-pointer bg-black/50 text-white text-[11px] px-2.5 py-1 rounded-md hover:bg-black/70 transition backdrop-blur-sm"
+              title="Click to upload · right-click the image anywhere to replace"
+            >
+              <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+              Change
+            </label>
+          )}
+        </div>
+
+        {/* Text column */}
+        <div
+          className="relative flex flex-col justify-between p-10 md:p-14"
+          style={{ order: imageFirst ? 2 : 1 }}
+        >
+          {/* Top — operator */}
+          <div className="flex items-center gap-3">
+            {operator.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-9 object-contain" />
+            ) : (
+              <span
+                className="text-[10px] uppercase tracking-[0.32em] font-semibold"
+                style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {operator.companyName || "Safari Studio"}
+              </span>
+            )}
+          </div>
+
+          {/* Middle — destinations + title + tagline */}
+          <div className="py-10">
+            {trip.destinations.length > 0 && (
+              <div
+                className="text-[10px] uppercase tracking-[0.36em] mb-5"
+                style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {trip.destinations.slice(0, 4).join("  ·  ")}
+              </div>
+            )}
+            <h1
+              className="font-bold leading-[0.98] tracking-tight outline-none"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(2.2rem, 4.6vw, 3.6rem)",
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              data-ai-editable="cover-title"
+              onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}
+            >
+              {trip.title}
+            </h1>
+            <p
+              className="mt-5 text-[15.5px] leading-relaxed max-w-md outline-none"
+              style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              data-ai-editable="cover-tagline"
+              onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
+            >
+              {(section.content.tagline as string) || trip.subtitle || "A draft itinerary, in detail"}
+            </p>
+          </div>
+
+          {/* Bottom — meta strip */}
+          <div
+            className="pt-6 grid grid-cols-2 gap-x-6 gap-y-4"
+            style={{ borderTop: `1px solid ${tokens.border}` }}
+          >
+            <CoverMeta label="For" tokens={tokens} theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+              >
+                {client.guestNames || "Your Guests"}
+              </span>
+            </CoverMeta>
+            <CoverMeta label="Dates" tokens={tokens} theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+              >
+                {trip.dates || "—"}
+              </span>
+            </CoverMeta>
+            <CoverMeta label="Duration" tokens={tokens} theme={theme}>
+              {trip.nights ? `${trip.nights} nights` : "—"}
+            </CoverMeta>
+            <CoverMeta label="Party" tokens={tokens} theme={theme}>
+              {client.pax || "—"}
+            </CoverMeta>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Editorial Magazine ─────────────────────────────────────────────────────
   // Kinfolk / Cereal / Wallpaper aesthetic. Full-bleed image with a paper-
   // band masthead in the lower third — issue line, big serif title, sub deck.
