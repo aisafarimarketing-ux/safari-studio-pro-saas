@@ -1,22 +1,12 @@
 // Safari Studio PDF render service.
 //
 // Tiny Express server that uses Playwright + Chromium to render a public
-// proposal URL (e.g. https://safari-studio.up.railway.app/p/abc123/print)
-// into a magazine-grade A4 PDF and pipes the bytes back. Deploy as a
-// separate Railway service: the main Next.js app calls POST /pdf with the
-// URL it wants rendered.
+// proposal URL into a magazine-grade A4 PDF and pipes the bytes back.
 //
-// Output quality decisions:
-//  - A4 @ 150dpi → 1240 × 1754 viewport with deviceScaleFactor 2 (so
-//    raster assets render at ~300 effective dpi).
-//  - preferCSSPageSize honours the @page rules defined on the print page.
-//  - printBackground preserves the proposal's background colours and
-//    images — without this, theme colours disappear.
-//  - Fonts are awaited via document.fonts.ready + __SS_READY__ before
-//    capture so the PDF never renders with FOUC glyphs.
-//  - Zero margins: the print page controls its own bleed and padding.
-//
-// Auth: shared secret in `Authorization: Bearer <PDF_SHARED_SECRET>`.
+// Diagnostic-rich: on failure, reports navigation status, console errors,
+// and the last page URL seen, so the caller knows whether the issue is
+// "URL returned 500", "timeout", or "browser crashed" without needing
+// to tail logs.
 
 import express from "express";
 import { chromium } from "playwright";
@@ -27,8 +17,6 @@ app.use(express.json({ limit: "1mb" }));
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.PDF_SHARED_SECRET;
 
-// Reuse a single browser instance — startup is the slow part. Lazy-init so
-// boot doesn't block on browser launch.
 let browserPromise = null;
 function getBrowser() {
   if (!browserPromise) {
@@ -46,14 +34,60 @@ function getBrowser() {
 
 app.get("/", (_req, res) => res.json({ status: "ok", service: "pdf" }));
 
-app.post("/pdf", async (req, res) => {
-  if (!SECRET) {
-    return res.status(500).json({ error: "PDF_SHARED_SECRET not configured" });
-  }
+// GET /diag?url=...  — dry run: just fetch the URL with Playwright and
+// return the HTTP status, content-type, page title, and any console errors.
+// Behind the same secret as /pdf. Useful when the full /pdf call 502s.
+app.post("/diag", async (req, res) => {
+  if (!SECRET) return res.status(500).json({ error: "PDF_SHARED_SECRET not configured" });
   const auth = req.header("authorization") || "";
-  if (auth !== `Bearer ${SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized" });
+  if (auth !== `Bearer ${SECRET}`) return res.status(401).json({ error: "Unauthorized" });
+
+  const url = req.body?.url;
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+    return res.status(400).json({ error: "url is required (http/https)" });
   }
+
+  const browser = await getBrowser();
+  const context = await browser.newContext({ viewport: { width: 1240, height: 1754 } });
+  const page = await context.newPage();
+  const consoleErrors = [];
+  const requestErrors = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200));
+  });
+  page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message.slice(0, 200)}`));
+  page.on("requestfailed", (r) => requestErrors.push(`${r.url().slice(0, 120)} → ${r.failure()?.errorText}`));
+
+  try {
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    const title = await page.title().catch(() => "");
+    const bodyLen = await page.evaluate(() => document.body?.innerText?.length ?? 0).catch(() => 0);
+    res.json({
+      ok: true,
+      navigationStatus: response?.status() ?? null,
+      contentType: response?.headers()["content-type"] ?? null,
+      pageTitle: title,
+      bodyTextLength: bodyLen,
+      consoleErrors,
+      requestErrors: requestErrors.slice(0, 10),
+      finalUrl: page.url(),
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err?.message || "navigation failed",
+      consoleErrors,
+      requestErrors: requestErrors.slice(0, 10),
+    });
+  } finally {
+    await context.close().catch(() => {});
+  }
+});
+
+app.post("/pdf", async (req, res) => {
+  if (!SECRET) return res.status(500).json({ error: "PDF_SHARED_SECRET not configured" });
+  const auth = req.header("authorization") || "";
+  if (auth !== `Bearer ${SECRET}`) return res.status(401).json({ error: "Unauthorized" });
 
   const url = req.body?.url;
   const filename = sanitize(req.body?.filename || "proposal.pdf");
@@ -63,38 +97,45 @@ app.post("/pdf", async (req, res) => {
 
   const browser = await getBrowser();
   const context = await browser.newContext({
-    // A4 at 150dpi ≈ 1240 × 1754. Device-scale 2 doubles it for crisp
-    // rasterisation.
     viewport: { width: 1240, height: 1754 },
     deviceScaleFactor: 2,
-    // Force screen (not print) media — our print stylesheet is already
-    // written with @media print guards; screen rendering + @page size is
-    // what produces the best PDF fidelity across Chromium versions.
     colorScheme: "light",
     reducedMotion: "reduce",
-    // Locale defaults to en-US; most proposals use English formatting.
     locale: "en-US",
   });
-
-  // Emulate the `print` media type so any @media print rules also apply
-  // in addition to the screen rules — the print page layers both.
-  // (Playwright's page.emulateMedia comes after page creation.)
   const page = await context.newPage();
   await page.emulateMedia({ media: "print" });
 
-  try {
-    // networkidle waits for all loaded sub-resources to finish; the
-    // SPA's data fetch settles here.
-    await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
+  // Capture diagnostic signal during the whole lifecycle.
+  const consoleErrors = [];
+  const requestErrors = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(m.text().slice(0, 300));
+  });
+  page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message.slice(0, 300)}`));
+  page.on("requestfailed", (r) => {
+    requestErrors.push(`${r.url().slice(0, 120)} → ${r.failure()?.errorText}`);
+  });
 
-    // Our print page sets window.__SS_READY__ once fonts + images have
-    // settled. Wait for that signal; fall back to a 1.5s timer if for
-    // any reason it never fires.
+  let navigationStatus = null;
+
+  try {
+    const response = await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
+    navigationStatus = response?.status() ?? null;
+
+    // If the print page itself returned a non-2xx (proposal 404, server
+    // error, redirect to sign-in), bail with a clear message before we
+    // try to rasterise an error page.
+    if (navigationStatus && (navigationStatus < 200 || navigationStatus >= 400)) {
+      throw new Error(
+        `print page responded ${navigationStatus} at ${page.url()}`,
+      );
+    }
+
     await page
       .waitForFunction(() => Boolean(window.__SS_READY__), { timeout: 20_000 })
       .catch(() => page.waitForTimeout(1500));
 
-    // Belt-and-braces: force every font to finish loading before capture.
     await page.evaluate(async () => {
       try { if (document.fonts?.ready) await document.fonts.ready; } catch {}
     });
@@ -104,10 +145,7 @@ app.post("/pdf", async (req, res) => {
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
-      // Tagged PDFs are accessibility-friendlier and preserve the
-      // document outline in viewers like Preview / Adobe.
       tagged: true,
-      // Outline = the sidebar bookmark tree from headings.
       outline: true,
     });
 
@@ -116,8 +154,22 @@ app.post("/pdf", async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store");
     res.send(pdf);
   } catch (err) {
-    console.error("[pdf]", err);
-    res.status(500).json({ error: err?.message || "Render failed" });
+    console.error("[pdf] render failed:", {
+      url,
+      navigationStatus,
+      error: err?.message,
+      consoleErrors: consoleErrors.slice(0, 5),
+      requestErrors: requestErrors.slice(0, 5),
+    });
+    // Return a diagnostic-rich body so the main app can forward it to the
+    // client and we can read "why" without tailing logs.
+    res.status(500).json({
+      error: err?.message || "Render failed",
+      navigationStatus,
+      consoleErrors: consoleErrors.slice(0, 5),
+      requestErrors: requestErrors.slice(0, 5),
+      finalUrl: page.url(),
+    });
   } finally {
     await context.close().catch(() => {});
   }
