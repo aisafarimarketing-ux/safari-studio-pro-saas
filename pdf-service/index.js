@@ -21,11 +21,9 @@ let browserPromise = null;
 function getBrowser() {
   if (!browserPromise) {
     browserPromise = chromium.launch({
-      // Aggressive memory-conservation flags. Railway's entry-tier plans
-      // give a service ~512MB of RAM; Chromium with a heavy SPA + fonts
-      // will OOM without these. --single-process puts everything in one
-      // process (lower memory, slightly less stable but fine for a
-      // single-request-at-a-time PDF worker).
+      // Standard Railway-safe flags. No --single-process: it causes
+      // Chromium to SIGSEGV on JS-heavy SPAs (ours has Clerk + React).
+      // With 1GB+ available memory we can afford multi-process mode.
       args: [
         "--no-sandbox",
         "--disable-dev-shm-usage",
@@ -33,25 +31,23 @@ function getBrowser() {
         "--disable-software-rasterizer",
         "--disable-extensions",
         "--disable-background-networking",
-        "--disable-default-apps",
-        "--disable-sync",
-        "--disable-translate",
         "--hide-scrollbars",
-        "--metrics-recording-only",
         "--mute-audio",
         "--no-first-run",
-        "--safebrowsing-disable-auto-update",
         "--font-render-hinting=none",
-        "--single-process",
-        "--memory-pressure-off",
       ],
     });
-    // Restart on unexpected close — lets us self-heal after OOM.
-    browserPromise.then((b) =>
-      b.on("disconnected", () => {
-        console.warn("[pdf] browser disconnected; will relaunch on next request");
+    // Self-heal if the browser dies between requests.
+    browserPromise.then(
+      (b) =>
+        b.on("disconnected", () => {
+          console.warn("[pdf] browser disconnected; will relaunch on next request");
+          browserPromise = null;
+        }),
+      (err) => {
+        console.error("[pdf] browser launch failed:", err);
         browserPromise = null;
-      }),
+      },
     );
   }
   return browserPromise;
