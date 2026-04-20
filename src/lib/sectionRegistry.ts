@@ -212,7 +212,10 @@ export const ADDABLE_SECTIONS: SectionType[] = [
   "operatorHeader",
   "cover",
   "greeting",
-  "tripSummary",
+  // tripSummary deprecated — its "At a glance" content is now rendered at
+  // the top of itineraryTable. Kept in the registry so old proposals that
+  // still have a tripSummary section don't crash, just not offered for
+  // new insertion.
   "itineraryTable",
   "dayJourney",
   "propertyShowcase",

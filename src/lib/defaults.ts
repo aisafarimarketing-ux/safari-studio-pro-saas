@@ -203,19 +203,20 @@ function buildDefaultSections(): Section[] {
       signOffLead: "Thanks again and I remain at your full disposal!",
       signOff: "Best regards,",
     }),
-    makeSection("tripSummary", 1, "default"),
-    makeSection("itineraryTable", 2, "default"),
-    makeSection("map", 3, "route", { coords: [] }),
-    makeSection("dayJourney", 4, "auto"),
-    makeSection("propertyShowcase", 5, "field-notes"),
-    makeSection("pricing", 6, "tiered-rail"),
-    makeSection("inclusions", 7, "default"),
-    makeSection("practicalInfo", 8, "card-grid"),
-    makeSection("closing", 9, "quote-led", {
+    // itineraryTable now carries the At-a-glance stats strip at its top
+    // — no separate tripSummary section in the default flow.
+    makeSection("itineraryTable", 1, "default"),
+    makeSection("map", 2, "route", { coords: [] }),
+    makeSection("dayJourney", 3, "auto"),
+    makeSection("propertyShowcase", 4, "field-notes"),
+    makeSection("pricing", 5, "tiered-rail"),
+    makeSection("inclusions", 6, "default"),
+    makeSection("practicalInfo", 7, "card-grid"),
+    makeSection("closing", 8, "quote-led", {
       quote: "Africa changes you. The question is not whether you will come back — it's when.",
       signOff: "With warm regards and great excitement for your journey,",
     }),
-    makeSection("footer", 10, "default"),
+    makeSection("footer", 9, "default"),
   ];
 }
 
@@ -352,8 +353,18 @@ const LEGACY_DAY_VARIANTS: Record<string, string> = {
 };
 
 export function migrateLoadedProposal(proposal: Proposal): Proposal {
-  const sections = [...proposal.sections];
+  let sections = [...proposal.sections];
   let changed = false;
+
+  // ── 0. Drop deprecated standalone tripSummary sections — the stats now
+  //    render at the top of itineraryTable. Only drop when an itineraryTable
+  //    is present so we don't accidentally strip the only summary a user has.
+  const hasItineraryTable = sections.some((s) => s.type === "itineraryTable");
+  if (hasItineraryTable) {
+    const before = sections.length;
+    sections = sections.filter((s) => s.type !== "tripSummary");
+    if (sections.length !== before) changed = true;
+  }
 
   // ── 1. Ensure a map section exists ──────────────────────────────────────
   const hasMap = sections.some((s) => s.type === "map");

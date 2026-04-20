@@ -4,10 +4,33 @@ import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
+// "At a glance" + itinerary table as a single editorial spread. The top row
+// is a slim meta strip (4 label/value pairs); a hairline separates it from
+// the day-by-day table below. Replaces the old split between TripSummary
+// and ItineraryTable — two sections that always sat next to each other and
+// said the same thing twice.
+
 export function ItineraryTableSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
-  const { days, activeTier, theme } = proposal;
+  const { days, activeTier, client, trip, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
+
+  // ── At-a-glance stats ──────────────────────────────────────────────────
+  const destinations = [...new Set(days.map((d) => d.destination))];
+  const destinationsLine = destinations.length
+    ? destinations.join(" · ")
+    : trip.destinations.join(" · ");
+  const duration = trip.nights
+    ? `${trip.nights + 1} days · ${trip.nights} nights`
+    : days.length
+      ? `${days.length} days`
+      : trip.dates;
+  const stats: { label: string; value: string }[] = [
+    { label: "Duration", value: duration || "—" },
+    { label: "Destinations", value: destinationsLine || "—" },
+    { label: "Guests", value: client.guestNames || "—" },
+    { label: "Style", value: trip.tripStyle || trip.subtitle || "—" },
+  ];
 
   return (
     <div className="py-20 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
@@ -16,10 +39,38 @@ export function ItineraryTableSection({ section }: { section: Section }) {
           className="text-[10px] uppercase tracking-[0.3em] mb-10"
           style={{ color: tokens.mutedText }}
         >
-          Itinerary at a glance
+          At a glance
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Slim meta strip — 4 label/value pairs, no card chrome */}
+        <div
+          className="grid grid-cols-2 md:grid-cols-4 gap-x-10 gap-y-8 pb-10"
+          style={{ borderBottom: `1px solid ${tokens.border}` }}
+        >
+          {stats.map((stat) => (
+            <div key={stat.label} className="min-w-0">
+              <div
+                className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-2"
+                style={{ color: tokens.mutedText }}
+              >
+                {stat.label}
+              </div>
+              <div
+                className="text-[16px] leading-snug"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontWeight: 500,
+                }}
+              >
+                {stat.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Day-by-day table */}
+        <div className="overflow-x-auto pt-6">
           <table className="w-full">
             <thead>
               <tr style={{ borderBottom: `1px solid ${tokens.border}` }}>
