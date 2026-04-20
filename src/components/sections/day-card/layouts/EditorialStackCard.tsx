@@ -391,82 +391,113 @@ function AccommodationBlock(props: DayCardLayoutProps) {
 
       {property ? (
         <>
-          <h4
-            className="text-[16px] uppercase tracking-[0.1em] font-bold mb-4"
-            style={{
-              color: tokens.headingText,
-              fontFamily: `'${theme.displayFont}', serif`,
-              letterSpacing: "0.08em",
-            }}
-          >
-            {property.name}
-          </h4>
+          {/* Name + location — concise, not chatty. Full description lives
+              in the Property Showcase section; day card stays visual. */}
+          <div className="mb-5 flex items-baseline justify-between flex-wrap gap-3">
+            <div className="min-w-0">
+              <h4
+                className="text-[17px] uppercase tracking-[0.08em] font-bold"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                }}
+              >
+                {property.name}
+              </h4>
+              {property.location && (
+                <div
+                  className="text-[11.5px] italic mt-0.5"
+                  style={{ color: tokens.mutedText }}
+                >
+                  {property.location}
+                </div>
+              )}
+            </div>
 
-          <div className="grid md:grid-cols-[200px_1fr] gap-5 items-start">
+            {/* Slim chip row — meal plan + up to 2 amenities, nothing more. */}
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {data.boardBasis && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                  style={{
+                    color: tokens.bodyText,
+                    background: `${tokens.accent}12`,
+                    border: `1px solid ${tokens.accent}26`,
+                  }}
+                >
+                  <span style={{ color: tokens.accent }}>●</span>
+                  {data.boardBasis}
+                </span>
+              )}
+              {property.highlights.slice(0, 2).map((h, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px]"
+                  style={{
+                    color: tokens.bodyText,
+                    background: `${tokens.cardBg}`,
+                    border: `1px solid ${tokens.border}`,
+                  }}
+                >
+                  {h}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Image grid — 4 tiles: lead + first three gallery images. One
+              dominant tile on the left (4:5), three stacked / tiled on the
+              right. Bleeds the full card width so the property reads as
+              imagery, not as a data block. */}
+          <div
+            className="grid gap-1.5 md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
+            style={{ background: tokens.cardBg }}
+          >
+            {/* Lead image — big left column */}
             <ImageSlot
               url={property.leadImageUrl}
               alt={property.name}
               isEditor={isEditor}
               tokens={tokens}
               onUpload={onPropertyImageUpload}
-              placeholderLabel="Add photo"
+              placeholderLabel="Add property photo"
               className="rounded-sm"
-              style={{ aspectRatio: "4 / 3" }}
+              style={{ aspectRatio: "4 / 5" }}
               showChangePill={Boolean(property.leadImageUrl)}
             />
 
-            <div className="min-w-0">
-              {property.summary && (
-                <p
-                  className="text-[13px] leading-[1.7]"
-                  style={{ color: tokens.bodyText }}
-                >
-                  {property.summary}
-                </p>
-              )}
-
-              {/* Meal plan + amenity chips */}
-              <div className="mt-4 flex items-center gap-2 flex-wrap">
-                {data.boardBasis && (
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
-                    style={{
-                      color: tokens.bodyText,
-                      background: `${tokens.accent}10`,
-                      border: `1px solid ${tokens.accent}22`,
-                    }}
-                  >
-                    <span style={{ color: tokens.accent }}>●</span>
-                    {data.boardBasis}
-                  </span>
-                )}
-                {property.highlights.slice(0, 4).map((h, i) => (
-                  <span
+            {/* Right column — three smaller tiles stacked */}
+            <div className="grid grid-rows-3 gap-1.5">
+              {[0, 1, 2].map((i) => {
+                const url = property.galleryUrls?.[i] ?? null;
+                return (
+                  <ImageSlot
                     key={i}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px]"
-                    style={{
-                      color: tokens.bodyText,
-                      background: `${tokens.cardBg}`,
-                      border: `1px solid ${tokens.border}`,
-                    }}
-                  >
-                    {h}
-                  </span>
-                ))}
-              </div>
-
-              {isEditor && (
-                <button
-                  type="button"
-                  onClick={onOpenPropertyPicker}
-                  className="mt-4 text-[11.5px] font-semibold uppercase tracking-[0.2em] hover:opacity-75 transition"
-                  style={{ color: tokens.accent }}
-                >
-                  Swap property →
-                </button>
-              )}
+                    url={url}
+                    alt=""
+                    isEditor={isEditor}
+                    tokens={tokens}
+                    onUpload={onPropertyImageUpload}
+                    placeholderLabel={i === 0 ? "Gallery photo" : "—"}
+                    className="rounded-sm"
+                    style={{ aspectRatio: "4 / 3" }}
+                    showChangePill={Boolean(url)}
+                  />
+                );
+              })}
             </div>
           </div>
+
+          {isEditor && (
+            <button
+              type="button"
+              onClick={onOpenPropertyPicker}
+              className="mt-4 text-[11.5px] font-semibold uppercase tracking-[0.2em] hover:opacity-75 transition"
+              style={{ color: tokens.accent }}
+            >
+              Swap property →
+            </button>
+          )}
         </>
       ) : (
         <div className="flex items-center justify-between gap-4">

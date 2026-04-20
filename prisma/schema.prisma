@@ -389,13 +389,12 @@ model Property {
   suggestedNights Int?
   suitability     String[] // ["families", "honeymoon", "photography", ...]
 
-  // NOTE — showcase facts (checkInTime, checkOutTime, totalRooms,
-  // spokenLanguages, specialInterests) + a PropertyRoom relation are
-  // intentionally NOT on this model yet. Their TypeScript types and UI
-  // exist client-side and round-trip through proposal.contentJson, but
-  // the DB columns only land after `npx prisma db push` is run against
-  // each environment. Once pushed, re-add them here along with the
-  // PropertyRoom model below. See git history for the exact shape.
+  // Showcase facts — rendered in PropertyShowcaseSection's STATS sidebar
+  checkInTime       String?
+  checkOutTime      String?
+  totalRooms        Int?
+  spokenLanguages   String[]
+  specialInterests  String[]
 
   // Internal — never rendered client-side
   internalNotes String?
@@ -408,6 +407,7 @@ model Property {
   images         PropertyImage[]
   tags           PropertyTagOnProperty[]
   customSections PropertyCustomSection[]
+  rooms          PropertyRoom[]
 
   @@index([organizationId])
   @@index([organizationId, archived])
@@ -415,28 +415,22 @@ model Property {
   @@index([organizationId, locationId])
 }
 
-// NOTE — a PropertyRoom model used to live here. Removed temporarily
-// because it depends on `prisma db push` being run on every environment
-// (local + Railway). The TypeScript types and editor UI still handle
-// rooms client-side; data is stored in proposal.contentJson.
-// Restore this model once `npx prisma db push` has been run everywhere:
-//
-// model PropertyRoom {
-//   id         String   @id @default(cuid())
-//   propertyId String
-//   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-//
-//   name        String
-//   bedConfig   String?
-//   description String?
-//   imageUrls   String[]
-//   order       Int      @default(0)
-//
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//
-//   @@index([propertyId, order])
-// }
+model PropertyRoom {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name        String
+  bedConfig   String?
+  description String?
+  imageUrls   String[]
+  order       Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, order])
+}
 
 model PropertyImage {
   id         String   @id @default(cuid())

@@ -30,6 +30,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       images: { orderBy: { order: "asc" } },
       tags: { include: { tag: true } },
       customSections: { orderBy: { order: "asc" } },
+      rooms: { orderBy: { order: "asc" } },
     },
   });
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -123,10 +124,24 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       }
     }
 
-    // Rooms body is accepted by the API shape but ignored until the
-    // PropertyRoom model is restored post-`prisma db push`. See
-    // prisma/schema.prisma for the planned shape.
-    void rooms;
+    if (rooms) {
+      // Wipe and recreate — same pattern as images / customSections.
+      await tx.propertyRoom.deleteMany({ where: { propertyId: id } });
+      if (rooms.length > 0) {
+        await tx.propertyRoom.createMany({
+          data: rooms.map((r, i) => ({
+            propertyId: id,
+            name: String(r.name || "Room"),
+            bedConfig: r.bedConfig?.trim() || null,
+            description: r.description?.trim() || null,
+            imageUrls: Array.isArray(r.imageUrls)
+              ? r.imageUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
+              : [],
+            order: typeof r.order === "number" ? r.order : i,
+          })),
+        });
+      }
+    }
 
     return await tx.property.findFirst({
       where: { id },
@@ -135,6 +150,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
         images: { orderBy: { order: "asc" } },
         tags: { include: { tag: true } },
         customSections: { orderBy: { order: "asc" } },
+        rooms: { orderBy: { order: "asc" } },
       },
     });
   });
@@ -200,31 +216,14 @@ function sanitizeProperty(body: Record<string, unknown>) {
   setIf("mealPlan", str(body.mealPlan));
   setIf("suggestedNights", int(body.suggestedNights));
   setIf("suitability", stringArray(body.suitability));
-  // Showcase fields (checkInTime / checkOutTime / totalRooms /
-  // spokenLanguages / specialInterests) are intentionally not written to
-  // the DB here — they're not in the current schema. The editor form
-  // still captures them and they round-trip through proposal.contentJson
-  // when a property is dropped into a proposal. Restore these setters
-  // once `npx prisma db push` has added the columns everywhere.
+  setIf("checkInTime", str(body.checkInTime));
+  setIf("checkOutTime", str(body.checkOutTime));
+  setIf("totalRooms", int(body.totalRooms));
+  setIf("spokenLanguages", stringArray(body.spokenLanguages));
+  setIf("specialInterests", stringArray(body.specialInterests));
   setIf("internalNotes", str(body.internalNotes));
   setIf("archived", bool(body.archived));
 
   return out;
 }
 
-/** Detects Prisma's "table does not exist" error so callers can degrade
- *  gracefully when schema hasn't been pushed to this environment yet.
- *  Covers PostgreSQL ("relation … does not exist") + Prisma's own
- *  code-prefixed error codes. */
-function isMissingTableError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const e = err as { code?: string; message?: string };
-  if (e.code === "P2021" || e.code === "P2022") return true; // prisma: table / column missing
-  const msg = typeof e.message === "string" ? e.message.toLowerCase() : "";
-  return (
-    msg.includes("does not exist") ||
-    msg.includes("relation ") ||
-    msg.includes("no such table") ||
-    msg.includes("unknown column")
-  );
-}
