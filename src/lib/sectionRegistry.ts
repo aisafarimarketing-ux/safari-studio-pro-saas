@@ -45,11 +45,24 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     defaultVariant: "hero-letter",
     defaultContent: { heroImageUrl: "", tagline: "", greetingBody: "" },
   },
+  personalNote: {
+    type: "personalNote",
+    label: "Personal Note",
+    icon: "✍",
+    description: "Branded letter from the consultant — greeting body, signature, photo, company logo and contact.",
+    variants: ["branded-letter", "minimal"],
+    defaultVariant: "branded-letter",
+    defaultContent: {
+      body: "Thank you very much for your interest in doing a safari with us.\n\nPlease review the day-by-day itinerary and let me know your thoughts and feedback. I would be delighted to tailor the trip further to accommodate your personal preferences.",
+      signOffLead: "Thanks again and I remain at your full disposal!",
+      signOff: "Best regards,",
+    },
+  },
   greeting: {
     type: "greeting",
-    label: "Greeting",
+    label: "Greeting (legacy)",
     icon: "✉",
-    description: "Personal introduction from the consultant",
+    description: "Legacy greeting block — superseded by Personal Note. Kept so old proposals still render.",
     variants: ["editorial-letter", "two-column-consultant", "centered-minimal", "sidebar-accent"],
     defaultVariant: "editorial-letter",
     defaultContent: { body: "Dear Guest,\n\nIt is a genuine pleasure to put this proposal together for you." },
@@ -211,7 +224,9 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
 export const ADDABLE_SECTIONS: SectionType[] = [
   "operatorHeader",
   "cover",
-  "greeting",
+  "personalNote",
+  // greeting deprecated — replaced by personalNote. Kept in the registry
+  // so legacy proposals still render, not offered for new insertion.
   // tripSummary deprecated — its "At a glance" content is now rendered at
   // the top of itineraryTable. Kept in the registry so old proposals that
   // still have a tripSummary section don't crash, just not offered for

@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
-import { SignaturePad } from "@/components/editor/SignaturePad";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 function CoverMeta({
@@ -43,7 +41,6 @@ export function CoverSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const heroUrl = section.content.heroImageUrl as string | undefined;
   const variant = section.layoutVariant;
-  const [signaturePadOpen, setSignaturePadOpen] = useState(false);
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -77,22 +74,13 @@ export function CoverSection({ section }: { section: Section }) {
     input.click();
   };
 
-  // ── Hero-letter — cover + greeting combined on one page ──────────────────
-  // Matches the SafariOffice-style proposal opening: boxed operator logo
-  // top-left, full-width hero photo with a dark title overlay, a taupe meta
-  // band, greeting body, signature block, and a consultant contact card.
-  // All text + all images are editable in place.
+  // ── Hero-letter — minimal editorial cover ─────────────────────────────
+  // Top taupe border + full-width hero photo with a dark title overlay + a
+  // warm meta band. The proposal's personal note (signature, consultant
+  // photo, logo, contact) lives in its own PersonalNote section right after
+  // this one — keeps the cover uncluttered and makes the same sign-off
+  // style available under every cover variant.
   if (variant === "hero-letter") {
-    // If the user has a standalone Greeting section in the proposal, let
-    // that section carry the body copy and render only the hero + meta +
-    // signature + contact footer here. Avoids showing the same greeting
-    // twice when both are present.
-    const hasStandaloneGreeting = proposal.sections.some(
-      (s) => s.type === "greeting" && s.visible !== false,
-    );
-
-    // Editable copy that lives in section.content (falls back to sensible
-    // defaults computed from trip / client the first time through).
     const coverLabel =
       (section.content.coverLabel as string) ||
       `Proposal for ${client.guestNames || "Your Guests"}`;
@@ -103,33 +91,6 @@ export function CoverSection({ section }: { section: Section }) {
     const tourLengthValue = (section.content.tourLengthValue as string) || defaultTourLengthValue;
     const travelersLabel = (section.content.travelersLabel as string) || "Travelers";
     const travelersValue = (section.content.travelersValue as string) || client.pax || "—";
-    const greetingOpener =
-      (section.content.greetingOpener as string) ||
-      `Good day ${client.guestNames?.split(/[,&]|and/)[0]?.trim() || "there"},`;
-    const greetingBody =
-      (section.content.greetingBody as string) ||
-      "Again, thank you very much for your interest in doing a safari with us.\n\nI am thrilled to offer you a personalised quote for this trip. Please review the day-by-day itinerary and let me know your thoughts and feedback.\n\nYour feedback is highly valued, and I would be delighted to tailor the itinerary further to accommodate your personal preferences.";
-    const signOffLead =
-      (section.content.signOffLead as string) ||
-      "Thanks again and I remain at your full disposal!";
-    const signOff = (section.content.signOff as string) || "Best regards,";
-
-    const pickImageAndSet = (onPicked: (dataUrl: string) => void) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.onchange = async () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        try {
-          const dataUrl = await fileToOptimizedDataUrl(file);
-          onPicked(dataUrl);
-        } catch (err) {
-          alert(err instanceof Error ? err.message : "Image upload failed");
-        }
-      };
-      input.click();
-    };
 
     const taupe = "#7a6e60";
     const metaBand = "#efece6";
@@ -266,239 +227,6 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
         </div>
 
-        {/* Greeting body — skipped when a standalone Greeting section is
-            present so the two don't show the same letter twice. */}
-        <div className="px-10 md:px-14 py-10" style={{ color: tokens.bodyText }}>
-          {!hasStandaloneGreeting && (
-            <>
-              <div
-                className="text-[15px] font-semibold mb-3 outline-none"
-                style={{ color: tokens.headingText }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateSectionContent(section.id, { greetingOpener: e.currentTarget.textContent ?? "" })
-                }
-              >
-                {greetingOpener}
-              </div>
-
-              <div
-                className="text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                data-ai-editable="greeting"
-                onBlur={(e) =>
-                  updateSectionContent(section.id, { greetingBody: e.currentTarget.textContent ?? "" })
-                }
-              >
-                {greetingBody}
-              </div>
-
-              <div
-                className="mt-6 text-[14.5px] leading-[1.75] outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateSectionContent(section.id, { signOffLead: e.currentTarget.textContent ?? "" })
-                }
-              >
-                {signOffLead}
-              </div>
-            </>
-          )}
-
-          <div
-            className="mt-1 text-[14.5px] leading-[1.75] outline-none"
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) =>
-              updateSectionContent(section.id, { signOff: e.currentTarget.textContent ?? "" })
-            }
-          >
-            {signOff}
-          </div>
-
-          {/* Handwritten signature — click to open the signature pad */}
-          <div className="mt-5">
-            <div
-              className="relative cursor-pointer"
-              style={{
-                width: 200,
-                height: 64,
-                display: operator.signatureUrl || isEditor ? "flex" : "none",
-              }}
-              onClick={() => {
-                if (isEditor) setSignaturePadOpen(true);
-              }}
-              title={isEditor ? "Click to sign" : undefined}
-            >
-              {operator.signatureUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={operator.signatureUrl}
-                  alt="Signature"
-                  className="max-h-full max-w-full object-contain"
-                  style={{ mixBlendMode: "multiply" }}
-                />
-              ) : isEditor ? (
-                <div
-                  className="text-[11px] uppercase tracking-[0.22em] flex items-center justify-center w-full h-full"
-                  style={{
-                    color: tokens.mutedText,
-                    border: `1px dashed ${tokens.border}`,
-                    borderRadius: 4,
-                  }}
-                >
-                  ✎ Click to sign
-                </div>
-              ) : null}
-            </div>
-
-            {/* Consultant name — always visible, editable */}
-            <div
-              className="mt-2 text-[14.5px] font-medium outline-none"
-              style={{ color: tokens.headingText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                updateOperator({ consultantName: e.currentTarget.textContent?.trim() ?? operator.consultantName })
-              }
-            >
-              {operator.consultantName || "Your name"}
-            </div>
-          </div>
-
-          {/* Branded contact block — divider, then logo + company + phone + email
-              + consultant photo. This is the proposal's signature footer. */}
-          <div
-            className="mt-10 pt-8 grid grid-cols-[auto_1fr_auto] items-center gap-6"
-            style={{ borderTop: `1px solid ${tokens.border}` }}
-          >
-            {/* Company logo */}
-            <div
-              className="shrink-0 flex items-center justify-center cursor-pointer"
-              style={{ width: 92, height: 92 }}
-              onClick={() => {
-                if (isEditor) pickImageAndSet((u) => updateOperator({ logoUrl: u }));
-              }}
-              onContextMenu={(e) => {
-                if (!isEditor) return;
-                e.preventDefault();
-                pickImageAndSet((u) => updateOperator({ logoUrl: u }));
-              }}
-              title={isEditor ? "Click / right-click to replace logo" : undefined}
-            >
-              {operator.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={operator.logoUrl}
-                  alt={operator.companyName}
-                  className="max-w-full max-h-full object-contain"
-                />
-              ) : isEditor ? (
-                <div
-                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                  style={{
-                    color: tokens.mutedText,
-                    border: `1px dashed ${tokens.border}`,
-                    borderRadius: 4,
-                  }}
-                >
-                  + Logo
-                </div>
-              ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.28em] font-semibold text-center"
-                  style={{ color: tokens.headingText }}
-                >
-                  {operator.companyName}
-                </div>
-              )}
-            </div>
-
-            {/* Company + consultant contact */}
-            <div className="min-w-0 space-y-0.5" style={{ color: tokens.bodyText }}>
-              <div
-                className="text-[15px] font-semibold outline-none"
-                style={{ color: tokens.headingText }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
-                }
-              >
-                {operator.companyName}
-              </div>
-              <div
-                className="text-[13px] outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ phone: e.currentTarget.textContent?.trim() ?? operator.phone })
-                }
-              >
-                {operator.phone || (isEditor ? "Phone" : "")}
-              </div>
-              <div
-                className="text-[13px] outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ email: e.currentTarget.textContent?.trim() ?? operator.email })
-                }
-              >
-                {operator.email || (isEditor ? "Email" : "")}
-              </div>
-            </div>
-
-            {/* Consultant photo — optional, right-hand side of the strip */}
-            <div
-              className="shrink-0 overflow-hidden cursor-pointer"
-              style={{ width: 72, height: 72, background: tokens.cardBg, borderRadius: 4 }}
-              onClick={() => {
-                if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
-              }}
-              onContextMenu={(e) => {
-                if (!isEditor) return;
-                e.preventDefault();
-                pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
-              }}
-              title={isEditor ? "Click / right-click to replace photo" : undefined}
-            >
-              {operator.consultantPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={operator.consultantPhoto}
-                  alt={operator.consultantName}
-                  className="w-full h-full object-cover"
-                />
-              ) : isEditor ? (
-                <div
-                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                  style={{ color: tokens.mutedText }}
-                >
-                  + Photo
-                </div>
-              ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
-                  style={{ color: tokens.accent }}
-                >
-                  {operator.consultantName?.charAt(0) ?? "·"}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {signaturePadOpen && (
-          <SignaturePad
-            initial={operator.signatureUrl ?? null}
-            onSave={(dataUrl) => updateOperator({ signatureUrl: dataUrl })}
-            onClose={() => setSignaturePadOpen(false)}
-          />
-        )}
       </div>
     );
   }

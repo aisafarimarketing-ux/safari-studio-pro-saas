@@ -152,6 +152,7 @@ export interface PracticalCard {
 export type SectionType =
   | "operatorHeader"
   | "cover"
+  | "personalNote"
   | "greeting"
   | "tripSummary"
   | "itineraryTable"

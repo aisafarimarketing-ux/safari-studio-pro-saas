@@ -2,21 +2,21 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
-import { SECTION_REGISTRY } from "@/lib/sectionRegistry";
+import { SECTION_REGISTRY, ADDABLE_SECTIONS } from "@/lib/sectionRegistry";
+import type { Section, SectionType } from "@/lib/types";
 
-// Left structure panel. Always-visible row controls — the brief was that the
-// previous hover-only up/down buttons were hard to find. Each row now shows:
-//   ▲  ▼   — move up / down (muted when not available)
-//   👁      — toggle visibility (dimmed when hidden)
-//   icon label
-//
-// Clicking the label scrolls the canvas to that section and selects it.
-// Controls stop-propagation so they don't double as scroll triggers.
+// Left structure panel. Shows the full catalog of section types — sections
+// currently in the proposal carry reorder + visibility controls and jump
+// to themselves on click; sections that have been deleted appear beneath
+// them, dimmed, with an "add" affordance so the operator can re-insert any
+// section they dropped by mistake without digging through the + popover.
 
 export function LeftSidebar() {
-  const { proposal, moveSection, toggleSectionVisibility } = useProposalStore();
+  const { proposal, moveSection, toggleSectionVisibility, addSection } = useProposalStore();
   const { selectedSectionId, selectSection } = useEditorStore();
-  const sorted = [...proposal.sections].sort((a, b) => a.order - b.order);
+  const sorted: Section[] = [...proposal.sections].sort((a, b) => a.order - b.order);
+  const inProposal = new Set<SectionType>(sorted.map((s) => s.type));
+  const missing: SectionType[] = ADDABLE_SECTIONS.filter((t) => !inProposal.has(t));
 
   const scrollTo = (id: string) => {
     selectSection(id);
@@ -113,10 +113,42 @@ export function LeftSidebar() {
             </div>
           );
         })}
+
+        {/* Missing section catalog — sections that aren't in the proposal
+            right now. One click re-adds at the end; operators can drag
+            from there into position if they want it elsewhere. */}
+        {missing.length > 0 && (
+          <>
+            <div className="mt-3 px-4 pt-2 pb-1.5 text-[9.5px] uppercase tracking-[0.24em] text-black/40 font-semibold border-t border-black/8">
+              Not in proposal
+            </div>
+            {missing.map((type) => {
+              const def = SECTION_REGISTRY[type];
+              const lastOrder = sorted.length > 0 ? sorted[sorted.length - 1].order : -1;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => addSection(type, lastOrder)}
+                  title={`Add ${def.label}`}
+                  className="w-full flex items-center gap-2 pl-[34px] pr-1.5 py-1.5 text-[13px] text-left text-black/40 hover:text-black/75 hover:bg-black/[0.035] transition group"
+                >
+                  <span className="shrink-0 w-5 text-center text-black/25 group-hover:text-black/55">
+                    {def?.icon ?? "◻"}
+                  </span>
+                  <span className="truncate">{def?.label ?? type}</span>
+                  <span className="ml-auto shrink-0 text-[12px] leading-none text-black/25 group-hover:text-[#1b3a2d]">
+                    +
+                  </span>
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <div className="px-4 py-2.5 border-t border-black/8 text-[10.5px] text-black/35 leading-snug">
-        Use ▲▼ to reorder · click the eye to hide.
+        Delete removes from proposal · click below to re-add.
       </div>
     </div>
   );

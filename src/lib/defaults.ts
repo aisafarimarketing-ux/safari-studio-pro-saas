@@ -205,9 +205,12 @@ function buildDefaultSections(): Section[] {
       signOffLead: "Thanks again and I remain at your full disposal!",
       signOff: "Best regards,",
     }),
-    makeSection("greeting", 1, "editorial-letter", {
+    makeSection("personalNote", 1, "branded-letter", {
+      opener: "Good day Anderson Family,",
       body:
         "Thank you very much for your interest in doing a safari with us.\n\nI am thrilled to offer you a personalised quote for this family trip across Kenya's greatest parks — Masai Mara, Amboseli and Tsavo East. Please review the day-by-day itinerary and let me know your thoughts and feedback.\n\nYour feedback is highly valued, and I would be delighted to tailor the itinerary further to accommodate your preferences.",
+      signOffLead: "Thanks again and I remain at your full disposal!",
+      signOff: "Best regards,",
     }),
     makeSection("itineraryTable", 2, "default"),
     makeSection("map", 3, "route", { coords: [] }),
@@ -367,6 +370,33 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   if (hasItineraryTable) {
     const before = sections.length;
     sections = sections.filter((s) => s.type !== "tripSummary");
+    if (sections.length !== before) changed = true;
+  }
+
+  // ── 0b. Upgrade legacy greeting sections to personalNote. Only upgrade
+  //    if the proposal doesn't already have a personalNote (avoids
+  //    duplicating when a user already started using the new one).
+  const hasPersonalNote = sections.some((s) => s.type === "personalNote");
+  if (!hasPersonalNote) {
+    sections = sections.map((s) => {
+      if (s.type !== "greeting") return s;
+      changed = true;
+      const legacyBody = (s.content.body as string) ?? "";
+      return {
+        ...s,
+        type: "personalNote" as const,
+        layoutVariant: "branded-letter",
+        content: {
+          ...s.content,
+          body: legacyBody,
+        },
+      };
+    });
+  } else {
+    // personalNote already exists — drop any stale legacy greeting so we
+    // don't render both.
+    const before = sections.length;
+    sections = sections.filter((s) => s.type !== "greeting");
     if (sections.length !== before) changed = true;
   }
 
