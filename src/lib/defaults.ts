@@ -219,11 +219,14 @@ function buildDefaultSections(): Section[] {
     makeSection("pricing", 6, "tiered-rail"),
     makeSection("inclusions", 7, "default"),
     makeSection("practicalInfo", 8, "card-grid"),
-    makeSection("closing", 9, "quote-led", {
-      quote: "Africa changes you. The question is not whether you will come back — it's when.",
-      signOff: "With warm regards and great excitement for your journey,",
+    // Closing-farewell carries the branded footer — no standalone footer
+    // section in the default flow anymore.
+    makeSection("closing", 9, "closing-farewell", {
+      quote: "Take only memories, leave only footprints.",
+      attribution: "— Chief Seattle",
+      signOff:
+        "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
-    makeSection("footer", 10, "default"),
   ];
 }
 
@@ -392,6 +395,16 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   if (hasItineraryTable) {
     const before = sections.length;
     sections = sections.filter((s) => s.type !== "tripSummary");
+    if (sections.length !== before) changed = true;
+  }
+
+  // ── 0a. Drop standalone footer sections — the closing-farewell variant
+  //    now renders the branded footer. Only drop when a closing section
+  //    exists so we don't strip the only contact block a user has.
+  const hasClosing = sections.some((s) => s.type === "closing");
+  if (hasClosing) {
+    const before = sections.length;
+    sections = sections.filter((s) => s.type !== "footer");
     if (sections.length !== before) changed = true;
   }
 

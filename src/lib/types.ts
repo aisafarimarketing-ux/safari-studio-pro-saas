@@ -36,6 +36,10 @@ export interface OperatorProfile {
   whatsapp?: string;
   logoUrl?: string;
   address?: string;
+  /** Country shown as a separate row in the closing-farewell contact block
+   *  (e.g. "Tanzania"). Free-form so operators can use "Kenya & Tanzania"
+   *  or similar multi-country phrasings. */
+  country?: string;
   website?: string;
   brandColors: { primary: string; secondary: string };
 }

@@ -141,8 +141,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Closing",
     icon: "◐",
     description: "Elegant sign-off from the consultant",
-    variants: ["quote-led", "letter-style", "centered-minimal", "cta-card"],
-    defaultVariant: "quote-led",
+    variants: ["closing-farewell", "quote-led", "letter-style", "centered-minimal", "cta-card"],
+    defaultVariant: "closing-farewell",
     defaultContent: {
       quote: "Africa changes you.",
       signOff: "With warm regards,",
@@ -230,7 +230,10 @@ export const ADDABLE_SECTIONS: SectionType[] = [
   "inclusions",
   "practicalInfo",
   "closing",
-  "footer",
+  // footer deprecated — the closing-farewell variant renders a branded
+  // footer (company logo, contact details, share, CTAs) so a standalone
+  // footer section is no longer needed. Registry entry stays for any
+  // legacy proposals still carrying one.
   "customText",
   "quote",
   "gallery",
