@@ -13,7 +13,7 @@ import type { Day, Property as ProposalProperty, TierKey, Section, Proposal } fr
 import { DayCardChrome } from "./DayCardChrome";
 import { resolveDayCard } from "./resolve";
 import { pickAutoLayoutForDay } from "./rotation";
-import { SplitPageCard } from "./layouts/SplitPageCard";
+import { EditorialStackCard } from "./layouts/EditorialStackCard";
 import type { DayCardLayoutProps, DayCardLayoutVariant } from "./types";
 import type { OptionalActivity } from "@/lib/types";
 
@@ -235,33 +235,11 @@ export function DayCard({
 
 type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto">;
 
-function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
-  // All four variants share the same component — proportions + side are
-  // driven by props.data.layoutVariant inside SplitPageCard.
-  return <SplitPageCard {...props} />;
+function renderLayout(_variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
+  // Single editorial-stack layout — variant is now a formality for the
+  // section registry, not a branching point.
+  return <EditorialStackCard {...props} />;
 }
-
-// Map the section-level variant (which can be "auto" or one of the four)
-// to the concrete layout used for this specific day. Called at render
-// time so rotation is always in sync with the current proposal state.
-//
-// Legacy aliases: old proposals stored variant names from previous layout
-// generations ("twin-frame", "split-editorial", etc.). Map them onto the
-// closest new split-page variant so existing work doesn't fall back to
-// the same default for every day.
-const LEGACY_VARIANT_ALIASES: Record<string, ConcreteLayoutVariant> = {
-  // v3 → v4 (Twin-frame → Split-page)
-  "twin-frame": "split-50-50-left",
-  "hero-thumbs": "split-60-40-left",
-  "hero-inset": "split-60-40-left",
-  "hero-pair": "split-50-50-left",
-  // v2 → v4
-  "split-editorial": "split-60-40-left",
-  "cinematic-hero": "split-50-50-left",
-  "stacked-story": "split-60-40-left",
-  "property-led": "split-40-60-left",
-  "collage-hybrid": "split-50-50-left",
-};
 
 function pickConcreteLayout(
   day: Day,
@@ -274,14 +252,7 @@ function pickConcreteLayout(
   if (sectionVariant === "auto" || !sectionVariant) {
     return pickAutoLayoutForDay(day, index, totalDays, proposal, activeTier);
   }
-  const allowed = [
-    "split-50-50-left",
-    "split-50-50-right",
-    "split-60-40-left",
-    "split-40-60-left",
-  ] as const;
-  if ((allowed as readonly string[]).includes(sectionVariant)) {
-    return sectionVariant as ConcreteLayoutVariant;
-  }
-  return LEGACY_VARIANT_ALIASES[sectionVariant] ?? "split-60-40-left";
+  // Everything resolves to the one layout — no branching needed, so
+  // legacy variant names from prior generations quietly map through.
+  return "editorial-stack";
 }

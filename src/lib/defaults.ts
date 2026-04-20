@@ -352,17 +352,20 @@ export function buildDemoProposal(): Proposal {
 // persisting the new names avoids that dance forever).
 
 const LEGACY_DAY_VARIANTS: Record<string, string> = {
-  // v2 → v4
-  "split-editorial": "split-60-40-left",
-  "cinematic-hero": "split-50-50-left",
-  "stacked-story": "split-60-40-left",
-  "property-led": "split-40-60-left",
-  "collage-hybrid": "split-50-50-left",
-  // v3 → v4 (twin-frame era)
-  "twin-frame": "split-50-50-left",
-  "hero-thumbs": "split-60-40-left",
-  "hero-inset": "split-60-40-left",
-  "hero-pair": "split-50-50-left",
+  // Everything prior generations stored resolves to the same layout now.
+  "split-editorial": "editorial-stack",
+  "cinematic-hero": "editorial-stack",
+  "stacked-story": "editorial-stack",
+  "property-led": "editorial-stack",
+  "collage-hybrid": "editorial-stack",
+  "twin-frame": "editorial-stack",
+  "hero-thumbs": "editorial-stack",
+  "hero-inset": "editorial-stack",
+  "hero-pair": "editorial-stack",
+  "split-50-50-left": "editorial-stack",
+  "split-50-50-right": "editorial-stack",
+  "split-60-40-left": "editorial-stack",
+  "split-40-60-left": "editorial-stack",
 };
 
 export function migrateLoadedProposal(proposal: Proposal): Proposal {

@@ -18,7 +18,7 @@ export function AIWriteButton({
   compact = false,
 }: {
   /** A label shown in the prompt so the model knows the section role. */
-  kind: "greeting" | "closing-signoff" | "closing-quote" | "custom";
+  kind: "greeting" | "closing-signoff" | "closing-quote" | "custom" | "day-narrative";
   currentText: string;
   context?: Record<string, unknown>;
   onResult: (text: string) => void;
@@ -163,6 +163,8 @@ function promptFor(kind: string): string {
       return "Write a warm 2-3 sentence sign-off from the consultant that feels personal and invites follow-up.";
     case "closing-quote":
       return "Write a single short, grounded line about safari travel — not a cliché, not a flourish. One sentence.";
+    case "day-narrative":
+      return "Write 2-3 grounded paragraphs describing what the guests will do on this safari day. Open with a concrete fact (a time, a distance, a named feature). Stay specific to the destination and activity. No clichés, no exclamation marks.";
     case "custom":
       return "Write a paragraph suitable for this proposal section.";
     default:

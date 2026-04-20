@@ -18,16 +18,11 @@ import type {
   OptionalActivity,
 } from "@/lib/types";
 
-// Day cards render one of four split-page variants. Variant name encodes
-// (a) which ratio the split uses — 50/50, 60/40, 40/60 — and (b) which
-// side the activities column sits on. The Stay column goes on the
-// opposite side. Everything spans the full canvas width.
-export type DayCardLayoutVariant =
-  | "auto"
-  | "split-50-50-left"
-  | "split-50-50-right"
-  | "split-60-40-left"
-  | "split-40-60-left";
+// Day cards render one editorial-stack layout: top header strip, big
+// hero photo, narrative, optional activities, and a trim accommodation
+// block. "auto" exists for the section-level variant picker but resolves
+// to the same layout.
+export type DayCardLayoutVariant = "auto" | "editorial-stack";
 
 export type ResolvedProperty = {
   id: string;
@@ -101,13 +96,7 @@ export type DayCardLayoutProps = {
 
 export function getDayCardVariant(raw: string | undefined): DayCardLayoutVariant {
   const v = (raw ?? "auto") as DayCardLayoutVariant;
-  const allowed: DayCardLayoutVariant[] = [
-    "auto",
-    "split-50-50-left",
-    "split-50-50-right",
-    "split-60-40-left",
-    "split-40-60-left",
-  ];
+  const allowed: DayCardLayoutVariant[] = ["auto", "editorial-stack"];
   return allowed.includes(v) ? v : "auto";
 }
 
