@@ -214,7 +214,7 @@ function buildDefaultSections(): Section[] {
     }),
     makeSection("itineraryTable", 2, "default"),
     makeSection("map", 3, "route", { coords: [] }),
-    makeSection("dayJourney", 4, "auto"),
+    makeSection("dayJourney", 4, "editorial-stack"),
     makeSection("propertyShowcase", 5, "field-notes"),
     makeSection("pricing", 6, "tiered-rail"),
     makeSection("inclusions", 7, "default"),
@@ -353,6 +353,9 @@ export function buildDemoProposal(): Proposal {
 
 const LEGACY_DAY_VARIANTS: Record<string, string> = {
   // Everything prior generations stored resolves to the same layout now.
+  "auto": "editorial-stack",
+  "chapter-magazine": "editorial-stack",
+  "chapter-destination": "editorial-stack",
   "split-editorial": "editorial-stack",
   "cinematic-hero": "editorial-stack",
   "stacked-story": "editorial-stack",
