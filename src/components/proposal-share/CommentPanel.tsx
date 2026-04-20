@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useProposalStore } from "@/store/proposalStore";
 
 // ─── Public comment panel ───────────────────────────────────────────────────
 //
@@ -27,6 +28,10 @@ const NAME_KEY = "ss-comment-author-name";
 const EMAIL_KEY = "ss-comment-author-email";
 
 export function CommentPanel({ proposalId }: { proposalId: string }) {
+  // Read the theme so the floating launcher matches the proposal's brand
+  // colours and never visually "disappears" against a dark section like
+  // the closing-farewell variant.
+  const accent = useProposalStore((s) => s.proposal.theme.tokens.accent);
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState<PublicComment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -119,22 +124,23 @@ export function CommentPanel({ proposalId }: { proposalId: string }) {
 
   return (
     <>
-      {/* Floating launcher */}
+      {/* Floating launcher — white pill with an accent ring + icon so it
+          pops against any proposal background (light or dark). */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="fixed bottom-6 right-6 z-40 px-4 h-12 rounded-full shadow-xl text-white text-sm font-semibold flex items-center gap-2 transition active:scale-95 hover:brightness-110"
-        style={{ background: "#1b3a2d" }}
+        className="fixed bottom-6 right-6 z-[60] px-4 h-12 rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.28)] text-sm font-semibold flex items-center gap-2 transition active:scale-95 hover:shadow-[0_14px_36px_rgba(0,0,0,0.34)] bg-white"
+        style={{ color: accent, border: `2px solid ${accent}` }}
         aria-label="Open notes"
       >
         <span className="text-base leading-none">✎</span>
-        <span>{open ? "Close notes" : openCount > 0 ? `Notes (${openCount})` : "Add a note"}</span>
+        <span>{open ? "Close notes" : openCount > 0 ? `Notes (${openCount})` : "Chat with us"}</span>
       </button>
 
       {/* Panel */}
       {open && (
         <div
-          className="fixed bottom-24 right-6 z-40 w-[min(380px,calc(100vw-3rem))] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-black/10 flex flex-col ss-popover-in"
+          className="fixed bottom-24 right-6 z-[60] w-[min(380px,calc(100vw-3rem))] max-h-[70vh] bg-white rounded-2xl shadow-2xl border border-black/10 flex flex-col ss-popover-in"
           role="dialog"
           aria-label="Notes"
         >

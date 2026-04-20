@@ -23,16 +23,38 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const { id } = await ctx.params;
-  const property = await prisma.property.findFirst({
-    where: { id, organizationId: auth.organization.id },
-    include: {
-      location: true,
-      images: { orderBy: { order: "asc" } },
-      tags: { include: { tag: true } },
-      customSections: { orderBy: { order: "asc" } },
-      rooms: { orderBy: { order: "asc" } },
-    },
-  });
+  // Try with rooms first; fall back to fetching without rooms if the
+  // PropertyRoom table hasn't been pushed to this environment's DB yet.
+  // Saves the endpoint from 500-ing on fresh deployments where
+  // `prisma db push` hasn't run.
+  let property: unknown = null;
+  try {
+    property = await prisma.property.findFirst({
+      where: { id, organizationId: auth.organization.id },
+      include: {
+        location: true,
+        images: { orderBy: { order: "asc" } },
+        tags: { include: { tag: true } },
+        customSections: { orderBy: { order: "asc" } },
+        rooms: { orderBy: { order: "asc" } },
+      },
+    });
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      console.warn("[properties.GET] PropertyRoom table missing — run `prisma db push`");
+      property = await prisma.property.findFirst({
+        where: { id, organizationId: auth.organization.id },
+        include: {
+          location: true,
+          images: { orderBy: { order: "asc" } },
+          tags: { include: { tag: true } },
+          customSections: { orderBy: { order: "asc" } },
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ property });
@@ -74,7 +96,27 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   // Run scalar update + nested replacements in a transaction so the
   // editor never sees a half-updated property.
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.property.update({ where: { id }, data });
+    try {
+      await tx.property.update({ where: { id }, data });
+    } catch (err) {
+      if (isMissingTableError(err)) {
+        // A new column (checkInTime, spokenLanguages, etc.) hasn't been
+        // pushed to this environment yet. Strip the unknown fields and
+        // retry with what the DB actually has.
+        const legacyData = { ...data } as Record<string, unknown>;
+        for (const k of [
+          "checkInTime",
+          "checkOutTime",
+          "totalRooms",
+          "spokenLanguages",
+          "specialInterests",
+        ]) delete legacyData[k];
+        await tx.property.update({ where: { id }, data: legacyData });
+        console.warn("[properties.PUT] new Property columns missing — run `prisma db push`");
+      } else {
+        throw err;
+      }
+    }
 
     if (images) {
       // Wipe and re-create. With < 50 images this is cheap and correctness
@@ -125,36 +167,59 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
 
     if (rooms) {
-      // Same wipe-and-recreate pattern as images / customSections. A room
-      // is cheap to rewrite (no images uploaded through this table — they
-      // live as string URLs).
-      await tx.propertyRoom.deleteMany({ where: { propertyId: id } });
-      if (rooms.length > 0) {
-        await tx.propertyRoom.createMany({
-          data: rooms.map((r, i) => ({
-            propertyId: id,
-            name: String(r.name || "Room"),
-            bedConfig: r.bedConfig?.trim() || null,
-            description: r.description?.trim() || null,
-            imageUrls: Array.isArray(r.imageUrls)
-              ? r.imageUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
-              : [],
-            order: typeof r.order === "number" ? r.order : i,
-          })),
-        });
+      // Same wipe-and-recreate pattern as images / customSections. Wrapped
+      // so the rest of the PUT still works if the PropertyRoom table
+      // hasn't been pushed to this environment yet.
+      try {
+        await tx.propertyRoom.deleteMany({ where: { propertyId: id } });
+        if (rooms.length > 0) {
+          await tx.propertyRoom.createMany({
+            data: rooms.map((r, i) => ({
+              propertyId: id,
+              name: String(r.name || "Room"),
+              bedConfig: r.bedConfig?.trim() || null,
+              description: r.description?.trim() || null,
+              imageUrls: Array.isArray(r.imageUrls)
+                ? r.imageUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
+                : [],
+              order: typeof r.order === "number" ? r.order : i,
+            })),
+          });
+        }
+      } catch (err) {
+        if (isMissingTableError(err)) {
+          console.warn("[properties.PUT] PropertyRoom table missing — run `prisma db push`");
+        } else {
+          throw err;
+        }
       }
     }
 
-    return tx.property.findFirst({
-      where: { id },
-      include: {
-        location: true,
-        images: { orderBy: { order: "asc" } },
-        tags: { include: { tag: true } },
-        customSections: { orderBy: { order: "asc" } },
-        rooms: { orderBy: { order: "asc" } },
-      },
-    });
+    try {
+      return await tx.property.findFirst({
+        where: { id },
+        include: {
+          location: true,
+          images: { orderBy: { order: "asc" } },
+          tags: { include: { tag: true } },
+          customSections: { orderBy: { order: "asc" } },
+          rooms: { orderBy: { order: "asc" } },
+        },
+      });
+    } catch (err) {
+      if (isMissingTableError(err)) {
+        return await tx.property.findFirst({
+          where: { id },
+          include: {
+            location: true,
+            images: { orderBy: { order: "asc" } },
+            tags: { include: { tag: true } },
+            customSections: { orderBy: { order: "asc" } },
+          },
+        });
+      }
+      throw err;
+    }
   });
 
   return NextResponse.json({ property: updated });
@@ -227,4 +292,21 @@ function sanitizeProperty(body: Record<string, unknown>) {
   setIf("archived", bool(body.archived));
 
   return out;
+}
+
+/** Detects Prisma's "table does not exist" error so callers can degrade
+ *  gracefully when schema hasn't been pushed to this environment yet.
+ *  Covers PostgreSQL ("relation … does not exist") + Prisma's own
+ *  code-prefixed error codes. */
+function isMissingTableError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code === "P2021" || e.code === "P2022") return true; // prisma: table / column missing
+  const msg = typeof e.message === "string" ? e.message.toLowerCase() : "";
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("relation ") ||
+    msg.includes("no such table") ||
+    msg.includes("unknown column")
+  );
 }

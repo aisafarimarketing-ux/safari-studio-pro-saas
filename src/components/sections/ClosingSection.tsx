@@ -111,19 +111,19 @@ export function ClosingSection({ section }: { section: Section }) {
     };
 
     return (
-      <div className="relative py-24 px-8 md:px-16" style={{ background: bg }}>
+      <div className="relative py-28 md:py-32 px-8 md:px-16" style={{ background: bg }}>
         {aiButtons}
 
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           {/* ── Pull-quote + sign-off note ──────────────────────────── */}
           <div className="text-center">
             <div
               aria-hidden
-              className="select-none"
+              className="select-none mx-auto"
               style={{
                 fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "3.6rem",
-                lineHeight: 0.8,
+                fontSize: "3rem",
+                lineHeight: 0.7,
                 color: color.accent,
                 opacity: isDark ? 0.7 : 0.5,
               }}
@@ -131,8 +131,13 @@ export function ClosingSection({ section }: { section: Section }) {
               &ldquo;
             </div>
             <blockquote
-              className="text-[clamp(1.8rem,3.2vw,2.6rem)] font-semibold leading-[1.2] outline-none mt-1"
-              style={{ color: color.heading, fontFamily: `'${theme.displayFont}', serif` }}
+              className="mt-2 mx-auto max-w-[640px] font-semibold leading-[1.2] outline-none"
+              style={{
+                color: color.heading,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.65rem, 2.8vw, 2.25rem)",
+                letterSpacing: "-0.005em",
+              }}
               contentEditable={isEditor}
               suppressContentEditableWarning
               data-ai-editable="closing"
@@ -142,7 +147,7 @@ export function ClosingSection({ section }: { section: Section }) {
             </blockquote>
             {(attribution || isEditor) && (
               <div
-                className="mt-2 text-[12.5px] outline-none"
+                className="mt-3 text-[12px] uppercase tracking-[0.22em] outline-none"
                 style={{ color: color.muted }}
                 contentEditable={isEditor}
                 suppressContentEditableWarning
@@ -153,7 +158,7 @@ export function ClosingSection({ section }: { section: Section }) {
             )}
             {(signOff || isEditor) && (
               <p
-                className="mt-8 mx-auto text-[14.5px] leading-[1.75] whitespace-pre-line outline-none max-w-xl"
+                className="mt-10 mx-auto text-[14.5px] leading-[1.8] whitespace-pre-line outline-none max-w-xl"
                 style={{ color: color.body }}
                 contentEditable={isEditor}
                 suppressContentEditableWarning
@@ -165,25 +170,33 @@ export function ClosingSection({ section }: { section: Section }) {
             )}
           </div>
 
-          {/* ── Footer columns ──────────────────────────────────────── */}
+          {/* Hairline divider */}
           <div
-            className="mt-16 pt-12 grid md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] gap-8 md:gap-12"
-            style={{ borderTop: `1px solid ${color.border}` }}
+            aria-hidden
+            className="mx-auto mt-20 mb-16"
+            style={{ height: 1, width: 80, background: color.border }}
+          />
+
+          {/* ── Two-column footer ──────────────────────────────────── */}
+          <div
+            className="grid md:grid-cols-2"
+            style={{ gap: 0 }}
           >
             {/* Book your Safari */}
-            <div className="min-w-0">
-              <h3
-                className="text-[18px] font-bold mb-5"
-                style={{ color: color.heading }}
+            <div className="md:pr-12 md:border-r" style={{ borderColor: color.border }}>
+              <div
+                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
+                style={{ color: color.muted }}
               >
                 Book your Safari
-              </h3>
+              </div>
 
-              <div className="flex items-start gap-4 mb-5">
+              {/* Cover thumb + title */}
+              <div className="flex items-stretch gap-4 mb-6">
                 {coverThumbUrl ? (
                   <div
                     className="shrink-0 overflow-hidden"
-                    style={{ width: 82, height: 108, background: color.coverLift, borderRadius: 3 }}
+                    style={{ width: 64, height: 84, background: color.coverLift, borderRadius: 2 }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -196,54 +209,67 @@ export function ClosingSection({ section }: { section: Section }) {
                   <div
                     className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
                     style={{
-                      width: 82,
-                      height: 108,
+                      width: 64,
+                      height: 84,
                       background: color.coverLift,
                       color: color.muted,
-                      borderRadius: 3,
+                      borderRadius: 2,
                     }}
                   >
                     Cover
                   </div>
                 )}
-                <div className="min-w-0 pt-1">
+                <div className="min-w-0 flex flex-col justify-center">
                   <div
-                    className="text-[14px] font-medium leading-snug"
-                    style={{ color: color.heading }}
+                    className="text-[14.5px] font-semibold leading-[1.35]"
+                    style={{
+                      color: color.heading,
+                      fontFamily: `'${theme.displayFont}', serif`,
+                    }}
                   >
                     {trip.title}
-                    {client.guestNames && (
-                      <>
-                        <span className="font-normal" style={{ color: color.muted }}> · for </span>
-                        <span className="font-medium">{client.guestNames}</span>
-                      </>
-                    )}
                   </div>
+                  {client.guestNames && (
+                    <div
+                      className="mt-1 text-[12px]"
+                      style={{ color: color.muted }}
+                    >
+                      for {client.guestNames}
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {/* Total price */}
               {totalLabel && (
-                <div className="flex items-baseline gap-2 flex-wrap mb-5 text-[13.5px]">
-                  <span className="font-semibold" style={{ color: color.heading }}>
-                    Total Price:
-                  </span>
-                  <span style={{ color: color.heading }}>{totalLabel}</span>
+                <div className="mb-6 text-[13.5px]" style={{ color: color.body }}>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-semibold" style={{ color: color.heading }}>
+                      Total:
+                    </span>
+                    <span style={{ color: color.heading }}>{totalLabel}</span>
+                  </div>
                   <a
                     href="#pricing"
-                    className="underline underline-offset-2 hover:opacity-80 transition"
-                    style={{ color: color.heading }}
+                    className="mt-1 inline-block text-[12px] transition hover:opacity-75"
+                    style={{
+                      color: color.muted,
+                      textDecoration: "underline",
+                      textUnderlineOffset: 3,
+                    }}
                   >
-                    Detailed Price Information →
+                    Detailed price information →
                   </a>
                 </div>
               )}
 
-              <div className="flex items-center gap-2 mb-6 flex-wrap">
+              {/* Primary CTAs — same height, same width on desktop */}
+              <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
                 <a
                   href={`/p/${proposal.id}/print`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2.5 text-[13px] font-semibold rounded-md transition"
+                  className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85"
                   style={{
                     background: color.button,
                     color: color.heading,
@@ -254,7 +280,7 @@ export function ClosingSection({ section }: { section: Section }) {
                 </a>
                 <a
                   href={confirmBookingHref}
-                  className="px-4 py-2.5 text-[13px] font-semibold rounded-md transition"
+                  className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
                   style={{
                     background: isDark ? "white" : color.accent,
                     color: isDark ? "#1d1d1f" : "white",
@@ -262,29 +288,34 @@ export function ClosingSection({ section }: { section: Section }) {
                 >
                   Confirm Booking
                 </a>
-                <button
-                  type="button"
-                  onClick={requestConfirmInComments}
-                  className="px-3 py-2.5 text-[12.5px] font-medium transition hover:opacity-80"
-                  style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
-                >
-                  Reply in comments
-                </button>
               </div>
+              <button
+                type="button"
+                onClick={requestConfirmInComments}
+                className="text-[12px] transition hover:opacity-75 mb-10"
+                style={{
+                  color: color.muted,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                }}
+              >
+                Or reply with a note in comments →
+              </button>
 
-              <h4
-                className="text-[13px] font-semibold mb-3"
-                style={{ color: color.heading }}
+              {/* Share */}
+              <div
+                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-3"
+                style={{ color: color.muted }}
               >
                 Share with family and friends
-              </h4>
-              <div className="flex items-center gap-3">
+              </div>
+              <div className="flex items-center gap-2">
                 <a
                   href={whatsappShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Share on WhatsApp"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
                   style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
                 >
                   <WaIcon />
@@ -293,7 +324,7 @@ export function ClosingSection({ section }: { section: Section }) {
                   type="button"
                   onClick={copyLink}
                   aria-label="Copy link"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
                   style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
                 >
                   <LinkIcon />
@@ -301,29 +332,31 @@ export function ClosingSection({ section }: { section: Section }) {
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="hidden md:block" style={{ background: color.border, width: 1 }} />
-
             {/* Contact Us */}
-            <div className="min-w-0">
-              <h3
-                className="text-[18px] font-bold mb-5"
-                style={{ color: color.heading }}
+            <div className="md:pl-12 mt-16 md:mt-0">
+              <div
+                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
+                style={{ color: color.muted }}
               >
                 Contact Us
-              </h3>
+              </div>
 
-              <div className="flex items-center gap-3 mb-5">
+              {/* Consultant */}
+              <div className="flex items-center gap-4 mb-8">
                 <div
-                  className="shrink-0 w-12 h-12 rounded-full overflow-hidden"
+                  className="shrink-0 w-14 h-14 rounded-full overflow-hidden"
                   style={{ background: color.coverLift }}
                 >
                   {operator.consultantPhoto ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
+                    <img
+                      src={operator.consultantPhoto}
+                      alt={operator.consultantName}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <div
-                      className="w-full h-full flex items-center justify-center text-base font-bold"
+                      className="w-full h-full flex items-center justify-center text-lg font-bold"
                       style={{ color: color.accent }}
                     >
                       {operator.consultantName?.charAt(0) ?? "·"}
@@ -332,24 +365,28 @@ export function ClosingSection({ section }: { section: Section }) {
                 </div>
                 <div className="min-w-0">
                   <div
-                    className="text-[14px] font-semibold leading-tight"
-                    style={{ color: color.heading }}
+                    className="text-[15px] font-semibold leading-tight"
+                    style={{
+                      color: color.heading,
+                      fontFamily: `'${theme.displayFont}', serif`,
+                    }}
                   >
                     {operator.consultantName}
                   </div>
                   <div
-                    className="text-[12.5px] italic"
-                    style={{ color: color.muted, fontFamily: `'${theme.displayFont}', serif` }}
+                    className="text-[12.5px] mt-0.5"
+                    style={{ color: color.muted }}
                   >
                     {operator.companyName}
                   </div>
                 </div>
               </div>
 
-              <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-[12.5px]">
+              {/* Fact rows — aligned label column */}
+              <dl className="grid grid-cols-[92px_1fr] gap-y-2.5 text-[13px]">
                 {(operator.address || isEditor) && (
                   <>
-                    <dt style={{ color: color.heading, fontWeight: 600 }}>Address</dt>
+                    <dt className="font-semibold" style={{ color: color.heading }}>Address</dt>
                     <dd
                       className="outline-none whitespace-pre-line"
                       style={{ color: color.body }}
@@ -367,7 +404,7 @@ export function ClosingSection({ section }: { section: Section }) {
                 )}
                 {(operator.country || isEditor) && (
                   <>
-                    <dt style={{ color: color.heading, fontWeight: 600 }}>Country</dt>
+                    <dt className="font-semibold" style={{ color: color.heading }}>Country</dt>
                     <dd
                       className="outline-none"
                       style={{ color: color.body }}
@@ -385,7 +422,7 @@ export function ClosingSection({ section }: { section: Section }) {
                 )}
                 {(operator.whatsapp || isEditor) && (
                   <>
-                    <dt style={{ color: color.heading, fontWeight: 600 }}>WhatsApp</dt>
+                    <dt className="font-semibold" style={{ color: color.heading }}>WhatsApp</dt>
                     <dd
                       className="outline-none"
                       style={{ color: color.body }}
@@ -401,9 +438,9 @@ export function ClosingSection({ section }: { section: Section }) {
                     </dd>
                   </>
                 )}
-                <dt style={{ color: color.heading, fontWeight: 600 }}>Email</dt>
+                <dt className="font-semibold" style={{ color: color.heading }}>Email</dt>
                 <dd
-                  className="outline-none"
+                  className="outline-none truncate"
                   style={{ color: color.body }}
                   contentEditable={isEditor}
                   suppressContentEditableWarning
@@ -422,8 +459,12 @@ export function ClosingSection({ section }: { section: Section }) {
                   href={normaliseUrl(operator.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-5 inline-block text-[13px] font-semibold transition hover:opacity-80"
-                  style={{ color: color.heading, textDecoration: "underline", textUnderlineOffset: 3 }}
+                  className="mt-8 inline-block text-[13px] font-semibold transition hover:opacity-80"
+                  style={{
+                    color: color.heading,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 4,
+                  }}
                 >
                   Visit our website →
                 </a>
