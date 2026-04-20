@@ -478,6 +478,19 @@ export const useProposalStore = create<ProposalState>()(
           tier: snapshot.tier,
           leadImageUrl: snapshot.leadImageUrl,
           galleryUrls: snapshot.galleryUrls ?? [],
+          // Showcase facts + rooms, carried over from the library snapshot.
+          checkInTime: snapshot.checkInTime,
+          checkOutTime: snapshot.checkOutTime,
+          totalRooms: snapshot.totalRooms,
+          spokenLanguages: snapshot.spokenLanguages ?? [],
+          specialInterests: snapshot.specialInterests ?? [],
+          rooms: (snapshot.rooms ?? []).map((r) => ({
+            id: nanoid(),
+            name: r.name,
+            bedConfig: r.bedConfig ?? "",
+            description: r.description ?? "",
+            imageUrls: r.imageUrls ?? [],
+          })),
         });
       }),
 

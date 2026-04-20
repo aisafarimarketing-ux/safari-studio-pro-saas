@@ -20,6 +20,7 @@ import {
   type ImageItem,
   type LocationLite,
   type PropertyForm,
+  type RoomItem,
   type TagLite,
 } from "./types";
 
@@ -31,6 +32,8 @@ const SECTIONS = [
   { id: "story", label: "Story" },
   { id: "amenities", label: "Amenities" },
   { id: "stay", label: "Stay snapshot" },
+  { id: "showcase", label: "Showcase facts" },
+  { id: "rooms", label: "Rooms" },
   { id: "internal", label: "Internal notes" },
   { id: "custom", label: "Custom sections" },
 ];
@@ -338,6 +341,24 @@ export function PropertyEditor({ propertyId }: { propertyId: string }) {
 
               <SectionCard id="stay" title="Stay snapshot" registerRef={registerSection}>
                 <StaySection form={form} update={update} />
+              </SectionCard>
+
+              <SectionCard
+                id="showcase"
+                title="Showcase facts"
+                hint="Rendered in the Property Showcase section's sidebar under Your Stay and Fun Facts."
+                registerRef={registerSection}
+              >
+                <ShowcaseFactsSection form={form} update={update} />
+              </SectionCard>
+
+              <SectionCard
+                id="rooms"
+                title="Rooms"
+                hint="Room types, bed configuration and photos. Shown in the Rooms tab of the property showcase."
+                registerRef={registerSection}
+              >
+                <RoomsSection rooms={form.rooms} onChange={(rooms) => update({ rooms })} />
               </SectionCard>
 
               <SectionCard
@@ -840,6 +861,233 @@ function StaySection({
   );
 }
 
+function ShowcaseFactsSection({
+  form,
+  update,
+}: {
+  form: PropertyForm;
+  update: (patch: Partial<PropertyForm>) => void;
+}) {
+  const csvToArray = (v: string) =>
+    v
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid md:grid-cols-3 gap-5">
+        <Field label="Check-in">
+          <input
+            type="text"
+            value={form.checkInTime}
+            onChange={(e) => update({ checkInTime: e.target.value })}
+            placeholder="14:00"
+            className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+          />
+        </Field>
+        <Field label="Check-out">
+          <input
+            type="text"
+            value={form.checkOutTime}
+            onChange={(e) => update({ checkOutTime: e.target.value })}
+            placeholder="10:00"
+            className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+          />
+        </Field>
+        <Field label="Total rooms">
+          <input
+            type="number"
+            min={0}
+            max={500}
+            value={form.totalRooms ?? ""}
+            onChange={(e) =>
+              update({
+                totalRooms: e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))),
+              })
+            }
+            placeholder="12"
+            className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+          />
+        </Field>
+      </div>
+
+      <Field label="Spoken languages" hint="Comma-separated — English, Swahili, French.">
+        <input
+          type="text"
+          value={form.spokenLanguages.join(", ")}
+          onChange={(e) => update({ spokenLanguages: csvToArray(e.target.value) })}
+          placeholder="English, Swahili"
+          className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+        />
+      </Field>
+
+      <Field
+        label="Special interests"
+        hint="Comma-separated — Big 5, Nature activities, Cultural, Photography."
+      >
+        <input
+          type="text"
+          value={form.specialInterests.join(", ")}
+          onChange={(e) => update({ specialInterests: csvToArray(e.target.value) })}
+          placeholder="Big 5, Nature activities"
+          className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function RoomsSection({
+  rooms,
+  onChange,
+}: {
+  rooms: RoomItem[];
+  onChange: (next: RoomItem[]) => void;
+}) {
+  const addRoom = () =>
+    onChange([
+      ...rooms,
+      { name: "New room type", bedConfig: "", description: "", imageUrls: [], order: rooms.length },
+    ]);
+
+  const updateRoom = (i: number, patch: Partial<RoomItem>) =>
+    onChange(rooms.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+  const removeRoom = (i: number) =>
+    onChange(rooms.filter((_, idx) => idx !== i));
+
+  const uploadImages = async (i: number, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const { fileToOptimizedDataUrl } = await import("@/lib/fileToDataUrl");
+      const urls = await Promise.all(Array.from(files).map((f) => fileToOptimizedDataUrl(f)));
+      updateRoom(i, { imageUrls: [...rooms[i].imageUrls, ...urls] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Upload failed");
+    }
+  };
+
+  const removeImage = (i: number, imgIdx: number) =>
+    updateRoom(i, { imageUrls: rooms[i].imageUrls.filter((_, x) => x !== imgIdx) });
+
+  if (rooms.length === 0) {
+    return (
+      <div className="space-y-3">
+        <div className="text-[13px] italic text-black/45">
+          No room types yet. Add one to describe bed configurations and show room photos on the
+          property showcase.
+        </div>
+        <button
+          type="button"
+          onClick={addRoom}
+          className="text-[12px] font-semibold uppercase tracking-[0.22em] px-4 py-2 rounded-md bg-[#1b3a2d]/10 text-[#1b3a2d] border border-dashed border-[#1b3a2d]/40 hover:bg-[#1b3a2d]/15 transition"
+        >
+          + Add room type
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {rooms.map((r, i) => (
+        <div
+          key={r.id ?? `new-${i}`}
+          className="p-4 rounded-xl border border-black/10 bg-white space-y-4"
+        >
+          <div className="grid md:grid-cols-[1fr_1fr] gap-4">
+            <Field label="Room name">
+              <input
+                type="text"
+                value={r.name}
+                onChange={(e) => updateRoom(i, { name: e.target.value })}
+                placeholder="Luxury suite"
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+              />
+            </Field>
+            <Field label="Bed configuration">
+              <input
+                type="text"
+                value={r.bedConfig}
+                onChange={(e) => updateRoom(i, { bedConfig: e.target.value })}
+                placeholder="King bed · extra bed on request"
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
+              />
+            </Field>
+          </div>
+
+          <Field label="Description">
+            <textarea
+              value={r.description}
+              onChange={(e) => updateRoom(i, { description: e.target.value })}
+              rows={3}
+              maxLength={600}
+              placeholder="What's in the room, views, private deck, etc."
+              className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition resize-y"
+            />
+          </Field>
+
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/55 mb-2">
+              Room photos
+            </div>
+            {r.imageUrls.length > 0 && (
+              <div className="grid grid-cols-4 gap-2 mb-2">
+                {r.imageUrls.map((u, imgIdx) => (
+                  <div
+                    key={imgIdx}
+                    className="relative group"
+                    style={{ aspectRatio: "4 / 3", background: "#f1ede4" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={u} alt="" className="w-full h-full object-cover rounded-sm" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i, imgIdx)}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] opacity-0 group-hover:opacity-100 transition"
+                      title="Remove"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] px-3 py-1.5 rounded-md bg-[#1b3a2d]/10 text-[#1b3a2d] border border-dashed border-[#1b3a2d]/40 hover:bg-[#1b3a2d]/15 transition cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => uploadImages(i, e.target.files)}
+              />
+              + Add photos
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => removeRoom(i)}
+              className="text-[11.5px] text-black/40 hover:text-red-500 transition"
+            >
+              Remove room
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addRoom}
+        className="w-full py-3 text-[12px] font-semibold uppercase tracking-[0.22em] rounded-md bg-[#1b3a2d]/10 text-[#1b3a2d] border border-dashed border-[#1b3a2d]/40 hover:bg-[#1b3a2d]/15 transition"
+      >
+        + Add another room type
+      </button>
+    </div>
+  );
+}
+
 function InternalSection({
   form,
   update,
@@ -939,11 +1187,24 @@ type LoadedProperty = {
   mealPlan?: string | null;
   suggestedNights?: number | null;
   suitability?: unknown;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  totalRooms?: number | null;
+  spokenLanguages?: unknown;
+  specialInterests?: unknown;
   internalNotes?: string | null;
   archived?: boolean;
   images?: { id: string; url: string; caption: string | null; order: number; isCover: boolean }[];
   tags?: { tag: { id: string; name: string } }[];
   customSections?: { id: string; title: string; body: string | null; visible: boolean; order: number }[];
+  rooms?: {
+    id: string;
+    name: string;
+    bedConfig: string | null;
+    description: string | null;
+    imageUrls: string[];
+    order: number;
+  }[];
 };
 
 function hydrateForm(p: LoadedProperty | null): PropertyForm {
@@ -959,6 +1220,11 @@ function hydrateForm(p: LoadedProperty | null): PropertyForm {
     mealPlan: p.mealPlan ?? "",
     suggestedNights: typeof p.suggestedNights === "number" ? p.suggestedNights : null,
     suitability: Array.isArray(p.suitability) ? (p.suitability as string[]) : [],
+    checkInTime: p.checkInTime ?? "",
+    checkOutTime: p.checkOutTime ?? "",
+    totalRooms: typeof p.totalRooms === "number" ? p.totalRooms : null,
+    spokenLanguages: Array.isArray(p.spokenLanguages) ? (p.spokenLanguages as string[]) : [],
+    specialInterests: Array.isArray(p.specialInterests) ? (p.specialInterests as string[]) : [],
     internalNotes: p.internalNotes ?? "",
     archived: Boolean(p.archived),
     images: (p.images ?? []).map((img) => ({
@@ -976,6 +1242,14 @@ function hydrateForm(p: LoadedProperty | null): PropertyForm {
       visible: s.visible,
       order: s.order,
     })),
+    rooms: (p.rooms ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      bedConfig: r.bedConfig ?? "",
+      description: r.description ?? "",
+      imageUrls: Array.isArray(r.imageUrls) ? r.imageUrls : [],
+      order: r.order,
+    })),
   };
 }
 
@@ -991,6 +1265,11 @@ function serialize(form: PropertyForm) {
     mealPlan: form.mealPlan || null,
     suggestedNights: form.suggestedNights,
     suitability: form.suitability,
+    checkInTime: form.checkInTime.trim() || null,
+    checkOutTime: form.checkOutTime.trim() || null,
+    totalRooms: form.totalRooms,
+    spokenLanguages: form.spokenLanguages,
+    specialInterests: form.specialInterests,
     internalNotes: form.internalNotes,
     archived: form.archived,
     images: form.images.map((img, i) => ({
@@ -1006,6 +1285,14 @@ function serialize(form: PropertyForm) {
       title: s.title,
       body: s.body,
       visible: s.visible,
+      order: i,
+    })),
+    rooms: form.rooms.map((r, i) => ({
+      id: r.id,
+      name: r.name,
+      bedConfig: r.bedConfig || null,
+      description: r.description || null,
+      imageUrls: r.imageUrls,
       order: i,
     })),
   };

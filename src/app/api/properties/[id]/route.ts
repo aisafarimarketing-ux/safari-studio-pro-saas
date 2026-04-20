@@ -5,6 +5,14 @@ import { prisma } from "@/lib/prisma";
 // Shape of an editable property — what the editor PUTs back to us.
 type IncomingImage = { id?: string; url: string; caption?: string | null; order: number; isCover: boolean };
 type IncomingSection = { id?: string; title: string; body?: string | null; visible: boolean; order: number };
+type IncomingRoom = {
+  id?: string;
+  name: string;
+  bedConfig?: string | null;
+  description?: string | null;
+  imageUrls?: string[];
+  order: number;
+};
 
 // GET /api/properties/:id — full editor payload.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -22,6 +30,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       images: { orderBy: { order: "asc" } },
       tags: { include: { tag: true } },
       customSections: { orderBy: { order: "asc" } },
+      rooms: { orderBy: { order: "asc" } },
     },
   });
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -60,6 +69,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const customSections = Array.isArray(body.customSections)
     ? (body.customSections as IncomingSection[])
     : null;
+  const rooms = Array.isArray(body.rooms) ? (body.rooms as IncomingRoom[]) : null;
 
   // Run scalar update + nested replacements in a transaction so the
   // editor never sees a half-updated property.
@@ -114,6 +124,27 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       }
     }
 
+    if (rooms) {
+      // Same wipe-and-recreate pattern as images / customSections. A room
+      // is cheap to rewrite (no images uploaded through this table — they
+      // live as string URLs).
+      await tx.propertyRoom.deleteMany({ where: { propertyId: id } });
+      if (rooms.length > 0) {
+        await tx.propertyRoom.createMany({
+          data: rooms.map((r, i) => ({
+            propertyId: id,
+            name: String(r.name || "Room"),
+            bedConfig: r.bedConfig?.trim() || null,
+            description: r.description?.trim() || null,
+            imageUrls: Array.isArray(r.imageUrls)
+              ? r.imageUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
+              : [],
+            order: typeof r.order === "number" ? r.order : i,
+          })),
+        });
+      }
+    }
+
     return tx.property.findFirst({
       where: { id },
       include: {
@@ -121,6 +152,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
         images: { orderBy: { order: "asc" } },
         tags: { include: { tag: true } },
         customSections: { orderBy: { order: "asc" } },
+        rooms: { orderBy: { order: "asc" } },
       },
     });
   });
@@ -186,6 +218,11 @@ function sanitizeProperty(body: Record<string, unknown>) {
   setIf("mealPlan", str(body.mealPlan));
   setIf("suggestedNights", int(body.suggestedNights));
   setIf("suitability", stringArray(body.suitability));
+  setIf("checkInTime", str(body.checkInTime));
+  setIf("checkOutTime", str(body.checkOutTime));
+  setIf("totalRooms", int(body.totalRooms));
+  setIf("spokenLanguages", stringArray(body.spokenLanguages));
+  setIf("specialInterests", stringArray(body.specialInterests));
   setIf("internalNotes", str(body.internalNotes));
   setIf("archived", bool(body.archived));
 

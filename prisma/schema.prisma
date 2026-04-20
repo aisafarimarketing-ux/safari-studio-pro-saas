@@ -389,6 +389,13 @@ model Property {
   suggestedNights Int?
   suitability     String[] // ["families", "honeymoon", "photography", ...]
 
+  // Showcase facts — rendered in PropertyShowcaseSection's STATS sidebar
+  checkInTime       String?
+  checkOutTime      String?
+  totalRooms        Int?
+  spokenLanguages   String[]
+  specialInterests  String[]
+
   // Internal — never rendered client-side
   internalNotes String?
 
@@ -400,11 +407,29 @@ model Property {
   images         PropertyImage[]
   tags           PropertyTagOnProperty[]
   customSections PropertyCustomSection[]
+  rooms          PropertyRoom[]
 
   @@index([organizationId])
   @@index([organizationId, archived])
   @@index([organizationId, propertyClass])
   @@index([organizationId, locationId])
+}
+
+model PropertyRoom {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name        String
+  bedConfig   String?
+  description String?
+  imageUrls   String[]
+  order       Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId, order])
 }
 
 model PropertyImage {

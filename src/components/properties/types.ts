@@ -28,6 +28,15 @@ export interface CustomSectionItem {
   order: number;
 }
 
+export interface RoomItem {
+  id?: string;        // present for existing rows
+  name: string;
+  bedConfig: string;
+  description: string;
+  imageUrls: string[];
+  order: number;
+}
+
 export interface PropertyForm {
   // Basics
   name: string;
@@ -47,6 +56,13 @@ export interface PropertyForm {
   suggestedNights: number | null;
   suitability: string[];
 
+  // Showcase facts — rendered in PropertyShowcaseSection's STATS sidebar
+  checkInTime: string;
+  checkOutTime: string;
+  totalRooms: number | null;
+  spokenLanguages: string[];
+  specialInterests: string[];
+
   // Internal
   internalNotes: string;
 
@@ -57,6 +73,7 @@ export interface PropertyForm {
   images: ImageItem[];
   tagIds: string[];
   customSections: CustomSectionItem[];
+  rooms: RoomItem[];
 }
 
 export const EMPTY_FORM: PropertyForm = {
@@ -70,9 +87,15 @@ export const EMPTY_FORM: PropertyForm = {
   mealPlan: "",
   suggestedNights: null,
   suitability: [],
+  checkInTime: "",
+  checkOutTime: "",
+  totalRooms: null,
+  spokenLanguages: [],
+  specialInterests: [],
   internalNotes: "",
   archived: false,
   images: [],
   tagIds: [],
   customSections: [],
+  rooms: [],
 };

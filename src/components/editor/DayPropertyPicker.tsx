@@ -26,6 +26,18 @@ type LibraryProperty = {
   amenities?: string[];
   mealPlan?: string | null;
   suggestedNights?: number | null;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  totalRooms?: number | null;
+  spokenLanguages?: string[];
+  specialInterests?: string[];
+  rooms?: {
+    id: string;
+    name: string;
+    bedConfig?: string | null;
+    description?: string | null;
+    imageUrls?: string[];
+  }[];
   location: LocationLite | null;
   images: { id: string; url: string; isCover?: boolean; order?: number }[];
 };
@@ -139,6 +151,19 @@ export function DayPropertyPicker({
         nights: p.suggestedNights ?? 2,
         leadImageUrl: lead,
         galleryUrls: gallery,
+        // Showcase facts prepped by the operator ahead of time.
+        checkInTime: p.checkInTime ?? undefined,
+        checkOutTime: p.checkOutTime ?? undefined,
+        totalRooms: p.totalRooms ?? undefined,
+        spokenLanguages: p.spokenLanguages ?? [],
+        specialInterests: p.specialInterests ?? [],
+        rooms: (p.rooms ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          bedConfig: r.bedConfig ?? "",
+          description: r.description ?? "",
+          imageUrls: r.imageUrls ?? [],
+        })),
       };
       void signals;
       onSelect(snapshot);
