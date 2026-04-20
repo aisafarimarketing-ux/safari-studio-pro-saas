@@ -207,7 +207,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Map",
     icon: "◎",
     description: "Interactive route map with pins for each day",
-    variants: ["route", "default", "full-width"],
+    variants: ["route", "interactive", "default", "full-width"],
     defaultVariant: "route",
     defaultContent: { caption: "", coords: [] },
   },

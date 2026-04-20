@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "./RouteMap";
-import type { Section, TierKey } from "@/lib/types";
+import type { Section, TierKey, Day } from "@/lib/types";
 
 // Route variant — two-column editorial spread. Itinerary table on the left
 // groups consecutive days with the same destination ("Day 3-4"); the
@@ -47,8 +48,38 @@ export function MapSection({ section }: { section: Section }) {
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
   const stops = stopsFromDays.length > 0 ? stopsFromDays : trip.destinations;
 
-  // ── Interactive route map (Leaflet + OSM) ─────────────────────────────
-  if (variant === "route" || variant === "interactive") {
+  // ── Interactive variant — lodge carousel sidebar + big map ────────────
+  if (variant === "interactive") {
+    const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
+    return (
+      <InteractiveMap
+        section={section}
+        days={days}
+        activeTier={activeTier as TierKey}
+        properties={proposal.properties}
+        cachedCoords={cachedCoords}
+        theme={theme}
+        tokens={tokens}
+        countryName={countryName}
+        countryFlag={countryFlag}
+        startPoint={startPoint}
+        endPoint={endPoint}
+        caption={caption}
+        isEditor={isEditor}
+        stops={stops}
+        onCaptionChange={(next) => updateSectionContent(section.id, { caption: next })}
+        onStartPointChange={(next) => updateSectionContent(section.id, { startPoint: next })}
+        onEndPointChange={(next) => updateSectionContent(section.id, { endPoint: next })}
+        onCountryNameChange={(next) => updateSectionContent(section.id, { countryName: next })}
+        onCoordsResolved={(coords) => {
+          if (isEditor) updateSectionContent(section.id, { coords });
+        }}
+      />
+    );
+  }
+
+  // ── Route variant — editorial table + map ─────────────────────────────
+  if (variant === "route") {
     const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
     const groupedRows = groupDayRows(days, activeTier as TierKey);
 
@@ -319,6 +350,8 @@ export function MapSection({ section }: { section: Section }) {
 
 type GroupedDayRow = {
   dayLabel: string;
+  startDay: number;
+  endDay: number;
   destination: string;
   accommodation: string;
 };
@@ -350,6 +383,8 @@ function groupDayRows(
     }
     rows.push({
       dayLabel: startDay === endDay ? `Day ${startDay}` : `Day ${startDay}-${endDay}`,
+      startDay,
+      endDay,
       destination: current.destination || "New Destination",
       accommodation: current.tiers?.[activeTier]?.camp ?? "",
     });
@@ -357,6 +392,247 @@ function groupDayRows(
   }
 
   return rows;
+}
+
+// ─── Interactive variant component ────────────────────────────────────────
+
+function InteractiveMap({
+  section,
+  days,
+  activeTier,
+  properties,
+  cachedCoords,
+  theme,
+  tokens,
+  countryName,
+  countryFlag,
+  startPoint,
+  endPoint,
+  caption,
+  isEditor,
+  stops,
+  onCaptionChange,
+  onStartPointChange,
+  onEndPointChange,
+  onCountryNameChange,
+  onCoordsResolved,
+}: {
+  section: Section;
+  days: Day[];
+  activeTier: TierKey;
+  properties: import("@/lib/types").Property[];
+  cachedCoords?: RouteCoord[];
+  theme: import("@/lib/types").ProposalTheme;
+  tokens: import("@/lib/types").ThemeTokens;
+  countryName: string;
+  countryFlag: string;
+  startPoint: string;
+  endPoint: string;
+  caption: string;
+  isEditor: boolean;
+  stops: string[];
+  onCaptionChange: (next: string) => void;
+  onStartPointChange: (next: string) => void;
+  onEndPointChange: (next: string) => void;
+  onCountryNameChange: (next: string) => void;
+  onCoordsResolved: (coords: RouteCoord[]) => void;
+}) {
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const groupedRows = groupDayRows(days, activeTier);
+
+  // Map row.startDay → the first day.id in that group so card selection
+  // can drive RouteMap.selectedDayId.
+  const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
+
+  const findDayIdForRow = (startDay: number): string | undefined =>
+    sortedDays.find((d) => d.dayNumber === startDay)?.id;
+
+  const findPropertyFor = (campName: string) => {
+    if (!campName) return null;
+    const lc = campName.trim().toLowerCase();
+    return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
+  };
+
+  return (
+    <div className="py-20" style={{ background: tokens.sectionSurface }}>
+      <div className="max-w-6xl mx-auto px-8 md:px-12">
+        {/* Header */}
+        <div className="mb-8">
+          <div
+            className="text-[10px] uppercase tracking-[0.3em] mb-3"
+            style={{ color: tokens.mutedText }}
+          >
+            Map
+          </div>
+          <h2
+            className="font-bold leading-tight"
+            style={{
+              color: tokens.headingText,
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(1.8rem, 3.4vw, 2.4rem)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
+          </h2>
+          <div className="mt-3 flex items-center gap-2.5">
+            {countryFlag && (
+              <span className="text-[16px] leading-none" aria-hidden>
+                {countryFlag}
+              </span>
+            )}
+            <span
+              className="text-[13.5px] font-semibold outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
+            >
+              {countryName}
+            </span>
+          </div>
+        </div>
+
+        {/* Lodge sidebar + map */}
+        <div className="grid md:grid-cols-[280px_1fr] gap-6 items-stretch">
+          {/* Sidebar */}
+          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+            <div
+              className="text-[13px] px-3 py-2 outline-none"
+              style={{ color: tokens.bodyText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => onStartPointChange(e.currentTarget.textContent ?? "")}
+            >
+              <span className="font-semibold" style={{ color: tokens.headingText }}>Start:</span>{" "}
+              {startPoint}
+            </div>
+
+            {groupedRows.map((row, idx) => {
+              const rowDayId = findDayIdForRow(row.startDay);
+              const isSelected = rowDayId && rowDayId === selectedDayId;
+              const prop = findPropertyFor(row.accommodation);
+              const thumb = prop?.leadImageUrl ?? null;
+
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedDayId(rowDayId ?? null)}
+                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-md transition"
+                  style={{
+                    background: isSelected ? `${tokens.accent}18` : tokens.cardBg,
+                    border: `1px solid ${isSelected ? tokens.accent : tokens.border}`,
+                    boxShadow: isSelected ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                  }}
+                >
+                  <div
+                    className="shrink-0 overflow-hidden"
+                    style={{ width: 58, height: 44, borderRadius: 4, background: tokens.sectionSurface }}
+                  >
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumb} alt={row.accommodation} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-[0.18em]" style={{ color: tokens.mutedText }}>
+                        {row.destination.slice(0, 3)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="text-[10.5px] uppercase tracking-[0.22em] font-semibold"
+                      style={{ color: tokens.accent }}
+                    >
+                      {row.dayLabel}
+                    </div>
+                    <div
+                      className="text-[13px] font-semibold leading-tight truncate mt-0.5"
+                      style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+                    >
+                      {row.accommodation || row.destination}
+                    </div>
+                    <div
+                      className="text-[11px] truncate mt-0.5"
+                      style={{ color: tokens.mutedText }}
+                    >
+                      {row.destination}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+
+            <div
+              className="text-[13px] px-3 py-2 outline-none"
+              style={{ color: tokens.bodyText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => onEndPointChange(e.currentTarget.textContent ?? "")}
+            >
+              <span className="font-semibold" style={{ color: tokens.headingText }}>End:</span>{" "}
+              {endPoint}
+            </div>
+          </div>
+
+          {/* Map */}
+          <div className="min-w-0">
+            {days.length > 0 ? (
+              <div
+                className="overflow-hidden"
+                style={{
+                  borderRadius: 6,
+                  border: `1px solid ${tokens.border}`,
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                }}
+              >
+                <RouteMap
+                  days={days}
+                  tokens={tokens}
+                  cachedCoords={cachedCoords}
+                  onCoordsResolved={onCoordsResolved}
+                  height={520}
+                  selectedDayId={selectedDayId}
+                />
+              </div>
+            ) : (
+              <div
+                className="flex items-center justify-center text-[13px]"
+                style={{
+                  height: 520,
+                  background: tokens.cardBg,
+                  color: tokens.mutedText,
+                  borderRadius: 6,
+                  border: `1px solid ${tokens.border}`,
+                }}
+              >
+                {isEditor ? "Add days with destinations to draw the route." : "Route coming soon."}
+              </div>
+            )}
+
+            {(caption || isEditor) && (
+              <p
+                className="text-[12px] italic text-center mt-4 outline-none"
+                style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onCaptionChange(e.currentTarget.textContent ?? "")}
+              >
+                {caption || (isEditor ? "Add a caption…" : "")}
+              </p>
+            )}
+
+            <div
+              className="mt-2 text-[10px] tracking-wide text-center"
+              style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif`, opacity: 0.55 }}
+            >
+              Map data © OpenStreetMap contributors
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Rough country → flag emoji mapping for the most common safari markets.

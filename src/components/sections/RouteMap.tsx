@@ -40,16 +40,22 @@ export function RouteMap({
   onCoordsResolved,
   tokens,
   height = 420,
+  selectedDayId,
 }: {
   days: Day[];
   cachedCoords?: RouteCoord[];
   onCoordsResolved?: (coords: RouteCoord[]) => void;
   tokens: ThemeTokens;
   height?: number;
+  /** When set, that day's pin gets a selected ring and the map flies
+   *  to it. Used by the "interactive" MapSection variant. */
+  selectedDayId?: string | null;
 }) {
   const [state, setState] = useState<GeocodeState>({ status: "idle" });
   // Import leaflet once on the client so we can build custom div icons.
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  // Hold on to the Leaflet map instance so parent-driven flyTo works.
+  const mapRef = useRef<import("leaflet").Map | null>(null);
 
   // Signature of current days used to invalidate the cache when destinations
   // change. The cache is stale if a destination was renamed.
@@ -202,6 +208,15 @@ export function RouteMap({
   // "Day 3-4" when a group spans multiple days.
   const groups = groupCoordsByLocation(coords);
 
+  // Which group contains the selected day (if any)?
+  const selectedGroupIndex = selectedDayId
+    ? groups.findIndex((g) =>
+        coords.some(
+          (c) => c.dayId === selectedDayId && Math.abs(c.lat - g.lat) < 0.0001 && Math.abs(c.lng - g.lng) < 0.0001,
+        ),
+      )
+    : -1;
+
   // Bounds from group centres — tighter than per-day bounds.
   const lats = groups.map((g) => g.lat);
   const lngs = groups.map((g) => g.lng);
@@ -230,7 +245,15 @@ export function RouteMap({
         bounds={bounds}
         boundsOptions={{ padding: [48, 48] }}
         style={{ width: "100%", height: "100%" }}
+        ref={(instance) => {
+          mapRef.current = instance as unknown as import("leaflet").Map | null;
+        }}
       >
+        <FlyToSelected
+          map={mapRef}
+          selectedGroupIndex={selectedGroupIndex}
+          groups={groups}
+        />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
@@ -252,15 +275,17 @@ export function RouteMap({
           />
         )}
 
-        {groups.map((g) => {
+        {groups.map((g, i) => {
+          const isSelected = i === selectedGroupIndex;
           const icon = leafletRef.current
-            ? buildDayBadge(leafletRef.current, g.dayLabel, tokens.accent)
+            ? buildDayBadge(leafletRef.current, g.dayLabel, tokens.accent, isSelected)
             : undefined;
           return (
             <Marker
               key={`${g.lat}-${g.lng}-${g.startDay}`}
               position={[g.lat, g.lng]}
               icon={icon}
+              zIndexOffset={isSelected ? 1000 : 0}
             >
               <Tooltip
                 direction="bottom"
@@ -381,18 +406,48 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
 }
 
 // Build a custom DivIcon for a pin that shows the day number (or range)
-// as a tinted circular badge.
+// as a tinted circular badge. Selected pins get a double-ring + scale-up
+// so the eye tracks where the current lodge sits.
 function buildDayBadge(
   L: typeof import("leaflet"),
   dayLabel: string,
   color: string,
+  isSelected: boolean = false,
 ) {
+  const size = isSelected ? 44 : 34;
+  const extraStyle = isSelected
+    ? `transform:scale(1.1);box-shadow:0 0 0 4px ${color}28, 0 6px 18px rgba(0,0,0,0.28);`
+    : "";
   return L.divIcon({
     className: "",
-    html: `<div class="ss-day-badge" style="background:${color}">${escape(dayLabel)}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    html: `<div class="ss-day-badge" style="background:${color};${extraStyle}">${escape(dayLabel)}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
+}
+
+// Sub-component — mounted inside MapContainer so it has access to the
+// parent's map ref. Whenever selectedGroupIndex changes to a valid value,
+// flies the map to that group's coordinates.
+function FlyToSelected({
+  map,
+  selectedGroupIndex,
+  groups,
+}: {
+  map: { current: import("leaflet").Map | null };
+  selectedGroupIndex: number;
+  groups: CoordGroup[];
+}) {
+  useEffect(() => {
+    if (selectedGroupIndex < 0 || !map.current) return;
+    const g = groups[selectedGroupIndex];
+    if (!g) return;
+    map.current.flyTo([g.lat, g.lng], Math.max(map.current.getZoom(), 8), {
+      duration: 0.9,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroupIndex]);
+  return null;
 }
 
 // Expand a sequence of waypoints into a denser point list that traces a
