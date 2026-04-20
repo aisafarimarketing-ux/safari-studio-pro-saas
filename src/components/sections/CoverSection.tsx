@@ -33,7 +33,7 @@ function CoverMeta({
 }
 
 export function CoverSection({ section }: { section: Section }) {
-  const { proposal, updateSectionContent, updateTrip, updateClient } = useProposalStore();
+  const { proposal, updateSectionContent, updateTrip, updateClient, updateOperator } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
 
@@ -73,6 +73,402 @@ export function CoverSection({ section }: { section: Section }) {
     };
     input.click();
   };
+
+  // ── Hero-letter — cover + greeting combined on one page ──────────────────
+  // Matches the SafariOffice-style proposal opening: boxed operator logo
+  // top-left, full-width hero photo with a dark title overlay, a taupe meta
+  // band, greeting body, signature block, and a consultant contact card.
+  // All text + all images are editable in place.
+  if (variant === "hero-letter") {
+    // Editable copy that lives in section.content (falls back to sensible
+    // defaults computed from trip / client the first time through).
+    const coverLabel =
+      (section.content.coverLabel as string) ||
+      `Proposal for ${client.guestNames || "Your Guests"}`;
+    const tourLengthLabel = (section.content.tourLengthLabel as string) || "Tour Length";
+    const defaultTourLengthValue = trip.nights
+      ? `${trip.nights + 1} Days / ${trip.nights} Nights`
+      : `${proposal.days.length || "—"} Days / ${Math.max(0, proposal.days.length - 1) || "—"} Nights`;
+    const tourLengthValue = (section.content.tourLengthValue as string) || defaultTourLengthValue;
+    const travelersLabel = (section.content.travelersLabel as string) || "Travelers";
+    const travelersValue = (section.content.travelersValue as string) || client.pax || "—";
+    const greetingOpener =
+      (section.content.greetingOpener as string) ||
+      `Good day ${client.guestNames?.split(/[,&]|and/)[0]?.trim() || "there"},`;
+    const greetingBody =
+      (section.content.greetingBody as string) ||
+      "Again, thank you very much for your interest in doing a safari with us.\n\nI am thrilled to offer you a personalised quote for this trip. Please review the day-by-day itinerary and let me know your thoughts and feedback.\n\nYour feedback is highly valued, and I would be delighted to tailor the itinerary further to accommodate your personal preferences.";
+    const signOffLead =
+      (section.content.signOffLead as string) ||
+      "Thanks again and I remain at your full disposal!";
+    const signOff = (section.content.signOff as string) || "Best regards,";
+
+    const pickImageAndSet = (onPicked: (dataUrl: string) => void) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const dataUrl = await fileToOptimizedDataUrl(file);
+          onPicked(dataUrl);
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "Image upload failed");
+        }
+      };
+      input.click();
+    };
+
+    const taupe = "#7a6e60";
+    const metaBand = "#efece6";
+
+    return (
+      <div style={{ background: tokens.pageBg, fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+        {/* 1mm-ish taupe top border — brand chrome */}
+        <div style={{ height: 8, background: taupe }} />
+
+        {/* Hero zone — operator logo top-left, full-width photo, title overlay */}
+        <div className="relative">
+          {/* Boxed operator logo */}
+          <div
+            className="absolute top-0 left-8 z-20 flex items-center justify-center"
+            style={{
+              background: tokens.pageBg,
+              width: 160,
+              height: 110,
+              border: `1px solid ${tokens.border}`,
+              borderTop: "none",
+            }}
+            onContextMenu={(e) => {
+              if (!isEditor) return;
+              e.preventDefault();
+              pickImageAndSet((u) => updateOperator({ logoUrl: u }));
+            }}
+            title={isEditor ? "Click / right-click to replace logo" : undefined}
+          >
+            {operator.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={operator.logoUrl}
+                alt={operator.companyName}
+                className="max-h-[78%] max-w-[78%] object-contain"
+              />
+            ) : isEditor ? (
+              <button
+                type="button"
+                onClick={() => pickImageAndSet((u) => updateOperator({ logoUrl: u }))}
+                className="text-[10.5px] uppercase tracking-[0.22em] text-center px-3"
+                style={{ color: tokens.mutedText }}
+              >
+                + Add logo
+              </button>
+            ) : (
+              <span
+                className="text-[11px] uppercase tracking-[0.28em] font-semibold text-center px-2"
+                style={{ color: tokens.headingText }}
+              >
+                {operator.companyName}
+              </span>
+            )}
+          </div>
+
+          {/* Full-width hero photo */}
+          <div
+            className="relative w-full"
+            style={{ aspectRatio: "16 / 9", background: tokens.cardBg }}
+            onContextMenu={handleImageContextMenu}
+          >
+            {heroUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={heroUrl}
+                alt="Cover"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : isEditor ? (
+              <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
+                <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+                <div className="text-center" style={{ color: tokens.mutedText }}>
+                  <div className="text-5xl mb-2 opacity-60">+</div>
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.2em]">Click to upload hero photo</div>
+                  <div className="text-[10.5px] mt-1.5 opacity-70">or right-click to replace</div>
+                </div>
+              </label>
+            ) : null}
+
+            {/* Dark overlay at bottom with title */}
+            <div
+              className="absolute inset-x-0 bottom-0 px-10 md:px-14 pt-16 pb-8"
+              style={{
+                background:
+                  "linear-gradient(to top, rgba(30,28,25,0.92) 0%, rgba(30,28,25,0.82) 45%, rgba(30,28,25,0) 100%)",
+              }}
+            >
+              <div
+                className="text-[15px] text-white/75 mb-3 outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateSectionContent(section.id, { coverLabel: e.currentTarget.textContent ?? "" })
+                }
+              >
+                {coverLabel}
+              </div>
+              <h1
+                className="font-bold leading-[1.05] text-white outline-none"
+                style={{ fontSize: "clamp(2.2rem, 4.6vw, 3.6rem)", letterSpacing: "-0.01em" }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                data-ai-editable="cover-title"
+                onBlur={(e) =>
+                  updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })
+                }
+              >
+                {trip.title}
+              </h1>
+            </div>
+
+            {heroUrl && isEditor && (
+              <label className="absolute top-4 right-4 z-10 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+                <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
+                Change image
+              </label>
+            )}
+          </div>
+        </div>
+
+        {/* Meta band — two labelled columns */}
+        <div
+          className="grid grid-cols-2 gap-10 px-10 md:px-14 py-5"
+          style={{ background: metaBand }}
+        >
+          <div>
+            <div
+              className="text-[13px] font-semibold mb-0.5 outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { tourLengthLabel: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {tourLengthLabel}
+            </div>
+            <div
+              className="text-[14px] outline-none"
+              style={{ color: tokens.bodyText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { tourLengthValue: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {tourLengthValue}
+            </div>
+          </div>
+          <div>
+            <div
+              className="text-[13px] font-semibold mb-0.5 outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { travelersLabel: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {travelersLabel}
+            </div>
+            <div
+              className="text-[14px] outline-none"
+              style={{ color: tokens.bodyText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => {
+                const next = e.currentTarget.textContent ?? "";
+                updateSectionContent(section.id, { travelersValue: next });
+                // Also keep client.pax in sync when the field is still the
+                // derived default (so Trip Setup and other sections see it).
+                if (!section.content.travelersValue) updateClient({ pax: next });
+              }}
+            >
+              {travelersValue}
+            </div>
+          </div>
+        </div>
+
+        {/* Greeting body */}
+        <div className="px-10 md:px-14 py-10" style={{ color: tokens.bodyText }}>
+          <div
+            className="text-[15px] font-semibold mb-3 outline-none"
+            style={{ color: tokens.headingText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateSectionContent(section.id, { greetingOpener: e.currentTarget.textContent ?? "" })
+            }
+          >
+            {greetingOpener}
+          </div>
+
+          <div
+            className="text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            data-ai-editable="greeting"
+            onBlur={(e) =>
+              updateSectionContent(section.id, { greetingBody: e.currentTarget.textContent ?? "" })
+            }
+          >
+            {greetingBody}
+          </div>
+
+          <div
+            className="mt-6 text-[14.5px] leading-[1.75] outline-none"
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateSectionContent(section.id, { signOffLead: e.currentTarget.textContent ?? "" })
+            }
+          >
+            {signOffLead}
+          </div>
+
+          <div
+            className="mt-1 text-[14.5px] leading-[1.75] outline-none"
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateSectionContent(section.id, { signOff: e.currentTarget.textContent ?? "" })
+            }
+          >
+            {signOff}
+          </div>
+
+          {/* Consultant name + handwritten signature */}
+          <div className="mt-5 flex flex-col items-start gap-2">
+            <div
+              className="text-[14.5px] outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateOperator({ consultantName: e.currentTarget.textContent?.trim() ?? operator.consultantName })
+              }
+            >
+              {operator.consultantName || "Your name"}
+            </div>
+
+            <div
+              className="relative"
+              style={{ width: 160, height: 56, display: operator.signatureUrl || isEditor ? "flex" : "none" }}
+              onContextMenu={(e) => {
+                if (!isEditor) return;
+                e.preventDefault();
+                pickImageAndSet((u) => updateOperator({ signatureUrl: u }));
+              }}
+              title={isEditor ? "Click / right-click to replace signature" : undefined}
+            >
+              {operator.signatureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={operator.signatureUrl}
+                  alt="Signature"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : isEditor ? (
+                <button
+                  type="button"
+                  onClick={() => pickImageAndSet((u) => updateOperator({ signatureUrl: u }))}
+                  className="text-[10.5px] uppercase tracking-[0.22em]"
+                  style={{
+                    color: tokens.mutedText,
+                    border: `1px dashed ${tokens.border}`,
+                    padding: "10px 14px",
+                    borderRadius: 4,
+                  }}
+                >
+                  + Add signature
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Contact card — consultant photo + company + phone + email */}
+          <div className="mt-10 flex items-start gap-4">
+            <div
+              className="shrink-0 overflow-hidden"
+              style={{ width: 72, height: 72, background: tokens.cardBg, borderRadius: 4 }}
+              onContextMenu={(e) => {
+                if (!isEditor) return;
+                e.preventDefault();
+                pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              }}
+              title={isEditor ? "Click / right-click to replace photo" : undefined}
+            >
+              {operator.consultantPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={operator.consultantPhoto}
+                  alt={operator.consultantName}
+                  className="w-full h-full object-cover"
+                />
+              ) : isEditor ? (
+                <button
+                  type="button"
+                  onClick={() => pickImageAndSet((u) => updateOperator({ consultantPhoto: u }))}
+                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
+                  style={{ color: tokens.mutedText }}
+                >
+                  + Photo
+                </button>
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
+                  style={{ color: tokens.accent }}
+                >
+                  {operator.consultantName?.charAt(0) ?? "·"}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-1 space-y-0.5 text-[13.5px]" style={{ color: tokens.bodyText }}>
+              <div
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
+                }
+              >
+                {operator.companyName}
+              </div>
+              <div
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ phone: e.currentTarget.textContent?.trim() ?? operator.phone })
+                }
+              >
+                {operator.phone || (isEditor ? "Phone" : "")}
+              </div>
+              <div
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ email: e.currentTarget.textContent?.trim() ?? operator.email })
+                }
+              >
+                {operator.email || (isEditor ? "Email" : "")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Split-panel variants — clean image + text side-by-side (no overlay) ───
   // Six variants share one renderer. The `side` argument says which side the

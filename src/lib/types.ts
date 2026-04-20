@@ -27,6 +27,10 @@ export interface OperatorProfile {
   companyName: string;
   consultantName: string;
   consultantPhoto?: string;
+  /** Handwritten signature image — rendered above the consultant's name on
+   *  the hero-letter cover variant. Optional; the name renders alone when
+   *  no signature has been uploaded. */
+  signatureUrl?: string;
   email: string;
   phone: string;
   whatsapp?: string;

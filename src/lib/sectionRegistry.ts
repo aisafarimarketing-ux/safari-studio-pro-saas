@@ -28,6 +28,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     icon: "◻",
     description: "Hero cover with image + text. Right-click an image to replace it.",
     variants: [
+      "hero-letter",
       "split-50-50-right",
       "split-50-50-left",
       "split-60-40-right",
@@ -41,8 +42,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "minimal-type",
       "full-bleed-overlay",
     ],
-    defaultVariant: "split-60-40-right",
-    defaultContent: { heroImageUrl: "", tagline: "" },
+    defaultVariant: "hero-letter",
+    defaultContent: { heroImageUrl: "", tagline: "", greetingBody: "" },
   },
   greeting: {
     type: "greeting",
