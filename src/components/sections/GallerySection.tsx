@@ -3,7 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type { Section } from "@/lib/types";
 
 export function GallerySection({ section }: { section: Section }) {
@@ -20,7 +20,7 @@ export function GallerySection({ section }: { section: Section }) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     try {
-      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      const urls = await Promise.all(files.map((f) => uploadImage(f)));
       updateSectionContent(section.id, { images: [...images, ...urls] });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Image upload failed");

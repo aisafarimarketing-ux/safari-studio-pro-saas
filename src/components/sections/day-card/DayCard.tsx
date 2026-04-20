@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import { DestinationImagePicker } from "@/components/editor/DestinationImagePicker";
 import { DayPropertyPicker } from "@/components/editor/DayPropertyPicker";
 import type { Day, Property as ProposalProperty, TierKey, Section, Proposal } from "@/lib/types";
@@ -94,7 +94,7 @@ export function DayCard({
   // ── Destination image upload ──────────────────────────────────────────
   const onDestinationImageUpload = async (file: File) => {
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
+      const dataUrl = await uploadImage(file);
       updateDay(day.id, { heroImageUrl: dataUrl });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Image upload failed");
@@ -109,7 +109,7 @@ export function DayCard({
   // back to writing the image onto the day's heroImageUrl.
   const onPropertyImageUpload = async (file: File) => {
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
+      const dataUrl = await uploadImage(file);
       const campName = day.tiers?.[activeTier as TierKey]?.camp?.trim();
       const match = campName
         ? proposal.properties.find(

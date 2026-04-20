@@ -1,7 +1,7 @@
 "use client";
 
 import { useProposalStore } from "@/store/proposalStore";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 
 export function ProposalSettingsPanel() {
   const { proposal, updateClient, updateOperator, updateTrip, updateTierLabel, toggleTierVisibility, setActiveTier } = useProposalStore();
@@ -101,7 +101,7 @@ export function ProposalSettingsPanel() {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       try {
-                        const dataUrl = await fileToOptimizedDataUrl(file, { maxDimension: 800 });
+                        const dataUrl = await uploadImage(file, { maxDimension: 800 });
                         updateOperator({ logoUrl: dataUrl });
                       } catch (err) {
                         alert(err instanceof Error ? err.message : "Logo upload failed");

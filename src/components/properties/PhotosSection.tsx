@@ -16,7 +16,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type { ImageItem } from "./types";
 
 const MAX_IMAGES = 24;
@@ -49,7 +49,7 @@ export function PhotosSection({
     try {
       for (const file of Array.from(files)) {
         if (images.length + added.length >= MAX_IMAGES) break;
-        const url = await fileToOptimizedDataUrl(file, { maxDimension: 2200 });
+        const url = await uploadImage(file, { maxDimension: 2200 });
         added.push({
           url,
           caption: null,

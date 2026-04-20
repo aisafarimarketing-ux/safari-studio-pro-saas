@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { SignaturePad } from "@/components/editor/SignaturePad";
 import type { Section } from "@/lib/types";
@@ -49,7 +49,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
       const file = input.files?.[0];
       if (!file) return;
       try {
-        const dataUrl = await fileToOptimizedDataUrl(file);
+        const dataUrl = await uploadImage(file);
         onPicked(dataUrl);
       } catch (err) {
         alert(err instanceof Error ? err.message : "Image upload failed");

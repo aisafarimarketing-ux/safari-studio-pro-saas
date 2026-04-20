@@ -960,8 +960,8 @@ function RoomsSection({
   const uploadImages = async (i: number, files: FileList | null) => {
     if (!files || files.length === 0) return;
     try {
-      const { fileToOptimizedDataUrl } = await import("@/lib/fileToDataUrl");
-      const urls = await Promise.all(Array.from(files).map((f) => fileToOptimizedDataUrl(f)));
+      const { uploadImage } = await import("@/lib/uploadImage");
+      const urls = await Promise.all(Array.from(files).map((f) => uploadImage(f)));
       updateRoom(i, { imageUrls: [...rooms[i].imageUrls, ...urls] });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");

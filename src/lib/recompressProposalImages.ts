@@ -150,6 +150,38 @@ async function reencodeDataUrl(dataUrl: string): Promise<string> {
   // source is a PNG AND encoding JPEG would lose transparency.
   const outputType = dataUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg";
 
+  // New path: after canvas re-encode, try to upload the result to Supabase
+  // Storage so existing proposals shed their inline base64. If the upload
+  // endpoint isn't available (dev, offline, 503), we fall through to the
+  // compressed data URL below. Defined as a nested helper so the upload
+  // happens after compression but before we commit a return value.
+  const canvasToUploadedUrl = async (q: number): Promise<string | null> => {
+    return await new Promise<string | null>((resolve) => {
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) return resolve(null);
+          try {
+            const form = new FormData();
+            form.append(
+              "file",
+              new File([blob], `recompressed.${outputType === "image/png" ? "png" : "jpg"}`, {
+                type: outputType,
+              }),
+            );
+            const res = await fetch("/api/upload-image", { method: "POST", body: form });
+            if (!res.ok) return resolve(null);
+            const data = (await res.json()) as { url?: string };
+            resolve(data.url ?? null);
+          } catch {
+            resolve(null);
+          }
+        },
+        outputType,
+        q,
+      );
+    });
+  };
+
   // Iterative compression — mirror fileToOptimizedDataUrl's strategy.
   let q = TARGET_QUALITY;
   let dim = TARGET_MAX_DIMENSION;
@@ -165,6 +197,13 @@ async function reencodeDataUrl(dataUrl: string): Promise<string> {
     }
     encoded = canvas.toDataURL(outputType, q);
   }
+
+  // Try to upload the final canvas state to Supabase Storage. If the
+  // endpoint succeeds, return the public URL — best outcome: the
+  // proposal drops a huge data URL for a ~200 byte URL. If not, fall
+  // back to the compressed data URL we already computed.
+  const uploaded = await canvasToUploadedUrl(q);
+  if (uploaded) return uploaded;
   return encoded;
 }
 

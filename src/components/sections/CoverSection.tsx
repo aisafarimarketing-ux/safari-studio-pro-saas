@@ -3,7 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 function CoverMeta({
@@ -46,7 +46,7 @@ export function CoverSection({ section }: { section: Section }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
+      const dataUrl = await uploadImage(file);
       updateSectionContent(section.id, { heroImageUrl: dataUrl });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Image upload failed");
@@ -65,7 +65,7 @@ export function CoverSection({ section }: { section: Section }) {
       const file = input.files?.[0];
       if (!file) return;
       try {
-        const dataUrl = await fileToOptimizedDataUrl(file);
+        const dataUrl = await uploadImage(file);
         updateSectionContent(section.id, { heroImageUrl: dataUrl });
       } catch (err) {
         alert(err instanceof Error ? err.message : "Image upload failed");

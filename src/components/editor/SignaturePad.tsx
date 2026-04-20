@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 
 // Canvas-backed signature pad. Draw with a mouse or finger, then save.
 // The last signature is cached in localStorage under a single key so a
@@ -156,7 +156,7 @@ export function SignaturePad({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file, { maxDimension: 800, quality: 0.9 });
+      const dataUrl = await uploadImage(file, { maxDimension: 800, quality: 0.9 });
       try {
         window.localStorage.setItem(STORAGE_KEY, dataUrl);
       } catch {

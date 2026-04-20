@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Field, TextArea, TextInput } from "./Field";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type { BrandDNAForm } from "./types";
 
 export function BrandCoreTab({
@@ -21,7 +21,7 @@ export function BrandCoreTab({
     setUploading(true);
     setUploadError(null);
     try {
-      const url = await fileToOptimizedDataUrl(file, { maxDimension: 800 });
+      const url = await uploadImage(file, { maxDimension: 800 });
       update({ logoUrl: url });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed");

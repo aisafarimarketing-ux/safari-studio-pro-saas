@@ -1,17 +1,18 @@
 "use client";
 
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 
 // Reusable right-click handler for image slots. Spawns a throwaway file
-// input, waits for a file, runs it through the existing optimisation
-// pipeline, then hands back a data URL via onResult.
+// input, waits for a file, runs it through uploadImage (which compresses,
+// uploads to Supabase Storage, and returns a public URL — or falls back
+// to a data URL if Storage isn't configured).
 //
 // Usage:
-//   const onContext = makeImageContextUpload((dataUrl) => updateDay(id, { heroImageUrl: dataUrl }), isEditor);
+//   const onContext = makeImageContextUpload((url) => updateDay(id, { heroImageUrl: url }), isEditor);
 //   <div onContextMenu={onContext}>…</div>
 
 export function makeImageContextUpload(
-  onResult: (dataUrl: string) => void,
+  onResult: (url: string) => void,
   enabled = true,
 ): (e: React.MouseEvent) => void {
   return (e: React.MouseEvent) => {
@@ -24,8 +25,8 @@ export function makeImageContextUpload(
       const file = input.files?.[0];
       if (!file) return;
       try {
-        const dataUrl = await fileToOptimizedDataUrl(file);
-        onResult(dataUrl);
+        const url = await uploadImage(file);
+        onResult(url);
       } catch (err) {
         alert(err instanceof Error ? err.message : "Image upload failed");
       }

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { CURATED_FONTS, IMAGE_STYLES, type BrandColor, type BrandImage } from "@/lib/brandDNA";
 import { Chip, Field, TextInput } from "./Field";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type { BrandDNAForm } from "./types";
 
 const COLOR_ROLES = ["primary", "secondary", "accent", "text", "background"] as const;
@@ -267,7 +267,7 @@ function ImageLibrarySection({
     try {
       for (const file of Array.from(files)) {
         if (form.imageLibrary.length + added.length >= MAX_IMAGES) break;
-        const url = await fileToOptimizedDataUrl(file, { maxDimension: 2000 });
+        const url = await uploadImage(file, { maxDimension: 2000 });
         added.push({ url });
       }
       update({ imageLibrary: [...form.imageLibrary, ...added] });

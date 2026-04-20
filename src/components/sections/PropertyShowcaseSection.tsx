@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { uploadImage } from "@/lib/uploadImage";
 import type {
   Section,
   Property,
@@ -383,7 +383,7 @@ function StatsTab({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToOptimizedDataUrl(file);
+      const dataUrl = await uploadImage(file);
       updateProperty(property.id, { leadImageUrl: dataUrl });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");
@@ -394,7 +394,7 @@ function StatsTab({
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     try {
-      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      const urls = await Promise.all(files.map((f) => uploadImage(f)));
       updateProperty(property.id, {
         galleryUrls: [...(property.galleryUrls ?? []), ...urls],
       });
@@ -522,7 +522,7 @@ function RoomCard({
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     try {
-      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      const urls = await Promise.all(files.map((f) => uploadImage(f)));
       updatePropertyRoom(propertyId, room.id, { imageUrls: [...imageUrls, ...urls] });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");
