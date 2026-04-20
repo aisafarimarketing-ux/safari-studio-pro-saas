@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
+import { SignaturePad } from "@/components/editor/SignaturePad";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 function CoverMeta({
@@ -41,6 +43,7 @@ export function CoverSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const heroUrl = section.content.heroImageUrl as string | undefined;
   const variant = section.layoutVariant;
+  const [signaturePadOpen, setSignaturePadOpen] = useState(false);
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -128,51 +131,9 @@ export function CoverSection({ section }: { section: Section }) {
         {/* 1mm-ish taupe top border — brand chrome */}
         <div style={{ height: 8, background: taupe }} />
 
-        {/* Hero zone — operator logo top-left, full-width photo, title overlay */}
+        {/* Hero zone — full-width photo + title overlay (logo moved to the
+            sign-off block below so the cover photo reads cleanly). */}
         <div className="relative">
-          {/* Boxed operator logo */}
-          <div
-            className="absolute top-0 left-8 z-20 flex items-center justify-center"
-            style={{
-              background: tokens.pageBg,
-              width: 160,
-              height: 110,
-              border: `1px solid ${tokens.border}`,
-              borderTop: "none",
-            }}
-            onContextMenu={(e) => {
-              if (!isEditor) return;
-              e.preventDefault();
-              pickImageAndSet((u) => updateOperator({ logoUrl: u }));
-            }}
-            title={isEditor ? "Click / right-click to replace logo" : undefined}
-          >
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={operator.logoUrl}
-                alt={operator.companyName}
-                className="max-h-[78%] max-w-[78%] object-contain"
-              />
-            ) : isEditor ? (
-              <button
-                type="button"
-                onClick={() => pickImageAndSet((u) => updateOperator({ logoUrl: u }))}
-                className="text-[10.5px] uppercase tracking-[0.22em] text-center px-3"
-                style={{ color: tokens.mutedText }}
-              >
-                + Add logo
-              </button>
-            ) : (
-              <span
-                className="text-[11px] uppercase tracking-[0.28em] font-semibold text-center px-2"
-                style={{ color: tokens.headingText }}
-              >
-                {operator.companyName}
-              </span>
-            )}
-          </div>
-
           {/* Full-width hero photo */}
           <div
             className="relative w-full"
@@ -345,10 +306,45 @@ export function CoverSection({ section }: { section: Section }) {
             {signOff}
           </div>
 
-          {/* Consultant name + handwritten signature */}
-          <div className="mt-5 flex flex-col items-start gap-2">
+          {/* Handwritten signature — click to open the signature pad */}
+          <div className="mt-5">
             <div
-              className="text-[14.5px] outline-none"
+              className="relative cursor-pointer"
+              style={{
+                width: 200,
+                height: 64,
+                display: operator.signatureUrl || isEditor ? "flex" : "none",
+              }}
+              onClick={() => {
+                if (isEditor) setSignaturePadOpen(true);
+              }}
+              title={isEditor ? "Click to sign" : undefined}
+            >
+              {operator.signatureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={operator.signatureUrl}
+                  alt="Signature"
+                  className="max-h-full max-w-full object-contain"
+                  style={{ mixBlendMode: "multiply" }}
+                />
+              ) : isEditor ? (
+                <div
+                  className="text-[11px] uppercase tracking-[0.22em] flex items-center justify-center w-full h-full"
+                  style={{
+                    color: tokens.mutedText,
+                    border: `1px dashed ${tokens.border}`,
+                    borderRadius: 4,
+                  }}
+                >
+                  ✎ Click to sign
+                </div>
+              ) : null}
+            </div>
+
+            {/* Consultant name — always visible, editable */}
+            <div
+              className="mt-2 text-[14.5px] font-medium outline-none"
               style={{ color: tokens.headingText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
@@ -358,47 +354,98 @@ export function CoverSection({ section }: { section: Section }) {
             >
               {operator.consultantName || "Your name"}
             </div>
+          </div>
 
+          {/* Branded contact block — divider, then logo + company + phone + email
+              + consultant photo. This is the proposal's signature footer. */}
+          <div
+            className="mt-10 pt-8 grid grid-cols-[auto_1fr_auto] items-center gap-6"
+            style={{ borderTop: `1px solid ${tokens.border}` }}
+          >
+            {/* Company logo */}
             <div
-              className="relative"
-              style={{ width: 160, height: 56, display: operator.signatureUrl || isEditor ? "flex" : "none" }}
+              className="shrink-0 flex items-center justify-center cursor-pointer"
+              style={{ width: 92, height: 92 }}
+              onClick={() => {
+                if (isEditor) pickImageAndSet((u) => updateOperator({ logoUrl: u }));
+              }}
               onContextMenu={(e) => {
                 if (!isEditor) return;
                 e.preventDefault();
-                pickImageAndSet((u) => updateOperator({ signatureUrl: u }));
+                pickImageAndSet((u) => updateOperator({ logoUrl: u }));
               }}
-              title={isEditor ? "Click / right-click to replace signature" : undefined}
+              title={isEditor ? "Click / right-click to replace logo" : undefined}
             >
-              {operator.signatureUrl ? (
+              {operator.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={operator.signatureUrl}
-                  alt="Signature"
-                  className="max-h-full max-w-full object-contain"
+                  src={operator.logoUrl}
+                  alt={operator.companyName}
+                  className="max-w-full max-h-full object-contain"
                 />
               ) : isEditor ? (
-                <button
-                  type="button"
-                  onClick={() => pickImageAndSet((u) => updateOperator({ signatureUrl: u }))}
-                  className="text-[10.5px] uppercase tracking-[0.22em]"
+                <div
+                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
                   style={{
                     color: tokens.mutedText,
                     border: `1px dashed ${tokens.border}`,
-                    padding: "10px 14px",
                     borderRadius: 4,
                   }}
                 >
-                  + Add signature
-                </button>
-              ) : null}
+                  + Logo
+                </div>
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.28em] font-semibold text-center"
+                  style={{ color: tokens.headingText }}
+                >
+                  {operator.companyName}
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Contact card — consultant photo + company + phone + email */}
-          <div className="mt-10 flex items-start gap-4">
+            {/* Company + consultant contact */}
+            <div className="min-w-0 space-y-0.5" style={{ color: tokens.bodyText }}>
+              <div
+                className="text-[15px] font-semibold outline-none"
+                style={{ color: tokens.headingText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
+                }
+              >
+                {operator.companyName}
+              </div>
+              <div
+                className="text-[13px] outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ phone: e.currentTarget.textContent?.trim() ?? operator.phone })
+                }
+              >
+                {operator.phone || (isEditor ? "Phone" : "")}
+              </div>
+              <div
+                className="text-[13px] outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ email: e.currentTarget.textContent?.trim() ?? operator.email })
+                }
+              >
+                {operator.email || (isEditor ? "Email" : "")}
+              </div>
+            </div>
+
+            {/* Consultant photo — optional, right-hand side of the strip */}
             <div
-              className="shrink-0 overflow-hidden"
+              className="shrink-0 overflow-hidden cursor-pointer"
               style={{ width: 72, height: 72, background: tokens.cardBg, borderRadius: 4 }}
+              onClick={() => {
+                if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              }}
               onContextMenu={(e) => {
                 if (!isEditor) return;
                 e.preventDefault();
@@ -414,14 +461,12 @@ export function CoverSection({ section }: { section: Section }) {
                   className="w-full h-full object-cover"
                 />
               ) : isEditor ? (
-                <button
-                  type="button"
-                  onClick={() => pickImageAndSet((u) => updateOperator({ consultantPhoto: u }))}
+                <div
                   className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
                   style={{ color: tokens.mutedText }}
                 >
                   + Photo
-                </button>
+                </div>
               ) : (
                 <div
                   className="w-full h-full flex items-center justify-center text-2xl font-bold"
@@ -431,41 +476,16 @@ export function CoverSection({ section }: { section: Section }) {
                 </div>
               )}
             </div>
-
-            <div className="pt-1 space-y-0.5 text-[13.5px]" style={{ color: tokens.bodyText }}>
-              <div
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
-                }
-              >
-                {operator.companyName}
-              </div>
-              <div
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ phone: e.currentTarget.textContent?.trim() ?? operator.phone })
-                }
-              >
-                {operator.phone || (isEditor ? "Phone" : "")}
-              </div>
-              <div
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ email: e.currentTarget.textContent?.trim() ?? operator.email })
-                }
-              >
-                {operator.email || (isEditor ? "Email" : "")}
-              </div>
-            </div>
           </div>
         </div>
+
+        {signaturePadOpen && (
+          <SignaturePad
+            initial={operator.signatureUrl ?? null}
+            onSave={(dataUrl) => updateOperator({ signatureUrl: dataUrl })}
+            onClose={() => setSignaturePadOpen(false)}
+          />
+        )}
       </div>
     );
   }
