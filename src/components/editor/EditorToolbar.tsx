@@ -15,6 +15,7 @@ import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
+import { recompressProposalImages } from "@/lib/recompressProposalImages";
 
 // ─── Editor toolbar ─────────────────────────────────────────────────────────
 //
@@ -49,6 +50,33 @@ export function EditorToolbar({
   const [duplicating, setDuplicating] = useState(false);
   const [pdfState, setPdfState] = useState<"idle" | "rendering" | "error">("idle");
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [compressResult, setCompressResult] = useState<string | null>(null);
+
+  // "Proposal is X MB — too big to auto-save" is the signal that the
+  // user's saved images exceed the body-size cap. Only that specific
+  // error is fixable by re-encoding; others need different handling.
+  const isSizeError = Boolean(autoSaveError?.startsWith("Proposal is "));
+
+  const handleCompressImages = async () => {
+    setCompressing(true);
+    setCompressResult(null);
+    try {
+      const current = useProposalStore.getState().proposal;
+      const result = await recompressProposalImages(current);
+      useProposalStore.getState().hydrateProposal(result.proposal);
+      const savedMb = ((result.beforeBytes - result.afterBytes) / 1024 / 1024).toFixed(1);
+      setCompressResult(
+        result.recompressedCount > 0
+          ? `Compressed ${result.recompressedCount} image${result.recompressedCount === 1 ? "" : "s"} · saved ${savedMb}MB. Auto-save will retry.`
+          : "No oversized images found. Try removing a few images manually.",
+      );
+    } catch (err) {
+      setCompressResult(err instanceof Error ? err.message : "Compression failed");
+    } finally {
+      setCompressing(false);
+    }
+  };
   const [pdfConfigDialog, setPdfConfigDialog] = useState<{
     open: boolean;
     message: string;
@@ -257,6 +285,23 @@ export function EditorToolbar({
             <div className="text-[13px] text-white/85 mt-0.5 break-words">
               {autoSaveError} — your next change will retry automatically.
             </div>
+            {isSizeError && (
+              <div className="mt-2.5">
+                <button
+                  type="button"
+                  onClick={handleCompressImages}
+                  disabled={compressing}
+                  className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-white text-[#b34334] hover:bg-white/90 disabled:opacity-60 disabled:cursor-wait transition"
+                >
+                  {compressing ? "Compressing images…" : "Compress existing images"}
+                </button>
+                {compressResult && (
+                  <div className="mt-1.5 text-[11.5px] text-white/85 break-words">
+                    {compressResult}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
