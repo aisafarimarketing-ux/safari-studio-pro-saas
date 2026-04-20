@@ -187,9 +187,11 @@ function buildDefaultSections(): Section[] {
   //   12 Closing (personal sign-off)
   //   13 Footer (operator contact)
   return [
-    // Cover combines the traditional cover + greeting into a single first
-    // page (hero-letter variant). No separate greeting section is added —
-    // operators can still insert one elsewhere if they want.
+    // Cover — hero-letter variant carries the full cover-plus-greeting on
+    // page one. If the user switches to a different cover variant, the
+    // standalone Greeting section below it takes over (hero-letter auto-
+    // suppresses its inline greeting when a standalone greeting exists so
+    // the two never duplicate).
     makeSection("cover", 0, "hero-letter", {
       heroImageUrl: "",
       coverLabel: "Proposal for the Anderson Family",
@@ -203,20 +205,22 @@ function buildDefaultSections(): Section[] {
       signOffLead: "Thanks again and I remain at your full disposal!",
       signOff: "Best regards,",
     }),
-    // itineraryTable now carries the At-a-glance stats strip at its top
-    // — no separate tripSummary section in the default flow.
-    makeSection("itineraryTable", 1, "default"),
-    makeSection("map", 2, "route", { coords: [] }),
-    makeSection("dayJourney", 3, "auto"),
-    makeSection("propertyShowcase", 4, "field-notes"),
-    makeSection("pricing", 5, "tiered-rail"),
-    makeSection("inclusions", 6, "default"),
-    makeSection("practicalInfo", 7, "card-grid"),
-    makeSection("closing", 8, "quote-led", {
+    makeSection("greeting", 1, "editorial-letter", {
+      body:
+        "Thank you very much for your interest in doing a safari with us.\n\nI am thrilled to offer you a personalised quote for this family trip across Kenya's greatest parks — Masai Mara, Amboseli and Tsavo East. Please review the day-by-day itinerary and let me know your thoughts and feedback.\n\nYour feedback is highly valued, and I would be delighted to tailor the itinerary further to accommodate your preferences.",
+    }),
+    makeSection("itineraryTable", 2, "default"),
+    makeSection("map", 3, "route", { coords: [] }),
+    makeSection("dayJourney", 4, "auto"),
+    makeSection("propertyShowcase", 5, "field-notes"),
+    makeSection("pricing", 6, "tiered-rail"),
+    makeSection("inclusions", 7, "default"),
+    makeSection("practicalInfo", 8, "card-grid"),
+    makeSection("closing", 9, "quote-led", {
       quote: "Africa changes you. The question is not whether you will come back — it's when.",
       signOff: "With warm regards and great excitement for your journey,",
     }),
-    makeSection("footer", 9, "default"),
+    makeSection("footer", 10, "default"),
   ];
 }
 

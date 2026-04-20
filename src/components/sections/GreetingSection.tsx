@@ -207,27 +207,26 @@ function ConsultantAvatar({
   size,
   textSize = "text-h3",
 }: {
-  operator: { consultantName: string; consultantPhoto?: string };
+  operator: { consultantName: string };
   tokens: { cardBg: string; accent: string };
   size: number;
   textSize?: string;
 }) {
+  // Shows the consultant's initial only. The consultant photo lives on the
+  // hero-letter cover's branded footer — rendering it here as well makes the
+  // same face appear across every cover variant's greeting, which the
+  // operator didn't ask for.
   return (
     <div
-      className="rounded-2xl overflow-hidden shrink-0"
+      className="rounded-2xl overflow-hidden shrink-0 flex items-center justify-center"
       style={{ background: tokens.cardBg, width: size, height: size }}
     >
-      {operator.consultantPhoto ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={operator.consultantPhoto} alt={operator.consultantName} className="w-full h-full object-cover" />
-      ) : (
-        <div
-          className={`w-full h-full flex items-center justify-center font-bold ${textSize}`}
-          style={{ color: tokens.accent }}
-        >
-          {operator.consultantName?.charAt(0) ?? "?"}
-        </div>
-      )}
+      <div
+        className={`w-full h-full flex items-center justify-center font-bold ${textSize}`}
+        style={{ color: tokens.accent }}
+      >
+        {operator.consultantName?.charAt(0) ?? "?"}
+      </div>
     </div>
   );
 }

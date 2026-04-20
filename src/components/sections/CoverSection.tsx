@@ -83,6 +83,14 @@ export function CoverSection({ section }: { section: Section }) {
   // band, greeting body, signature block, and a consultant contact card.
   // All text + all images are editable in place.
   if (variant === "hero-letter") {
+    // If the user has a standalone Greeting section in the proposal, let
+    // that section carry the body copy and render only the hero + meta +
+    // signature + contact footer here. Avoids showing the same greeting
+    // twice when both are present.
+    const hasStandaloneGreeting = proposal.sections.some(
+      (s) => s.type === "greeting" && s.visible !== false,
+    );
+
     // Editable copy that lives in section.content (falls back to sensible
     // defaults computed from trip / client the first time through).
     const coverLabel =
@@ -258,42 +266,47 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
         </div>
 
-        {/* Greeting body */}
+        {/* Greeting body — skipped when a standalone Greeting section is
+            present so the two don't show the same letter twice. */}
         <div className="px-10 md:px-14 py-10" style={{ color: tokens.bodyText }}>
-          <div
-            className="text-[15px] font-semibold mb-3 outline-none"
-            style={{ color: tokens.headingText }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) =>
-              updateSectionContent(section.id, { greetingOpener: e.currentTarget.textContent ?? "" })
-            }
-          >
-            {greetingOpener}
-          </div>
+          {!hasStandaloneGreeting && (
+            <>
+              <div
+                className="text-[15px] font-semibold mb-3 outline-none"
+                style={{ color: tokens.headingText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateSectionContent(section.id, { greetingOpener: e.currentTarget.textContent ?? "" })
+                }
+              >
+                {greetingOpener}
+              </div>
 
-          <div
-            className="text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            data-ai-editable="greeting"
-            onBlur={(e) =>
-              updateSectionContent(section.id, { greetingBody: e.currentTarget.textContent ?? "" })
-            }
-          >
-            {greetingBody}
-          </div>
+              <div
+                className="text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                data-ai-editable="greeting"
+                onBlur={(e) =>
+                  updateSectionContent(section.id, { greetingBody: e.currentTarget.textContent ?? "" })
+                }
+              >
+                {greetingBody}
+              </div>
 
-          <div
-            className="mt-6 text-[14.5px] leading-[1.75] outline-none"
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) =>
-              updateSectionContent(section.id, { signOffLead: e.currentTarget.textContent ?? "" })
-            }
-          >
-            {signOffLead}
-          </div>
+              <div
+                className="mt-6 text-[14.5px] leading-[1.75] outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateSectionContent(section.id, { signOffLead: e.currentTarget.textContent ?? "" })
+                }
+              >
+                {signOffLead}
+              </div>
+            </>
+          )}
 
           <div
             className="mt-1 text-[14.5px] leading-[1.75] outline-none"
