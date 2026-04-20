@@ -23,38 +23,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const { id } = await ctx.params;
-  // Try with rooms first; fall back to fetching without rooms if the
-  // PropertyRoom table hasn't been pushed to this environment's DB yet.
-  // Saves the endpoint from 500-ing on fresh deployments where
-  // `prisma db push` hasn't run.
-  let property: unknown = null;
-  try {
-    property = await prisma.property.findFirst({
-      where: { id, organizationId: auth.organization.id },
-      include: {
-        location: true,
-        images: { orderBy: { order: "asc" } },
-        tags: { include: { tag: true } },
-        customSections: { orderBy: { order: "asc" } },
-        rooms: { orderBy: { order: "asc" } },
-      },
-    });
-  } catch (err) {
-    if (isMissingTableError(err)) {
-      console.warn("[properties.GET] PropertyRoom table missing — run `prisma db push`");
-      property = await prisma.property.findFirst({
-        where: { id, organizationId: auth.organization.id },
-        include: {
-          location: true,
-          images: { orderBy: { order: "asc" } },
-          tags: { include: { tag: true } },
-          customSections: { orderBy: { order: "asc" } },
-        },
-      });
-    } else {
-      throw err;
-    }
-  }
+  const property = await prisma.property.findFirst({
+    where: { id, organizationId: auth.organization.id },
+    include: {
+      location: true,
+      images: { orderBy: { order: "asc" } },
+      tags: { include: { tag: true } },
+      customSections: { orderBy: { order: "asc" } },
+    },
+  });
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ property });
@@ -96,27 +73,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   // Run scalar update + nested replacements in a transaction so the
   // editor never sees a half-updated property.
   const updated = await prisma.$transaction(async (tx) => {
-    try {
-      await tx.property.update({ where: { id }, data });
-    } catch (err) {
-      if (isMissingTableError(err)) {
-        // A new column (checkInTime, spokenLanguages, etc.) hasn't been
-        // pushed to this environment yet. Strip the unknown fields and
-        // retry with what the DB actually has.
-        const legacyData = { ...data } as Record<string, unknown>;
-        for (const k of [
-          "checkInTime",
-          "checkOutTime",
-          "totalRooms",
-          "spokenLanguages",
-          "specialInterests",
-        ]) delete legacyData[k];
-        await tx.property.update({ where: { id }, data: legacyData });
-        console.warn("[properties.PUT] new Property columns missing — run `prisma db push`");
-      } else {
-        throw err;
-      }
-    }
+    await tx.property.update({ where: { id }, data });
 
     if (images) {
       // Wipe and re-create. With < 50 images this is cheap and correctness
@@ -166,60 +123,20 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       }
     }
 
-    if (rooms) {
-      // Same wipe-and-recreate pattern as images / customSections. Wrapped
-      // so the rest of the PUT still works if the PropertyRoom table
-      // hasn't been pushed to this environment yet.
-      try {
-        await tx.propertyRoom.deleteMany({ where: { propertyId: id } });
-        if (rooms.length > 0) {
-          await tx.propertyRoom.createMany({
-            data: rooms.map((r, i) => ({
-              propertyId: id,
-              name: String(r.name || "Room"),
-              bedConfig: r.bedConfig?.trim() || null,
-              description: r.description?.trim() || null,
-              imageUrls: Array.isArray(r.imageUrls)
-                ? r.imageUrls.filter((u): u is string => typeof u === "string" && u.length > 0)
-                : [],
-              order: typeof r.order === "number" ? r.order : i,
-            })),
-          });
-        }
-      } catch (err) {
-        if (isMissingTableError(err)) {
-          console.warn("[properties.PUT] PropertyRoom table missing — run `prisma db push`");
-        } else {
-          throw err;
-        }
-      }
-    }
+    // Rooms body is accepted by the API shape but ignored until the
+    // PropertyRoom model is restored post-`prisma db push`. See
+    // prisma/schema.prisma for the planned shape.
+    void rooms;
 
-    try {
-      return await tx.property.findFirst({
-        where: { id },
-        include: {
-          location: true,
-          images: { orderBy: { order: "asc" } },
-          tags: { include: { tag: true } },
-          customSections: { orderBy: { order: "asc" } },
-          rooms: { orderBy: { order: "asc" } },
-        },
-      });
-    } catch (err) {
-      if (isMissingTableError(err)) {
-        return await tx.property.findFirst({
-          where: { id },
-          include: {
-            location: true,
-            images: { orderBy: { order: "asc" } },
-            tags: { include: { tag: true } },
-            customSections: { orderBy: { order: "asc" } },
-          },
-        });
-      }
-      throw err;
-    }
+    return await tx.property.findFirst({
+      where: { id },
+      include: {
+        location: true,
+        images: { orderBy: { order: "asc" } },
+        tags: { include: { tag: true } },
+        customSections: { orderBy: { order: "asc" } },
+      },
+    });
   });
 
   return NextResponse.json({ property: updated });
@@ -283,11 +200,12 @@ function sanitizeProperty(body: Record<string, unknown>) {
   setIf("mealPlan", str(body.mealPlan));
   setIf("suggestedNights", int(body.suggestedNights));
   setIf("suitability", stringArray(body.suitability));
-  setIf("checkInTime", str(body.checkInTime));
-  setIf("checkOutTime", str(body.checkOutTime));
-  setIf("totalRooms", int(body.totalRooms));
-  setIf("spokenLanguages", stringArray(body.spokenLanguages));
-  setIf("specialInterests", stringArray(body.specialInterests));
+  // Showcase fields (checkInTime / checkOutTime / totalRooms /
+  // spokenLanguages / specialInterests) are intentionally not written to
+  // the DB here — they're not in the current schema. The editor form
+  // still captures them and they round-trip through proposal.contentJson
+  // when a property is dropped into a proposal. Restore these setters
+  // once `npx prisma db push` has added the columns everywhere.
   setIf("internalNotes", str(body.internalNotes));
   setIf("archived", bool(body.archived));
 
