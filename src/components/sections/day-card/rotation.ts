@@ -1,11 +1,11 @@
 import type { Day, Proposal, TierKey } from "@/lib/types";
 import type { DayCardLayoutVariant } from "./types";
 
-// Picks a concrete layout for a day when the section variant is "auto".
-// Goal: the proposal should feel designed, not templated — no two
-// identical layouts back to back. The four new editorial layouts each
-// depend on different amounts of property imagery, so we pick what looks
-// fullest given the property that's actually assigned.
+// Picks a concrete split-page variant for a day when the section variant
+// is "auto". The four variants differ only in proportions and which side
+// the Activities column sits on — so auto rotation is really about
+// rhythm: alternate the dominant side and the ratio so a 6-day proposal
+// doesn't feel like one template repeated.
 
 export function pickAutoLayoutForDay(
   day: Day,
@@ -14,25 +14,22 @@ export function pickAutoLayoutForDay(
   proposal: Proposal,
   activeTier: TierKey,
 ): Exclude<DayCardLayoutVariant, "auto"> {
-  // Day 1 → twin-frame (sets the tone with two images).
-  if (index === 0) return "twin-frame";
+  // Signature / arrival day — Activities on the left, slightly wider.
+  if (index === 0) return "split-60-40-left";
 
-  // Look at what property imagery we have for this day.
+  // Final day — flip sides for contrast.
+  if (index === totalDays - 1) return "split-50-50-right";
+
+  // Premium multi-night stays — give the Stay column more room.
   const campName = day.tiers?.[activeTier]?.camp?.trim().toLowerCase();
-  const property = campName
-    ? proposal.properties.find((p) => p.name.trim().toLowerCase() === campName)
-    : null;
-  const galleryCount = property?.galleryUrls?.filter(Boolean).length ?? 0;
-
-  // Highly-photographed property → thumbs layout (shows off the gallery).
-  if (galleryCount >= 2) {
-    // Alternate thumbs / pair / inset by position so the same property
-    // across multiple days doesn't repeat the exact composition.
-    const phase = index % 3;
-    if (phase === 0) return "hero-thumbs";
-    if (phase === 1) return "hero-pair";
-    return "hero-inset";
+  if (campName) {
+    const sameCampCount = proposal.days.filter(
+      (d) => d.tiers?.[activeTier]?.camp?.trim().toLowerCase() === campName,
+    ).length;
+    if (sameCampCount >= 2) return "split-40-60-left";
   }
-  if (galleryCount === 1) return "hero-pair";
-  return "hero-inset";
+
+  // Otherwise alternate 60-40 / 50-50 for rhythm so consecutive days don't
+  // look identical.
+  return index % 2 === 0 ? "split-60-40-left" : "split-50-50-left";
 }

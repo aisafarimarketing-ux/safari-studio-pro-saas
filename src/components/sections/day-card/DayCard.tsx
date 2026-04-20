@@ -13,11 +13,9 @@ import type { Day, Property as ProposalProperty, TierKey, Section, Proposal } fr
 import { DayCardChrome } from "./DayCardChrome";
 import { resolveDayCard } from "./resolve";
 import { pickAutoLayoutForDay } from "./rotation";
-import { TwinFrameCard } from "./layouts/TwinFrame";
-import { HeroThumbsCard } from "./layouts/HeroThumbs";
-import { HeroInsetCard } from "./layouts/HeroInset";
-import { HeroPairCard } from "./layouts/HeroPair";
+import { SplitPageCard } from "./layouts/SplitPageCard";
 import type { DayCardLayoutProps, DayCardLayoutVariant } from "./types";
+import type { OptionalActivity } from "@/lib/types";
 
 // The single entry point for a day card. Handles:
 //   - drag + drop (dnd-kit)
@@ -43,6 +41,10 @@ export function DayCard({
     duplicateDay,
     removeDay,
     addPropertyFromLibrary,
+    addOptionalActivity,
+    updateOptionalActivity,
+    removeOptionalActivity,
+    toggleAddOnSelection,
   } = useProposalStore();
   const { mode, selectDay, selectedDayId } = useEditorStore();
   const isEditor = mode === "editor";
@@ -86,6 +88,8 @@ export function DayCard({
     updateDay(day.id, { subtitle: next });
   const onNarrativeChange = (next: string) =>
     updateDay(day.id, { description: next });
+  const onBoardChange = (next: string) =>
+    updateDay(day.id, { board: next || day.board });
 
   // ── Destination image upload ──────────────────────────────────────────
   const onDestinationImageUpload = async (file: File) => {
@@ -144,7 +148,24 @@ export function DayCard({
     setPropPickerOpen(false);
   };
 
-  const layoutProps = {
+  const selectedAddOns = proposal.selectedAddOns ?? [];
+  const isAddOnSelected = (activityId: string) =>
+    selectedAddOns.some((s) => s.dayId === day.id && s.activityId === activityId);
+
+  // "Request in comments" — emit a window event the share view's comment
+  // panel listens for. If nothing listens (editor mode, or no panel
+  // mounted), the click is a no-op. Keeps coupling loose.
+  const onRequestActivityInComments = (activity: OptionalActivity) => {
+    const pricePart = activity.priceAmount
+      ? ` (${activity.priceCurrency || "USD"} ${activity.priceAmount})`
+      : "";
+    const message = `Hi — I'd like to add "${activity.title}"${pricePart} on Day ${day.dayNumber}. Could you add it to my itinerary?`;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("ss:prefillComment", { detail: { message } }));
+    }
+  };
+
+  const layoutProps: DayCardLayoutProps = {
     data,
     isEditor,
     tokens,
@@ -153,10 +174,18 @@ export function DayCard({
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,
+    onBoardChange,
     onDestinationImageUpload,
     onDestinationImagePickerOpen: () => setImagePickerOpen(true),
     onOpenPropertyPicker: () => setPropPickerOpen(true),
     onPropertyImageUpload,
+    onAddOptionalActivity: () => addOptionalActivity(day.id),
+    onUpdateOptionalActivity: (activityId, patch) =>
+      updateOptionalActivity(day.id, activityId, patch),
+    onRemoveOptionalActivity: (activityId) => removeOptionalActivity(day.id, activityId),
+    onToggleAddOn: (activityId) => toggleAddOnSelection(day.id, activityId),
+    isAddOnSelected,
+    onRequestActivityInComments,
   };
 
   return (
@@ -207,32 +236,31 @@ export function DayCard({
 type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto">;
 
 function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
-  switch (variant) {
-    case "hero-thumbs":
-      return <HeroThumbsCard {...props} />;
-    case "hero-inset":
-      return <HeroInsetCard {...props} />;
-    case "hero-pair":
-      return <HeroPairCard {...props} />;
-    case "twin-frame":
-    default:
-      return <TwinFrameCard {...props} />;
-  }
+  // All four variants share the same component — proportions + side are
+  // driven by props.data.layoutVariant inside SplitPageCard.
+  return <SplitPageCard {...props} />;
 }
 
 // Map the section-level variant (which can be "auto" or one of the four)
 // to the concrete layout used for this specific day. Called at render
 // time so rotation is always in sync with the current proposal state.
 //
-// Legacy aliases: proposals saved before the layout swap stored the old
-// names ("split-editorial" etc.). Map them onto the closest new layout
-// so existing work doesn't all collapse to the same fallback.
+// Legacy aliases: old proposals stored variant names from previous layout
+// generations ("twin-frame", "split-editorial", etc.). Map them onto the
+// closest new split-page variant so existing work doesn't fall back to
+// the same default for every day.
 const LEGACY_VARIANT_ALIASES: Record<string, ConcreteLayoutVariant> = {
-  "split-editorial": "hero-inset",
-  "cinematic-hero": "hero-thumbs",
-  "stacked-story": "hero-pair",
-  "property-led": "hero-inset",
-  "collage-hybrid": "twin-frame",
+  // v3 → v4 (Twin-frame → Split-page)
+  "twin-frame": "split-50-50-left",
+  "hero-thumbs": "split-60-40-left",
+  "hero-inset": "split-60-40-left",
+  "hero-pair": "split-50-50-left",
+  // v2 → v4
+  "split-editorial": "split-60-40-left",
+  "cinematic-hero": "split-50-50-left",
+  "stacked-story": "split-60-40-left",
+  "property-led": "split-40-60-left",
+  "collage-hybrid": "split-50-50-left",
 };
 
 function pickConcreteLayout(
@@ -246,9 +274,14 @@ function pickConcreteLayout(
   if (sectionVariant === "auto" || !sectionVariant) {
     return pickAutoLayoutForDay(day, index, totalDays, proposal, activeTier);
   }
-  const allowed = ["twin-frame", "hero-thumbs", "hero-inset", "hero-pair"] as const;
+  const allowed = [
+    "split-50-50-left",
+    "split-50-50-right",
+    "split-60-40-left",
+    "split-40-60-left",
+  ] as const;
   if ((allowed as readonly string[]).includes(sectionVariant)) {
     return sectionVariant as ConcreteLayoutVariant;
   }
-  return LEGACY_VARIANT_ALIASES[sectionVariant] ?? "twin-frame";
+  return LEGACY_VARIANT_ALIASES[sectionVariant] ?? "split-60-40-left";
 }

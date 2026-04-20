@@ -352,11 +352,17 @@ export function buildDemoProposal(): Proposal {
 // persisting the new names avoids that dance forever).
 
 const LEGACY_DAY_VARIANTS: Record<string, string> = {
-  "split-editorial": "hero-inset",
-  "cinematic-hero": "hero-thumbs",
-  "stacked-story": "hero-pair",
-  "property-led": "hero-inset",
-  "collage-hybrid": "twin-frame",
+  // v2 → v4
+  "split-editorial": "split-60-40-left",
+  "cinematic-hero": "split-50-50-left",
+  "stacked-story": "split-60-40-left",
+  "property-led": "split-40-60-left",
+  "collage-hybrid": "split-50-50-left",
+  // v3 → v4 (twin-frame era)
+  "twin-frame": "split-50-50-left",
+  "hero-thumbs": "split-60-40-left",
+  "hero-inset": "split-60-40-left",
+  "hero-pair": "split-50-50-left",
 };
 
 export function migrateLoadedProposal(proposal: Proposal): Proposal {

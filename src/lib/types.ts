@@ -97,11 +97,30 @@ export interface Day {
   heroImageUrl?: string;
   transfer?: string;
   highlights?: string[];
+  /** Operator-curated add-ons for this day (priced extras the guest can
+   *  opt into from the share view). */
+  optionalActivities?: OptionalActivity[];
   tiers: {
     classic: Accommodation;
     premier: Accommodation;
     signature: Accommodation;
   };
+}
+
+// ─── Optional activity (per-day add-on) ──────────────────────────────────────
+
+export interface OptionalActivity {
+  id: string;
+  title: string;
+  /** Where the activity takes place — e.g. "Ngorongoro Crater". */
+  location?: string;
+  /** When it happens — free text like "Morning", "Afternoon", "All Day". */
+  timeOfDay?: string;
+  description?: string;
+  /** Price displayed as text (e.g. "55"), currency separate so the share
+   *  view can render it consistently. */
+  priceAmount?: string;
+  priceCurrency?: string;
 }
 
 // ─── Property ────────────────────────────────────────────────────────────────
@@ -211,6 +230,17 @@ export interface Proposal {
   inclusions: string[];
   exclusions: string[];
   practicalInfo: PracticalCard[];
+  /** Client-selected optional activities (from the share view "Add to my
+   *  itinerary" toggles). Written only in non-editor mode. */
+  selectedAddOns?: SelectedAddOn[];
+}
+
+export interface SelectedAddOn {
+  dayId: string;
+  activityId: string;
+  /** ISO timestamp — ordered newest-first so the operator can see the
+   *  sequence in which the guest added them. */
+  selectedAt: string;
 }
 
 // ─── Quick Start Form ─────────────────────────────────────────────────────────

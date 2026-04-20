@@ -11,6 +11,7 @@ import type {
   QuickStartForm,
   TierKey,
   PracticalCard,
+  OptionalActivity,
 } from "@/lib/types";
 import { buildDefaultProposal, buildBlankProposal, migrateLoadedProposal } from "@/lib/defaults";
 import { COLOR_PRESETS } from "@/lib/theme";
@@ -61,6 +62,14 @@ interface ProposalState {
   duplicateDay: (id: string) => void;
   moveDay: (fromIndex: number, toIndex: number) => void;
   updateDay: (id: string, patch: Partial<Day>) => void;
+
+  // ── Optional activities (per-day priced add-ons) ─────────────────────────
+  addOptionalActivity: (dayId: string) => void;
+  updateOptionalActivity: (dayId: string, activityId: string, patch: Partial<OptionalActivity>) => void;
+  removeOptionalActivity: (dayId: string, activityId: string) => void;
+
+  // ── Add-on selection (guest-side, share view) ───────────────────────────
+  toggleAddOnSelection: (dayId: string, activityId: string) => void;
 
   // ── Properties ──────────────────────────────────────────────────────────────
   addProperty: () => void;
@@ -372,6 +381,55 @@ export const useProposalStore = create<ProposalState>()(
       set((state) => {
         const d = state.proposal.days.find((d) => d.id === id);
         if (d) Object.assign(d, patch);
+      }),
+
+    // ── Optional activities (per-day priced add-ons) ────────────────────────
+
+    addOptionalActivity: (dayId) =>
+      set((state) => {
+        const d = state.proposal.days.find((d) => d.id === dayId);
+        if (!d) return;
+        if (!d.optionalActivities) d.optionalActivities = [];
+        d.optionalActivities.push({
+          id: nanoid(),
+          title: "Optional activity",
+          timeOfDay: "Morning",
+          location: "",
+          description: "",
+          priceAmount: "",
+          priceCurrency: "USD",
+        });
+      }),
+
+    updateOptionalActivity: (dayId, activityId, patch) =>
+      set((state) => {
+        const d = state.proposal.days.find((d) => d.id === dayId);
+        if (!d?.optionalActivities) return;
+        const activity = d.optionalActivities.find((a) => a.id === activityId);
+        if (activity) Object.assign(activity, patch);
+      }),
+
+    removeOptionalActivity: (dayId, activityId) =>
+      set((state) => {
+        const d = state.proposal.days.find((d) => d.id === dayId);
+        if (!d?.optionalActivities) return;
+        d.optionalActivities = d.optionalActivities.filter((a) => a.id !== activityId);
+      }),
+
+    // ── Add-on selection (guest-side) ───────────────────────────────────────
+
+    toggleAddOnSelection: (dayId, activityId) =>
+      set((state) => {
+        if (!state.proposal.selectedAddOns) state.proposal.selectedAddOns = [];
+        const list = state.proposal.selectedAddOns;
+        const existing = list.findIndex(
+          (s) => s.dayId === dayId && s.activityId === activityId,
+        );
+        if (existing >= 0) {
+          list.splice(existing, 1);
+        } else {
+          list.unshift({ dayId, activityId, selectedAt: new Date().toISOString() });
+        }
       }),
 
     // ── Properties ────────────────────────────────────────────────────────────

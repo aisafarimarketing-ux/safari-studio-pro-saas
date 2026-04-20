@@ -8,14 +8,26 @@
 // Missing or null values are handled by the layouts, which fall back to
 // polished placeholders — never broken UI.
 
-import type { Day, Property, Proposal, TierKey, ThemeTokens, ProposalTheme } from "@/lib/types";
+import type {
+  Day,
+  Property,
+  Proposal,
+  TierKey,
+  ThemeTokens,
+  ProposalTheme,
+  OptionalActivity,
+} from "@/lib/types";
 
+// Day cards render one of four split-page variants. Variant name encodes
+// (a) which ratio the split uses — 50/50, 60/40, 40/60 — and (b) which
+// side the activities column sits on. The Stay column goes on the
+// opposite side. Everything spans the full canvas width.
 export type DayCardLayoutVariant =
   | "auto"
-  | "twin-frame"
-  | "hero-thumbs"
-  | "hero-inset"
-  | "hero-pair";
+  | "split-50-50-left"
+  | "split-50-50-right"
+  | "split-60-40-left"
+  | "split-40-60-left";
 
 export type ResolvedProperty = {
   id: string;
@@ -48,6 +60,9 @@ export type DayCardData = {
   // Property
   property: ResolvedProperty | null;
 
+  // Priced optional activities for this day (the upsell column).
+  optionalActivities: OptionalActivity[];
+
   // Layout hint set by the editor
   layoutVariant: DayCardLayoutVariant;
 };
@@ -65,6 +80,7 @@ export type DayCardLayoutProps = {
   onDestinationChange: (next: string) => void;
   onPhaseLabelChange: (next: string) => void;
   onNarrativeChange: (next: string) => void;
+  onBoardChange: (next: string) => void;
 
   // Image actions — destination hero
   onDestinationImageUpload: (file: File) => void;
@@ -73,16 +89,24 @@ export type DayCardLayoutProps = {
   // Property actions
   onOpenPropertyPicker: () => void;
   onPropertyImageUpload: (file: File) => void;  // replaces property.leadImageUrl
+
+  // Optional-activity actions (editor + guest)
+  onAddOptionalActivity: () => void;
+  onUpdateOptionalActivity: (activityId: string, patch: Partial<OptionalActivity>) => void;
+  onRemoveOptionalActivity: (activityId: string) => void;
+  onToggleAddOn: (activityId: string) => void;
+  isAddOnSelected: (activityId: string) => boolean;
+  onRequestActivityInComments: (activity: OptionalActivity) => void;
 };
 
 export function getDayCardVariant(raw: string | undefined): DayCardLayoutVariant {
   const v = (raw ?? "auto") as DayCardLayoutVariant;
   const allowed: DayCardLayoutVariant[] = [
     "auto",
-    "twin-frame",
-    "hero-thumbs",
-    "hero-inset",
-    "hero-pair",
+    "split-50-50-left",
+    "split-50-50-right",
+    "split-60-40-left",
+    "split-40-60-left",
   ];
   return allowed.includes(v) ? v : "auto";
 }

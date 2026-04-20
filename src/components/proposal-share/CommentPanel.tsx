@@ -44,6 +44,25 @@ export function CommentPanel({ proposalId }: { proposalId: string }) {
   });
   const [body, setBody] = useState("");
 
+  // Open the panel and pre-fill the composer when another part of the page
+  // dispatches ss:prefillComment — e.g. the "Request in comments" button on
+  // an optional activity. Event-based wiring keeps coupling loose.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail;
+      if (!detail?.message) return;
+      setOpen(true);
+      const msg = detail.message;
+      setBody((prev) => (prev.trim() ? prev + "\n\n" + msg : msg));
+      // Give the textarea a tick to mount before focusing it.
+      setTimeout(() => {
+        document.querySelector<HTMLTextAreaElement>('textarea[placeholder="Type a note…"]')?.focus();
+      }, 60);
+    };
+    window.addEventListener("ss:prefillComment", handler as EventListener);
+    return () => window.removeEventListener("ss:prefillComment", handler as EventListener);
+  }, []);
+
   // Load comments on first open. We don't poll — re-open to refresh, or
   // the operator can refresh the share link to see the latest.
   useEffect(() => {
