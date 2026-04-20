@@ -12,6 +12,7 @@ import type {
   TierKey,
   PracticalCard,
   OptionalActivity,
+  PropertyRoom,
 } from "@/lib/types";
 import { buildDefaultProposal, buildBlankProposal, migrateLoadedProposal } from "@/lib/defaults";
 import { COLOR_PRESETS } from "@/lib/theme";
@@ -77,6 +78,11 @@ interface ProposalState {
   removeProperty: (id: string) => void;
   moveProperty: (fromIndex: number, toIndex: number) => void;
   updateProperty: (id: string, patch: Partial<Property>) => void;
+
+  // ── Property rooms (STATS/ROOMS/INFORMATION tab content) ────────────────
+  addPropertyRoom: (propertyId: string) => void;
+  updatePropertyRoom: (propertyId: string, roomId: string, patch: Partial<PropertyRoom>) => void;
+  removePropertyRoom: (propertyId: string, roomId: string) => void;
 
   // ── Inclusions / Exclusions ─────────────────────────────────────────────────
   updateInclusions: (list: string[]) => void;
@@ -493,6 +499,37 @@ export const useProposalStore = create<ProposalState>()(
       set((state) => {
         const p = state.proposal.properties.find((p) => p.id === id);
         if (p) Object.assign(p, patch);
+      }),
+
+    // ── Property rooms (STATS / ROOMS / INFORMATION tab content) ──────────
+
+    addPropertyRoom: (propertyId) =>
+      set((state) => {
+        const p = state.proposal.properties.find((p) => p.id === propertyId);
+        if (!p) return;
+        if (!p.rooms) p.rooms = [];
+        p.rooms.push({
+          id: nanoid(),
+          name: "New room type",
+          bedConfig: "",
+          description: "",
+          imageUrls: [],
+        });
+      }),
+
+    updatePropertyRoom: (propertyId, roomId, patch) =>
+      set((state) => {
+        const p = state.proposal.properties.find((p) => p.id === propertyId);
+        if (!p?.rooms) return;
+        const room = p.rooms.find((r) => r.id === roomId);
+        if (room) Object.assign(room, patch);
+      }),
+
+    removePropertyRoom: (propertyId, roomId) =>
+      set((state) => {
+        const p = state.proposal.properties.find((p) => p.id === propertyId);
+        if (!p?.rooms) return;
+        p.rooms = p.rooms.filter((r) => r.id !== roomId);
       }),
 
     // ── Inclusions / Exclusions ───────────────────────────────────────────────

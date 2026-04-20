@@ -215,7 +215,7 @@ function buildDefaultSections(): Section[] {
     makeSection("itineraryTable", 2, "default"),
     makeSection("map", 3, "route", { coords: [] }),
     makeSection("dayJourney", 4, "editorial-stack"),
-    makeSection("propertyShowcase", 5, "field-notes"),
+    makeSection("propertyShowcase", 5, "editorial-carousel"),
     makeSection("pricing", 6, "tiered-rail"),
     makeSection("inclusions", 7, "default"),
     makeSection("practicalInfo", 8, "card-grid"),
@@ -351,6 +351,16 @@ export function buildDemoProposal(): Proposal {
 // the next save cleans the data (the renderer has an alias fallback, but
 // persisting the new names avoids that dance forever).
 
+const LEGACY_PROPERTY_SHOWCASE_VARIANTS: Record<string, string> = {
+  "field-notes": "editorial-carousel",
+  "editorial": "editorial-carousel",
+  "image-left-details-right": "editorial-carousel",
+  "large-image-detail-block": "editorial-carousel",
+  "hero-thumbnails": "editorial-carousel",
+  "card-grid": "editorial-carousel",
+  "full-bleed": "editorial-carousel",
+};
+
 const LEGACY_DAY_VARIANTS: Record<string, string> = {
   // Everything prior generations stored resolves to the same layout now.
   "auto": "editorial-stack",
@@ -427,13 +437,21 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
     changed = true;
   }
 
-  // ── 2. Normalise legacy dayJourney variants ─────────────────────────────
+  // ── 2. Normalise legacy dayJourney + propertyShowcase variants ──────────
   const normalised = sections.map((s) => {
-    if (s.type !== "dayJourney") return s;
-    const mapped = LEGACY_DAY_VARIANTS[s.layoutVariant];
-    if (!mapped) return s;
-    changed = true;
-    return { ...s, layoutVariant: mapped };
+    if (s.type === "dayJourney") {
+      const mapped = LEGACY_DAY_VARIANTS[s.layoutVariant];
+      if (!mapped) return s;
+      changed = true;
+      return { ...s, layoutVariant: mapped };
+    }
+    if (s.type === "propertyShowcase") {
+      const mapped = LEGACY_PROPERTY_SHOWCASE_VARIANTS[s.layoutVariant];
+      if (!mapped) return s;
+      changed = true;
+      return { ...s, layoutVariant: mapped };
+    }
+    return s;
   });
 
   // ── 3. Re-number order to stay contiguous ──────────────────────────────

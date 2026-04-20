@@ -1,1025 +1,832 @@
 "use client";
 
 import { useState } from "react";
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
-} from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { fileToOptimizedDataUrl } from "@/lib/fileToDataUrl";
-import { LibraryPicker } from "@/components/properties/LibraryPicker";
-import type { Property, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
+import type {
+  Section,
+  Property,
+  PropertyRoom,
+  TierKey,
+  Proposal,
+  ProposalTheme,
+  ThemeTokens,
+} from "@/lib/types";
 
-// ── Property card ──────────────────────────────────────────────────────────────
+// Property Showcase — one single editorial-carousel variant.
+//
+// For each property in the proposal, render a full-width spread:
+//   ┌─────────────────┬───────────────────────────────────────┐
+//   │ Title           │   STATS · ROOMS · INFORMATION   ← → •• │
+//   │ Park · Days     │                                       │
+//   │                 │                                       │
+//   │ Your Stay       │        (tab content fills here)       │
+//   │ Fun Facts       │                                       │
+//   └─────────────────┴───────────────────────────────────────┘
+//
+// Tabs are real:
+//   STATS         — image carousel (leadImage + galleryUrls)
+//   ROOMS         — room type cards with bed config + photos
+//   INFORMATION   — long-form description + whyWeChoseThis + amenities
+//
+// All fields are contentEditable in editor mode; in share view the
+// carousel arrows/dots are the only interactive bits.
 
-function PropertyCard({ property, variant, index = 0 }: { property: Property; variant: string; index?: number }) {
-  const { proposal, updateProperty, removeProperty } = useProposalStore();
-  const { mode, selectProperty, selectedPropertyId } = useEditorStore();
+type Tab = "stats" | "rooms" | "information";
+
+export function PropertyShowcaseSection({ section }: { section: Section }) {
+  const { proposal } = useProposalStore();
+  const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const { theme } = proposal;
-  const tokens = theme.tokens;
-  const isSelected = selectedPropertyId === property.id;
+  const { theme, properties } = proposal;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: property.id });
+  if (properties.length === 0) {
+    return (
+      <div className="py-24" style={{ background: tokens.sectionSurface }}>
+        <div className="ed-wide text-center text-small" style={{ color: tokens.mutedText }}>
+          {isEditor
+            ? "No properties added yet. Pick properties from the library in Day-by-Day cards."
+            : "Property details coming soon."}
+        </div>
+      </div>
+    );
+  }
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: [transition, "box-shadow 200ms ease"].filter(Boolean).join(", "),
-    opacity: isDragging ? 0.4 : 1,
-    boxShadow: isSelected
-      ? "0 0 0 2px rgba(27,58,45,0.28), 0 4px 16px rgba(27,58,45,0.08)"
-      : undefined,
-  };
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      {properties.map((property, idx) => (
+        <PropertyBlock
+          key={property.id}
+          property={property}
+          isFirst={idx === 0}
+          isLast={idx === properties.length - 1}
+          isEditor={isEditor}
+          proposal={proposal}
+          theme={theme}
+          tokens={tokens}
+        />
+      ))}
+    </div>
+  );
+}
 
-  const handleLeadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+// ─── Single property block ────────────────────────────────────────────────
+
+function PropertyBlock({
+  property,
+  isFirst,
+  isLast,
+  isEditor,
+  proposal,
+  theme,
+  tokens,
+}: {
+  property: Property;
+  isFirst: boolean;
+  isLast: boolean;
+  isEditor: boolean;
+  proposal: Proposal;
+  theme: ProposalTheme;
+  tokens: ThemeTokens;
+}) {
+  const {
+    updateProperty,
+    addPropertyRoom,
+  } = useProposalStore();
+  const [activeTab, setActiveTab] = useState<Tab>("stats");
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
+  // Compute "Days 1-2" label from which days use this property at the
+  // active tier. Keeps this in sync with the itinerary automatically.
+  const daysLabel = computeDaysLabel(property, proposal, proposal.activeTier as TierKey);
+  // Nights is derived the same way.
+  const nightsCount = countNightsFor(property, proposal, proposal.activeTier as TierKey);
+
+  const carouselImages = [property.leadImageUrl, ...(property.galleryUrls ?? [])].filter(
+    (u): u is string => Boolean(u),
+  );
+  const activeCarouselImage = carouselImages[carouselIndex] ?? null;
+  const goPrev = () =>
+    setCarouselIndex((i) => (i <= 0 ? Math.max(0, carouselImages.length - 1) : i - 1));
+  const goNext = () =>
+    setCarouselIndex((i) => (i >= carouselImages.length - 1 ? 0 : i + 1));
+
+  return (
+    <div
+      className="py-20"
+      style={{
+        background: tokens.sectionSurface,
+        borderTop: isFirst ? "none" : `1px solid ${tokens.border}`,
+      }}
+    >
+      <div className="max-w-6xl mx-auto px-8 md:px-12">
+        <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
+          {/* ── Left sidebar ──────────────────────────────────────── */}
+          <div>
+            <h3
+              className="font-bold leading-[1.05] outline-none"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.8rem, 2.8vw, 2.4rem)",
+                letterSpacing: "-0.01em",
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateProperty(property.id, {
+                  name: e.currentTarget.textContent?.trim() ?? property.name,
+                })
+              }
+            >
+              {property.name}
+            </h3>
+
+            <div
+              className="mt-3 text-[10.5px] uppercase tracking-[0.24em] font-semibold"
+              style={{ color: tokens.mutedText }}
+            >
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateProperty(property.id, {
+                    location: e.currentTarget.textContent?.trim() ?? property.location,
+                  })
+                }
+              >
+                {property.location || "Location"}
+              </span>
+              {daysLabel && (
+                <>
+                  <span className="mx-2 opacity-60">|</span>
+                  <span>{daysLabel}</span>
+                </>
+              )}
+            </div>
+
+            {/* Your Stay */}
+            <FactBlock label="Your Stay" tokens={tokens}>
+              <FactRow label="Nights" value={nightsCount ? String(nightsCount) : "—"} tokens={tokens} />
+              <FactRow
+                label="Meal"
+                value={property.mealPlan || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) => updateProperty(property.id, { mealPlan: v })}
+              />
+              <FactRow
+                label="Check-in"
+                value={property.checkInTime || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) => updateProperty(property.id, { checkInTime: v })}
+              />
+              <FactRow
+                label="Check-out"
+                value={property.checkOutTime || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) => updateProperty(property.id, { checkOutTime: v })}
+              />
+            </FactBlock>
+
+            {/* Fun Facts */}
+            <FactBlock label="Fun Facts" tokens={tokens}>
+              <FactRow
+                label="No. of rooms"
+                value={property.totalRooms ? String(property.totalRooms) : "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) => {
+                  const n = parseInt(v, 10);
+                  updateProperty(property.id, {
+                    totalRooms: Number.isFinite(n) ? n : undefined,
+                  });
+                }}
+              />
+              <FactRow
+                label="Spoken languages"
+                value={(property.spokenLanguages ?? []).join(", ") || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) =>
+                  updateProperty(property.id, {
+                    spokenLanguages: v
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+              <FactRow
+                label="Special interests"
+                value={(property.specialInterests ?? []).join(", ") || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) =>
+                  updateProperty(property.id, {
+                    specialInterests: v
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            </FactBlock>
+          </div>
+
+          {/* ── Right column ──────────────────────────────────────── */}
+          <div>
+            {/* Tabs + carousel controls */}
+            <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+              <TabBar activeTab={activeTab} onTab={setActiveTab} tokens={tokens} />
+
+              {activeTab === "stats" && carouselImages.length > 1 && (
+                <div className="flex items-center gap-3 text-[12px]">
+                  <button
+                    type="button"
+                    onClick={goPrev}
+                    className="w-7 h-7 rounded-full flex items-center justify-center transition hover:opacity-70"
+                    style={{ border: `1px solid ${tokens.border}`, color: tokens.mutedText }}
+                    aria-label="Previous"
+                  >
+                    ‹
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {carouselImages.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setCarouselIndex(i)}
+                        className="w-1.5 h-1.5 rounded-full transition"
+                        style={{
+                          background: i === carouselIndex ? tokens.accent : tokens.border,
+                        }}
+                        aria-label={`Image ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="w-7 h-7 rounded-full flex items-center justify-center transition hover:opacity-70"
+                    style={{ border: `1px solid ${tokens.border}`, color: tokens.mutedText }}
+                    aria-label="Next"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Tab content */}
+            {activeTab === "stats" && (
+              <StatsTab
+                imageUrl={activeCarouselImage}
+                property={property}
+                isEditor={isEditor}
+                tokens={tokens}
+              />
+            )}
+            {activeTab === "rooms" && (
+              <RoomsTab
+                property={property}
+                isEditor={isEditor}
+                tokens={tokens}
+                theme={theme}
+                onAddRoom={() => addPropertyRoom(property.id)}
+              />
+            )}
+            {activeTab === "information" && (
+              <InformationTab property={property} isEditor={isEditor} tokens={tokens} />
+            )}
+          </div>
+        </div>
+      </div>
+      {!isLast && (
+        <div
+          className="max-w-6xl mx-auto px-8 md:px-12 mt-14"
+          aria-hidden
+          style={{ height: 1, background: "transparent" }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Tab bar ──────────────────────────────────────────────────────────────
+
+function TabBar({
+  activeTab,
+  onTab,
+  tokens,
+}: {
+  activeTab: Tab;
+  onTab: (t: Tab) => void;
+  tokens: ThemeTokens;
+}) {
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "stats", label: "Stats" },
+    { id: "rooms", label: "Rooms" },
+    { id: "information", label: "Information" },
+  ];
+  return (
+    <div className="flex items-center gap-6">
+      {tabs.map((t) => {
+        const active = t.id === activeTab;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onTab(t.id)}
+            className="text-[11px] uppercase tracking-[0.28em] font-semibold transition relative pb-1.5"
+            style={{
+              color: active ? tokens.headingText : tokens.mutedText,
+            }}
+          >
+            {t.label}
+            {active && (
+              <span
+                aria-hidden
+                className="absolute left-0 right-0 bottom-0 h-px"
+                style={{ background: tokens.accent }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── STATS tab — image carousel ──────────────────────────────────────────
+
+function StatsTab({
+  imageUrl,
+  property,
+  isEditor,
+  tokens,
+}: {
+  imageUrl: string | null;
+  property: Property;
+  isEditor: boolean;
+  tokens: ThemeTokens;
+}) {
+  const { updateProperty } = useProposalStore();
+
+  const uploadLead = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const dataUrl = await fileToOptimizedDataUrl(file);
       updateProperty(property.id, { leadImageUrl: dataUrl });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Image upload failed");
+      alert(err instanceof Error ? err.message : "Upload failed");
     }
   };
 
-  // Right-click on any <img> inside this property card opens a file picker.
-  const handleImageContextMenu = (e: React.MouseEvent) => {
-    if (!isEditor) return;
-    const el = e.target as HTMLElement;
-    if (el.tagName !== "IMG" && !el.closest(".dm-image")) return;
-    e.preventDefault();
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      try {
-        const dataUrl = await fileToOptimizedDataUrl(file);
-        updateProperty(property.id, { leadImageUrl: dataUrl });
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Image upload failed");
-      }
-    };
-    input.click();
-  };
-
-  const isEditorial = variant === "editorial";
-  const isFullBleed = variant === "full-bleed";
-  const isFieldNotes = variant === "field-notes";
-  // Editorial / full-bleed / field-notes are flush with the page — no harsh
-  // card border / rounded corners. Other variants keep the framed card.
-  const flush = isEditorial || isFullBleed || isFieldNotes;
-  const wrapperClass = flush
-    ? "dm-card relative transition-colors duration-150"
-    : "dm-card relative rounded-2xl overflow-hidden border transition-colors duration-150";
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ ...style, borderColor: flush ? "transparent" : tokens.border }}
-      onClick={() => isEditor && selectProperty(property.id)}
-      onContextMenu={handleImageContextMenu}
-      className={wrapperClass}
-    >
-      {/* Editor controls */}
-      {isEditor && (
-        <div className="absolute top-3 right-3 z-20 flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <button {...attributes} {...listeners}
-            className="w-7 h-7 rounded-md bg-black/40 text-white/70 text-xs flex items-center justify-center cursor-grab hover:bg-black/60 transition" title="Drag">⠿</button>
-          <button onClick={() => removeProperty(property.id)}
-            className="w-7 h-7 rounded-md bg-black/40 text-white/70 text-xs flex items-center justify-center hover:bg-red-500/80 transition" title="Remove">×</button>
-        </div>
-      )}
-
-      {variant === "editorial" ? (
-        <EditorialLayout property={property} index={index} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : variant === "large-image-detail-block" ? (
-        <LargeImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : variant === "hero-thumbnails" ? (
-        <HeroThumbnailsLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : variant === "card-grid" ? (
-        <CardGridLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : variant === "full-bleed" ? (
-        <FullBleedLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : variant === "field-notes" ? (
-        <FieldNotesLayout property={property} index={index} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      ) : (
-        <SplitImageLayout property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} handleLeadImage={handleLeadImage} />
-      )}
-    </div>
-  );
-}
-
-// ── Large image layout: cinematic full-width image with text overlay ──────────
-
-function LargeImageLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  return (
-    <div style={{ background: tokens.sectionSurface }}>
-      {/* Cinematic image with overlaid property name */}
-      <div className="relative w-full h-[340px] overflow-hidden">
-        {property.leadImageUrl ? (
-          <>
-            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
-            {/* Gradient overlay for text legibility */}
-            <div className="absolute inset-0" style={{
-              background: "linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)",
-            }} />
-            {/* Property name over image */}
-            <div className="absolute bottom-0 left-0 right-0 p-6">
-              <h3
-                className="text-[1.8rem] font-bold text-white leading-tight outline-none"
-                style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
-              >
-                {property.name}
-              </h3>
-              <div
-                className="text-white/70 text-sm mt-0.5 outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateProperty(property.id, { location: e.currentTarget.textContent ?? property.location })}
-              >
-                {property.location}
-              </div>
-            </div>
-            {isEditor && (
-              <label className="absolute top-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-                Change
-              </label>
-            )}
-          </>
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image"
-            style={{ background: tokens.cardBg }}>
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : (
-          <div className="w-full h-full" style={{ background: tokens.cardBg }} />
-        )}
-      </div>
-
-      {/* Details below */}
-      <div className="p-8 md:p-10">
-        {/* Name (shown when no image — duplicate hidden when image overlays it) */}
-        {!property.leadImageUrl && (
-          <div className="mb-5">
-            <h3
-              className="text-2xl font-bold outline-none"
-              style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
-            >
-              {property.name}
-            </h3>
-            <div
-              className="text-sm mt-0.5 outline-none"
-              style={{ color: tokens.mutedText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateProperty(property.id, { location: e.currentTarget.textContent ?? property.location })}
-            >
-              {property.location}
-            </div>
-          </div>
-        )}
-        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={!!property.leadImageUrl} />
-      </div>
-    </div>
-  );
-}
-
-// ── Split layout: image left (40%), details right (60%) ───────────────────────
-
-function SplitImageLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  return (
-    <div className="grid md:grid-cols-[42%_58%]" style={{ background: tokens.sectionSurface }}>
-      {/* Image */}
-      <div className="relative min-h-[300px] overflow-hidden" style={{ background: tokens.cardBg }}>
-        {property.leadImageUrl ? (
-          <>
-            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover absolute inset-0" />
-            {/* Bottom gradient */}
-            <div className="absolute inset-x-0 bottom-0 h-24" style={{
-              background: "linear-gradient(to top, rgba(0,0,0,0.35), transparent)"
-            }} />
-            {isEditor && (
-              <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-                Change
-              </label>
-            )}
-          </>
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : null}
-      </div>
-
-      {/* Details */}
-      <div className="p-8 md:p-10" style={{ background: tokens.sectionSurface }}>
-        <div className="mb-4">
-          <h3
-            className="text-[1.6rem] font-bold leading-tight outline-none"
-            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
-          >
-            {property.name}
-          </h3>
-          <div
-            className="text-sm mt-0.5 outline-none"
-            style={{ color: tokens.mutedText }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { location: e.currentTarget.textContent ?? property.location })}
-          >
-            {property.location}
-          </div>
-        </div>
-        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={false} />
-      </div>
-    </div>
-  );
-}
-
-// ── Hero + thumbnails: large lead image with gallery strip ──────────────────────
-
-function HeroThumbnailsLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  const galleryUrls = property.galleryUrls ?? [];
-
-  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const appendGallery = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     try {
       const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
-      updateProperty(property.id, { galleryUrls: [...galleryUrls, ...urls] });
+      updateProperty(property.id, {
+        galleryUrls: [...(property.galleryUrls ?? []), ...urls],
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gallery upload failed");
+      alert(err instanceof Error ? err.message : "Upload failed");
     }
   };
 
-  const removeGalleryImage = (idx: number) => {
-    updateProperty(property.id, { galleryUrls: galleryUrls.filter((_, i) => i !== idx) });
-  };
-
-  const setAsLead = (url: string) => {
-    updateProperty(property.id, { leadImageUrl: url });
-  };
-
   return (
-    <div style={{ background: tokens.sectionSurface }}>
-      {/* Hero image */}
-      <div className="relative w-full h-[380px] overflow-hidden">
-        {property.leadImageUrl ? (
-          <>
-            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
-            <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)" }} />
-            <div className="absolute bottom-0 left-0 right-0 p-8">
-              <h3 className="text-[1.8rem] font-bold text-white leading-tight outline-none"
-                style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
-                contentEditable={isEditor} suppressContentEditableWarning
-                onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}>
-                {property.name}
-              </h3>
-              <div className="text-white/70 text-sm mt-0.5">{property.location}</div>
-            </div>
-            {isEditor && (
-              <label className="absolute top-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-                Change
-              </label>
-            )}
-          </>
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image" style={{ background: tokens.cardBg }}>
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add lead photo</div>
-          </label>
-        ) : (
-          <div className="w-full h-full" style={{ background: tokens.cardBg }} />
-        )}
-      </div>
-
-      {/* Thumbnail strip */}
-      {(galleryUrls.length > 0 || isEditor) && (
-        <div className="flex gap-1.5 px-4 py-3 overflow-x-auto" style={{ background: tokens.cardBg }}>
-          {galleryUrls.map((url, i) => (
-            <div key={i} className="relative shrink-0 w-[80px] h-[60px] rounded-lg overflow-hidden group cursor-pointer"
-              onClick={() => !isEditor && setAsLead(url)}>
-              <img src={url} alt="" className="w-full h-full object-cover" />
-              {isEditor && (
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1 transition">
-                  <button onClick={(e) => { e.stopPropagation(); setAsLead(url); }}
-                    className="text-white text-[8px] bg-white/20 px-1.5 py-0.5 rounded" title="Set as main">★</button>
-                  <button onClick={(e) => { e.stopPropagation(); removeGalleryImage(i); }}
-                    className="text-white text-[8px] bg-white/20 px-1.5 py-0.5 rounded" title="Remove">×</button>
-                </div>
-              )}
-            </div>
-          ))}
-          {isEditor && (
-            <label className="shrink-0 w-[80px] h-[60px] rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer hover:bg-black/3 transition"
-              style={{ borderColor: tokens.border }}>
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryUpload} />
-              <span className="text-lg opacity-30">+</span>
-            </label>
-          )}
-        </div>
-      )}
-
-      {/* Details */}
-      <div className="p-8 md:p-10">
-        {!property.leadImageUrl && (
-          <div className="mb-5">
-            <h3 className="text-2xl font-bold outline-none" style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-              contentEditable={isEditor} suppressContentEditableWarning
-              onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}>
-              {property.name}
-            </h3>
-          </div>
-        )}
-        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={!!property.leadImageUrl} />
-      </div>
-    </div>
-  );
-}
-
-// ── Card grid: compact vertical card ────────────────────────────────────────────
-
-function CardGridLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  return (
-    <div style={{ background: tokens.sectionSurface }}>
-      <div className="relative h-[220px] overflow-hidden" style={{ background: tokens.cardBg }}>
-        {property.leadImageUrl ? (
-          <>
-            <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
-            {isEditor && (
-              <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-                Change
-              </label>
-            )}
-          </>
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-2xl opacity-30">+</div>
-          </label>
-        ) : null}
-      </div>
-      <div className="p-6">
-        <h3
-          className="text-lg font-bold leading-tight outline-none mb-1"
-          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
-        >
-          {property.name}
-        </h3>
-        <div className="text-[11px] mb-3" style={{ color: tokens.mutedText }}>{property.location}</div>
-        <p
-          className="text-[12.5px] leading-[1.8] outline-none"
-          style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
-        >
-          {property.shortDesc || property.description}
-        </p>
-        <div className="flex gap-4 mt-4 text-[10px]" style={{ color: tokens.mutedText }}>
-          {property.nights && <span>{property.nights} nights</span>}
-          {property.mealPlan && <span>{property.mealPlan}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Full-bleed: edge-to-edge image with floating text card ──────────────────
-
-function FullBleedLayout({ property, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property; isEditor: boolean; tokens: ThemeTokens; theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  return (
-    <div className="relative" style={{ background: tokens.cardBg }}>
-      <div className="relative h-[400px] overflow-hidden">
-        {property.leadImageUrl ? (
-          <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : null}
-        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%)" }} />
-        {property.leadImageUrl && isEditor && (
-          <label className="absolute top-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            Change
-          </label>
-        )}
-      </div>
-      {/* Floating card overlapping image */}
+    <div>
       <div
-        className="relative -mt-20 mx-6 md:mx-10 p-8 rounded-xl"
-        style={{ background: tokens.sectionSurface, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
+        className="relative overflow-hidden w-full"
+        style={{
+          background: tokens.cardBg,
+          aspectRatio: "16 / 10",
+          borderRadius: 4,
+        }}
       >
-        <h3
-          className="text-[1.5rem] font-bold leading-tight outline-none mb-1"
-          style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
-        >
-          {property.name}
-        </h3>
-        <div className="text-sm mb-4" style={{ color: tokens.mutedText }}>{property.location}</div>
-        <PropertyDetails property={property} isEditor={isEditor} tokens={tokens} theme={theme} updateProperty={updateProperty} showHeader={false} />
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt={property.name} className="absolute inset-0 w-full h-full object-cover" />
+        ) : isEditor ? (
+          <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
+            <input type="file" accept="image/*" className="hidden" onChange={uploadLead} />
+            <div className="text-center" style={{ color: tokens.mutedText }}>
+              <div className="text-4xl mb-2 opacity-60">+</div>
+              <div className="text-[11.5px] uppercase tracking-[0.22em] font-semibold">
+                Add property photo
+              </div>
+            </div>
+          </label>
+        ) : null}
+
+        {isEditor && (
+          <label
+            className="absolute top-3 right-3 cursor-pointer bg-black/50 text-white text-[11px] px-2.5 py-1 rounded-md hover:bg-black/70 transition backdrop-blur-sm"
+            title="Add more gallery images"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={appendGallery}
+            />
+            + Gallery images
+          </label>
+        )}
       </div>
-      <div className="h-6" />
     </div>
   );
 }
 
-// ── Shared details block ───────────────────────────────────────────────────────
+// ─── ROOMS tab ────────────────────────────────────────────────────────────
 
-// ── Editorial alternating layout — image side flips per property index ──────
-//
-// The default since this commit: a luxury-brochure feel. No card border,
-// no rounded frame on the wrapper — just a tall image (4:5 aspect) on
-// one side and a generous typography column on the other, alternating
-// position by index so the spread breathes.
-
-function EditorialLayout({
+function RoomsTab({
   property,
-  index,
   isEditor,
   tokens,
   theme,
-  updateProperty,
-  handleLeadImage,
+  onAddRoom,
 }: {
   property: Property;
-  index: number;
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onAddRoom: () => void;
 }) {
-  const imageRight = index % 2 === 1;
+  const rooms = property.rooms ?? [];
+  if (rooms.length === 0 && !isEditor) {
+    return (
+      <div className="text-[13px] italic py-10" style={{ color: tokens.mutedText }}>
+        Room details coming soon.
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`grid md:grid-cols-2 gap-10 md:gap-14 items-center ${
-        imageRight ? "md:[&>*:first-child]:order-2" : ""
-      }`}
-    >
-      {/* Image */}
-      <div
-        className="relative aspect-[4/5] md:aspect-[5/6] overflow-hidden rounded-sm"
-        style={{ background: tokens.cardBg }}
-      >
-        {property.leadImageUrl ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={property.leadImageUrl}
-              alt={property.name}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            {isEditor && (
-              <label className="absolute bottom-3 left-3 cursor-pointer bg-black/45 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/65 transition backdrop-blur-sm">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-                Change
-              </label>
-            )}
-          </>
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : null}
-      </div>
-
-      {/* Detail column — strict editorial type scale, generous rhythm */}
-      <div className="px-2 md:px-0">
-        <div
-          className="text-label ed-label mb-4"
-          style={{ color: tokens.mutedText }}
-        >
-          {property.location || "The stay"}
-        </div>
-        <h3
-          className="text-display font-bold tracking-tight outline-none"
+    <div className="space-y-5">
+      {rooms.map((room) => (
+        <RoomCard
+          key={room.id}
+          room={room}
+          propertyId={property.id}
+          isEditor={isEditor}
+          tokens={tokens}
+          theme={theme}
+        />
+      ))}
+      {isEditor && (
+        <button
+          type="button"
+          onClick={onAddRoom}
+          className="w-full py-4 text-[12px] font-semibold uppercase tracking-[0.22em] rounded-md transition hover:opacity-80"
           style={{
-            color: tokens.headingText,
-            fontFamily: `'${theme.displayFont}', serif`,
-            // Drop a notch on small screens so the display size doesn't
-            // overflow narrow viewports.
-            fontSize: "clamp(2.5rem, 6vw, 4rem)",
-            lineHeight: 1.05,
+            color: tokens.accent,
+            background: `${tokens.accent}10`,
+            border: `1px dashed ${tokens.accent}55`,
           }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
         >
-          {property.name}
-        </h3>
-        {property.shortDesc && (
-          <p
-            className="text-body-lg italic mt-4 outline-none"
-            style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
-          >
-            {property.shortDesc}
-          </p>
-        )}
-
-        {property.description && (
-          <p
-            className="text-body mt-8 outline-none"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { description: e.currentTarget.textContent ?? property.description })}
-          >
-            {property.description}
-          </p>
-        )}
-
-        {property.whyWeChoseThis && (
-          <div className="mt-8 pl-6 border-l-2" style={{ borderColor: tokens.accent }}>
-            <div
-              className="text-label ed-label mb-2"
-              style={{ color: tokens.accent }}
-            >
-              Why we chose this
-            </div>
-            <p
-              className="text-body-lg italic outline-none"
-              style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
-            >
-              {property.whyWeChoseThis}
-            </p>
-          </div>
-        )}
-
-        {(property.mealPlan || property.roomType || property.nights) && (
-          <div
-            className="mt-8 pt-6 flex flex-wrap gap-x-12 gap-y-4 border-t"
-            style={{ borderColor: tokens.border }}
-          >
-            {[
-              { label: "Meal plan", value: property.mealPlan },
-              { label: "Room", value: property.roomType },
-              { label: "Nights", value: property.nights ? `${property.nights} nights` : undefined },
-            ].map((item) =>
-              item.value ? (
-                <div key={item.label}>
-                  <div className="text-label ed-label mb-1" style={{ color: tokens.mutedText }}>
-                    {item.label}
-                  </div>
-                  <div className="text-small font-semibold" style={{ color: tokens.headingText }}>
-                    {item.value}
-                  </div>
-                </div>
-              ) : null,
-            )}
-          </div>
-        )}
-
-        {property.amenities.length > 0 && (
-          <div className="mt-8">
-            <div className="text-label ed-label mb-3" style={{ color: tokens.mutedText }}>
-              Amenities
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {property.amenities.map((a) => (
-                <span
-                  key={a}
-                  className="px-3 py-1 rounded-full text-label"
-                  style={{
-                    background: tokens.cardBg,
-                    color: tokens.bodyText,
-                    border: `1px solid ${tokens.border}`,
-                    textTransform: "none",
-                    letterSpacing: "0",
-                    fontWeight: 400,
-                  }}
-                >
-                  {a}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          + Add room type
+        </button>
+      )}
     </div>
   );
 }
 
-// ── Field Notes: Magnum / Wallpaper-style. Hero image, then a two-column body
-//    (description + the "why we chose this" + amenities). Gallery strip below.
-//    Everything visible at once — no progressive disclosure.
-
-function FieldNotesLayout({ property, index = 0, isEditor, tokens, theme, updateProperty, handleLeadImage }: {
-  property: Property;
-  index?: number;
+function RoomCard({
+  room,
+  propertyId,
+  isEditor,
+  tokens,
+  theme,
+}: {
+  room: PropertyRoom;
+  propertyId: string;
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
-  handleLeadImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
-  const gallery = (property.galleryUrls ?? []).filter(Boolean);
-  return (
-    <div style={{ background: tokens.sectionSurface }}>
-      {/* Header strip — folio number + name + location */}
-      <div className="px-8 md:px-12 pt-12 pb-6 flex items-end justify-between gap-6 flex-wrap">
-        <div className="flex items-end gap-5 min-w-0">
-          <div
-            className="text-[10px] uppercase tracking-[0.32em] pb-2"
-            style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          >
-            Property No. {String(index + 1).padStart(2, "0")}
-          </div>
-        </div>
-        {property.tier && (
-          <div
-            className="text-[10px] uppercase tracking-[0.28em] pb-2"
-            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          >
-            {property.tier}
-          </div>
-        )}
-      </div>
+  const { updatePropertyRoom, removePropertyRoom } = useProposalStore();
+  const imageUrls = room.imageUrls ?? [];
 
-      <div className="px-8 md:px-12 pb-2">
-        <h3
-          className="font-bold leading-[1.0] tracking-tight outline-none"
+  const appendImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    try {
+      const urls = await Promise.all(files.map((f) => fileToOptimizedDataUrl(f)));
+      updatePropertyRoom(propertyId, room.id, { imageUrls: [...imageUrls, ...urls] });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Upload failed");
+    }
+  };
+
+  const removeImage = (idx: number) =>
+    updatePropertyRoom(propertyId, room.id, {
+      imageUrls: imageUrls.filter((_, i) => i !== idx),
+    });
+
+  return (
+    <div
+      className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 p-4 rounded-md"
+      style={{ background: tokens.cardBg, border: `1px solid ${tokens.border}` }}
+    >
+      {/* Details */}
+      <div className="min-w-0">
+        <div
+          className="text-[16px] font-semibold outline-none"
           style={{
             color: tokens.headingText,
             fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "clamp(2rem, 4.4vw, 3rem)",
           }}
           contentEditable={isEditor}
           suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { name: e.currentTarget.textContent ?? property.name })}
+          onBlur={(e) =>
+            updatePropertyRoom(propertyId, room.id, {
+              name: e.currentTarget.textContent?.trim() ?? room.name,
+            })
+          }
         >
-          {property.name}
-        </h3>
-        <div
-          className="mt-2 text-[14px] outline-none"
-          style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          onBlur={(e) => updateProperty(property.id, { location: e.currentTarget.textContent ?? property.location })}
-        >
-          {property.location}
+          {room.name}
         </div>
-        {property.shortDesc && (
+        {(room.bedConfig || isEditor) && (
           <div
-            className="mt-3 text-[15px] italic outline-none max-w-[640px]"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { shortDesc: e.currentTarget.textContent ?? property.shortDesc })}
-          >
-            {property.shortDesc}
-          </div>
-        )}
-      </div>
-
-      {/* Hero image */}
-      <div className="relative w-full overflow-hidden mt-8" style={{ background: tokens.cardBg, aspectRatio: "16 / 9" }}>
-        {property.leadImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={property.leadImageUrl} alt={property.name} className="w-full h-full object-cover" />
-        ) : isEditor ? (
-          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-black/5 transition dm-image">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            <div className="text-3xl opacity-30 mb-1">+</div>
-            <div className="text-sm opacity-40">Add photo</div>
-          </label>
-        ) : null}
-        {property.leadImageUrl && isEditor && (
-          <label className="absolute bottom-3 right-3 cursor-pointer bg-black/55 text-white text-[10px] px-2.5 py-1 rounded-md hover:bg-black/75 transition backdrop-blur-sm">
-            <input type="file" accept="image/*" className="hidden" onChange={handleLeadImage} />
-            Change
-          </label>
-        )}
-      </div>
-
-      {/* Two-column body */}
-      <div className="px-8 md:px-12 py-12 grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-10 md:gap-14">
-        {/* Left — narrative */}
-        <div>
-          <div
-            className="text-[10px] uppercase tracking-[0.28em] mb-4"
-            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          >
-            About
-          </div>
-          <p
-            className="text-[15px] leading-[1.85] outline-none"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { description: e.currentTarget.textContent ?? property.description })}
-          >
-            {property.description || "Describe this property…"}
-          </p>
-
-          {property.whyWeChoseThis && (
-            <div className="mt-8 pl-5" style={{ borderLeft: `2px solid ${tokens.accent}` }}>
-              <div
-                className="text-[10px] uppercase tracking-[0.28em] mb-2"
-                style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                Why we chose this
-              </div>
-              <p
-                className="text-[14.5px] italic leading-[1.7] outline-none"
-                style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
-              >
-                {property.whyWeChoseThis}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Right — fact sheet */}
-        <aside style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-          <div
-            className="text-[10px] uppercase tracking-[0.28em] mb-4"
+            className="text-[12.5px] italic mt-1 outline-none"
             style={{ color: tokens.mutedText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updatePropertyRoom(propertyId, room.id, {
+                bedConfig: e.currentTarget.textContent?.trim() ?? room.bedConfig ?? "",
+              })
+            }
           >
-            At a glance
+            {room.bedConfig || (isEditor ? "Bed configuration" : "")}
           </div>
-          <dl className="space-y-3.5">
-            {[
-              { label: "Meal plan", value: property.mealPlan },
-              { label: "Room type", value: property.roomType },
-              { label: "Stay", value: property.nights ? `${property.nights} night${property.nights === 1 ? "" : "s"}` : undefined },
-            ]
-              .filter((row) => row.value)
-              .map((row) => (
-                <div key={row.label} className="flex justify-between gap-3 pb-3" style={{ borderBottom: `1px solid ${tokens.border}` }}>
-                  <dt className="text-[12px]" style={{ color: tokens.mutedText }}>{row.label}</dt>
-                  <dd className="text-[13px] font-semibold text-right" style={{ color: tokens.headingText }}>{row.value}</dd>
-                </div>
-              ))}
-          </dl>
-
-          {property.amenities.length > 0 && (
-            <div className="mt-6">
-              <div
-                className="text-[10px] uppercase tracking-[0.28em] mb-3"
-                style={{ color: tokens.mutedText }}
-              >
-                Amenities
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {property.amenities.map((a, i) => (
-                  <span
-                    key={i}
-                    className="text-[11.5px] px-2.5 py-1 rounded-full"
-                    style={{
-                      color: tokens.bodyText,
-                      background: tokens.cardBg,
-                      border: `1px solid ${tokens.border}`,
-                    }}
-                  >
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </aside>
+        )}
+        {(room.description || isEditor) && (
+          <div
+            className="text-[13px] leading-[1.7] mt-3 outline-none"
+            style={{ color: tokens.bodyText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updatePropertyRoom(propertyId, room.id, {
+                description: e.currentTarget.textContent ?? "",
+              })
+            }
+          >
+            {room.description || (isEditor ? "Describe the room…" : "")}
+          </div>
+        )}
+        {isEditor && (
+          <button
+            type="button"
+            onClick={() => removePropertyRoom(propertyId, room.id)}
+            className="mt-3 text-[11px] text-black/40 hover:text-red-500 transition"
+          >
+            Remove room
+          </button>
+        )}
       </div>
 
-      {/* Gallery strip */}
-      {gallery.length > 0 && (
-        <div className="px-8 md:px-12 pb-12">
-          <div
-            className="text-[10px] uppercase tracking-[0.28em] mb-4"
-            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          >
-            Plates
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {gallery.slice(0, 8).map((url, i) => (
+      {/* Room images */}
+      <div>
+        {imageUrls.length > 0 ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            {imageUrls.map((url, i) => (
               <div
                 key={i}
-                className="relative overflow-hidden rounded-md"
-                style={{ background: tokens.cardBg, aspectRatio: "1 / 1" }}
+                className="relative group"
+                style={{ aspectRatio: "4 / 3", background: tokens.cardBg }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`${property.name} ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+                <img src={url} alt="" className="w-full h-full object-cover rounded-sm" />
+                {isEditor && (
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] opacity-0 group-hover:opacity-100 transition"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : null}
+        {isEditor && (
+          <label
+            className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] px-3 py-1.5 rounded-md transition hover:opacity-80 cursor-pointer"
+            style={{
+              color: tokens.accent,
+              background: `${tokens.accent}10`,
+              border: `1px dashed ${tokens.accent}55`,
+            }}
+          >
+            <input type="file" accept="image/*" multiple className="hidden" onChange={appendImage} />
+            + Add room photos
+          </label>
+        )}
+      </div>
     </div>
   );
 }
 
-function PropertyDetails({ property, isEditor, tokens, theme, updateProperty, showHeader }: {
+// ─── INFORMATION tab ──────────────────────────────────────────────────────
+
+function InformationTab({
+  property,
+  isEditor,
+  tokens,
+}: {
   property: Property;
   isEditor: boolean;
   tokens: ThemeTokens;
-  theme: ProposalTheme;
-  showHeader: boolean;
-  updateProperty: (id: string, patch: Partial<Property>) => void;
 }) {
+  const { updateProperty } = useProposalStore();
   return (
-    <div className="space-y-4">
-      {/* Description */}
-      <p
-        className="text-[13.5px] leading-[2.0] outline-none"
-        style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-        contentEditable={isEditor}
-        suppressContentEditableWarning
-        onBlur={(e) => updateProperty(property.id, { description: e.currentTarget.textContent ?? property.description })}
-      >
-        {property.description}
-      </p>
+    <div className="space-y-8">
+      <section>
+        <div
+          className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
+          style={{ color: tokens.mutedText }}
+        >
+          About the property
+        </div>
+        <div
+          className="text-[14px] leading-[1.8] whitespace-pre-line outline-none"
+          style={{ color: tokens.bodyText }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) =>
+            updateProperty(property.id, { description: e.currentTarget.textContent ?? "" })
+          }
+        >
+          {property.description ||
+            (isEditor ? "Describe the property — setting, character, service, style…" : "")}
+        </div>
+      </section>
 
-      {/* Why we chose this — left border quote treatment */}
-      {property.whyWeChoseThis && (
-        <div className="pl-4 border-l-2" style={{ borderColor: `${tokens.accent}45` }}>
-          <p
-            className="text-[13px] leading-[1.85] outline-none italic"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
+      {(property.whyWeChoseThis || isEditor) && (
+        <section>
+          <div
+            className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
+            style={{ color: tokens.mutedText }}
+          >
+            Why we chose it
+          </div>
+          <div
+            className="text-[14px] leading-[1.8] whitespace-pre-line outline-none"
+            style={{ color: tokens.bodyText }}
             contentEditable={isEditor}
             suppressContentEditableWarning
-            onBlur={(e) => updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? property.whyWeChoseThis })}
+            onBlur={(e) =>
+              updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? "" })
+            }
           >
-            {property.whyWeChoseThis}
-          </p>
-        </div>
+            {property.whyWeChoseThis || (isEditor ? "Why this specific lodge for these guests?" : "")}
+          </div>
+        </section>
       )}
 
-      {/* Quick stats row */}
-      <div className="flex flex-wrap gap-5 pt-1">
-        {[
-          { label: "Meal plan", value: property.mealPlan },
-          { label: "Room type", value: property.roomType },
-          { label: "Nights", value: property.nights ? `${property.nights} nights` : undefined },
-        ].map((item) => item.value ? (
-          <div key={item.label}>
-            <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: tokens.mutedText }}>{item.label}</div>
-            <div className="text-[13px] font-semibold mt-0.5" style={{ color: tokens.headingText }}>{item.value}</div>
+      {(property.amenities.length > 0 || isEditor) && (
+        <section>
+          <div
+            className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
+            style={{ color: tokens.mutedText }}
+          >
+            Amenities
           </div>
-        ) : null)}
-      </div>
-
-      {/* Amenities — dot-separated text, no pills */}
-      {property.amenities.length > 0 && (
-        <div className="pt-3.5 border-t" style={{ borderColor: tokens.border }}>
-          <p className="text-[11.5px] leading-relaxed" style={{ color: tokens.mutedText }}>
-            {property.amenities.join("  ·  ")}
-          </p>
-        </div>
+          <div
+            className="text-[13.5px] leading-[1.7] outline-none"
+            style={{ color: tokens.bodyText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateProperty(property.id, {
+                amenities: (e.currentTarget.textContent ?? "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+          >
+            {property.amenities.length > 0
+              ? property.amenities.join(", ")
+              : isEditor
+                ? "Comma-separated list — e.g. Pool, Spa, Private verandah, Kids club"
+                : ""}
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-// ─── Section wrapper ───────────────────────────────────────────────────────────
+// ─── Shared sidebar bits ──────────────────────────────────────────────────
 
-export function PropertyShowcaseSection({ section }: { section: Section }) {
-  const { proposal, moveProperty, addProperty, addPropertyFromLibrary } = useProposalStore();
-  const { mode } = useEditorStore();
-  const isEditor = mode === "editor";
-  const { properties, theme } = proposal;
-  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
-  const [pickerOpen, setPickerOpen] = useState(false);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const fromIdx = properties.findIndex((p) => p.id === active.id);
-    const toIdx = properties.findIndex((p) => p.id === over.id);
-    if (fromIdx !== -1 && toIdx !== -1) moveProperty(fromIdx, toIdx);
-  };
-
+function FactBlock({
+  label,
+  tokens,
+  children,
+}: {
+  label: string;
+  tokens: ThemeTokens;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="py-24" style={{ background: tokens.pageBg }}>
-      <div className="ed-wide">
-        {/* Section header */}
-        <div className="flex items-end justify-between mb-16">
-          <div>
-            <div className="text-label ed-label mb-3" style={{ color: tokens.mutedText }}>
-              Where you&apos;ll stay
-            </div>
-            <div
-              className="text-h1 font-bold tracking-tight"
-              style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            >
-              Your properties
-            </div>
-          </div>
-          <div className="text-small pb-1" style={{ color: tokens.mutedText }}>
-            {properties.length} {properties.length === 1 ? "property" : "properties"}
-          </div>
-        </div>
-
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={properties.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-            <div className={section.layoutVariant === "card-grid" ? "grid grid-cols-1 md:grid-cols-2 gap-5" : section.layoutVariant === "editorial" ? "space-y-20 md:space-y-28" : "space-y-6"}>
-              {properties.map((property, i) => (
-                <div className="relative" key={property.id}>
-                  <PropertyCard property={property} variant={section.layoutVariant} index={i} />
-                </div>
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {properties.length === 0 && (
-          <div className="text-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: tokens.border, color: tokens.mutedText }}>
-            No properties yet.
-          </div>
-        )}
-
-        {isEditor && (
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={() => setPickerOpen(true)}
-              className="py-4 rounded-2xl text-sm font-semibold transition hover:opacity-90 active:scale-[0.99]"
-              style={{ background: tokens.accent, color: tokens.pageBg }}
-            >
-              ◇ Browse my properties
-            </button>
-            <button
-              onClick={addProperty}
-              className="py-4 rounded-2xl border-2 border-dashed text-sm font-medium transition hover:opacity-80"
-              style={{ borderColor: tokens.accent, color: tokens.accent }}
-            >
-              + Add blank property
-            </button>
-          </div>
-        )}
+    <div className="mt-8">
+      <div
+        className="text-[14px] font-semibold mb-3"
+        style={{ color: tokens.headingText }}
+      >
+        {label}
       </div>
-
-      <LibraryPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(snapshots) => {
-          for (const snap of snapshots) addPropertyFromLibrary(snap);
-        }}
-      />
+      <div className="space-y-1">{children}</div>
     </div>
   );
+}
+
+function FactRow({
+  label,
+  value,
+  tokens,
+  isEditor,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  tokens: ThemeTokens;
+  isEditor?: boolean;
+  onChange?: (next: string) => void;
+}) {
+  const editable = Boolean(isEditor && onChange);
+  return (
+    <div className="grid grid-cols-[auto_1fr] gap-3 text-[12.5px]">
+      <div className="tabular-nums" style={{ color: tokens.mutedText }}>
+        {label}
+      </div>
+      <div
+        className="min-w-0 outline-none"
+        style={{ color: editable ? tokens.headingText : tokens.bodyText }}
+        contentEditable={editable}
+        suppressContentEditableWarning
+        onBlur={editable ? (e) => onChange!(e.currentTarget.textContent?.trim() ?? "") : undefined}
+      >
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+/** Build a "Days 1-2" label from the days that use this property at the
+ *  active tier. Collapses consecutive day numbers into ranges. */
+function computeDaysLabel(
+  property: Property,
+  proposal: Proposal,
+  activeTier: TierKey,
+): string {
+  const lcName = property.name.trim().toLowerCase();
+  const nums = proposal.days
+    .filter((d) => d.tiers?.[activeTier]?.camp?.trim().toLowerCase() === lcName)
+    .map((d) => d.dayNumber)
+    .sort((a, b) => a - b);
+  if (nums.length === 0) return "";
+  const ranges: string[] = [];
+  let start = nums[0];
+  let prev = nums[0];
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] === prev + 1) {
+      prev = nums[i];
+      continue;
+    }
+    ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+    start = nums[i];
+    prev = nums[i];
+  }
+  ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+  return `Days ${ranges.join(", ")}`;
+}
+
+function countNightsFor(
+  property: Property,
+  proposal: Proposal,
+  activeTier: TierKey,
+): number {
+  const lcName = property.name.trim().toLowerCase();
+  return proposal.days.filter(
+    (d) => d.tiers?.[activeTier]?.camp?.trim().toLowerCase() === lcName,
+  ).length;
 }

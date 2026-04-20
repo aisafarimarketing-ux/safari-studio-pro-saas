@@ -139,6 +139,23 @@ export interface Property {
   tier?: string;
   leadImageUrl?: string;
   galleryUrls: string[];
+  /** Tour-operator-curated showcase fields. All optional — backfilled from
+   *  the tour operator's property library ahead of the proposal and shown
+   *  in PropertyShowcaseSection's STATS / ROOMS / INFORMATION tabs. */
+  checkInTime?: string;
+  checkOutTime?: string;
+  totalRooms?: number;
+  spokenLanguages?: string[];
+  specialInterests?: string[];
+  rooms?: PropertyRoom[];
+}
+
+export interface PropertyRoom {
+  id: string;
+  name: string;
+  bedConfig?: string;
+  description?: string;
+  imageUrls?: string[];
 }
 
 // ─── Pricing ─────────────────────────────────────────────────────────────────
