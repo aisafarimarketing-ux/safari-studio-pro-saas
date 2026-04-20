@@ -111,8 +111,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Pricing",
     icon: "$",
     description: "Investment overview with 3-tier pricing",
-    variants: ["tiered-rail", "default", "compact", "horizontal", "minimal"],
-    defaultVariant: "tiered-rail",
+    variants: ["editorial"],
+    defaultVariant: "editorial",
     defaultContent: {},
     dataSource: "pricing",
   },
@@ -227,7 +227,9 @@ export const ADDABLE_SECTIONS: SectionType[] = [
   "dayJourney",
   "propertyShowcase",
   "pricing",
-  "inclusions",
+  // inclusions deprecated — moved inside the pricing section's editorial
+  // variant. Kept in the registry so legacy renders still work, removed
+  // from addable.
   "practicalInfo",
   "closing",
   // footer deprecated — the closing-farewell variant renders a branded

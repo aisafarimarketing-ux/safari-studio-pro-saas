@@ -216,12 +216,14 @@ function buildDefaultSections(): Section[] {
     makeSection("map", 3, "route", { coords: [] }),
     makeSection("dayJourney", 4, "editorial-stack"),
     makeSection("propertyShowcase", 5, "editorial-carousel"),
-    makeSection("pricing", 6, "tiered-rail"),
-    makeSection("inclusions", 7, "default"),
-    makeSection("practicalInfo", 8, "card-grid"),
+    // Pricing now carries inclusions/exclusions + payment schedule,
+    // cancellation, insurance, and T&Cs. No standalone inclusions section
+    // in the default flow — still available in the registry for legacy.
+    makeSection("pricing", 6, "editorial"),
+    makeSection("practicalInfo", 7, "card-grid"),
     // Closing-farewell carries the branded footer — no standalone footer
     // section in the default flow anymore.
-    makeSection("closing", 9, "closing-farewell", {
+    makeSection("closing", 8, "closing-farewell", {
       quote: "Take only memories, leave only footprints.",
       attribution: "— Chief Seattle",
       signOff:
@@ -405,6 +407,16 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   if (hasClosing) {
     const before = sections.length;
     sections = sections.filter((s) => s.type !== "footer");
+    if (sections.length !== before) changed = true;
+  }
+
+  // ── 0b. Drop standalone inclusions sections — the pricing editorial
+  //    variant now renders inclusions + exclusions inline. Only drop
+  //    when a pricing section exists so nobody loses their only list.
+  const hasPricing = sections.some((s) => s.type === "pricing");
+  if (hasPricing) {
+    const before = sections.length;
+    sections = sections.filter((s) => s.type !== "inclusions");
     if (sections.length !== before) changed = true;
   }
 
