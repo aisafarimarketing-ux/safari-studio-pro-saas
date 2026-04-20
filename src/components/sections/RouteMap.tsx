@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
 
 // Leaflet needs the DOM, so dynamic-import with ssr: false. The map tiles
-// come from OpenStreetMap; no API key required.
+// come from Carto (Voyager style) — no API key, more colourful than raw
+// OSM without going illustrated.
 
 const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
@@ -47,6 +48,8 @@ export function RouteMap({
   height?: number;
 }) {
   const [state, setState] = useState<GeocodeState>({ status: "idle" });
+  // Import leaflet once on the client so we can build custom div icons.
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
 
   // Signature of current days used to invalidate the cache when destinations
   // change. The cache is stale if a destination was renamed.
@@ -146,6 +149,7 @@ export function RouteMap({
     let mounted = true;
     import("leaflet").then((L) => {
       if (!mounted) return;
+      leafletRef.current = L;
       delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -161,7 +165,7 @@ export function RouteMap({
   if (state.status === "idle" || state.status === "loading") {
     return (
       <div
-        className="w-full flex items-center justify-center rounded-xl"
+        className="w-full flex items-center justify-center"
         style={{ height, background: tokens.cardBg, color: tokens.mutedText }}
       >
         <div className="text-small">Plotting route…</div>
@@ -172,7 +176,7 @@ export function RouteMap({
   if (state.status === "error") {
     return (
       <div
-        className="w-full flex items-center justify-center rounded-xl"
+        className="w-full flex items-center justify-center"
         style={{ height, background: tokens.cardBg, color: tokens.mutedText }}
       >
         <div className="text-small">Map unavailable — {state.message}</div>
@@ -184,7 +188,7 @@ export function RouteMap({
   if (coords.length === 0) {
     return (
       <div
-        className="w-full flex flex-col items-center justify-center rounded-xl"
+        className="w-full flex flex-col items-center justify-center"
         style={{ height, background: tokens.cardBg, color: tokens.mutedText }}
       >
         <div className="text-small">No destinations to plot.</div>
@@ -193,9 +197,14 @@ export function RouteMap({
     );
   }
 
-  // Compute center + zoom — fit all points in view.
-  const lats = coords.map((c) => c.lat);
-  const lngs = coords.map((c) => c.lng);
+  // Group consecutive days at the same coordinate into a single marker so
+  // a 2-night stay doesn't stack two pins on the same pixel. Label reads
+  // "Day 3-4" when a group spans multiple days.
+  const groups = groupCoordsByLocation(coords);
+
+  // Bounds from group centres — tighter than per-day bounds.
+  const lats = groups.map((g) => g.lat);
+  const lngs = groups.map((g) => g.lng);
   const center: LatLngExpression = [
     (Math.min(...lats) + Math.max(...lats)) / 2,
     (Math.min(...lngs) + Math.max(...lngs)) / 2,
@@ -204,46 +213,226 @@ export function RouteMap({
     [Math.min(...lats), Math.min(...lngs)],
     [Math.max(...lats), Math.max(...lngs)],
   ];
-  const routeLine: LatLngExpression[] = coords.map((c) => [c.lat, c.lng]);
+
+  // Gentle curved polyline between consecutive group centres. Keeps the
+  // route feeling like a journey instead of a straight-line diagram.
+  const routeLine: LatLngExpression[] = buildCurvedPath(
+    groups.map((g) => [g.lat, g.lng] as LatLngTuple),
+    28,
+  );
 
   return (
-    <div className="w-full overflow-hidden rounded-xl" style={{ height, background: tokens.cardBg }}>
+    <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
       <MapContainer
         center={center}
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        boundsOptions={{ padding: [32, 32] }}
+        boundsOptions={{ padding: [48, 48] }}
         style={{ width: "100%", height: "100%" }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          subdomains={["a", "b", "c", "d"]}
+          maxZoom={19}
         />
-        {coords.length > 1 && (
+
+        {groups.length > 1 && (
           <Polyline
             positions={routeLine}
             pathOptions={{
               color: tokens.accent,
-              weight: 3,
-              dashArray: "6 6",
-              opacity: 0.9,
+              weight: 2.4,
+              opacity: 0.85,
+              dashArray: "4 6",
+              lineCap: "round",
+              lineJoin: "round",
             }}
           />
         )}
-        {coords.map((c) => (
-          <Marker key={`${c.dayId}-${c.lat}-${c.lng}`} position={[c.lat, c.lng]}>
-            <Tooltip direction="top" offset={[0, -28]} opacity={1} permanent={false}>
-              <div style={{ fontFamily: "system-ui, sans-serif", padding: "2px 4px" }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "#666" }}>
-                  Day {c.dayNumber}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{c.label}</div>
-              </div>
-            </Tooltip>
-          </Marker>
-        ))}
+
+        {groups.map((g) => {
+          const icon = leafletRef.current
+            ? buildDayBadge(leafletRef.current, g.dayLabel, tokens.accent)
+            : undefined;
+          return (
+            <Marker
+              key={`${g.lat}-${g.lng}-${g.startDay}`}
+              position={[g.lat, g.lng]}
+              icon={icon}
+            >
+              <Tooltip
+                direction="bottom"
+                offset={[0, 18]}
+                opacity={1}
+                permanent={true}
+                className="ss-map-label"
+              >
+                {g.label}
+              </Tooltip>
+            </Marker>
+          );
+        })}
       </MapContainer>
+
+      {/* Legend chip — sits on the map, subtle */}
+      <div
+        className="absolute bottom-3 left-3 z-[500] flex items-center gap-3 px-3 py-1.5 rounded-md text-[10.5px] uppercase tracking-[0.18em]"
+        style={{
+          background: "rgba(255,255,255,0.92)",
+          color: tokens.bodyText,
+          border: `1px solid ${tokens.border}`,
+          backdropFilter: "blur(4px)",
+        }}
+      >
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block"
+            style={{ width: 10, height: 10, borderRadius: 999, background: tokens.accent }}
+          />
+          Stopover
+        </span>
+        <span style={{ opacity: 0.5 }}>·</span>
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block"
+            style={{ width: 16, height: 2, background: tokens.accent, opacity: 0.6 }}
+          />
+          Route
+        </span>
+      </div>
+
+      {/* Global style for the permanent tooltips — can't inject via the
+          react-leaflet props, so we do it once at the module scope. */}
+      <style jsx global>{`
+        .leaflet-tooltip.ss-map-label {
+          background: rgba(30, 28, 25, 0.9);
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 3px 8px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          white-space: nowrap;
+        }
+        .leaflet-tooltip.ss-map-label::before {
+          display: none;
+        }
+        .ss-day-badge {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          color: white;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          border: 2px solid white;
+          font-family: system-ui, sans-serif;
+        }
+      `}</style>
     </div>
   );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+type CoordGroup = {
+  startDay: number;
+  endDay: number;
+  dayLabel: string;   // "1" or "3-4"
+  label: string;      // "Day 1 · Arusha" — rendered in the permanent tooltip
+  lat: number;
+  lng: number;
+};
+
+// Merge consecutive coords with the same lat/lng into a single group so
+// multi-night stays don't overplot. Tolerance is tiny (~11m) — geocoding
+// returns identical coords for the same place on repeat calls.
+function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
+  const groups: CoordGroup[] = [];
+  const EPS = 0.0001;
+  for (const c of coords) {
+    const last = groups[groups.length - 1];
+    if (last && Math.abs(last.lat - c.lat) < EPS && Math.abs(last.lng - c.lng) < EPS) {
+      last.endDay = c.dayNumber;
+      last.dayLabel = last.startDay === last.endDay ? `${last.startDay}` : `${last.startDay}-${last.endDay}`;
+      last.label = `Day ${last.dayLabel} · ${c.label}`;
+      continue;
+    }
+    groups.push({
+      startDay: c.dayNumber,
+      endDay: c.dayNumber,
+      dayLabel: String(c.dayNumber),
+      label: `Day ${c.dayNumber} · ${c.label}`,
+      lat: c.lat,
+      lng: c.lng,
+    });
+  }
+  return groups;
+}
+
+// Build a custom DivIcon for a pin that shows the day number (or range)
+// as a tinted circular badge.
+function buildDayBadge(
+  L: typeof import("leaflet"),
+  dayLabel: string,
+  color: string,
+) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="ss-day-badge" style="background:${color}">${escape(dayLabel)}</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
+}
+
+// Expand a sequence of waypoints into a denser point list that traces a
+// gentle curve through each consecutive pair. Uses a quadratic Bézier with
+// a perpendicular-offset control point so the arc always bows in a
+// consistent direction along the journey.
+function buildCurvedPath(points: LatLngTuple[], segments: number): LatLngExpression[] {
+  if (points.length < 2) return points;
+  const out: LatLngTuple[] = [points[0]];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p2 = points[i + 1];
+    const mx = (p0[0] + p2[0]) / 2;
+    const my = (p0[1] + p2[1]) / 2;
+    const dx = p2[0] - p0[0];
+    const dy = p2[1] - p0[1];
+    const len = Math.hypot(dx, dy) || 1;
+    // Perpendicular unit vector, then offset by ~12% of segment length
+    // so the bow is visible but not cartoonish.
+    const nx = -dy / len;
+    const ny = dx / len;
+    const bow = len * 0.12;
+    const cx = mx + nx * bow;
+    const cy = my + ny * bow;
+    for (let s = 1; s <= segments; s++) {
+      const t = s / segments;
+      const x = (1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * cx + t * t * p2[0];
+      const y = (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * cy + t * t * p2[1];
+      out.push([x, y]);
+    }
+  }
+  return out;
+}
+
+function escape(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c] ?? c);
 }
