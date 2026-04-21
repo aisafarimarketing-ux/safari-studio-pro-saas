@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useEditorStore } from "@/store/editorStore";
 
 // Small inline "Generate with AI" / "Rewrite with AI" button used by
 // Greeting, Closing, CustomText. Hits /api/ai/rewrite in either "write"
 // or "rewrite" mode with whatever context the caller provides, then
 // returns the text to the parent through onResult.
+//
+// Self-gates on editor mode as a safety net — callers already wrap it
+// in `isEditor && (…)` but if a future call site forgets, this button
+// still refuses to render for a guest on /p/[id] or the PDF renderer.
 
 type Tone = "warm" | "formal" | "brief" | "playful" | "poetic";
 type Length = "shorter" | "same" | "longer";
@@ -29,6 +34,11 @@ export function AIWriteButton({
   const [error, setError] = useState<string | null>(null);
   const [tone, setTone] = useState<Tone | "">("");
   const [length, setLength] = useState<Length>("same");
+
+  // Refuse to render anywhere except the editor. Selector keeps renders
+  // minimal (only re-renders when mode changes, not on other store updates).
+  const mode = useEditorStore((s) => s.mode);
+  if (mode !== "editor") return null;
 
   const hasText = currentText.trim().length > 0;
 

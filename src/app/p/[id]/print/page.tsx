@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProposalStore } from "@/store/proposalStore";
+import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import type { Proposal, Section } from "@/lib/types";
 
@@ -26,6 +27,18 @@ export default function PrintProposalPage({
   const { proposal } = useProposalStore();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Print view is strictly client-facing — force + re-clamp "print" mode
+  // so no editor chrome (swap buttons, × removes, + adds, AI rewrite
+  // popovers, hover controls) ever bleeds into the PDF.
+  useEffect(() => {
+    const { setMode } = useEditorStore.getState();
+    setMode("print");
+    const unsub = useEditorStore.subscribe((state) => {
+      if (state.mode !== "print") state.setMode("print");
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

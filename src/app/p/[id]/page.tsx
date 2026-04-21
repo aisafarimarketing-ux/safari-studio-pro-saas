@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
+import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
@@ -17,6 +18,22 @@ export default function ClientProposalPage({
   const { proposal } = useProposalStore();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Share view is strictly client-facing — force the editor store into
+  // "preview" mode on mount and clamp it back every render. The store
+  // defaults to "editor" (used by the /proposals editor), which means
+  // every isEditor check across every section leaks editor chrome into
+  // the public page unless we reset it here. Also re-clamp on every
+  // render so any in-page code that accidentally flips mode back can't
+  // silently re-expose editor controls to a guest.
+  useEffect(() => {
+    const { setMode } = useEditorStore.getState();
+    setMode("preview");
+    const unsub = useEditorStore.subscribe((state) => {
+      if (state.mode !== "preview") state.setMode("preview");
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
