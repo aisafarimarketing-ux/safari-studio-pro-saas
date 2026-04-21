@@ -32,8 +32,11 @@ export function getStorageBucketName(): string {
 export function getStorageClient(): SupabaseClient | null {
   if (!isStorageConfigured()) return null;
   if (client) return client;
+  // Strip any trailing slash — @supabase/supabase-js concatenates paths
+  // directly and a stray slash yields "Invalid path specified in request URL".
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim().replace(/\/+$/, "");
   client = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
+    url,
     process.env.SUPABASE_SERVICE_ROLE_KEY!.trim(),
     {
       auth: { persistSession: false, autoRefreshToken: false },

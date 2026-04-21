@@ -550,7 +550,7 @@ function BrandDNATease() {
             className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
             style={{ fontFamily: "'Playfair Display', serif" }}
           >
-            Teaches the AI how you sound.
+            Teaches the automation how you sound.
           </h2>
           <p className="mt-5 text-[15px] leading-relaxed text-black/55 max-w-md">
             Four sliders, two writing samples, and a list of the things you

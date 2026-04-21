@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
+import { recompressProposalImages } from "@/lib/recompressProposalImages";
 
 // Auto-save hook for the proposal editor. Subscribes to the proposal store,
 // debounces changes by 800ms, and POSTs the full proposal to /api/proposals
@@ -34,6 +35,11 @@ export function useAutoSaveProposal(enabled: boolean): {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSerializedRef = useRef<string | null>(null);
   const inFlightRef = useRef<boolean>(false);
+  // Prevents re-entering the auto-heal flow if a single heal pass couldn't
+  // bring the payload under the cap. Reset after each successful save so
+  // a later batch of uploads can trigger healing again.
+  const healedOnceRef = useRef<boolean>(false);
+  const healingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -70,13 +76,38 @@ export function useAutoSaveProposal(enabled: boolean): {
       // Pre-flight payload-size guard. Vercel/edge proxies truncate bodies
       // at ~10MB, which produces an unparseable JSON tail on the server.
       // Catching it here gives the user an actionable message instead of
-      // an opaque "Unterminated string at position N" later. Threshold is
-      // a touch under the platform cap so headers + form overhead fit.
-      const MAX_PAYLOAD_BYTES = 9 * 1024 * 1024;
+      // an opaque "Unterminated string at position N" later.
+      const MAX_PAYLOAD_BYTES = 9.5 * 1024 * 1024;
       if (payload.length > MAX_PAYLOAD_BYTES) {
+        // A heal is already running — let it finish and drive the retry.
+        if (healingRef.current) return;
+        // Auto-heal: if the payload is fat because the proposal still
+        // carries inline base64 images (legacy proposals created before
+        // Supabase Storage was wired up), silently recompress and upload
+        // them, then let the subscribe loop retry the save.
+        const hasInlineImages = payload.includes('"data:image/');
+        if (hasInlineImages && !healedOnceRef.current) {
+          healedOnceRef.current = true;
+          healingRef.current = true;
+          setState("saving");
+          setError(null);
+          try {
+            const result = await recompressProposalImages(current);
+            // hydrateProposal fires a store update, which re-triggers
+            // schedule() → save() via the subscription below. The retry
+            // runs the size guard again; if we cleared it, it proceeds.
+            useProposalStore.getState().hydrateProposal(result.proposal);
+            return;
+          } catch (err) {
+            console.error("[autoSave] auto-heal failed:", err);
+            // fall through to the size error below
+          } finally {
+            healingRef.current = false;
+          }
+        }
         const mb = (payload.length / 1024 / 1024).toFixed(1);
         setError(
-          `Proposal is ${mb}MB — too big to auto-save. Remove or replace some uploaded images, then try again. (Image uploads are stored inline; we're moving them to cloud storage to lift this limit.)`,
+          `Proposal is ${mb}MB — too big to auto-save. Remove or replace some uploaded images, then try again.`,
         );
         setState("error");
         return;
@@ -100,6 +131,9 @@ export function useAutoSaveProposal(enabled: boolean): {
         // Persist active id so a refresh reloads the same proposal.
         try { localStorage.setItem("activeProposalId", current.id); } catch {}
         lastSerializedRef.current = serialized;
+        // A successful save means the current payload is under the cap;
+        // clear the heal latch so a later batch of uploads can retry.
+        healedOnceRef.current = false;
         setLastSavedAt(new Date());
         setState("saved");
         // Fade the "Saved" label after a moment so the UI settles on "idle".
