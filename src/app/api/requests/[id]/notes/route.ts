@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/activity";
 
 // /api/requests/[id]/notes — append a user note to a request's activity
 // feed. System notes (status changes, assignments) are written by the
@@ -55,6 +56,14 @@ export async function POST(
       lastActivityAt: now,
       ...(request.firstReplyAt ? {} : { firstReplyAt: now }),
     },
+  });
+
+  await recordActivity({
+    userId: ctx.user.id,
+    organizationId: ctx.organization.id,
+    type: "postNote",
+    targetType: "request",
+    targetId: request.id,
   });
 
   return NextResponse.json({ note }, { status: 201 });

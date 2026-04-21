@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { nextRequestReferenceNumber } from "@/lib/requestCounter";
+import { recordActivity } from "@/lib/activity";
 
 // /api/requests — tenant-scoped CRUD for inbound client inquiries.
 //
@@ -196,6 +197,15 @@ export async function POST(req: Request) {
         ? `Request received via ${body.source}.`
         : "Request received.",
     },
+  });
+
+  await recordActivity({
+    userId: ctx.user.id,
+    organizationId: ctx.organization.id,
+    type: "createRequest",
+    targetType: "request",
+    targetId: request.id,
+    detail: { referenceNumber, source: body.source ?? null },
   });
 
   return NextResponse.json({ request }, { status: 201 });

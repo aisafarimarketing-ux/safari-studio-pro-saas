@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { PresenceProvider } from "@/components/presence/PresenceProvider";
 import "./globals.css";
 
 // Geist for editor UI chrome only — proposal fonts are loaded via CSS from Google Fonts
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <ClerkProvider afterSignOutUrl="/">
       <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
-        <body className="min-h-full flex flex-col">{children}</body>
+        <body className="min-h-full flex flex-col">
+          <PresenceProvider>{children}</PresenceProvider>
+        </body>
       </html>
     </ClerkProvider>
   );

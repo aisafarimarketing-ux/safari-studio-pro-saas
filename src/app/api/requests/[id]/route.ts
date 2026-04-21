@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/activity";
 
 // /api/requests/[id] — detail (GET) + status/assignment update (PATCH) +
 // soft delete (DELETE). Every mutation emits a system note into the
@@ -146,6 +147,27 @@ export async function PATCH(
         kind: "system",
         body,
       })),
+    });
+  }
+
+  if (updates.status) {
+    await recordActivity({
+      userId: ctx.user.id,
+      organizationId: ctx.organization.id,
+      type: "changeStatus",
+      targetType: "request",
+      targetId: existing.id,
+      detail: { from: existing.status, to: updates.status },
+    });
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "assignedToUserId")) {
+    await recordActivity({
+      userId: ctx.user.id,
+      organizationId: ctx.organization.id,
+      type: "assignRequest",
+      targetType: "request",
+      targetId: existing.id,
+      detail: { assignedToUserId: updates.assignedToUserId ?? null },
     });
   }
 
