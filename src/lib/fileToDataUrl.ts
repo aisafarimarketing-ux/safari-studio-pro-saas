@@ -14,13 +14,13 @@ export async function fileToOptimizedDataUrl(
   file: File,
   opts: { maxDimension?: number; quality?: number; maxBytes?: number } = {},
 ): Promise<string> {
-  // Tighter defaults to keep the per-image data URL near ~250KB so a
-  // 30-image proposal stays well under the platform's 10MB body cap.
-  // Real fix is moving uploads to blob storage — until that lands these
-  // limits buy headroom without crushing image quality.
+  // Defaults keep the compressed output near ~700KB regardless of input
+  // size. The intake cap below is a memory safety rail — browsers on
+  // low-end devices can OOM decoding massive source images — not a
+  // platform limit: compressed blobs are ~700KB before they hit Supabase.
   const maxDimension = opts.maxDimension ?? 1200;
   const quality = opts.quality ?? 0.78;
-  const maxBytes = opts.maxBytes ?? 10 * 1024 * 1024;
+  const maxBytes = opts.maxBytes ?? 30 * 1024 * 1024;
   // If the encoded data URL is larger than this we re-encode at lower
   // quality (and, if still too big, smaller dimensions). Caps a single
   // photo at ~700KB of base64.
