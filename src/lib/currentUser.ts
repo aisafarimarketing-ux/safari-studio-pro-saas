@@ -1,10 +1,19 @@
 import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import type { Organization, User } from "@prisma/client";
+import { ensureDefaultLeadSources } from "@/lib/leadSources";
+import type { Organization, OrgMembership, User } from "@prisma/client";
 
 export type AuthContext = {
   user: User;
   organization: Organization | null;
+  /** Per-user per-org membership row — carries role, signature, prefs.
+   *  Null when the user is signed in but has no active org. Upserted
+   *  alongside the User + Organization rows so every route sees it. */
+  membership: OrgMembership | null;
+  /** Convenience — one of: "owner" | "admin" | "member". "member" when no
+   *  membership is resolved yet. Prefer this to reading membership.role
+   *  directly because it collapses the null case. */
+  role: "owner" | "admin" | "member";
   /** Quick gate for kill-switch checks. True when organization is present
    *  AND its status is "active". Suspended orgs get false. */
   orgActive: boolean;
@@ -35,31 +44,72 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     update: { email, name },
   });
 
-  if (!orgId) return { user, organization: null, orgActive: false };
+  if (!orgId) return { user, organization: null, membership: null, role: "member", orgActive: false };
 
   // First-sight: hydrate name + slug from Clerk. Cheap because it only runs
   // the network call when we haven't seen this org before.
-  const existing = await prisma.organization.findUnique({
+  let organization = await prisma.organization.findUnique({
     where: { clerkOrgId: orgId },
   });
-  if (existing) return { user, organization: existing, orgActive: existing.status === "active" };
 
-  let orgName: string | null = null;
-  let orgSlug: string | null = null;
-  try {
-    const client = await clerkClient();
-    const clerkOrg = await client.organizations.getOrganization({ organizationId: orgId });
-    orgName = clerkOrg.name ?? null;
-    orgSlug = clerkOrg.slug ?? null;
-  } catch {
-    // Fall through — we'll store null and the display name comes from Clerk's
-    // client-side state. Later syncs can backfill.
+  if (!organization) {
+    let orgName: string | null = null;
+    let orgSlug: string | null = null;
+    try {
+      const client = await clerkClient();
+      const clerkOrg = await client.organizations.getOrganization({ organizationId: orgId });
+      orgName = clerkOrg.name ?? null;
+      orgSlug = clerkOrg.slug ?? null;
+    } catch {
+      // Fall through — we'll store null and the display name comes from Clerk's
+      // client-side state. Later syncs can backfill.
+    }
+
+    organization = await prisma.organization.create({
+      data: { clerkOrgId: orgId, name: orgName, slug: orgSlug },
+    });
+
+    // Seed the default lead-source taxonomy once per org. Non-fatal —
+    // missing sources just show an empty dropdown until the operator adds
+    // their own, so we don't block auth on a seed failure.
+    try {
+      await ensureDefaultLeadSources(organization.id);
+    } catch (err) {
+      console.warn("[currentUser] lead-source seed failed:", err);
+    }
   }
 
-  const organization = await prisma.organization.create({
-    data: { clerkOrgId: orgId, name: orgName, slug: orgSlug },
+  // Upsert the (user × org) membership. First member of a fresh org is
+  // the owner by default; everyone else comes in as "member" and can be
+  // promoted via Settings → Team. We never overwrite role on subsequent
+  // calls — that would clobber admin changes.
+  let membership = await prisma.orgMembership.findUnique({
+    where: { userId_organizationId: { userId: user.id, organizationId: organization.id } },
   });
-  return { user, organization, orgActive: organization.status === "active" };
+  if (!membership) {
+    const memberCount = await prisma.orgMembership.count({
+      where: { organizationId: organization.id },
+    });
+    membership = await prisma.orgMembership.create({
+      data: {
+        userId: user.id,
+        organizationId: organization.id,
+        role: memberCount === 0 ? "owner" : "member",
+      },
+    });
+  }
+
+  const role = (membership.role === "owner" || membership.role === "admin")
+    ? (membership.role as "owner" | "admin")
+    : "member";
+
+  return {
+    user,
+    organization,
+    membership,
+    role,
+    orgActive: organization.status === "active",
+  };
 }
 
 /**
