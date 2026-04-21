@@ -37,12 +37,22 @@ const isOrgAgnosticRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect();
+  const isApi = req.nextUrl.pathname.startsWith("/api/");
+
+  // Only run auth.protect() on page routes. Clerk's protect() returns a
+  // 404 (not 401) for protected API routes when the session can't be
+  // verified — which is opaque to the client and eats the real error.
+  // Every /api/* route already calls getAuthContext() and returns a
+  // proper 401/402/403/409, so letting them self-protect gives us
+  // debuggable errors and matches what the client autosave / fetch
+  // helpers already handle.
+  if (!isApi && isProtectedRoute(req)) await auth.protect();
 
   const { userId, orgId } = await auth();
   // Signed-in but no active organization → force them through the picker
   // before they can reach any app surface that depends on tenant scope.
-  if (userId && !orgId && !isOrgAgnosticRoute(req)) {
+  // API routes don't redirect — they return 409 (handled by the route).
+  if (!isApi && userId && !orgId && !isOrgAgnosticRoute(req)) {
     const url = new URL("/select-organization", req.url);
     return NextResponse.redirect(url);
   }
