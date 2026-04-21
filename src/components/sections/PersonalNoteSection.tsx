@@ -182,49 +182,45 @@ export function PersonalNoteSection({ section }: { section: Section }) {
           </div>
         </div>
 
-        {/* Branded contact strip — logo · company info · consultant photo */}
+        {/* Branded contact strip — consultant photo · company info · logo */}
         <div
           className="mt-10 pt-8 grid grid-cols-[auto_1fr_auto] items-center gap-6"
           style={{ borderTop: `1px solid ${tokens.border}` }}
         >
-          {/* Company logo */}
+          {/* Consultant photo */}
           <div
-            className="shrink-0 flex items-center justify-center cursor-pointer"
-            style={{ width: 92, height: 92 }}
+            className="shrink-0 overflow-hidden cursor-pointer"
+            style={{ width: 96, height: 96, background: tokens.cardBg, borderRadius: 4 }}
             onClick={() => {
-              if (isEditor) pickImageAndSet((u) => updateOperator({ logoUrl: u }));
+              if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
             }}
             onContextMenu={(e) => {
               if (!isEditor) return;
               e.preventDefault();
-              pickImageAndSet((u) => updateOperator({ logoUrl: u }));
+              pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
             }}
-            title={isEditor ? "Click / right-click to replace logo" : undefined}
+            title={isEditor ? "Click / right-click to replace photo" : undefined}
           >
-            {operator.logoUrl ? (
+            {operator.consultantPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={operator.logoUrl}
-                alt={operator.companyName}
-                className="max-w-full max-h-full object-contain"
+                src={operator.consultantPhoto}
+                alt={operator.consultantName}
+                className="w-full h-full object-cover"
               />
             ) : isEditor ? (
               <div
                 className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                style={{
-                  color: tokens.mutedText,
-                  border: `1px dashed ${tokens.border}`,
-                  borderRadius: 4,
-                }}
+                style={{ color: tokens.mutedText }}
               >
-                + Logo
+                + Photo
               </div>
             ) : (
               <div
-                className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.28em] font-semibold text-center"
-                style={{ color: tokens.headingText }}
+                className="w-full h-full flex items-center justify-center text-2xl font-bold"
+                style={{ color: tokens.accent }}
               >
-                {operator.companyName}
+                {operator.consultantName?.charAt(0) ?? "·"}
               </div>
             )}
           </div>
@@ -264,40 +260,44 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             </div>
           </div>
 
-          {/* Consultant photo */}
+          {/* Company logo */}
           <div
-            className="shrink-0 overflow-hidden cursor-pointer"
-            style={{ width: 72, height: 72, background: tokens.cardBg, borderRadius: 4 }}
+            className="shrink-0 flex items-center justify-center cursor-pointer"
+            style={{ width: 92, height: 92 }}
             onClick={() => {
-              if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              if (isEditor) pickImageAndSet((u) => updateOperator({ logoUrl: u }));
             }}
             onContextMenu={(e) => {
               if (!isEditor) return;
               e.preventDefault();
-              pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              pickImageAndSet((u) => updateOperator({ logoUrl: u }));
             }}
-            title={isEditor ? "Click / right-click to replace photo" : undefined}
+            title={isEditor ? "Click / right-click to replace logo" : undefined}
           >
-            {operator.consultantPhoto ? (
+            {operator.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={operator.consultantPhoto}
-                alt={operator.consultantName}
-                className="w-full h-full object-cover"
+                src={operator.logoUrl}
+                alt={operator.companyName}
+                className="max-w-full max-h-full object-contain"
               />
             ) : isEditor ? (
               <div
                 className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                style={{ color: tokens.mutedText }}
+                style={{
+                  color: tokens.mutedText,
+                  border: `1px dashed ${tokens.border}`,
+                  borderRadius: 4,
+                }}
               >
-                + Photo
+                + Logo
               </div>
             ) : (
               <div
-                className="w-full h-full flex items-center justify-center text-2xl font-bold"
-                style={{ color: tokens.accent }}
+                className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.28em] font-semibold text-center"
+                style={{ color: tokens.headingText }}
               >
-                {operator.consultantName?.charAt(0) ?? "·"}
+                {operator.companyName}
               </div>
             )}
           </div>
