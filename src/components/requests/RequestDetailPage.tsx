@@ -121,6 +121,27 @@ export function RequestDetailPage({ id }: { id: string }) {
     }
   };
 
+  const [creatingQuote, setCreatingQuote] = useState(false);
+
+  const createQuote = async () => {
+    setCreatingQuote(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/${id}/quote`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error ?? `HTTP ${res.status}`);
+      }
+      const { proposalId } = (await res.json()) as { proposalId: string };
+      // Drop the operator straight into the editor. They can click the
+      // "Automate" button from there to run the AI autopilot if they want.
+      window.location.href = `/studio/${proposalId}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create quote");
+      setCreatingQuote(false);
+    }
+  };
+
   const postNote = async () => {
     if (!noteText.trim()) return;
     setPosting(true);
@@ -185,8 +206,17 @@ export function RequestDetailPage({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* Status + Assignment controls */}
-          <div className="flex items-center gap-3">
+          {/* Primary action + Status + Assignment controls */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={createQuote}
+              disabled={creatingQuote}
+              className="text-[12.5px] font-semibold text-white px-4 py-2 rounded-full disabled:opacity-60 whitespace-nowrap"
+              style={{ background: "#1b3a2d" }}
+            >
+              {creatingQuote ? "Creating…" : "Create Quote →"}
+            </button>
             <label className="text-[11.5px] font-medium text-black/60 flex items-center gap-2">
               Status
               <select
@@ -283,8 +313,17 @@ export function RequestDetailPage({ id }: { id: string }) {
                 </div>
               </header>
               {data.proposals.length === 0 ? (
-                <div className="p-8 text-center text-[13px] text-black/50">
-                  No quote drafted yet. Open a proposal to start.
+                <div className="p-10 text-center">
+                  <div className="text-[13px] text-black/50">No quote drafted yet.</div>
+                  <button
+                    type="button"
+                    onClick={createQuote}
+                    disabled={creatingQuote}
+                    className="mt-4 text-[12.5px] font-medium text-white px-4 py-2 rounded-full disabled:opacity-60"
+                    style={{ background: "#1b3a2d" }}
+                  >
+                    {creatingQuote ? "Creating…" : "Draft first quote →"}
+                  </button>
                 </div>
               ) : (
                 <ul className="divide-y divide-black/5">
