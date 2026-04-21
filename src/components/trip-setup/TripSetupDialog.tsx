@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { buildBlankProposal } from "@/lib/defaults";
+import { AutomatingOverlay } from "./AutomatingOverlay";
 import type { Proposal } from "@/lib/types";
 
 // ─── Trip Setup ─────────────────────────────────────────────────────────────
@@ -111,6 +112,10 @@ export function TripSetupDialog({
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      {/* Full-screen overlay while the autopilot is drafting. Auto-runs
+          simulated progress, chases 100% the moment `submitting` flips
+          back to false, then fades out. */}
+      <AutomatingOverlay active={Boolean(submitting && autopilot)} />
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
