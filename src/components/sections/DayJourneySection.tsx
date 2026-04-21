@@ -43,7 +43,7 @@ export function DayJourneySection({ section }: { section: Section }) {
 
   return (
     <div className="py-24 md:py-28" style={{ background: tokens.pageBg }}>
-      <div className="ed-wide">
+      <div className="max-w-5xl mx-auto px-8 md:px-12">
         {/* Section header */}
         <div className="flex items-end justify-between mb-16 gap-6 flex-wrap">
           <div>

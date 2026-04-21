@@ -105,7 +105,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         onPickFromLibrary={onDestinationImagePickerOpen}
         placeholderLabel="Add a wildlife or location photo"
         placeholderHint="Pick something cinematic — this is the face of the day."
-        style={{ aspectRatio: "16 / 9" }}
+        style={{ aspectRatio: "21 / 9" }}
       />
 
       {/* Narrative body + AI write/rewrite */}
@@ -466,7 +466,7 @@ function AccommodationBlock(props: DayCardLayoutProps) {
                 onUpload={onPropertyImageUpload}
                 placeholderLabel={i === 0 ? "Add property photo" : "Gallery photo"}
                 className="rounded-sm"
-                style={{ aspectRatio: "4 / 3" }}
+                style={{ aspectRatio: "1 / 1" }}
                 showChangePill={Boolean(url)}
               />
             ))}
