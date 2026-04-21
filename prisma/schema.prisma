@@ -28,7 +28,43 @@ model User {
 
   proposals Proposal[]
 
+  orgMemberships   OrgMembership[]
+  assignedRequests Request[]       @relation("RequestAssignee")
+  authoredNotes    RequestNote[]   @relation("RequestNoteAuthor")
+  presence         Presence?
+  activityEvents   ActivityEvent[]
+
   @@index([clerkUserId])
+}
+
+// ─── Org membership — per-user per-org profile ─────────────────────────────
+//
+// One row per (user × organization). Carries the per-org role + the user's
+// per-org profile (signature, photo, notification prefs). A person who
+// belongs to multiple orgs has one row per org so their role / signature
+// can differ across workspaces.
+//
+// Role mirrors Clerk's org-level roles but we store it here so server-side
+// queries (team lists, analytics) don't have to fan out to Clerk's API.
+
+model OrgMembership {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  role              String  @default("member") // owner | admin | member
+  profilePhotoUrl   String?
+  signatureUrl      String?
+  roleTitle         String? // free-text "Founder / Safari Specialist"
+  notificationPrefs Json? // { newRequest: bool, requestAssigned: bool }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
 }
 
 // ─── Organization ───────────────────────────────────────────────────────────
@@ -39,8 +75,8 @@ model User {
 // Row is upserted on first authenticated request that carries an orgId.
 
 model Organization {
-  id         String   @id @default(cuid())
-  clerkOrgId String   @unique
+  id         String  @id @default(cuid())
+  clerkOrgId String  @unique
   name       String?
   slug       String?
 
@@ -48,7 +84,7 @@ model Organization {
   // workspace is frozen until the admin reactivates (used in lieu of billing
   // until the Stripe integration lands). Suspended orgs can still authenticate
   // via Clerk but every protected route gates on this flag.
-  status          String    @default("active")  // "active" | "suspended"
+  status          String    @default("active") // "active" | "suspended"
   suspendedAt     DateTime?
   suspendedReason String?
 
@@ -56,19 +92,27 @@ model Organization {
   // "trial" is the default for new orgs; "pilot" is a hand-picked zero-cost
   // engagement with a `tierExpiresAt`; "paid" is what an operator becomes
   // once they start paying (manual or Stripe later).
-  tier            String    @default("trial")    // "trial" | "pilot" | "paid"
-  tierExpiresAt   DateTime?
-  tierNote        String?
+  tier          String    @default("trial") // "trial" | "pilot" | "paid"
+  tierExpiresAt DateTime?
+  tierNote      String?
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  proposals           Proposal[]
-  brandDNA            BrandDNAProfile?
-  destinationMedia    DestinationMediaAsset[]
-  locations           Location[]
-  properties          Property[]
-  propertyTags        PropertyTag[]
+  proposals        Proposal[]
+  brandDNA         BrandDNAProfile?
+  destinationMedia DestinationMediaAsset[]
+  locations        Location[]
+  properties       Property[]
+  propertyTags     PropertyTag[]
+
+  memberships     OrgMembership[]
+  clients         Client[]
+  requests        Request[]
+  leadSources     LeadSource[]
+  requestCounters RequestCounter[]
+  presences       Presence[]
+  activityEvents  ActivityEvent[]
 
   @@index([clerkOrgId])
 }
@@ -95,28 +139,28 @@ model BrandDNAProfile {
   shortDescription String?
 
   // Voice & Tone — 0 is the left label, 100 is the right label
-  voiceFormality         Int?  //   0 formal          ↔ 100 conversational
-  voiceLuxury            Int?  //   0 luxury          ↔ 100 adventurous
-  voiceDensity           Int?  //   0 concise         ↔ 100 detailed
-  voiceStorytelling      Int?  //   0 storytelling    ↔ 100 informational
-  writingSample1         String?
-  writingSample2         String?
+  voiceFormality    Int? //   0 formal          ↔ 100 conversational
+  voiceLuxury       Int? //   0 luxury          ↔ 100 adventurous
+  voiceDensity      Int? //   0 concise         ↔ 100 detailed
+  voiceStorytelling Int? //   0 storytelling    ↔ 100 informational
+  writingSample1    String?
+  writingSample2    String?
 
   // Visual Style
-  brandColors          Json?      // [{ hex: string, role?: string }]
+  brandColors          Json? // [{ hex: string, role?: string }]
   headingFont          String?
   bodyFont             String?
   customFontUrl        String?
-  preferredImageStyles String[]   // e.g. "wildlife_closeup", "landscape", "lodge_interior", "guest_experience", "beach", "cultural"
-  imageLibrary         Json?      // [{ url: string, caption?: string, tags?: string[] }]
+  preferredImageStyles String[] // e.g. "wildlife_closeup", "landscape", "lodge_interior", "guest_experience", "beach", "cultural"
+  imageLibrary         Json? // [{ url: string, caption?: string, tags?: string[] }]
 
   // Property preferences — global biases (per-property rows live in
   // BrandDNAPropertyPreference).
-  tierBias             String?    // "luxury" | "mid_range" | "value"
-  styleBias            String[]   // e.g. "honeymoon", "family", "adventure", "eco_luxury"
+  tierBias  String? // "luxury" | "mid_range" | "value"
+  styleBias String[] // e.g. "honeymoon", "family", "adventure", "eco_luxury"
 
   // Free-text AI instructions
-  aiInstructions       String?
+  aiInstructions String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -128,11 +172,11 @@ model BrandDNAProfile {
 // Per-property entries (preferred or avoided), optionally scoped by location.
 
 model BrandDNAPropertyPreference {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   profileId String
   profile   BrandDNAProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  kind         String   // "preferred" | "avoided"
+  kind         String // "preferred" | "avoided"
   location     String?
   propertyName String
   notes        String?
@@ -148,15 +192,15 @@ model BrandDNAPropertyPreference {
 // *suggestions only* and must never auto-apply.
 
 model BrandDNASuggestion {
-  id         String   @id @default(cuid())
-  profileId  String
-  profile    BrandDNAProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id        String          @id @default(cuid())
+  profileId String
+  profile   BrandDNAProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  kind       String   // "voice" | "property" | "visual"
-  title      String
-  rationale  String?
-  payload    Json?    // applicable patch if the user accepts
-  status     String   @default("pending")  // pending | accepted | dismissed
+  kind      String // "voice" | "property" | "visual"
+  title     String
+  rationale String?
+  payload   Json? // applicable patch if the user accepts
+  status    String  @default("pending") // pending | accepted | dismissed
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -177,26 +221,26 @@ model DestinationMediaAsset {
 
   // Location — free-form for now; upgrades to a FK when the Location model
   // lands in a later phase.
-  locationId    String?
-  locationName  String?
-  country       String?
+  locationId   String?
+  locationName String?
+  country      String?
 
-  imageUrl      String
-  thumbnailUrl  String?
-  width         Int?
-  height        Int?
+  imageUrl     String
+  thumbnailUrl String?
+  width        Int?
+  height       Int?
 
-  provider         String?  // "unsplash" | "pexels" | "upload" | "custom"
+  provider         String? // "unsplash" | "pexels" | "upload" | "custom"
   photographerName String?
   photographerUrl  String?
   attributionText  String?
 
   tags           String[]
-  category       String?  // "wildlife" | "landscape" | "lodge" | "people" | "beach" | "city" | "airport"
-  animalType     String?  // "elephant" | "lion" | "giraffe" | ...
-  experienceType String?  // "game_drive" | "beach" | "arrival" | "hot_air_balloon" | ...
+  category       String? // "wildlife" | "landscape" | "lodge" | "people" | "beach" | "city" | "airport"
+  animalType     String? // "elephant" | "lion" | "giraffe" | ...
+  experienceType String? // "game_drive" | "beach" | "arrival" | "hot_air_balloon" | ...
 
-  priorityScore  Int      @default(0)
+  priorityScore Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -217,9 +261,9 @@ model DestinationMediaAsset {
 // title and status are denormalised for queries (list proposals, filter drafts).
 
 model Proposal {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Tenant scope. Nullable to survive the schema migration for any pre-org
   // rows, but every new proposal is created with this set; queries always
@@ -227,12 +271,24 @@ model Proposal {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  title     String   @default("Untitled Proposal")
-  status    String   @default("draft")       // draft | sent | accepted
-  isPublic  Boolean  @default(false)
-  shareSlug String?  @unique
+  title     String  @default("Untitled Proposal")
+  status    String  @default("draft") // draft | sent | accepted
+  isPublic  Boolean @default(false)
+  shareSlug String? @unique
 
-  contentJson Json   // Full Proposal object — see src/lib/types.ts
+  contentJson Json // Full Proposal object — see src/lib/types.ts
+
+  // Optional link to the inbound Request this proposal was drafted for.
+  // Nullable because legacy proposals + "blank canvas" drafts have no
+  // request. When the operator creates a request-first flow, the proposal
+  // is spawned with requestId set so the CRM can attribute the quote.
+  requestId String?
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  // Denormalised client link for fast lookups ("all proposals for this
+  // client"). Set alongside requestId when the flow starts from a request.
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -243,6 +299,8 @@ model Proposal {
   @@index([userId])
   @@index([organizationId])
   @@index([shareSlug])
+  @@index([requestId])
+  @@index([clientId])
 }
 
 // ─── Engagement tracking ───────────────────────────────────────────────────
@@ -279,14 +337,14 @@ model ProposalView {
 }
 
 model ProposalViewEvent {
-  id     String        @id @default(cuid())
+  id     String       @id @default(cuid())
   viewId String
-  view   ProposalView  @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  view   ProposalView @relation(fields: [viewId], references: [id], onDelete: Cascade)
 
   // "open" | "section" | "close"
-  kind          String
-  sectionId     String?
-  dwellSeconds  Int?
+  kind         String
+  sectionId    String?
+  dwellSeconds Int?
 
   createdAt DateTime @default(now())
 
@@ -317,14 +375,14 @@ model ProposalComment {
 
   // Anonymous client identity, captured at submission time. Both optional —
   // some clients prefer to stay anonymous; we still accept the comment.
-  authorName  String?
-  authorEmail String?
+  authorName       String?
+  authorEmail      String?
   // operator: when an operator replies the future inline-thread UI will
   // set this so the bubble renders on the right side.
   authorIsOperator Boolean @default(false)
 
   body   String
-  status String @default("open")  // open | resolved
+  status String @default("open") // open | resolved
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -350,10 +408,10 @@ model Location {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name      String
-  country   String?
-  region    String?  // optional sub-grouping (e.g. "Northern Tanzania")
-  notes     String?
+  name    String
+  country String?
+  region  String? // optional sub-grouping (e.g. "Northern Tanzania")
+  notes   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -374,7 +432,7 @@ model Property {
 
   // Basics
   name          String
-  propertyClass String?  // "camp" | "lodge" | "tented_camp" | "mobile_camp" | "boutique_hotel" | "villa" | "houseboat" | "treehouse" | "other"
+  propertyClass String? // "camp" | "lodge" | "tented_camp" | "mobile_camp" | "boutique_hotel" | "villa" | "houseboat" | "treehouse" | "other"
 
   // Client-facing copy
   shortSummary     String?
@@ -385,16 +443,16 @@ model Property {
   amenities String[]
 
   // Stay snapshot
-  mealPlan        String?  // "Full board" | "Half board" | "B&B" | "All-inclusive" | etc.
+  mealPlan        String? // "Full board" | "Half board" | "B&B" | "All-inclusive" | etc.
   suggestedNights Int?
   suitability     String[] // ["families", "honeymoon", "photography", ...]
 
   // Showcase facts — rendered in PropertyShowcaseSection's STATS sidebar
-  checkInTime       String?
-  checkOutTime      String?
-  totalRooms        Int?
-  spokenLanguages   String[]
-  specialInterests  String[]
+  checkInTime      String?
+  checkOutTime     String?
+  totalRooms       Int?
+  spokenLanguages  String[]
+  specialInterests String[]
 
   // Internal — never rendered client-side
   internalNotes String?
@@ -489,4 +547,212 @@ model PropertyCustomSection {
   updatedAt DateTime @updatedAt
 
   @@index([propertyId, order])
+}
+
+// ─── CRM: Client ────────────────────────────────────────────────────────────
+//
+// A person (or traveller group) that has contacted the tour operator.
+// Deduped by email within an organisation — the second request from the
+// same email links to the same client record so the detail view can show
+// "3 prior requests, 1 booked". Fields mirror the reference app's client
+// card (email, names, salutation, country, phone, language).
+
+model Client {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email             String
+  firstName         String?
+  lastName          String?
+  salutation        String?
+  phone             String?
+  country           String? // ISO country code or free-text — display uses flagFor()
+  origin            String? // "where they're flying from" — distinct from country of residence
+  preferredLanguage String? // communication language: "English" | "German" | ...
+
+  // Free-form tags & notes (internal only, never rendered to the client).
+  tags          String[]
+  internalNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requests  Request[]
+  proposals Proposal[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, lastName])
+  @@index([organizationId])
+}
+
+// ─── CRM: Lead source (per-org taxonomy) ───────────────────────────────────
+//
+// Operator-defined sources: SafariBookings, TripAdvisor, Website form,
+// Referral, Trade show, Direct email, Unknown. Seeded with a default set
+// on org creation and editable under Settings → Lead Sources. Requests
+// reference these by name (denormalised) so the analytics view can slice
+// conversion rate per source without a join.
+
+model LeadSource {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name      String
+  sortOrder Int     @default(0)
+  archived  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId, archived])
+}
+
+// ─── CRM: Request (inbound inquiry) ────────────────────────────────────────
+//
+// The new top-level object — a client inquiry that flows through the
+// pipeline: new → working → open → booked → completed | not_booked.
+// A Request owns one or more Proposals (quotes) and an activity timeline.
+//
+// referenceNumber is the human-readable id the operator references in
+// emails ("your request #2026-0042"). Generated per-org per-year via the
+// RequestCounter table so two orgs can share the same number without
+// collision.
+
+model Request {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  referenceNumber String // e.g. "2026-0042"
+  status          String @default("new") // new | working | open | booked | completed | not_booked
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  assignedToUserId String?
+  assignedTo       User?   @relation("RequestAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  source       String? // denormalised LeadSource name
+  sourceDetail String? // free text ("Referred by Kendra")
+
+  // Time-to-first-response metrics. receivedAt is when the lead landed,
+  // firstReplyAt fires on the first user-driven action (note, quote, or
+  // status change off "new"). lastActivityAt is bumped by any mutation.
+  receivedAt     DateTime  @default(now())
+  firstReplyAt   DateTime?
+  assignedAt     DateTime?
+  lastActivityAt DateTime  @default(now())
+
+  // Short form of the trip brief (dates, nights, destinations, travelers,
+  // style, operator note). Full trip detail lives on the drafted Proposal.
+  tripBrief Json?
+
+  // Free-text note the operator enters when creating the request.
+  originalMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposals Proposal[]
+  notes     RequestNote[]
+
+  @@unique([organizationId, referenceNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, receivedAt])
+  @@index([clientId])
+}
+
+// Per-org per-year counter for referenceNumber generation. Each time a
+// request is created, we upsert this row and increment. The formatted
+// number is "{year}-{nextValue:04d}".
+
+model RequestCounter {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  year  Int
+  value Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, year])
+}
+
+// ─── CRM: Request activity feed ────────────────────────────────────────────
+//
+// Mixed timeline — user-authored notes + system-generated events
+// ("Status changed to Open", "Quote v2 sent", "Assigned to Lilian").
+// Rendered as the right-hand rail of the request detail view.
+
+model RequestNote {
+  id        String  @id @default(cuid())
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  authorUserId String?
+  author       User?   @relation("RequestNoteAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  kind String // "user" | "system"
+  body String
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId, createdAt])
+}
+
+// ─── Team presence (who's online, what they're doing) ──────────────────────
+//
+// One row per user — updated every ~30s by a client-side heartbeat.
+// currentView encodes the "what" in a stable-enough-to-display string
+// ("request:abc123", "studio", "library"). Admin's Team page polls this
+// and renders a green/amber/grey dot plus a human-readable activity.
+//
+// Upgrade path: swap heartbeat + polling for Supabase Realtime presence
+// channels once the team size makes polling wasteful.
+
+model Presence {
+  userId         String       @id
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  currentView   String? // e.g. "request:abc123", "studio", "library", "proposal:xyz"
+  currentAction String? // short verb — "editing", "viewing", "drafting"
+  lastActiveAt  DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, lastActiveAt])
+}
+
+// ─── Activity log (auditable event stream) ─────────────────────────────────
+//
+// Append-only record of significant actions. Drives the admin's live
+// activity feed and per-user timeline. Keeping it separate from Presence
+// so presence stays small + fast to poll, while the log accumulates.
+
+model ActivityEvent {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  type       String // signin, signout, viewRequest, createRequest, createQuote,
+  // sendQuote, assignRequest, changeStatus, postNote,
+  // editProposal, archiveProperty, editBrandDNA
+  targetType String? // "request" | "proposal" | "property" | "client" | "brand_dna"
+  targetId   String?
+  detail     Json? // structured context — e.g. { fromStatus: "new", toStatus: "working" }
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([organizationId, type, createdAt])
 }
