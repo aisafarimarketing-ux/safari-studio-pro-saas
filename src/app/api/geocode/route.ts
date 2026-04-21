@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getAuthContext } from "@/lib/currentUser";
 
 // GET /api/geocode?q=Masai+Mara,Kenya
 //
@@ -9,6 +8,11 @@ import { getAuthContext } from "@/lib/currentUser";
 //   - We can cache responses across tenants so repeated lookups of
 //     popular destinations (e.g. "Masai Mara") hit the cache after the
 //     first call.
+//
+// Intentionally unauthenticated — the share view (/p/[id]) renders its
+// own map for guests who have no session, and this endpoint is a thin
+// proxy over a public service. The in-process cache + tight input
+// validation are the only gatekeeping needed.
 //
 // Rate limiting: Nominatim's usage policy is ≤1 req/sec. We don't add
 // server-side throttling here; the client caches results per-proposal
@@ -25,9 +29,6 @@ type GeocodeResult = {
 };
 
 export async function GET(req: Request) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-
   const url = new URL(req.url);
   const q = url.searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ error: "q is required" }, { status: 400 });

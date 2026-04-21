@@ -17,7 +17,9 @@ const isProtectedRoute = createRouteMatcher([
   "/api/media(.*)",
   "/api/admin(.*)",
   "/api/workspace(.*)",
-  "/api/geocode(.*)",
+  // /api/geocode is intentionally public — the share view (/p/[id])
+  // renders its own map for unauthenticated guests and needs to look up
+  // destination coordinates. Thin proxy over Nominatim, in-process cache.
   "/api/pdf(.*)",
 ]);
 

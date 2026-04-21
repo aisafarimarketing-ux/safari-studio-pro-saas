@@ -445,11 +445,13 @@ function AccommodationBlock(props: DayCardLayoutProps) {
             </div>
           </div>
 
-          {/* Image strip — three equal tiles across the full width. The
-              lead image sits first, followed by the first two gallery
-              photos. Reads as a photography row, not a hero-plus-stack. */}
+          {/* Image strip — three equal tiles spanning the full card width.
+              Negative horizontal margin breaks out of the AccommodationBlock's
+              mx-10/14 container so each tile gains the full card width
+              (~25% more pixels per image). The day card's overflow-hidden
+              outer wrapper clips cleanly. */}
           <div
-            className="grid grid-cols-3 gap-1.5"
+            className="-mx-10 md:-mx-14 grid grid-cols-3 gap-1.5"
             style={{ background: tokens.cardBg }}
           >
             {[
@@ -465,7 +467,6 @@ function AccommodationBlock(props: DayCardLayoutProps) {
                 tokens={tokens}
                 onUpload={onPropertyImageUpload}
                 placeholderLabel={i === 0 ? "Add property photo" : "Gallery photo"}
-                className="rounded-sm"
                 style={{ aspectRatio: "1 / 1" }}
                 showChangePill={Boolean(url)}
               />
