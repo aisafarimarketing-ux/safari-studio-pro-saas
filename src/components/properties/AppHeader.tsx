@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; matches: (pathname: string) => boolean
   { href: "/properties", label: "Properties", matches: (p) => p.startsWith("/properties") },
   { href: "/settings/brand", label: "Brand DNA", matches: (p) => p.startsWith("/settings/brand") },
   { href: "/team", label: "Team", matches: (p) => p === "/team" || p.startsWith("/team/") },
+  { href: "/analytics", label: "Analytics", matches: (p) => p.startsWith("/analytics") },
 ];
 
 export function AppHeader({
