@@ -17,6 +17,7 @@ import {
 
 const NAV: { href: string; label: string; matches: (pathname: string) => boolean }[] = [
   { href: "/dashboard", label: "Overview", matches: (p) => p === "/dashboard" },
+  { href: "/requests", label: "Requests", matches: (p) => p.startsWith("/requests") },
   { href: "/proposals", label: "Proposals", matches: (p) => p.startsWith("/proposals") },
   { href: "/properties", label: "Properties", matches: (p) => p.startsWith("/properties") },
   { href: "/settings/brand", label: "Brand DNA", matches: (p) => p.startsWith("/settings/brand") },
