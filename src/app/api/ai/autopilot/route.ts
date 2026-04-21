@@ -241,6 +241,12 @@ DAYS:
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
 
+FIRST AND LAST DAYS ARE FIXED POINTS — no exceptions:
+- Day 1 MUST use the FIRST destination in the input "destinations" list. This is the arrival gateway (usually Arusha, Nairobi, or similar). Never invent a different Day 1 city.
+- The LAST day MUST use either (a) the LAST destination in the input list, or (b) the FIRST destination (return to gateway for departure). Pick whichever is more realistic for the trip shape — a beach extension ends on the beach; a classic safari loop returns to the gateway.
+- Never introduce a destination on Day 1 or the last day that is not in the input list.
+- Internal days (2 through N-1) distribute the remaining input destinations in a geographically sensible order. Do NOT repeat the same destination as a one-night stop between other destinations — that's not how real safaris route.
+
 PRACTICAL INFO:
 - Use real facts: Kenya and Tanzania e-visa, yellow-fever certificate rules, typical Nairobi/Dar flights from the guest's origin when known, season-specific packing.
 - Short, specific. 2-3 sentences each. No filler.`;
@@ -324,6 +330,24 @@ ${JSON.stringify(userPayload, null, 2)}`;
       signature: pickTier(d.tiers?.signature, library),
     },
   }));
+
+  // Clamp Day 1 and the last day to the operator's input destination list.
+  // The prompt already asks for this, but a belt-and-braces normalisation
+  // stops the model from inventing "Day 7: Tarangire" when the trip shape
+  // is Arusha → Tarangire → Serengeti → Ngorongoro → Zanzibar. If the
+  // model's pick isn't in the input list, snap: Day 1 → first destination,
+  // last day → last destination.
+  if (destinations.length > 0 && days.length > 0) {
+    const norm = (s: string) => s.trim().toLowerCase();
+    const allowed = new Set(destinations.map(norm));
+    if (!allowed.has(norm(days[0].destination))) {
+      days[0].destination = destinations[0];
+    }
+    const last = days[days.length - 1];
+    if (!allowed.has(norm(last.destination))) {
+      last.destination = destinations[destinations.length - 1];
+    }
+  }
 
   const inclusions = stringArray(parsed.inclusions, 12);
   const exclusions = stringArray(parsed.exclusions, 12);

@@ -30,15 +30,18 @@ export function MapSection({ section }: { section: Section }) {
     "";
   const countryName = (section.content.countryName as string) || primaryCountry || "Country";
   const countryFlag = (section.content.countryFlag as string) || flagFor(primaryCountry);
+  // Prefer days[] as the source of truth — that's what the itinerary table
+  // and per-day sections actually render. trip.destinations is just the
+  // original setup input and can drift out of sync after AI drafting.
   const startPoint =
     (section.content.startPoint as string) ||
-    trip.destinations[0] ||
     days[0]?.destination ||
+    trip.destinations[0] ||
     "Start point";
   const endPoint =
     (section.content.endPoint as string) ||
-    trip.destinations[trip.destinations.length - 1] ||
     days[days.length - 1]?.destination ||
+    trip.destinations[trip.destinations.length - 1] ||
     "End point";
 
   const stopsFromDays = days
