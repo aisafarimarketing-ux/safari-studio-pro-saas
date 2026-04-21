@@ -35,6 +35,8 @@ export function PricingSection({ section }: { section: Section }) {
     proposal,
     setActiveTier,
     updateTierPrice,
+    updateTierCurrency,
+    updateTierLabel,
     updatePricingNotes,
     updateSectionContent,
     updateInclusions,
@@ -65,190 +67,180 @@ export function PricingSection({ section }: { section: Section }) {
       className="py-20 md:py-24 px-8 md:px-16"
       style={{ background: tokens.sectionSurface }}
     >
-      <div className="max-w-3xl mx-auto space-y-16 md:space-y-20">
+      <div className="max-w-5xl mx-auto space-y-10 md:space-y-12">
         {/* ── 1 · Header ─────────────────────────────────────── */}
-        <header>
+        <header className="max-w-2xl">
           <Eyebrow tokens={tokens} theme={theme}>Your Investment</Eyebrow>
           <h2
-            className="mt-2.5 font-bold leading-[1.05]"
+            className="mt-2 font-bold leading-[1.05]"
             style={{
               color: tokens.headingText,
               fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(1.9rem, 3.6vw, 2.5rem)",
+              fontSize: "clamp(1.75rem, 3.2vw, 2.25rem)",
               letterSpacing: "-0.01em",
             }}
           >
             Choose your experience
           </h2>
           <p
-            className="mt-3 max-w-xl text-[14.5px] leading-[1.7]"
+            className="mt-2 text-[14px] leading-[1.6]"
             style={{ color: tokens.bodyText }}
           >
-            The same itinerary at three levels. Pick the one that fits — every
-            day, destination and activity stays exactly the same; only the
-            accommodation shifts between the tiers.
+            Same itinerary at three levels — only the accommodation shifts between tiers.
           </p>
         </header>
 
-        {/* ── 2 · Tier rail ──────────────────────────────────── */}
-        <TierRail
-          pricing={pricing}
-          visibleKeys={visibleKeys}
-          activeTier={activeTier}
-          onSelect={setActiveTier}
-          onUpdatePrice={updateTierPrice}
-          nights={nights}
-          client={client}
-          isEditor={isEditor}
-          tokens={tokens}
-          theme={theme}
-        />
-
-        {pricing.notes && (
-          <p
-            className="-mt-16 text-[13px] max-w-2xl italic outline-none"
-            style={{
-              color: tokens.mutedText,
-              fontFamily: `'${theme.displayFont}', serif`,
-            }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updatePricingNotes(e.currentTarget.textContent ?? "")}
-          >
-            {pricing.notes}
-          </p>
-        )}
-
-        {/* ── 3 · What's included ───────────────────────────── */}
-        <EditableList
-          label="Included"
-          subhead="What's covered in the quoted price"
-          items={inclusions}
-          onChange={updateInclusions}
-          isEditor={isEditor}
-          tokens={tokens}
-          theme={theme}
-          accentBullet
-        />
-
-        {/* ── 4 · Not included ──────────────────────────────── */}
-        <EditableList
-          label="Not included"
-          subhead="These are on your own tab"
-          items={exclusions}
-          onChange={updateExclusions}
-          isEditor={isEditor}
-          tokens={tokens}
-          theme={theme}
-        />
-
-        {/* ── 5 · Payment schedule ──────────────────────────── */}
-        <BodyBlock
-          label="Payment schedule"
-          tokens={tokens}
-          theme={theme}
-          isEditor={isEditor}
-          value={paymentSchedule}
-          onChange={(v) => updateSectionContent(section.id, { paymentSchedule: v })}
-        />
-
-        {/* ── 6 · Cancellation ──────────────────────────────── */}
-        <BodyBlock
-          label="Cancellation policy"
-          tokens={tokens}
-          theme={theme}
-          isEditor={isEditor}
-          value={cancellationPolicy}
-          onChange={(v) => updateSectionContent(section.id, { cancellationPolicy: v })}
-        />
-
-        {/* ── 7 · Travel insurance ──────────────────────────── */}
-        <BodyBlock
-          label="Travel insurance"
-          tokens={tokens}
-          theme={theme}
-          isEditor={isEditor}
-          value={travelInsurance}
-          onChange={(v) => updateSectionContent(section.id, { travelInsurance: v })}
-        />
-
-        {/* ── 8 · Terms & Conditions ────────────────────────── */}
+        {/* ── 2 · Tier rail + notes ─────────────────────────── */}
         <section>
-          <Eyebrow tokens={tokens} theme={theme}>Terms &amp; Conditions</Eyebrow>
-          <div className="mt-5 flex items-center gap-3">
-            <CrownGlyph color={tokens.accent} />
-            {termsUrl ? (
-              <a
-                href={termsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[14px] underline underline-offset-[5px] hover:opacity-80 transition"
-                style={{ color: tokens.headingText }}
-              >
-                <span
-                  className="outline-none"
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) =>
-                    updateSectionContent(section.id, {
-                      termsLabel: e.currentTarget.textContent ?? termsLabel,
-                    })
-                  }
-                >
-                  {termsLabel}
-                </span>
-                <span className="ml-2" aria-hidden>→</span>
-              </a>
-            ) : (
-              <div className="text-[14px]" style={{ color: tokens.mutedText }}>
-                <span
-                  className="outline-none"
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) =>
-                    updateSectionContent(section.id, {
-                      termsLabel: e.currentTarget.textContent ?? termsLabel,
-                    })
-                  }
-                >
-                  {termsLabel}
-                </span>
-                {isEditor && (
-                  <span
-                    className="ml-2 text-[11.5px] italic"
-                    style={{ color: tokens.mutedText }}
-                  >
-                    — paste a URL below to make it a link
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          {isEditor && (
-            <div
-              className="mt-3 text-[11.5px]"
-              style={{ color: tokens.mutedText }}
+          <TierRail
+            pricing={pricing}
+            visibleKeys={visibleKeys}
+            activeTier={activeTier}
+            onSelect={setActiveTier}
+            onUpdatePrice={updateTierPrice}
+            onUpdateCurrency={updateTierCurrency}
+            onUpdateLabel={updateTierLabel}
+            nights={nights}
+            client={client}
+            isEditor={isEditor}
+            tokens={tokens}
+            theme={theme}
+          />
+
+          {(pricing.notes || isEditor) && (
+            <p
+              className="mt-4 text-[12.5px] max-w-2xl italic outline-none"
+              style={{
+                color: tokens.mutedText,
+                fontFamily: `'${theme.displayFont}', serif`,
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updatePricingNotes(e.currentTarget.textContent ?? "")}
             >
-              URL:{" "}
-              <span
-                className="outline-none px-2 py-0.5 rounded"
-                style={{
-                  background: `${tokens.accent}10`,
-                  color: tokens.headingText,
-                }}
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateSectionContent(section.id, {
-                    termsUrl: e.currentTarget.textContent?.trim() ?? "",
-                  })
-                }
-              >
-                {termsUrl || "https://example.com/terms.pdf"}
-              </span>
-            </div>
+              {pricing.notes || (isEditor ? "Optional: price notes, validity window, what affects quote…" : "")}
+            </p>
           )}
         </section>
+
+        {/* ── 3 · Included + Not included (side by side) ────── */}
+        <div className="grid md:grid-cols-2 gap-10 md:gap-14">
+          <EditableList
+            label="Included"
+            items={inclusions}
+            onChange={updateInclusions}
+            isEditor={isEditor}
+            tokens={tokens}
+            theme={theme}
+            accentBullet
+          />
+          <EditableList
+            label="Not included"
+            items={exclusions}
+            onChange={updateExclusions}
+            isEditor={isEditor}
+            tokens={tokens}
+            theme={theme}
+          />
+        </div>
+
+        {/* ── 4 · Policies + T&Cs (2-col grid) ──────────────── */}
+        <div className="grid md:grid-cols-2 gap-10 md:gap-14">
+          <BodyBlock
+            label="Payment schedule"
+            tokens={tokens}
+            theme={theme}
+            isEditor={isEditor}
+            value={paymentSchedule}
+            onChange={(v) => updateSectionContent(section.id, { paymentSchedule: v })}
+          />
+          <BodyBlock
+            label="Cancellation policy"
+            tokens={tokens}
+            theme={theme}
+            isEditor={isEditor}
+            value={cancellationPolicy}
+            onChange={(v) => updateSectionContent(section.id, { cancellationPolicy: v })}
+          />
+          <BodyBlock
+            label="Travel insurance"
+            tokens={tokens}
+            theme={theme}
+            isEditor={isEditor}
+            value={travelInsurance}
+            onChange={(v) => updateSectionContent(section.id, { travelInsurance: v })}
+          />
+
+          {/* ── Terms & Conditions — in the same 2x2 policy grid ────── */}
+          <section>
+            <Eyebrow tokens={tokens} theme={theme}>Terms &amp; Conditions</Eyebrow>
+            <div className="mt-3 flex items-center gap-2.5">
+              <CrownGlyph color={tokens.accent} />
+              {termsUrl ? (
+                <a
+                  href={termsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[14px] underline underline-offset-[4px] hover:opacity-80 transition"
+                  style={{ color: tokens.headingText }}
+                >
+                  <span
+                    className="outline-none"
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={(e) =>
+                      updateSectionContent(section.id, {
+                        termsLabel: e.currentTarget.textContent ?? termsLabel,
+                      })
+                    }
+                  >
+                    {termsLabel}
+                  </span>
+                  <span className="ml-2" aria-hidden>→</span>
+                </a>
+              ) : (
+                <div className="text-[14px]" style={{ color: tokens.mutedText }}>
+                  <span
+                    className="outline-none"
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={(e) =>
+                      updateSectionContent(section.id, {
+                        termsLabel: e.currentTarget.textContent ?? termsLabel,
+                      })
+                    }
+                  >
+                    {termsLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+            {isEditor && (
+              <div
+                className="mt-2 text-[11px]"
+                style={{ color: tokens.mutedText }}
+              >
+                URL:{" "}
+                <span
+                  className="outline-none px-2 py-0.5 rounded"
+                  style={{
+                    background: `${tokens.accent}10`,
+                    color: tokens.headingText,
+                  }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    updateSectionContent(section.id, {
+                      termsUrl: e.currentTarget.textContent?.trim() ?? "",
+                    })
+                  }
+                >
+                  {termsUrl || "https://example.com/terms.pdf"}
+                </span>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -403,6 +395,8 @@ function TierRail({
   activeTier,
   onSelect,
   onUpdatePrice,
+  onUpdateCurrency,
+  onUpdateLabel,
   nights,
   client,
   isEditor,
@@ -414,6 +408,8 @@ function TierRail({
   activeTier: TierKey;
   onSelect: (tier: TierKey) => void;
   onUpdatePrice: (tier: TierKey, price: string) => void;
+  onUpdateCurrency: (tier: TierKey, currency: string) => void;
+  onUpdateLabel: (tier: TierKey, label: string) => void;
   nights: number;
   client: { pax?: string };
   isEditor: boolean;
@@ -457,10 +453,13 @@ function TierRail({
 
               <div className="flex items-center justify-between mb-8">
                 <div
-                  className="text-[10.5px] font-bold uppercase tracking-[0.28em]"
+                  className="text-[10.5px] font-bold uppercase tracking-[0.28em] outline-none"
                   style={{
                     color: isActive ? tokens.accent : tokens.mutedText,
                   }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => onUpdateLabel(tier, e.currentTarget.textContent?.trim() ?? p.label)}
                 >
                   {p.label}
                 </div>
@@ -476,22 +475,27 @@ function TierRail({
 
               <div className="flex items-baseline gap-1.5">
                 <span
-                  className="text-[11.5px] font-medium"
+                  className="text-[11.5px] font-medium outline-none"
                   style={{ color: tokens.mutedText }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    onUpdateCurrency(tier, e.currentTarget.textContent?.trim() ?? p.currency)
+                  }
                 >
                   {p.currency}
                 </span>
                 <span
-                  className="font-bold leading-none outline-none tracking-tight"
+                  className="font-bold leading-none outline-none tracking-tight tabular-nums"
                   contentEditable={isEditor}
                   suppressContentEditableWarning
                   style={{
                     color: tokens.headingText,
                     fontFamily: `'${theme.displayFont}', serif`,
-                    fontSize: "clamp(2.2rem, 4vw, 3rem)",
+                    fontSize: "clamp(2rem, 3.6vw, 2.75rem)",
                   }}
                   onBlur={(e) =>
-                    onUpdatePrice(tier, e.currentTarget.textContent ?? p.pricePerPerson)
+                    onUpdatePrice(tier, e.currentTarget.textContent?.trim() ?? p.pricePerPerson)
                   }
                 >
                   {p.pricePerPerson}

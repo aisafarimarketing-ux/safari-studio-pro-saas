@@ -259,7 +259,7 @@ export function CoverSection({ section }: { section: Section }) {
     const imageFirst = side === "left";
     return (
       <div
-        className={`relative w-full grid ${isEditor ? "min-h-[620px]" : "min-h-screen"}`}
+        className={`relative w-full grid ${isEditor ? "min-h-[620px]" : "min-h-[640px]"}`}
         style={{ gridTemplateColumns: cols, background: tokens.sectionSurface }}
       >
         {/* Image column */}
@@ -399,7 +399,7 @@ export function CoverSection({ section }: { section: Section }) {
     const issue = (section.content.issue as string) || `Issue No. ${String(trip.nights ?? 1).padStart(2, "0")}`;
     return (
       <div
-        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[640px]" : "min-h-screen"}`}
+        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[640px]" : "min-h-[640px]"}`}
         style={{ background: tokens.headingText }}
       >
         {/* Hero */}
@@ -551,7 +551,7 @@ export function CoverSection({ section }: { section: Section }) {
   if (variant === "centered-editorial") {
     return (
       <div
-        className={`relative w-full flex flex-col overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}
+        className={`relative w-full flex flex-col overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}
         style={{ background: tokens.accent }}
       >
         {/* Full-bleed hero */}
@@ -755,7 +755,7 @@ export function CoverSection({ section }: { section: Section }) {
   if (variant === "full-bleed-overlay") {
     return (
       <div
-        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}
+        className={`relative w-full overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}
         style={{ background: tokens.accent }}
       >
         {heroUrl ? (
@@ -827,7 +827,7 @@ export function CoverSection({ section }: { section: Section }) {
   // ── Flip-split — image left, text right ──────────────────────────────────────
   if (variant === "flip-split") {
     return (
-      <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
+      <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Full-bleed image */}
         <div className="absolute inset-0">
           {heroUrl ? (
@@ -908,7 +908,7 @@ export function CoverSection({ section }: { section: Section }) {
 
   // ── Cinematic-split (default) ───────────────────────────────────────────────
   return (
-    <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
+    <div className={`relative w-full flex overflow-hidden ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
       {/* Right: full-bleed image */}
       <div className="absolute inset-0">
         {heroUrl ? (
@@ -942,7 +942,7 @@ export function CoverSection({ section }: { section: Section }) {
       </div>
 
       {/* Left: text column */}
-      <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-screen"}`}>
+      <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
           {operator.logoUrl ? (

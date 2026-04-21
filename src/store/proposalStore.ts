@@ -43,6 +43,7 @@ interface ProposalState {
   toggleTierVisibility: (tier: TierKey) => void;
   updateTierLabel: (tier: TierKey, label: string) => void;
   updateTierPrice: (tier: TierKey, price: string) => void;
+  updateTierCurrency: (tier: TierKey, currency: string) => void;
   updatePricingNotes: (notes: string) => void;
 
   // ── Sections ────────────────────────────────────────────────────────────────
@@ -217,6 +218,11 @@ export const useProposalStore = create<ProposalState>()(
     updateTierPrice: (tier, price) =>
       set((state) => {
         state.proposal.pricing[tier].pricePerPerson = price;
+      }),
+
+    updateTierCurrency: (tier, currency) =>
+      set((state) => {
+        state.proposal.pricing[tier].currency = currency;
       }),
 
     updatePricingNotes: (notes) =>
