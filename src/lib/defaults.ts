@@ -220,7 +220,7 @@ function buildDefaultSections(): Section[] {
     // cancellation, insurance, and T&Cs. No standalone inclusions section
     // in the default flow — still available in the registry for legacy.
     makeSection("pricing", 6, "editorial"),
-    makeSection("practicalInfo", 7, "card-grid"),
+    makeSection("practicalInfo", 7, "two-column-notes"),
     // Closing-farewell carries the branded footer — no standalone footer
     // section in the default flow anymore.
     makeSection("closing", 8, "closing-farewell", {

@@ -62,26 +62,26 @@ export function PricingSection({ section }: { section: Section }) {
 
   return (
     <div
-      className="py-24 md:py-32 px-8 md:px-16"
+      className="py-20 md:py-24 px-8 md:px-16"
       style={{ background: tokens.sectionSurface }}
     >
-      <div className="max-w-4xl mx-auto space-y-24 md:space-y-28">
+      <div className="max-w-3xl mx-auto space-y-16 md:space-y-20">
         {/* ── 1 · Header ─────────────────────────────────────── */}
         <header>
           <Eyebrow tokens={tokens} theme={theme}>Your Investment</Eyebrow>
           <h2
-            className="mt-3 font-bold leading-[1.05]"
+            className="mt-2.5 font-bold leading-[1.05]"
             style={{
               color: tokens.headingText,
               fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(2rem, 3.8vw, 2.8rem)",
+              fontSize: "clamp(1.9rem, 3.6vw, 2.5rem)",
               letterSpacing: "-0.01em",
             }}
           >
             Choose your experience
           </h2>
           <p
-            className="mt-5 max-w-xl text-[15px] leading-[1.75]"
+            className="mt-3 max-w-xl text-[14.5px] leading-[1.7]"
             style={{ color: tokens.bodyText }}
           >
             The same itinerary at three levels. Pick the one that fits — every
@@ -297,7 +297,7 @@ function BodyBlock({
     <section>
       <Eyebrow tokens={tokens} theme={theme}>{label}</Eyebrow>
       <div
-        className="mt-5 max-w-2xl text-[15px] leading-[1.85] whitespace-pre-line outline-none"
+        className="mt-3 max-w-2xl text-[14.5px] leading-[1.7] whitespace-pre-line outline-none"
         style={{ color: tokens.bodyText }}
         contentEditable={isEditor}
         suppressContentEditableWarning
@@ -335,13 +335,13 @@ function EditableList({
       <Eyebrow tokens={tokens} theme={theme}>{label}</Eyebrow>
       {subhead && (
         <div
-          className="mt-1 text-[13px]"
+          className="mt-1 text-[12.5px]"
           style={{ color: tokens.mutedText }}
         >
           {subhead}
         </div>
       )}
-      <ul className="mt-5 grid sm:grid-cols-2 gap-x-10 gap-y-2.5 max-w-2xl">
+      <ul className="mt-3 grid sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-2xl">
         {items.map((item, i) => (
           <li
             key={i}
@@ -443,7 +443,7 @@ function TierRail({
             <div
               key={tier}
               onClick={() => onSelect(tier)}
-              className="relative cursor-pointer py-10 px-6 md:px-8 transition"
+              className="relative cursor-pointer py-8 px-5 md:px-6 transition"
               style={{
                 borderLeft: i > 0 ? `1px solid ${tokens.border}` : undefined,
               }}
