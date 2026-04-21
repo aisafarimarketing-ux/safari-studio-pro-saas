@@ -25,9 +25,11 @@ const STYLE_OPTIONS = [
 ] as const;
 
 const COMMON_DESTINATIONS = [
-  "Masai Mara", "Amboseli", "Serengeti", "Ngorongoro", "Tarangire",
-  "Zanzibar", "Lamu", "Laikipia", "Nairobi", "Lake Manyara",
-  "Samburu", "Tsavo East", "Tsavo West", "Bwindi", "Murchison Falls",
+  "Arusha", "Masai Mara", "Amboseli", "Serengeti", "Ngorongoro",
+  "Tarangire", "Lake Manyara", "Lake Nakuru", "Lake Naivasha", "Samburu",
+  "Laikipia", "Ol Pejeta", "Meru", "Mount Kenya", "Nairobi",
+  "Zanzibar", "Lamu", "Diani", "Tsavo East", "Tsavo West",
+  "Ruaha", "Selous / Nyerere", "Bwindi", "Murchison Falls", "Volcanoes (Rwanda)",
 ];
 
 const COMMON_ORIGINS = [

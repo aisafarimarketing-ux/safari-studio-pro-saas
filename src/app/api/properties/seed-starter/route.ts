@@ -63,6 +63,9 @@ export async function POST() {
       locByName.set(loc.name.toLowerCase(), loc.id);
     }
 
+    // Create the property + its cover/gallery images in a single write.
+    // Nested `images.create` keeps PropertyImage rows in lockstep with
+    // the property lifecycle — delete cascades cover them.
     await prisma.property.create({
       data: {
         organizationId: orgId,
@@ -76,6 +79,27 @@ export async function POST() {
         mealPlan: entry.mealPlan,
         suggestedNights: entry.suggestedNights,
         suitability: entry.suitability,
+        checkInTime: entry.checkInTime,
+        checkOutTime: entry.checkOutTime,
+        totalRooms: entry.totalRooms,
+        spokenLanguages: entry.spokenLanguages,
+        specialInterests: entry.specialInterests,
+        images: {
+          create: [
+            {
+              url: entry.leadImageUrl,
+              order: 0,
+              isCover: true,
+              caption: null,
+            },
+            ...entry.galleryUrls.map((url, i) => ({
+              url,
+              order: i + 1,
+              isCover: false,
+              caption: null,
+            })),
+          ],
+        },
       },
     });
     created++;

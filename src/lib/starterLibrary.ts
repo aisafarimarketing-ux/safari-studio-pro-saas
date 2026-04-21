@@ -1,8 +1,27 @@
-// Starter library — 10 famous East African camps new operators can load
-// with one click. The content is grounded in publicly-known facts about
-// each property; operators are expected to edit / replace / archive.
+// Starter library — famous East African camps + lodges new operators can
+// load with one click. The prose is grounded in publicly-known facts
+// about each property; operators are expected to edit / replace / archive.
 //
-// Short + plain voice, matching the same style rules the AI endpoint uses.
+// Covers the classic northern Tanzania circuit, the Kenyan north (Mara /
+// Samburu / Lewa), city stopovers, lake properties, and a post-safari
+// beach finale. Enough to build any typical East African demo proposal
+// without having to create a single property manually.
+
+// Unsplash photo pool — stable CDN URLs under Unsplash license. If any
+// break on our environment, operators can replace the seeded images
+// through the property editor. Sized for the 1600-wide upload pipeline.
+const IMG = {
+  savannaLion: "https://images.unsplash.com/photo-1516426122078-c23e76319801?w=1600&q=80&auto=format&fit=crop",
+  elephants: "https://images.unsplash.com/photo-1549366021-9f761d450615?w=1600&q=80&auto=format&fit=crop",
+  giraffes: "https://images.unsplash.com/photo-1547721064-da6cfb341d50?w=1600&q=80&auto=format&fit=crop",
+  cheetah: "https://images.unsplash.com/photo-1523805009345-7448845a9e53?w=1600&q=80&auto=format&fit=crop",
+  tentExt: "https://images.unsplash.com/photo-1568084680786-a84f91d1153c?w=1600&q=80&auto=format&fit=crop",
+  tentInt: "https://images.unsplash.com/photo-1554979081-ea48b0d38055?w=1600&q=80&auto=format&fit=crop",
+  acacia: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1600&q=80&auto=format&fit=crop",
+  beach: "https://images.unsplash.com/photo-1505881402582-c5bc11054f91?w=1600&q=80&auto=format&fit=crop",
+  lodge: "https://images.unsplash.com/photo-1582094787095-38b5b0889d1d?w=1600&q=80&auto=format&fit=crop",
+  hippo: "https://images.unsplash.com/photo-1534700644851-7c8f51a34c26?w=1600&q=80&auto=format&fit=crop",
+};
 
 export type StarterProperty = {
   name: string;
@@ -18,9 +37,18 @@ export type StarterProperty = {
   suggestedNights: number;
   suitability: string[];
   tags: string[];
+  // Showcase fields
+  leadImageUrl: string;
+  galleryUrls: string[];
+  checkInTime: string;
+  checkOutTime: string;
+  totalRooms: number;
+  spokenLanguages: string[];
+  specialInterests: string[];
 };
 
 export const STARTER_LIBRARY: StarterProperty[] = [
+  // ── Kenya — Maasai Mara ────────────────────────────────────────────────
   {
     name: "Angama Mara",
     propertyClass: "lodge",
@@ -35,6 +63,13 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["honeymoon", "first_time", "photography"],
     tags: ["luxury", "view"],
+    leadImageUrl: IMG.savannaLion,
+    galleryUrls: [IMG.acacia, IMG.tentInt, IMG.giraffes, IMG.lodge],
+    checkInTime: "14:00",
+    checkOutTime: "10:30",
+    totalRooms: 30,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Big Five", "Great Migration", "Photography", "Cultural"],
   },
   {
     name: "Cottar's 1920s Safari Camp",
@@ -50,7 +85,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["families", "experienced", "photography", "small_groups"],
     tags: ["luxury", "conservancy", "heritage"],
+    leadImageUrl: IMG.tentExt,
+    galleryUrls: [IMG.savannaLion, IMG.tentInt, IMG.elephants, IMG.acacia],
+    checkInTime: "13:30",
+    checkOutTime: "10:30",
+    totalRooms: 10,
+    spokenLanguages: ["English", "Swahili", "French"],
+    specialInterests: ["Big Five", "Walking safaris", "Night drives", "Cultural"],
   },
+
+  // ── Kenya — Nairobi stopover ────────────────────────────────────────────
   {
     name: "Giraffe Manor",
     propertyClass: "boutique_hotel",
@@ -64,7 +108,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 1,
     suitability: ["families", "first_time", "honeymoon", "kids_under_12"],
     tags: ["iconic", "city"],
+    leadImageUrl: IMG.giraffes,
+    galleryUrls: [IMG.lodge, IMG.tentInt, IMG.giraffes, IMG.acacia],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 12,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Giraffe encounter", "Conservation", "Cultural", "Family"],
   },
+
+  // ── Tanzania — Grumeti / Serengeti ──────────────────────────────────────
   {
     name: "Singita Grumeti — Sasakwa Lodge",
     propertyClass: "lodge",
@@ -79,6 +132,13 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 4,
     suitability: ["honeymoon", "experienced", "small_groups"],
     tags: ["luxury", "private-concession"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.savannaLion, IMG.elephants, IMG.tentInt, IMG.giraffes],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 10,
+    spokenLanguages: ["English", "Swahili", "French", "Italian"],
+    specialInterests: ["Great Migration", "Big Five", "Photography", "Private concession"],
   },
   {
     name: "Serengeti Under Canvas",
@@ -93,7 +153,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["experienced", "photography", "honeymoon"],
     tags: ["migration", "mobile"],
+    leadImageUrl: IMG.tentExt,
+    galleryUrls: [IMG.hippo, IMG.cheetah, IMG.tentInt, IMG.acacia],
+    checkInTime: "13:00",
+    checkOutTime: "10:00",
+    totalRooms: 9,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Great Migration", "Big Five", "River crossings", "Photography"],
   },
+
+  // ── Tanzania — Ngorongoro ───────────────────────────────────────────────
   {
     name: "The Highlands, Ngorongoro",
     propertyClass: "lodge",
@@ -108,7 +177,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 2,
     suitability: ["families", "first_time", "experienced"],
     tags: ["highlands", "crater"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.acacia, IMG.tentInt, IMG.elephants, IMG.savannaLion],
+    checkInTime: "14:00",
+    checkOutTime: "10:00",
+    totalRooms: 8,
+    spokenLanguages: ["English", "Swahili", "Maasai"],
+    specialInterests: ["Ngorongoro Crater", "Cultural (Maasai)", "Walking safaris", "Big Five"],
   },
+
+  // ── Tanzania — Tarangire ────────────────────────────────────────────────
   {
     name: "Chem Chem Lodge",
     propertyClass: "lodge",
@@ -123,7 +201,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["honeymoon", "photography", "small_groups"],
     tags: ["concession", "elephants"],
+    leadImageUrl: IMG.elephants,
+    galleryUrls: [IMG.acacia, IMG.tentExt, IMG.tentInt, IMG.giraffes],
+    checkInTime: "13:30",
+    checkOutTime: "10:30",
+    totalRooms: 8,
+    spokenLanguages: ["English", "Swahili", "French", "Italian"],
+    specialInterests: ["Elephants", "Walking safaris", "Bike safaris", "Private concession"],
   },
+
+  // ── Kenya — Laikipia / Lewa ─────────────────────────────────────────────
   {
     name: "Sirikoi",
     propertyClass: "lodge",
@@ -138,7 +225,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["families", "experienced", "photography", "small_groups"],
     tags: ["conservancy", "rhino"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.giraffes, IMG.elephants, IMG.tentInt, IMG.acacia],
+    checkInTime: "14:00",
+    checkOutTime: "10:30",
+    totalRooms: 9,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Rhino tracking", "Conservation", "Horse riding", "Helicopter safaris"],
   },
+
+  // ── Kenya — Samburu ─────────────────────────────────────────────────────
   {
     name: "Saruni Samburu",
     propertyClass: "lodge",
@@ -153,7 +249,16 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 3,
     suitability: ["honeymoon", "experienced", "photography"],
     tags: ["conservancy", "cultural"],
+    leadImageUrl: IMG.acacia,
+    galleryUrls: [IMG.giraffes, IMG.cheetah, IMG.tentInt, IMG.lodge],
+    checkInTime: "14:00",
+    checkOutTime: "10:30",
+    totalRooms: 6,
+    spokenLanguages: ["English", "Swahili", "Samburu"],
+    specialInterests: ["Samburu Special Five", "Cultural", "Walking safaris", "Photography"],
   },
+
+  // ── Tanzania — Zanzibar beach ────────────────────────────────────────────
   {
     name: "Mnemba Island Lodge",
     propertyClass: "boutique_hotel",
@@ -168,5 +273,245 @@ export const STARTER_LIBRARY: StarterProperty[] = [
     suggestedNights: 4,
     suitability: ["honeymoon", "families", "first_time"],
     tags: ["beach", "island", "conservation"],
+    leadImageUrl: IMG.beach,
+    galleryUrls: [IMG.beach, IMG.tentInt, IMG.lodge, IMG.acacia],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 12,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Beach", "Snorkelling", "Diving", "Marine conservation"],
+  },
+
+  // ═══ NEW — 10 additions covering missing locations ═══════════════════════
+
+  // ── Tanzania — Arusha (gateway) ─────────────────────────────────────────
+  {
+    name: "Mount Meru Game Lodge",
+    propertyClass: "lodge",
+    locationName: "Arusha",
+    country: "Tanzania",
+    region: "Usa River",
+    shortSummary: "A historic lodge on a 35-acre wildlife sanctuary fifteen minutes from Arusha airport, with orphaned animals in open enclosures and Mount Meru above.",
+    whatMakesSpecial: "The sanctuary hosts cheetahs, zebras, antelope, and waterbirds in the wetlands. Classic stone-and-thatch rooms that feel rooted in a different era of East African travel.",
+    whyWeChoose: "A straightforward first-night stop for clients landing at Kilimanjaro Airport and starting the northern circuit the next morning. Low fuss, reliable, close to the safari route.",
+    amenities: ["Pool", "Wi-Fi", "Restaurant", "Gardens", "Wildlife sanctuary", "Airport transfers", "Bar", "Lounge"],
+    mealPlan: "half_board",
+    suggestedNights: 1,
+    suitability: ["first_time", "families", "short_stay"],
+    tags: ["gateway", "airport"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.acacia, IMG.giraffes, IMG.tentInt, IMG.elephants],
+    checkInTime: "14:00",
+    checkOutTime: "10:00",
+    totalRooms: 15,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Wildlife sanctuary", "Gateway stopover", "Gardens"],
+  },
+  {
+    name: "Arusha Coffee Lodge",
+    propertyClass: "lodge",
+    locationName: "Arusha",
+    country: "Tanzania",
+    region: "Burka Coffee Estate",
+    shortSummary: "Thirty plantation suites set on a 300-acre working coffee estate on the outskirts of Arusha, with coffee tours and plantation walks.",
+    whatMakesSpecial: "The estate is still a commercial coffee farm. Rooms are individual suites among the trees; the main lodge is a converted planter's house. Coffee from the estate is served at breakfast.",
+    whyWeChoose: "Best stopover option for guests who want something with character on the first or last night — more personal than the airport hotels, still efficient for departures.",
+    amenities: ["Pool", "Wi-Fi", "Coffee tour", "Spa", "Restaurant", "Gardens", "Airport transfers", "Library"],
+    mealPlan: "half_board",
+    suggestedNights: 1,
+    suitability: ["honeymoon", "first_time", "short_stay"],
+    tags: ["gateway", "coffee"],
+    leadImageUrl: IMG.acacia,
+    galleryUrls: [IMG.lodge, IMG.tentInt, IMG.giraffes, IMG.elephants],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 30,
+    spokenLanguages: ["English", "Swahili", "German"],
+    specialInterests: ["Coffee tour", "Gateway stopover", "Plantation walks", "Cultural"],
+  },
+
+  // ── Kenya — Amboseli ────────────────────────────────────────────────────
+  {
+    name: "Tortilis Camp",
+    propertyClass: "tented_camp",
+    locationName: "Amboseli",
+    country: "Kenya",
+    region: "Amboseli private conservancy",
+    shortSummary: "Sixteen tents under thorn trees on a private conservancy bordering Amboseli National Park, with Kilimanjaro filling the skyline.",
+    whatMakesSpecial: "Kilimanjaro views are the brief — tents are oriented to catch the dawn light on the mountain. The private conservancy adds walking safaris and night drives that you can't do inside the park.",
+    whyWeChoose: "The photographer's Amboseli. Pair with a Mara stay for a classic Kenya 'elephants + cats' loop.",
+    amenities: ["Pool", "Spa", "Wi-Fi", "Guided walks", "Night drives", "Private dining", "Library", "Sundowner deck"],
+    mealPlan: "full_board",
+    suggestedNights: 2,
+    suitability: ["honeymoon", "photography", "first_time"],
+    tags: ["elephants", "kilimanjaro"],
+    leadImageUrl: IMG.elephants,
+    galleryUrls: [IMG.acacia, IMG.tentExt, IMG.tentInt, IMG.giraffes],
+    checkInTime: "13:30",
+    checkOutTime: "10:30",
+    totalRooms: 16,
+    spokenLanguages: ["English", "Swahili", "French"],
+    specialInterests: ["Elephants", "Kilimanjaro views", "Photography", "Walking safaris"],
+  },
+  {
+    name: "Ol Tukai Lodge",
+    propertyClass: "lodge",
+    locationName: "Amboseli",
+    country: "Kenya",
+    shortSummary: "Eighty rooms at the heart of Amboseli National Park, on the site of the original Ernest Hemingway tented camp.",
+    whatMakesSpecial: "Inside-the-park location on Observation Hill — elephants walk past the swimming pool most afternoons in dry season. Big, reliable lodge operation rather than an intimate camp.",
+    whyWeChoose: "The value pick for Amboseli. Family rooms, adjoining rooms, big-group logistics all work here. Not for guests chasing intimacy, but great for first-timers and multigenerational trips.",
+    amenities: ["Pool", "Wi-Fi", "Restaurant", "Gardens", "Family rooms", "Gift shop", "Kids' programme", "Guided drives"],
+    mealPlan: "full_board",
+    suggestedNights: 2,
+    suitability: ["families", "first_time", "kids_under_12"],
+    tags: ["value", "elephants"],
+    leadImageUrl: IMG.elephants,
+    galleryUrls: [IMG.lodge, IMG.acacia, IMG.giraffes, IMG.tentInt],
+    checkInTime: "14:00",
+    checkOutTime: "10:00",
+    totalRooms: 80,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Elephants", "Kilimanjaro views", "Family", "Value"],
+  },
+
+  // ── Tanzania — Lake Manyara ─────────────────────────────────────────────
+  {
+    name: "Lake Manyara Serena Safari Lodge",
+    propertyClass: "lodge",
+    locationName: "Lake Manyara",
+    country: "Tanzania",
+    region: "Rift Valley escarpment",
+    shortSummary: "Sixty-seven rondavel-style rooms high on the Rift Valley escarpment, overlooking Lake Manyara and the plains beyond.",
+    whatMakesSpecial: "The escarpment-top location gives you the lake, the forested slopes, and the alkaline flats in one sweep. Safe, full-service lodge operation on a dramatic site.",
+    whyWeChoose: "Reliable mid-range stop on the northern Tanzania circuit, especially between Tarangire and Serengeti. Not glamorous, but gets the Manyara day done efficiently.",
+    amenities: ["Pool", "Wi-Fi", "Restaurant", "Gardens", "Viewing deck", "Family rooms", "Guided drives", "Gift shop"],
+    mealPlan: "full_board",
+    suggestedNights: 1,
+    suitability: ["families", "first_time", "short_stay"],
+    tags: ["rift-valley", "value"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.acacia, IMG.elephants, IMG.tentInt, IMG.hippo],
+    checkInTime: "14:00",
+    checkOutTime: "10:00",
+    totalRooms: 67,
+    spokenLanguages: ["English", "Swahili", "German"],
+    specialInterests: ["Rift Valley views", "Tree-climbing lions", "Birdlife", "Forest walks"],
+  },
+  {
+    name: "&Beyond Lake Manyara Tree Lodge",
+    propertyClass: "tree_lodge",
+    locationName: "Lake Manyara",
+    country: "Tanzania",
+    region: "Lake Manyara National Park",
+    shortSummary: "Ten stilted treehouse suites inside Lake Manyara National Park, the only permanent property inside the park boundary.",
+    whatMakesSpecial: "Inside-the-park exclusivity means you're first at the lake gate each morning and last to leave at sunset. Suites are built around mahogany trees; the shower is open to the canopy.",
+    whyWeChoose: "When the operator brief is 'Manyara done properly, not as a drive-through'. Pair with a Serengeti or Grumeti leg for a tight luxury northern circuit.",
+    amenities: ["Pool", "Spa", "Wi-Fi", "Private dining", "Guided walks", "Sundowner deck", "Library", "Kids' programme"],
+    mealPlan: "all_inclusive",
+    suggestedNights: 2,
+    suitability: ["honeymoon", "experienced", "photography"],
+    tags: ["luxury", "treehouse"],
+    leadImageUrl: IMG.tentExt,
+    galleryUrls: [IMG.acacia, IMG.tentInt, IMG.elephants, IMG.lodge],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 10,
+    spokenLanguages: ["English", "Swahili", "French"],
+    specialInterests: ["Treehouse suites", "Tree-climbing lions", "Birdlife", "Forest walks"],
+  },
+
+  // ── Kenya — Lake Nakuru ─────────────────────────────────────────────────
+  {
+    name: "Sarova Lion Hill Game Lodge",
+    propertyClass: "lodge",
+    locationName: "Lake Nakuru",
+    country: "Kenya",
+    region: "Lake Nakuru National Park",
+    shortSummary: "Sixty-seven chalet-style rooms on a wooded hillside inside Lake Nakuru National Park, overlooking the alkaline lake.",
+    whatMakesSpecial: "Lake Nakuru is the rhino sanctuary park — both black and white rhinos, plus the flamingo flocks when water levels cooperate. The lodge sits above the treeline on a dedicated hill with long-view sundowners.",
+    whyWeChoose: "Classic choice for a Kenya Rift Valley loop. Pair with Lake Naivasha for a two-night interlude between Nairobi and the Mara.",
+    amenities: ["Pool", "Wi-Fi", "Restaurant", "Gardens", "Viewing deck", "Gift shop", "Guided drives", "Bar"],
+    mealPlan: "full_board",
+    suggestedNights: 1,
+    suitability: ["families", "first_time", "short_stay"],
+    tags: ["rhino", "rift-valley"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.acacia, IMG.giraffes, IMG.tentInt, IMG.hippo],
+    checkInTime: "14:00",
+    checkOutTime: "10:00",
+    totalRooms: 67,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Rhino", "Flamingos", "Birdlife", "Rift Valley views"],
+  },
+
+  // ── Kenya — Lake Naivasha ───────────────────────────────────────────────
+  {
+    name: "Loldia House",
+    propertyClass: "boutique_hotel",
+    locationName: "Lake Naivasha",
+    country: "Kenya",
+    region: "Lake Naivasha",
+    shortSummary: "Eight rooms in a lakeside farmhouse on a working 6,500-acre cattle and wildlife ranch, with private access to Lake Naivasha.",
+    whatMakesSpecial: "Loldia is a family home on the ranch the Nightingale family has farmed since the 1960s. Walking, boating, horseback rides — wildlife moves across the property freely. Very un-lodgey, very personal.",
+    whyWeChoose: "For guests who want one night that feels like staying with friends on a historic farm. Sits well between Nairobi and the Mara, especially for multi-generational trips.",
+    amenities: ["Pool", "Wi-Fi", "Boating", "Horse riding", "Guided walks", "Private dining", "Library", "Gardens"],
+    mealPlan: "full_board",
+    suggestedNights: 2,
+    suitability: ["families", "honeymoon", "small_groups"],
+    tags: ["heritage", "ranch"],
+    leadImageUrl: IMG.lodge,
+    galleryUrls: [IMG.acacia, IMG.hippo, IMG.giraffes, IMG.tentInt],
+    checkInTime: "14:00",
+    checkOutTime: "11:00",
+    totalRooms: 8,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Boat safaris", "Horse riding", "Birdlife", "Walking safaris"],
+  },
+  {
+    name: "Chui Lodge",
+    propertyClass: "lodge",
+    locationName: "Lake Naivasha",
+    country: "Kenya",
+    region: "Oserian Wildlife Sanctuary",
+    shortSummary: "Eight thatched cottages on the 18,000-acre Oserian Wildlife Sanctuary above Lake Naivasha, surrounded by leopards, giraffes and grazing herds.",
+    whatMakesSpecial: "Chui means leopard in Swahili and the sanctuary lives up to it — leopards routinely pass through camp at night. Walking and night drives are both permitted on the sanctuary.",
+    whyWeChoose: "A quieter alternative to Loldia when guests want a bush-camp feel on Naivasha rather than a farmhouse. Good photography base.",
+    amenities: ["Pool", "Spa", "Wi-Fi", "Guided walks", "Night drives", "Private dining", "Library", "Sundowner deck"],
+    mealPlan: "full_board",
+    suggestedNights: 2,
+    suitability: ["honeymoon", "experienced", "photography"],
+    tags: ["conservancy", "leopards"],
+    leadImageUrl: IMG.cheetah,
+    galleryUrls: [IMG.acacia, IMG.lodge, IMG.tentInt, IMG.giraffes],
+    checkInTime: "14:00",
+    checkOutTime: "10:30",
+    totalRooms: 8,
+    spokenLanguages: ["English", "Swahili"],
+    specialInterests: ["Leopards", "Walking safaris", "Night drives", "Photography"],
+  },
+
+  // ── Kenya — Meru ────────────────────────────────────────────────────────
+  {
+    name: "Elsa's Kopje",
+    propertyClass: "lodge",
+    locationName: "Meru",
+    country: "Kenya",
+    region: "Meru National Park",
+    shortSummary: "Ten open-fronted cottages built into a rocky kopje overlooking the plains of Meru National Park, named for Elsa the lioness of Born Free.",
+    whatMakesSpecial: "The kopje setting — cottages are literally part of the rock, open to the view on three sides. Meru itself is quiet, wild, and restored: rhino sanctuary, big elephant herds, no crowds.",
+    whyWeChoose: "For repeat Kenya clients who've done Mara and Samburu and want somewhere fresh. Very private, very photogenic. Pair with Lewa for a Laikipia-to-Meru loop.",
+    amenities: ["Infinity pool", "Spa", "Wi-Fi", "Guided walks", "Cultural visits", "Private dining", "Library", "Sundowner deck"],
+    mealPlan: "full_board",
+    suggestedNights: 3,
+    suitability: ["honeymoon", "experienced", "photography"],
+    tags: ["kopje", "remote"],
+    leadImageUrl: IMG.savannaLion,
+    galleryUrls: [IMG.acacia, IMG.tentInt, IMG.elephants, IMG.giraffes],
+    checkInTime: "14:00",
+    checkOutTime: "10:30",
+    totalRooms: 10,
+    spokenLanguages: ["English", "Swahili", "Italian"],
+    specialInterests: ["Born Free heritage", "Rhino sanctuary", "Walking safaris", "Photography"],
   },
 ];

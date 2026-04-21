@@ -112,6 +112,27 @@ export function PropertyListPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={async () => {
+                if (seeding) return;
+                setSeeding(true);
+                try {
+                  const res = await fetch("/api/properties/seed-starter", { method: "POST" });
+                  if (res.status === 409) { window.location.href = "/select-organization"; return; }
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  await load();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Seed failed");
+                } finally {
+                  setSeeding(false);
+                }
+              }}
+              disabled={seeding}
+              className="px-3.5 py-2 rounded-lg text-sm text-black/70 hover:bg-black/[0.04] border border-black/12 transition disabled:opacity-60"
+              title="Add 20 pre-built East African camps — dedupes against existing names."
+            >
+              {seeding ? "Loading starters…" : "✨ Load starter library"}
+            </button>
+            <button
               onClick={() => setImportOpen(true)}
               className="px-3.5 py-2 rounded-lg text-sm text-black/70 hover:bg-black/[0.04] border border-black/12 transition"
               title="Bulk-import from a CSV"
