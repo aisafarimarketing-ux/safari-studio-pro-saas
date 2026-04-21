@@ -445,47 +445,31 @@ function AccommodationBlock(props: DayCardLayoutProps) {
             </div>
           </div>
 
-          {/* Image grid — 4 tiles: lead + first three gallery images. One
-              dominant tile on the left (4:5), three stacked / tiled on the
-              right. Bleeds the full card width so the property reads as
-              imagery, not as a data block. */}
+          {/* Image strip — three equal tiles across the full width. The
+              lead image sits first, followed by the first two gallery
+              photos. Reads as a photography row, not a hero-plus-stack. */}
           <div
-            className="grid gap-1.5 md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
+            className="grid grid-cols-3 gap-1.5"
             style={{ background: tokens.cardBg }}
           >
-            {/* Lead image — big left column */}
-            <ImageSlot
-              url={property.leadImageUrl}
-              alt={property.name}
-              isEditor={isEditor}
-              tokens={tokens}
-              onUpload={onPropertyImageUpload}
-              placeholderLabel="Add property photo"
-              className="rounded-sm"
-              style={{ aspectRatio: "4 / 5" }}
-              showChangePill={Boolean(property.leadImageUrl)}
-            />
-
-            {/* Right column — three smaller tiles stacked */}
-            <div className="grid grid-rows-3 gap-1.5">
-              {[0, 1, 2].map((i) => {
-                const url = property.galleryUrls?.[i] ?? null;
-                return (
-                  <ImageSlot
-                    key={i}
-                    url={url}
-                    alt=""
-                    isEditor={isEditor}
-                    tokens={tokens}
-                    onUpload={onPropertyImageUpload}
-                    placeholderLabel={i === 0 ? "Gallery photo" : "—"}
-                    className="rounded-sm"
-                    style={{ aspectRatio: "4 / 3" }}
-                    showChangePill={Boolean(url)}
-                  />
-                );
-              })}
-            </div>
+            {[
+              property.leadImageUrl ?? null,
+              property.galleryUrls?.[0] ?? null,
+              property.galleryUrls?.[1] ?? null,
+            ].map((url, i) => (
+              <ImageSlot
+                key={i}
+                url={url}
+                alt={i === 0 ? property.name : ""}
+                isEditor={isEditor}
+                tokens={tokens}
+                onUpload={onPropertyImageUpload}
+                placeholderLabel={i === 0 ? "Add property photo" : "Gallery photo"}
+                className="rounded-sm"
+                style={{ aspectRatio: "4 / 3" }}
+                showChangePill={Boolean(url)}
+              />
+            ))}
           </div>
 
           {isEditor && (
