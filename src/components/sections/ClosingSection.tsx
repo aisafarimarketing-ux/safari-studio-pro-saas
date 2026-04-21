@@ -4,7 +4,17 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
-import type { Section } from "@/lib/types";
+import type {
+  Section,
+  Proposal,
+  OperatorProfile,
+  ClientDetails,
+  TripDetails,
+  PricingData,
+  TierKey,
+  ThemeTokens,
+  ProposalTheme,
+} from "@/lib/types";
 
 // Closing — includes the merged closing-farewell variant (default) that
 // also carries the branded footer, plus the four legacy editorial
@@ -479,9 +489,9 @@ export function ClosingSection({ section }: { section: Section }) {
   // ── Centered-minimal ──────────────────────────────────────────────────────
   if (variant === "centered-minimal") {
     return (
-      <div className="py-24 text-center relative" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
         {aiButtons}
-        <div className="ed-narrow" style={{ maxWidth: 480 }}>
+        <div className="ed-narrow text-center" style={{ maxWidth: 480 }}>
           <div className="w-12 mx-auto mb-8" style={{ height: "2px", background: tokens.accent }} />
           <p
             className="text-body-lg leading-loose mb-8 outline-none"
@@ -500,6 +510,19 @@ export function ClosingSection({ section }: { section: Section }) {
             {operator.companyName}
           </div>
         </div>
+        <BookAndContactFooter
+          proposal={proposal}
+          operator={operator}
+          client={client}
+          trip={trip}
+          pricing={pricing}
+          activeTier={activeTier as TierKey}
+          theme={theme}
+          tokens={tokens}
+          bg={tokens.sectionSurface}
+          isEditor={isEditor}
+          updateOperator={updateOperator}
+        />
       </div>
     );
   }
@@ -507,7 +530,7 @@ export function ClosingSection({ section }: { section: Section }) {
   // ── CTA-card ──────────────────────────────────────────────────────────────
   if (variant === "cta-card") {
     return (
-      <div className="py-24 relative" style={{ background: tokens.pageBg }}>
+      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.pageBg }}>
         {aiButtons}
         <div className="ed-narrow">
           <div
@@ -529,29 +552,21 @@ export function ClosingSection({ section }: { section: Section }) {
             <div className="text-label text-white/50" style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
               {operator.companyName}
             </div>
-            {(operator.email || operator.whatsapp) && (
-              <div className="mt-6 flex flex-wrap justify-center gap-3">
-                {operator.email && (
-                  <a
-                    href={`mailto:${operator.email}`}
-                    className="px-4 py-2 rounded-lg text-small font-medium transition"
-                    style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.85)" }}
-                  >
-                    {operator.email}
-                  </a>
-                )}
-                {operator.whatsapp && (
-                  <span
-                    className="px-4 py-2 rounded-lg text-small"
-                    style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
-                  >
-                    {operator.whatsapp}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
+        <BookAndContactFooter
+          proposal={proposal}
+          operator={operator}
+          client={client}
+          trip={trip}
+          pricing={pricing}
+          activeTier={activeTier as TierKey}
+          theme={theme}
+          tokens={tokens}
+          bg={tokens.pageBg}
+          isEditor={isEditor}
+          updateOperator={updateOperator}
+        />
       </div>
     );
   }
@@ -559,7 +574,7 @@ export function ClosingSection({ section }: { section: Section }) {
   // ── Letter-style ──────────────────────────────────────────────────────────
   if (variant === "letter-style") {
     return (
-      <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
         {aiButtons}
         <div className="ed-narrow space-y-8" style={{ maxWidth: 580 }}>
           <p
@@ -582,15 +597,28 @@ export function ClosingSection({ section }: { section: Section }) {
             <div className="text-small" style={{ color: tokens.mutedText }}>{operator.companyName}</div>
           </div>
         </div>
+        <BookAndContactFooter
+          proposal={proposal}
+          operator={operator}
+          client={client}
+          trip={trip}
+          pricing={pricing}
+          activeTier={activeTier as TierKey}
+          theme={theme}
+          tokens={tokens}
+          bg={tokens.sectionSurface}
+          isEditor={isEditor}
+          updateOperator={updateOperator}
+        />
       </div>
     );
   }
 
   // ── Quote-led (legacy default) ───────────────────────────────────────────
   return (
-    <div className="py-24 text-center relative" style={{ background: tokens.accent }}>
+    <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.accent }}>
       {aiButtons}
-      <div className="ed-narrow">
+      <div className="ed-narrow text-center">
         <div
           aria-hidden
           className="select-none leading-none"
@@ -634,14 +662,21 @@ export function ClosingSection({ section }: { section: Section }) {
             {operator.consultantName}
           </div>
           <div className="text-small mt-1 text-white/45">{operator.companyName}</div>
-          {(operator.email || operator.whatsapp) && (
-            <div className="mt-4 space-y-1 text-label" style={{ color: "rgba(255,255,255,0.35)", textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
-              {operator.email && <div>{operator.email}</div>}
-              {operator.whatsapp && <div>{operator.whatsapp}</div>}
-            </div>
-          )}
         </div>
       </div>
+      <BookAndContactFooter
+        proposal={proposal}
+        operator={operator}
+        client={client}
+        trip={trip}
+        pricing={pricing}
+        activeTier={activeTier as TierKey}
+        theme={theme}
+        tokens={tokens}
+        bg={tokens.accent}
+        isEditor={isEditor}
+        updateOperator={updateOperator}
+      />
     </div>
   );
 }
@@ -769,5 +804,358 @@ function LinkIcon() {
       <path d="M10 14a5 5 0 0 1 0-7l3-3a5 5 0 0 1 7 7l-1.5 1.5" />
       <path d="M14 10a5 5 0 0 1 0 7l-3 3a5 5 0 0 1-7-7l1.5-1.5" />
     </svg>
+  );
+}
+
+// ─── Shared Book + Contact footer ─────────────────────────────────────────
+//
+// Every closing variant renders this block at the bottom so the guest
+// always has the same path to confirm / download / share / contact —
+// regardless of which layout style the operator picked. Auto-flips text
+// colours when the surrounding background is dark.
+
+function BookAndContactFooter({
+  proposal,
+  operator,
+  client,
+  trip,
+  pricing,
+  activeTier,
+  theme,
+  tokens,
+  bg,
+  isEditor,
+  updateOperator,
+}: {
+  proposal: Proposal;
+  operator: OperatorProfile;
+  client: ClientDetails;
+  trip: TripDetails;
+  pricing: PricingData;
+  activeTier: TierKey;
+  theme: ProposalTheme;
+  tokens: ThemeTokens;
+  bg: string;
+  isEditor: boolean;
+  updateOperator: (patch: Partial<OperatorProfile>) => void;
+}) {
+  const isDark = isDarkColor(bg);
+  const color = {
+    heading: isDark ? "rgba(255,255,255,0.92)" : tokens.headingText,
+    body: isDark ? "rgba(255,255,255,0.78)" : tokens.bodyText,
+    muted: isDark ? "rgba(255,255,255,0.45)" : tokens.mutedText,
+    border: isDark ? "rgba(255,255,255,0.14)" : tokens.border,
+    accent: tokens.accent,
+    button: isDark ? "rgba(255,255,255,0.1)" : "#00000008",
+    buttonBorder: isDark ? "rgba(255,255,255,0.25)" : tokens.border,
+    coverLift: isDark ? "rgba(255,255,255,0.04)" : tokens.cardBg,
+  };
+
+  const coverSection = proposal.sections.find((s) => s.type === "cover");
+  const coverThumbUrl = (coverSection?.content?.heroImageUrl as string | undefined) ?? null;
+
+  const pax = parsePax(client.pax);
+  const tier =
+    activeTier === "classic" || activeTier === "premier" || activeTier === "signature"
+      ? pricing[activeTier]
+      : null;
+  const perPerson = tier?.pricePerPerson ?? "";
+  const currency = tier?.currency ?? "USD";
+  const totalLabel = buildTotalLabel(perPerson, currency, pax);
+
+  const confirmBookingHref = buildMailtoHref(operator.email, proposal, totalLabel);
+  const whatsappShareHref =
+    typeof window !== "undefined"
+      ? `https://wa.me/?text=${encodeURIComponent(
+          `${trip.title || "Safari proposal"} — ${window.location.href}`,
+        )}`
+      : "#";
+
+  const copyLink = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      // no-op
+    }
+  };
+
+  const requestConfirmInComments = () => {
+    if (typeof window === "undefined") return;
+    const message = `I'd like to confirm the booking for ${trip.title || "this safari"}. Please send next steps.`;
+    window.dispatchEvent(new CustomEvent("ss:prefillComment", { detail: { message } }));
+  };
+
+  return (
+    <div
+      className="max-w-4xl mx-auto mt-16 md:mt-20 pt-12 grid md:grid-cols-2"
+      style={{
+        borderTop: `1px solid ${color.border}`,
+        gap: 0,
+      }}
+    >
+      {/* Book your Safari */}
+      <div className="md:pr-10 md:border-r" style={{ borderColor: color.border }}>
+        <div
+          className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4 text-left"
+          style={{ color: color.muted }}
+        >
+          Book your Safari
+        </div>
+
+        <div className="flex items-stretch gap-4 mb-6 text-left">
+          {coverThumbUrl ? (
+            <div
+              className="shrink-0 overflow-hidden"
+              style={{ width: 64, height: 84, background: color.coverLift, borderRadius: 2 }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverThumbUrl} alt="Proposal cover" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div
+              className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
+              style={{
+                width: 64,
+                height: 84,
+                background: color.coverLift,
+                color: color.muted,
+                borderRadius: 2,
+              }}
+            >
+              Cover
+            </div>
+          )}
+          <div className="min-w-0 flex flex-col justify-center">
+            <div
+              className="text-[14.5px] font-semibold leading-[1.35]"
+              style={{
+                color: color.heading,
+                fontFamily: `'${theme.displayFont}', serif`,
+              }}
+            >
+              {trip.title}
+            </div>
+            {client.guestNames && (
+              <div className="mt-1 text-[12px]" style={{ color: color.muted }}>
+                for {client.guestNames}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {totalLabel && (
+          <div className="mb-6 text-[13.5px] text-left" style={{ color: color.body }}>
+            <div className="flex items-baseline gap-2">
+              <span className="font-semibold" style={{ color: color.heading }}>Total:</span>
+              <span style={{ color: color.heading }}>{totalLabel}</span>
+            </div>
+            <a
+              href="#pricing"
+              className="mt-1 inline-block text-[12px] transition hover:opacity-75"
+              style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
+            >
+              Detailed price information →
+            </a>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
+          <a
+            href={`/p/${proposal.id}/print`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85"
+            style={{
+              background: color.button,
+              color: color.heading,
+              border: `1px solid ${color.buttonBorder}`,
+            }}
+          >
+            Download Quote
+          </a>
+          <a
+            href={confirmBookingHref}
+            className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
+            style={{
+              background: isDark ? "white" : color.accent,
+              color: isDark ? "#1d1d1f" : "white",
+            }}
+          >
+            Confirm Booking
+          </a>
+        </div>
+        <button
+          type="button"
+          onClick={requestConfirmInComments}
+          className="text-[12px] transition hover:opacity-75 mb-10 text-left"
+          style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
+        >
+          Or reply with a note in comments →
+        </button>
+
+        <div
+          className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-3 text-left"
+          style={{ color: color.muted }}
+        >
+          Share with family and friends
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={whatsappShareHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Share on WhatsApp"
+            className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+            style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
+          >
+            <WaIcon />
+          </a>
+          <button
+            type="button"
+            onClick={copyLink}
+            aria-label="Copy link"
+            className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+            style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
+          >
+            <LinkIcon />
+          </button>
+        </div>
+      </div>
+
+      {/* Contact Us */}
+      <div className="md:pl-10 mt-16 md:mt-0 text-left">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
+          style={{ color: color.muted }}
+        >
+          Contact Us
+        </div>
+
+        <div className="flex items-center gap-4 mb-8">
+          <div
+            className="shrink-0 w-14 h-14 rounded-full overflow-hidden"
+            style={{ background: color.coverLift }}
+          >
+            {operator.consultantPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={operator.consultantPhoto}
+                alt={operator.consultantName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center text-lg font-bold"
+                style={{ color: color.accent }}
+              >
+                {operator.consultantName?.charAt(0) ?? "·"}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <div
+              className="text-[15px] font-semibold leading-tight"
+              style={{
+                color: color.heading,
+                fontFamily: `'${theme.displayFont}', serif`,
+              }}
+            >
+              {operator.consultantName}
+            </div>
+            <div className="text-[12.5px] mt-0.5" style={{ color: color.muted }}>
+              {operator.companyName}
+            </div>
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-[92px_1fr] gap-y-2.5 text-[13px]">
+          {(operator.address || isEditor) && (
+            <>
+              <dt className="font-semibold" style={{ color: color.heading }}>Address</dt>
+              <dd
+                className="outline-none whitespace-pre-line"
+                style={{ color: color.body }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({
+                    address: e.currentTarget.textContent?.trim() ?? operator.address ?? "",
+                  })
+                }
+              >
+                {operator.address || (isEditor ? "Street, city" : "")}
+              </dd>
+            </>
+          )}
+          {(operator.country || isEditor) && (
+            <>
+              <dt className="font-semibold" style={{ color: color.heading }}>Country</dt>
+              <dd
+                className="outline-none"
+                style={{ color: color.body }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({
+                    country: e.currentTarget.textContent?.trim() ?? operator.country ?? "",
+                  })
+                }
+              >
+                {operator.country || (isEditor ? "Country" : "")}
+              </dd>
+            </>
+          )}
+          {(operator.whatsapp || isEditor) && (
+            <>
+              <dt className="font-semibold" style={{ color: color.heading }}>WhatsApp</dt>
+              <dd
+                className="outline-none"
+                style={{ color: color.body }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({
+                    whatsapp: e.currentTarget.textContent?.trim() ?? operator.whatsapp ?? "",
+                  })
+                }
+              >
+                {operator.whatsapp || (isEditor ? "+1 555 …" : "")}
+              </dd>
+            </>
+          )}
+          <dt className="font-semibold" style={{ color: color.heading }}>Email</dt>
+          <dd
+            className="outline-none truncate"
+            style={{ color: color.body }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateOperator({
+                email: e.currentTarget.textContent?.trim() ?? operator.email,
+              })
+            }
+          >
+            {operator.email || (isEditor ? "email@…" : "")}
+          </dd>
+        </dl>
+
+        {(operator.website || isEditor) && (
+          <a
+            href={normaliseUrl(operator.website)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-8 inline-block text-[13px] font-semibold transition hover:opacity-80"
+            style={{
+              color: color.heading,
+              textDecoration: "underline",
+              textUnderlineOffset: 4,
+            }}
+          >
+            Visit our website →
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
