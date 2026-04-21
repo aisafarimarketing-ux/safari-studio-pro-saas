@@ -40,25 +40,43 @@ export function ClosingSection({ section }: { section: Section }) {
       attribution: e.currentTarget.textContent ?? attribution ?? "",
     });
 
+  // Which AI write buttons make sense depends on what the variant renders.
+  // Quote-only variants (cta-card) get one button; sign-off-only variants
+  // (letter-style, centered-minimal) get the other; variants that show
+  // both (closing-farewell, quote-led) get both stacked.
+  const variantHasQuote =
+    variant === "closing-farewell" ||
+    variant === "quote-led" ||
+    variant === "cta-card";
+  const variantHasSignOff =
+    variant === "closing-farewell" ||
+    variant === "quote-led" ||
+    variant === "letter-style" ||
+    variant === "centered-minimal";
+
   const aiButtons = isEditor ? (
-    <div className="absolute top-4 right-4 z-20 flex items-center gap-2" data-editor-chrome>
-      <AIWriteButton
-        kind="closing-quote"
-        currentText={quote ?? ""}
-        context={{ clientName: client.guestNames, destinations: trip.destinations }}
-        onResult={(text) => updateSectionContent(section.id, { quote: text })}
-        compact
-      />
-      <AIWriteButton
-        kind="closing-signoff"
-        currentText={signOff ?? ""}
-        context={{
-          clientName: client.guestNames,
-          consultantName: operator.consultantName,
-        }}
-        onResult={(text) => updateSectionContent(section.id, { signOff: text })}
-        compact
-      />
+    <div className="absolute top-14 right-4 z-[35] flex items-center gap-2" data-editor-chrome>
+      {variantHasQuote && (
+        <AIWriteButton
+          kind="closing-quote"
+          currentText={quote ?? ""}
+          context={{ clientName: client.guestNames, destinations: trip.destinations }}
+          onResult={(text) => updateSectionContent(section.id, { quote: text })}
+          compact
+        />
+      )}
+      {variantHasSignOff && (
+        <AIWriteButton
+          kind="closing-signoff"
+          currentText={signOff ?? ""}
+          context={{
+            clientName: client.guestNames,
+            consultantName: operator.consultantName,
+          }}
+          onResult={(text) => updateSectionContent(section.id, { signOff: text })}
+          compact
+        />
+      )}
     </div>
   ) : null;
 

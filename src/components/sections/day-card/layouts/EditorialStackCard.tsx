@@ -111,7 +111,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
       {/* Narrative body + AI write/rewrite */}
       <div className="relative px-10 md:px-14 py-10">
         {isEditor && (
-          <div className="absolute top-4 right-8 md:right-10 z-10">
+          <div className="absolute top-14 right-8 md:right-10 z-[35]">
             <AIWriteButton
               kind="day-narrative"
               currentText={data.narrative}

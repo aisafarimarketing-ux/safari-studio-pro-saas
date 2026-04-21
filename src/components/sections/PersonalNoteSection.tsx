@@ -66,7 +66,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
       style={{ background: tokens.sectionSurface, color: tokens.bodyText }}
     >
       {isEditor && (
-        <div className="absolute top-4 right-4 z-20">
+        <div className="absolute top-14 right-4 z-[35]">
           <AIWriteButton
             kind="greeting"
             currentText={body}

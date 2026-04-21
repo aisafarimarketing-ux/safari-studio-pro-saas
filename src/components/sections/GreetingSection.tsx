@@ -21,7 +21,7 @@ export function GreetingSection({ section }: { section: Section }) {
     updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" });
 
   const aiButton = isEditor ? (
-    <div className="absolute top-4 right-4 z-20">
+    <div className="absolute top-14 right-4 z-[35]">
       <AIWriteButton
         kind="greeting"
         currentText={body ?? ""}
