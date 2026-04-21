@@ -33,7 +33,9 @@ export function SectionChrome({ section, children }: Props) {
   };
 
   if (mode !== "editor") {
-    return section.visible ? <div>{children}</div> : null;
+    return section.visible ? (
+      <div data-section-type={section.type}>{children}</div>
+    ) : null;
   }
 
   const reg = SECTION_REGISTRY[section.type];
@@ -65,7 +67,13 @@ export function SectionChrome({ section, children }: Props) {
   }
 
   return (
-    <div ref={setNodeRef} style={sortableStyle} data-editor-chrome id={`section-${section.id}`}>
+    <div
+      ref={setNodeRef}
+      style={sortableStyle}
+      data-editor-chrome
+      data-section-type={section.type}
+      id={`section-${section.id}`}
+    >
       {/* Inner div handles all visual states — isolated from dnd-kit's transform/transition */}
       <div
         className="relative transition-shadow duration-200"

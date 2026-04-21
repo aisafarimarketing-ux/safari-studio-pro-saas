@@ -117,6 +117,7 @@ function PropertyBlock({
   return (
     <div
       className="py-20"
+      data-property-block
       style={{
         background: tokens.sectionSurface,
         borderTop: isFirst ? "none" : `1px solid ${tokens.border}`,

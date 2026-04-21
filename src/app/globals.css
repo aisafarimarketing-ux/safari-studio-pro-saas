@@ -363,10 +363,53 @@ body {
     break-after: avoid !important;
   }
 
-  /* Cover: full page, then break */
+  /* ── Section-level page-break strategy ───────────────────────────────
+   *  Cleaner, explicit rules keyed off [data-section-type]. The wrapper
+   *  is stamped by SectionChrome so both the editor preview and the
+   *  share/print views get consistent behaviour.
+   */
+
+  /* Cover always fills page 1, then whatever comes next starts fresh. */
+  [data-section-type="cover"] {
+    page-break-after: always !important;
+    break-after: page !important;
+    min-height: 100vh !important;
+  }
+
+  /* Closing gets its own sheet — the signed sign-off is a page moment. */
+  [data-section-type="closing"] {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  /* Day-by-Day Journey: let each day card start on its own page. The
+     first day follows the "Your journey" heading on the same page; the
+     rest push forward. */
+  [data-section-type="dayJourney"] .dm-card + .dm-card {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  /* Property Showcase: each property block its own page after the first. */
+  [data-section-type="propertyShowcase"] [data-property-block] + [data-property-block] {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  /* No property block should ever split across a page. */
+  [data-property-block] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Everything else — personalNote, itineraryTable, map, pricing,
+     practicalInfo — flows naturally. No forced breaks; the browser's
+     default pagination + break-inside rules above handle the details. */
+
+  /* Retire the old brittle min-h-screen / min-h-[600px] rule so it
+     doesn't fight the new data-section-type one. */
   [class*="min-h-screen"],
   [class*="min-h-\\[600px\\]"] {
-    page-break-after: always;
     min-height: 100vh !important;
   }
 
@@ -419,10 +462,8 @@ body {
     object-fit: cover !important;
   }
 
-  /* Closing section: break before for emotional impact */
-  [class*="text-center"][class*="py-28"] {
-    page-break-before: always;
-  }
+  /* (Closing page-break rule now lives in the data-section-type block
+   *  above — this slot retired so two rules don't fight.) */
 
   /* Gallery thumbnails: hide in print for cleanliness */
   [class*="overflow-x-auto"] {
