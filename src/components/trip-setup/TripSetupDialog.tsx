@@ -358,7 +358,7 @@ export function TripSetupDialog({
               className="sr-only"
             />
             <span className="text-small text-black/70 group-hover:text-black/90">
-              <span className="text-[#c9a84c]">✦</span> Generate draft with AI
+              <span className="text-[#c9a84c]">✦</span> Automate draft
             </span>
             <span
               className="text-label text-black/40 hidden sm:inline"
@@ -389,7 +389,7 @@ export function TripSetupDialog({
             >
               {submitting
                 ? autopilot ? "Drafting…" : "Creating…"
-                : autopilot ? "✦ Generate & open →" : "Open editor →"}
+                : autopilot ? "✦ Automate & open →" : "Open editor →"}
             </button>
           </div>
         </footer>

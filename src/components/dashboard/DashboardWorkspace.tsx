@@ -315,7 +315,7 @@ function ActiveProposalCard({
         </div>
         <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
         <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
-          Fill in a few facts about your guests and the trip, and the AI will draft a fully-personalised proposal in seconds.
+          Fill in a few facts about your guests and the trip — we&apos;ll automate a fully-personalised draft in seconds.
         </p>
         <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
           <button

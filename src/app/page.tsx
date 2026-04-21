@@ -123,9 +123,9 @@ function Hero() {
         </h1>
 
         <p className="mt-7 text-[17px] md:text-[19px] text-white/65 max-w-2xl mx-auto leading-relaxed">
-          Tell the AI who&apos;s travelling and where. It drafts every section —
-          greeting, day-by-day, pricing, sign-off — in your brand voice, using
-          only the camps in your library. You polish and send.
+          Tell it who&apos;s travelling and where. Every section — greeting,
+          day-by-day, pricing, sign-off — drafts itself in your brand voice,
+          using only the camps in your library. You polish and send.
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3.5">
@@ -382,14 +382,14 @@ function Differentiator() {
       <div className="max-w-6xl mx-auto px-6">
         <SectionHeading
           eyebrow="Why it's different"
-          title="Operator intelligence, not generic AI."
+          title="Operator intelligence, not generic automation."
           sub="Three things every safari operator told us they wanted — and that no general-purpose tool will give them."
         />
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
           <Pillar
             symbol="◇"
             title="Built around your properties"
-            body="The AI only suggests camps and lodges that are in your library. No surprise recommendations. No camps you don't sell."
+            body="The automation only suggests camps and lodges that are in your library. No surprise recommendations. No camps you don't sell."
           />
           <Pillar
             symbol="◈"
@@ -599,7 +599,7 @@ function SpeedControl() {
           className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
           style={{ fontFamily: "'Playfair Display', serif" }}
         >
-          AI writes the first draft.<br /> You stay the operator.
+          Automation writes the first draft.<br /> You stay the operator.
         </h2>
         <p className="mt-6 text-[16px] leading-relaxed text-black/55 max-w-xl mx-auto">
           Generate a day narrative or a greeting in a click. Edit any line in
@@ -655,7 +655,7 @@ function Pricing() {
             features={[
               "Up to 5 proposals / month",
               "Property library",
-              "AI generation (basic)",
+              "Automated drafts (basic)",
               "Web view sharing",
               "PDF export",
             ]}
@@ -671,7 +671,7 @@ function Pricing() {
               "Unlimited proposals",
               "Full property system",
               "Brand DNA — tone control",
-              "Priority AI",
+              "Priority automation",
               "Advanced exports + 5 seats",
             ]}
             cta="Start Operator"
