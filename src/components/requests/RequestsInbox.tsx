@@ -186,8 +186,24 @@ export function RequestsInbox() {
                   ))}
                 </select>
               </div>
-              <div className="text-[11px] uppercase tracking-[0.26em] font-semibold text-black/50">
-                {rows === null ? "Loading…" : `${rows.length} request${rows.length === 1 ? "" : "s"}`}
+              <div className="flex items-center gap-3">
+                <a
+                  href={(() => {
+                    const p = new URLSearchParams();
+                    p.set("status", stage);
+                    if (handledBy === "me") p.set("assignedToUserId", "me");
+                    else if (handledBy === "unassigned") p.set("assignedToUserId", "unassigned");
+                    else if (handledBy !== "all") p.set("assignedToUserId", handledBy);
+                    return `/api/requests/export?${p.toString()}`;
+                  })()}
+                  className="text-[11.5px] text-black/55 hover:text-[#1b3a2d]"
+                  title="Download this filtered list as CSV"
+                >
+                  ↓ Export CSV
+                </a>
+                <div className="text-[11px] uppercase tracking-[0.26em] font-semibold text-black/50">
+                  {rows === null ? "Loading…" : `${rows.length} request${rows.length === 1 ? "" : "s"}`}
+                </div>
               </div>
             </header>
 
