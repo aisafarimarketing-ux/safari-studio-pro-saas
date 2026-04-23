@@ -201,7 +201,14 @@ export function RequestDetailPage({ id }: { id: string }) {
               <div className="text-[11px] tabular-nums text-black/45">#{data.referenceNumber}</div>
             </div>
             <h1 className="text-[24px] md:text-[30px] font-bold tracking-tight text-black/85 mt-1" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Request from {clientName}
+              Request from{" "}
+              {data.client?.id ? (
+                <Link href={`/clients/${data.client.id}`} className="hover:underline decoration-[#1b3a2d]/40 underline-offset-4">
+                  {clientName}
+                </Link>
+              ) : (
+                clientName
+              )}
             </h1>
             <div className="text-[12px] text-black/55 mt-1">
               Received {formatDate(data.receivedAt)} · Source: {data.source ?? "Unknown"}
