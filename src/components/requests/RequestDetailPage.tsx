@@ -135,9 +135,12 @@ export function RequestDetailPage({ id }: { id: string }) {
         throw new Error(err?.error ?? `HTTP ${res.status}`);
       }
       const { proposalId } = (await res.json()) as { proposalId: string };
-      // Drop the operator straight into the editor. They can click the
-      // "Automate" button from there to run the AI autopilot if they want.
-      window.location.href = `/studio/${proposalId}`;
+      // The editor loads the active proposal from localStorage rather
+      // than a URL param, so stash the id first, then navigate. Using
+      // location.href (not router.push) forces a full reload so the
+      // editor picks up the fresh activeProposalId on mount.
+      try { localStorage.setItem("activeProposalId", proposalId); } catch {}
+      window.location.href = `/studio`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create quote");
       setCreatingQuote(false);
