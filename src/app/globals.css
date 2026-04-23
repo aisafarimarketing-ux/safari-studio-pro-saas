@@ -402,15 +402,69 @@ body {
     break-inside: avoid !important;
   }
 
-  /* Everything else — personalNote, itineraryTable, map, pricing,
-     practicalInfo — flows naturally. No forced breaks; the browser's
-     default pagination + break-inside rules above handle the details. */
+  /* Mid sections — personalNote, itineraryTable, map, pricing,
+     practicalInfo — flow naturally. We explicitly neutralise the
+     min-height classes so sections don't leave a blank half-page when
+     their content is shorter than the viewport. Each inner content
+     block tries to stay together (avoid splitting mid-paragraph). */
+  [data-section-type="personalNote"],
+  [data-section-type="itineraryTable"],
+  [data-section-type="map"],
+  [data-section-type="pricing"],
+  [data-section-type="practicalInfo"],
+  [data-section-type="greeting"],
+  [data-section-type="footer"] {
+    min-height: 0 !important;
+    height: auto !important;
+  }
 
-  /* Retire the old brittle min-h-screen / min-h-[600px] rule so it
-     doesn't fight the new data-section-type one. */
-  [class*="min-h-screen"],
-  [class*="min-h-\\[600px\\]"] {
+  /* Any descendant that was forcing 100vh / tall min-heights should
+     relax to its natural height in print. Scoped to non-cover sections
+     so the cover's intentional full-page layout still works. */
+  [data-section-type]:not([data-section-type="cover"]) [class*="min-h-screen"],
+  [data-section-type]:not([data-section-type="cover"]) [class*="min-h-\\[600px\\]"],
+  [data-section-type]:not([data-section-type="cover"]) [class*="min-h-\\[640px\\]"] {
+    min-height: 0 !important;
+  }
+
+  /* Keep the cover explicitly full-page. */
+  [data-section-type="cover"] [class*="min-h-screen"],
+  [data-section-type="cover"] [class*="min-h-\\[640px\\]"] {
     min-height: 100vh !important;
+  }
+
+  /* Pricing block: keep tiers + inclusions together; never split the
+     4-row editorial block across a page. */
+  [data-section-type="pricing"] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Itinerary table: let rows flow between pages but never split a row. */
+  [data-section-type="itineraryTable"] table {
+    page-break-inside: auto !important;
+  }
+  [data-section-type="itineraryTable"] tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  [data-section-type="itineraryTable"] thead {
+    display: table-header-group !important; /* repeat header on each page */
+  }
+
+  /* Map + practical info: try to keep each block intact on one page. */
+  [data-section-type="map"] > *,
+  [data-section-type="practicalInfo"] > * {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Personal note and greeting: signature block shouldn't split from
+     the name, so treat the whole inner content as one unit. */
+  [data-section-type="personalNote"],
+  [data-section-type="greeting"] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   /* ── Section spacing for print ── */

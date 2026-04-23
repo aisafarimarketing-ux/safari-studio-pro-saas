@@ -138,9 +138,15 @@ app.post("/pdf", async (req, res) => {
 
   let context;
   try {
+    // deviceScaleFactor = 1: every bitmap (hero photos, backgrounds) is
+    // embedded at 1x instead of 2x. For a proposal with 15-25 photos this
+    // is the difference between a 10MB PDF and a 50-60MB PDF. A4 at 1024
+    // viewport still renders at ~125 DPI once scaled to print — plenty
+    // sharp for on-screen viewing and typical letter-press printing, and
+    // the text is vector so sharpness is independent of the factor.
     context = await browser.newContext({
       viewport: { width: 1024, height: 1440 },
-      deviceScaleFactor: 2,
+      deviceScaleFactor: 1,
       colorScheme: "light",
       reducedMotion: "reduce",
       locale: "en-US",
