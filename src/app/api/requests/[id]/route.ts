@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity";
+import { notifyAssignment } from "@/lib/notifications";
 
 // /api/requests/[id] — detail (GET) + status/assignment update (PATCH) +
 // soft delete (DELETE). Every mutation emits a system note into the
@@ -169,6 +170,24 @@ export async function PATCH(
       targetId: existing.id,
       detail: { assignedToUserId: updates.assignedToUserId ?? null },
     });
+    // Fire-and-forget assignment email to the new assignee (if any).
+    if (updates.assignedToUserId && typeof updates.assignedToUserId === "string") {
+      const clientName = [updated.client?.firstName, updated.client?.lastName].filter(Boolean).join(" ").trim() || null;
+      const brief = (updated.tripBrief as Record<string, unknown> | null) ?? null;
+      void notifyAssignment({
+        organizationId: ctx.organization.id,
+        requestId: existing.id,
+        referenceNumber: updated.referenceNumber,
+        assigneeUserId: updates.assignedToUserId,
+        assignerUserId: ctx.user.id,
+        clientName,
+        clientEmail: updated.client?.email ?? "",
+        tripSummary: brief ? [
+          typeof brief.nights === "number" ? `${brief.nights} nights` : null,
+          Array.isArray(brief.destinations) ? (brief.destinations as string[]).slice(0, 3).join(" · ") : null,
+        ].filter(Boolean).join(" · ") : null,
+      });
+    }
   }
 
   return NextResponse.json({ request: updated });

@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { nextRequestReferenceNumber } from "@/lib/requestCounter";
 import { recordActivity } from "@/lib/activity";
+import { notifyNewRequest } from "@/lib/notifications";
 
 // /api/requests — tenant-scoped CRUD for inbound client inquiries.
 //
@@ -206,6 +207,21 @@ export async function POST(req: Request) {
     targetType: "request",
     targetId: request.id,
     detail: { referenceNumber, source: body.source ?? null },
+  });
+
+  // Fire-and-forget — don't await email delivery; it runs best-effort.
+  void notifyNewRequest({
+    organizationId: ctx.organization.id,
+    requestId: request.id,
+    referenceNumber,
+    createdByUserId: ctx.user.id,
+    clientName: [client.firstName, client.lastName].filter(Boolean).join(" ").trim() || null,
+    clientEmail: client.email,
+    source: body.source ?? null,
+    tripSummary: [
+      body.tripBrief?.nights ? `${body.tripBrief.nights} nights` : null,
+      Array.isArray(body.tripBrief?.destinations) ? body.tripBrief!.destinations!.slice(0, 3).join(" · ") : null,
+    ].filter(Boolean).join(" · ") || null,
   });
 
   return NextResponse.json({ request }, { status: 201 });
