@@ -12,6 +12,7 @@ import {
 import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
 import { CommentsDrawer } from "./CommentsDrawer";
 import { ProposalViewsWidget } from "./ProposalViewsWidget";
+import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -52,6 +53,7 @@ export function EditorToolbar({
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
   const [compressResult, setCompressResult] = useState<string | null>(null);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
 
   // "Proposal is X MB — too big to auto-save" is the signal that the
   // user's saved images exceed the body-size cap. Only that specific
@@ -241,6 +243,7 @@ export function EditorToolbar({
           setOpen={setMenuOpen}
           onCopyLink={handleShare}
           onPreview={handlePreview}
+          onRebuildBudget={() => setRebuildOpen(true)}
           onDownloadPDF={handleDownloadPDF}
           pdfState={pdfState}
           onDuplicate={handleDuplicate}
@@ -316,6 +319,11 @@ export function EditorToolbar({
         onClose={() => setPdfConfigDialog({ open: false, message: "" })}
         onUsePrintView={openPrintView}
       />
+
+      <RebuildBudgetDialog
+        open={rebuildOpen}
+        onClose={() => setRebuildOpen(false)}
+      />
     </div>
   );
 }
@@ -372,6 +380,7 @@ function ActionsMenu({
   setOpen,
   onCopyLink,
   onPreview,
+  onRebuildBudget,
   onDownloadPDF,
   pdfState,
   onDuplicate,
@@ -381,6 +390,7 @@ function ActionsMenu({
   setOpen: (v: boolean) => void;
   onCopyLink: () => void;
   onPreview: () => void;
+  onRebuildBudget: () => void;
   onDownloadPDF: () => void;
   pdfState: "idle" | "rendering" | "error";
   onDuplicate: () => void;
@@ -414,7 +424,17 @@ function ActionsMenu({
         ⋯
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-white border border-black/10 rounded-xl shadow-xl py-1 ss-popover-in">
+        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-white border border-black/10 rounded-xl shadow-xl py-1 ss-popover-in">
+          <MenuItem
+            onClick={() => { setOpen(false); onRebuildBudget(); }}
+            accent
+          >
+            <span className="flex items-center justify-between gap-2">
+              <span>Rebuild to a budget…</span>
+              <span className="text-[9.5px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(201,168,76,0.2)", color: "#8a7125" }}>AI</span>
+            </span>
+          </MenuItem>
+          <div className="my-1 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }} />
           <MenuItem onClick={() => { setOpen(false); onPreview(); }}>Preview</MenuItem>
           <MenuItem onClick={() => { setOpen(false); onCopyLink(); }}>Copy link</MenuItem>
           <MenuItem onClick={onDownloadPDF} disabled={pdfState === "rendering"}>
@@ -432,10 +452,12 @@ function ActionsMenu({
 function MenuItem({
   onClick,
   disabled,
+  accent,
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
+  accent?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -443,7 +465,11 @@ function MenuItem({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="w-full text-left px-3 py-2 text-sm text-black/75 hover:bg-black/[0.04] transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className={`w-full text-left px-3 py-2 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed ${
+        accent
+          ? "font-semibold text-[#1b3a2d] hover:bg-[rgba(201,168,76,0.1)]"
+          : "text-black/75 hover:bg-black/[0.04]"
+      }`}
     >
       {children}
     </button>
