@@ -7,31 +7,37 @@
 // the extracted text to the API. Keeps sensitive client data (names,
 // pricing, flight numbers) out of our server logs.
 //
-// The worker is loaded from unpkg pinned to the installed pdfjs version
-// — avoids per-project bundler config and works uniformly across dev,
-// Railway build, and Turbopack.
+// IMPORTANT: pdfjs-dist references DOMMatrix at module evaluation. A
+// top-level `import * as pdfjsLib from "pdfjs-dist"` therefore crashes
+// during Next.js SSR/prerender even on "use client" files, because the
+// JS module still gets evaluated server-side for hydration boundary
+// analysis. We lazy-import the module inside the call site — the
+// dynamic import only fires in the browser when the user actually
+// picks a PDF.
 
-import * as pdfjsLib from "pdfjs-dist";
+type PdfJs = typeof import("pdfjs-dist");
+let pdfjsLibCached: PdfJs | null = null;
 
-let workerConfigured = false;
-
-function ensureWorker() {
-  if (workerConfigured) return;
-  if (typeof window === "undefined") return;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  workerConfigured = true;
+async function loadPdfJs(): Promise<PdfJs> {
+  if (pdfjsLibCached) return pdfjsLibCached;
+  const mod = (await import("pdfjs-dist")) as PdfJs;
+  // Worker — pinned to the loaded version, served by unpkg so no bundler
+  // config is needed. Turbopack + Next 16 compat: keep this outside any
+  // build-time URL graph.
+  mod.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${mod.version}/build/pdf.worker.min.mjs`;
+  pdfjsLibCached = mod;
+  return mod;
 }
 
 /**
- * Extract the raw text of a PDF file, in page order. Returns one page of
- * concatenated text per array entry so the caller can cap or chunk as
- * needed. Text-layout reconstruction (paragraphs, columns) is intentional
- * left to the downstream LLM — pdfjs gives us items with positions but
- * robust paragraph re-flow is its own rabbit hole and Claude handles
+ * Extract the raw text of a PDF file, in page order. Text-layout
+ * reconstruction (paragraphs, columns) is intentionally left to the
+ * downstream LLM — pdfjs gives us items with positions but robust
+ * paragraph re-flow is its own rabbit hole and Claude handles
  * unsegmented text fine.
  */
 export async function extractPdfPages(file: File | Blob): Promise<string[]> {
-  ensureWorker();
+  const pdfjsLib = await loadPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pages: string[] = [];
@@ -53,8 +59,9 @@ export async function extractPdfPages(file: File | Blob): Promise<string[]> {
 
 /**
  * Convenience wrapper — returns the whole document as a single string
- * with two-newline separators between pages. Pages caps at `maxPages` so
- * a pathologically long source can't blow the LLM's input window.
+ * with two-newline separators between pages. `maxPages` caps page count
+ * and `maxChars` caps the returned length so a pathologically long PDF
+ * can't blow the LLM's input window.
  */
 export async function extractPdfText(
   file: File | Blob,
