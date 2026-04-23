@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { EditorToolbar } from "./EditorToolbar";
-import { EditorDayNav } from "./EditorDayNav";
-import { TripMetaStrip } from "./TripMetaStrip";
 import { LeftSidebar } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
 import { AISelectionToolbar } from "./AISelectionToolbar";
@@ -201,7 +199,6 @@ export function ProposalEditor() {
         autoSaveError={autoSave.error}
         lastSavedAt={autoSave.lastSavedAt}
       />
-      <TripMetaStrip />
 
       <div className="flex flex-1 min-h-0 relative">
         {/* Left sidebar — collapsible */}
@@ -219,7 +216,6 @@ export function ProposalEditor() {
         </button>
 
         <div className="flex-1 min-w-0 flex flex-col proposal-canvas">
-          <EditorDayNav />
           <ProposalCanvas />
           <AISelectionToolbar />
         </div>

@@ -240,18 +240,12 @@ export function EditorToolbar({
           open={menuOpen}
           setOpen={setMenuOpen}
           onCopyLink={handleShare}
+          onPreview={handlePreview}
           onDownloadPDF={handleDownloadPDF}
           pdfState={pdfState}
           onDuplicate={handleDuplicate}
           duplicating={duplicating}
         />
-
-        <button
-          onClick={handlePreview}
-          className="px-3.5 py-1.5 text-sm border border-black/12 rounded-lg hover:bg-black/5 text-black/65 transition active:scale-95"
-        >
-          Preview
-        </button>
 
         <button
           onClick={handleShare}
@@ -377,6 +371,7 @@ function ActionsMenu({
   open,
   setOpen,
   onCopyLink,
+  onPreview,
   onDownloadPDF,
   pdfState,
   onDuplicate,
@@ -385,6 +380,7 @@ function ActionsMenu({
   open: boolean;
   setOpen: (v: boolean) => void;
   onCopyLink: () => void;
+  onPreview: () => void;
   onDownloadPDF: () => void;
   pdfState: "idle" | "rendering" | "error";
   onDuplicate: () => void;
@@ -419,6 +415,7 @@ function ActionsMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-white border border-black/10 rounded-xl shadow-xl py-1 ss-popover-in">
+          <MenuItem onClick={() => { setOpen(false); onPreview(); }}>Preview</MenuItem>
           <MenuItem onClick={() => { setOpen(false); onCopyLink(); }}>Copy link</MenuItem>
           <MenuItem onClick={onDownloadPDF} disabled={pdfState === "rendering"}>
             {pdfState === "rendering" ? "Rendering PDF…" : pdfState === "error" ? "PDF failed — retry" : "Download PDF"}
