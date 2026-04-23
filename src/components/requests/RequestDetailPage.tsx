@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/properties/AppHeader";
+import { TasksPanel } from "./TasksPanel";
 
 // ─── Request detail — split view ───────────────────────────────────────────
 //
@@ -69,6 +70,7 @@ export function RequestDetailPage({ id }: { id: string }) {
   const [noteText, setNoteText] = useState("");
   const [posting, setPosting] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [railTab, setRailTab] = useState<"notes" | "tasks">("notes");
 
   const load = useCallback(async () => {
     try {
@@ -348,13 +350,38 @@ export function RequestDetailPage({ id }: { id: string }) {
             </section>
           </div>
 
-          {/* Right rail — notes */}
+          {/* Right rail — notes + tasks, tab-switched */}
           <aside className="bg-white rounded-2xl border border-black/8 overflow-hidden self-start lg:sticky lg:top-6 flex flex-col max-h-[75vh]">
-            <header className="px-5 py-4 border-b border-black/8 text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55 shrink-0">
-              Notes &amp; Activity
-            </header>
+            <nav className="px-5 pt-4 pb-0 border-b border-black/8 shrink-0 flex items-center gap-4 text-[11px] uppercase tracking-[0.28em] font-semibold">
+              <button
+                type="button"
+                onClick={() => setRailTab("notes")}
+                className="pb-3 -mb-[1px]"
+                style={{
+                  color: railTab === "notes" ? "#1b3a2d" : "rgba(0,0,0,0.45)",
+                  borderBottom: railTab === "notes" ? "2px solid #1b3a2d" : "2px solid transparent",
+                }}
+              >
+                Notes
+              </button>
+              <button
+                type="button"
+                onClick={() => setRailTab("tasks")}
+                className="pb-3 -mb-[1px]"
+                style={{
+                  color: railTab === "tasks" ? "#1b3a2d" : "rgba(0,0,0,0.45)",
+                  borderBottom: railTab === "tasks" ? "2px solid #1b3a2d" : "2px solid transparent",
+                }}
+              >
+                Tasks
+              </button>
+            </nav>
 
-            {/* Composer */}
+            {railTab === "tasks" ? (
+              <TasksPanel requestId={id} />
+            ) : (
+              <>
+            {/* Notes composer */}
             <div className="p-4 border-b border-black/5 shrink-0">
               <textarea
                 rows={3}
@@ -404,6 +431,8 @@ export function RequestDetailPage({ id }: { id: string }) {
                 </ul>
               )}
             </div>
+              </>
+            )}
           </aside>
         </div>
       </main>

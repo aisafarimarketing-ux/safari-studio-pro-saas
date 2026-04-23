@@ -658,6 +658,7 @@ model Request {
 
   proposals Proposal[]
   notes     RequestNote[]
+  tasks     RequestTask[]
 
   @@unique([organizationId, referenceNumber])
   @@index([organizationId, status])
@@ -688,6 +689,35 @@ model RequestCounter {
 // Mixed timeline — user-authored notes + system-generated events
 // ("Status changed to Open", "Quote v2 sent", "Assigned to Lilian").
 // Rendered as the right-hand rail of the request detail view.
+
+// ─── CRM: Request tasks ────────────────────────────────────────────────────
+//
+// Small todos attached to a request. Mirrors the reference app's "Tasks"
+// tab — things the operator remembers to do later ("follow up next
+// Monday", "send flight options by Friday"). Due dates are optional; the
+// dashboard "overdue" band will eventually include due-date task misses.
+
+model RequestTask {
+  id        String  @id @default(cuid())
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  title  String
+  notes  String?
+  dueAt  DateTime?
+  doneAt DateTime?
+
+  // Not nullable — if the author is later removed from the org we still
+  // want to know who created the task. Using the User FK keeps joins cheap.
+  createdByUserId String?
+  order           Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestId, order])
+  @@index([requestId, doneAt])
+}
 
 model RequestNote {
   id        String  @id @default(cuid())
