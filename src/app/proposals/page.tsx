@@ -177,13 +177,23 @@ export default function ProposalsPage() {
               Drafts, in-flight, and sent. Newest first.
             </p>
           </div>
-          <button
-            onClick={handleNew}
-            disabled={creating}
-            className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition shadow-sm disabled:opacity-60"
-          >
-            {creating ? "Creating…" : "+ New proposal"}
-          </button>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/import"
+              className="px-4 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
+              style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+              title="Bring a proposal from Safariportal, Safari Office, Wetu — or any PDF"
+            >
+              Import →
+            </Link>
+            <button
+              onClick={handleNew}
+              disabled={creating}
+              className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition shadow-sm disabled:opacity-60"
+            >
+              {creating ? "Creating…" : "+ New proposal"}
+            </button>
+          </div>
         </div>
 
         <div className="mb-8">
@@ -342,16 +352,25 @@ function EmptyState({ onNew, creating }: { onNew: () => void; creating: boolean 
       </div>
       <h2 className="text-lg font-semibold text-black/80">No proposals yet</h2>
       <p className="mt-1.5 text-[14px] text-black/50 max-w-sm mx-auto">
-        Start your first proposal — the editor opens with a blank canvas and a
-        safari-tuned theme.
+        Start fresh in the editor, or bring your last proposal from
+        Safariportal / Safari Office / Wetu — we&apos;ll restructure it.
       </p>
-      <button
-        onClick={onNew}
-        disabled={creating}
-        className="mt-6 px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
-      >
-        {creating ? "Creating…" : "+ New proposal"}
-      </button>
+      <div className="mt-6 flex items-center justify-center gap-2.5 flex-wrap">
+        <button
+          onClick={onNew}
+          disabled={creating}
+          className="px-5 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
+        >
+          {creating ? "Creating…" : "+ New proposal"}
+        </button>
+        <Link
+          href="/import"
+          className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
+          style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+        >
+          Import existing →
+        </Link>
+      </div>
     </div>
   );
 }

@@ -326,6 +326,14 @@ function ActiveProposalCard({
           >
             {creating ? "Creating…" : "+ New proposal"}
           </button>
+          <Link
+            href="/import"
+            className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
+            style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+            title="Import an existing proposal from Safariportal, Safari Office, Wetu — or any PDF"
+          >
+            Import existing →
+          </Link>
           <button
             onClick={onImportSample}
             disabled={importing}
@@ -432,6 +440,14 @@ function QuickActionsCard({
         >
           {creating ? "Creating…" : "+ New proposal"}
         </button>
+        <Link
+          href="/import"
+          className="px-4 py-2.5 rounded-xl border text-sm font-medium transition active:scale-95"
+          style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+          title="Bring a PDF from Safariportal / Safari Office / Wetu"
+        >
+          Import existing proposal →
+        </Link>
         <Link
           href="/properties/new"
           className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 transition active:scale-95"

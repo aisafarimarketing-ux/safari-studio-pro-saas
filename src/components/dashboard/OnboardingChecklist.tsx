@@ -45,7 +45,7 @@ export function OnboardingChecklist({ progress }: { progress: OnboardingProgress
       key: "proposal",
       done: progress.hasProposals,
       label: "Create your first proposal",
-      hint: "Open the editor with a blank canvas, or import the sample to explore.",
+      hint: "Start fresh in the editor, or bring one from Safariportal / Safari Office / Wetu — we'll restructure it.",
       cta: { href: "/studio", label: "New proposal" },
     },
     {
