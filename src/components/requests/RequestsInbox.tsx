@@ -62,6 +62,8 @@ export function RequestsInbox() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +88,52 @@ export function RequestsInbox() {
   }, [stage, handledBy, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Clear selection whenever the filter changes — stops stale ids lingering.
+  useEffect(() => { setSelected(new Set()); }, [stage, handledBy, search]);
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (!rows) return;
+    if (selected.size === rows.length) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.id)));
+  };
+
+  const runBulk = async (body: Record<string, unknown>) => {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/requests/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selected), ...body }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error ?? `HTTP ${res.status}`);
+      }
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk action failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkAssign = async (assignedToUserId: string | null) => runBulk({ action: "assign", assignedToUserId });
+  const bulkStatus = async (status: string) => runBulk({ action: "status", status });
+  const bulkDelete = async () => {
+    if (!confirm(`Delete ${selected.size} request${selected.size === 1 ? "" : "s"}? This can't be undone.`)) return;
+    await runBulk({ action: "delete" });
+  };
 
   // Load team once for the Handled-by filter.
   useEffect(() => {
@@ -213,6 +261,57 @@ export function RequestsInbox() {
               </div>
             )}
 
+            {rows && rows.length > 0 && selected.size > 0 && (
+              <div
+                className="flex items-center justify-between gap-3 px-5 py-3 border-b border-black/8 flex-wrap"
+                style={{ background: "rgba(27,58,45,0.04)" }}
+              >
+                <div className="text-[12.5px] font-medium text-[#1b3a2d]">
+                  {selected.size} selected
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) { bulkAssign(e.target.value === "unassign" ? null : e.target.value); } }}
+                    disabled={bulkBusy}
+                    className="text-[12px] px-2 py-1 rounded border border-black/15 bg-white"
+                  >
+                    <option value="">Assign to…</option>
+                    <option value="unassign">— Unassign —</option>
+                    {team.map((m) => (
+                      <option key={m.userId} value={m.userId}>{m.name || m.email}</option>
+                    ))}
+                  </select>
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) bulkStatus(e.target.value); }}
+                    disabled={bulkBusy}
+                    className="text-[12px] px-2 py-1 rounded border border-black/15 bg-white"
+                  >
+                    <option value="">Change stage…</option>
+                    {STAGES.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={bulkDelete}
+                    disabled={bulkBusy}
+                    className="text-[12px] px-3 py-1 rounded border border-[#b34334]/30 text-[#b34334] hover:bg-[#b34334]/5 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(new Set())}
+                    disabled={bulkBusy}
+                    className="text-[12px] text-black/55 hover:text-black/85 px-2"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
             {rows === null ? (
               <div className="p-5 space-y-3">
                 {[0, 1, 2].map((i) => (
@@ -222,11 +321,27 @@ export function RequestsInbox() {
             ) : rows.length === 0 ? (
               <EmptyState onNew={() => setDialogOpen(true)} stage={stage} />
             ) : (
-              <ul className="divide-y divide-black/5">
-                {rows.map((r) => (
-                  <RequestCard key={r.id} row={r} />
-                ))}
-              </ul>
+              <>
+                <div className="px-5 py-2 border-b border-black/5 flex items-center gap-3 text-[11.5px] text-black/50">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === rows.length && rows.length > 0}
+                    onChange={toggleSelectAll}
+                    className="accent-[#1b3a2d]"
+                  />
+                  <span>Select all on this page</span>
+                </div>
+                <ul className="divide-y divide-black/5">
+                  {rows.map((r) => (
+                    <RequestCard
+                      key={r.id}
+                      row={r}
+                      selected={selected.has(r.id)}
+                      onToggle={() => toggleSelect(r.id)}
+                    />
+                  ))}
+                </ul>
+              </>
             )}
           </section>
         </div>
@@ -247,7 +362,15 @@ export function RequestsInbox() {
 
 // ─── Row ──────────────────────────────────────────────────────────────────
 
-function RequestCard({ row }: { row: RequestRow }) {
+function RequestCard({
+  row,
+  selected,
+  onToggle,
+}: {
+  row: RequestRow;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const name = [row.client?.firstName, row.client?.lastName]
     .filter(Boolean)
     .join(" ")
@@ -257,10 +380,21 @@ function RequestCard({ row }: { row: RequestRow }) {
   const country = row.client?.country ?? "";
 
   return (
-    <li>
+    <li className="flex items-stretch hover:bg-black/[0.02] transition">
+      <label
+        className="pl-5 pr-3 flex items-center shrink-0 cursor-pointer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="accent-[#1b3a2d]"
+        />
+      </label>
       <Link
         href={`/requests/${row.id}`}
-        className="block px-5 py-4 hover:bg-black/[0.02] transition"
+        className="flex-1 block py-4 pr-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
