@@ -59,9 +59,9 @@ function Nav() {
         </Link>
 
         <div className="hidden md:flex items-center gap-7 text-[13.5px] text-white/60">
+          <Link href="/demo" className="hover:text-white transition" style={{ color: GOLD }}>Live demo</Link>
           <a href="#how" className="hover:text-white transition">How it works</a>
           <a href="#different" className="hover:text-white transition">Why different</a>
-          <a href="#brand" className="hover:text-white transition">Brand DNA</a>
           <a href="#pricing" className="hover:text-white transition">Pricing</a>
         </div>
 
@@ -136,13 +136,13 @@ function Hero() {
           >
             Start free — no card
           </a>
-          <a
-            href="#how"
+          <Link
+            href="/demo"
             className="px-7 py-3.5 rounded-xl font-semibold text-white/85 text-[15px] transition hover:text-white hover:bg-white/[0.04]"
             style={{ border: "1px solid rgba(255,255,255,0.18)" }}
           >
-            See it in action →
-          </a>
+            Try the live demo →
+          </Link>
         </div>
 
         {/* Value strip — three sharp claims replacing the old tag. */}
@@ -857,8 +857,8 @@ function Footer() {
           <span className="text-white/55 font-medium">Safari Studio</span>
         </div>
         <div className="flex gap-6">
+          <Link href="/demo" className="hover:text-white/70 transition">Live demo</Link>
           <a href="#how" className="hover:text-white/70 transition">How it works</a>
-          <a href="#different" className="hover:text-white/70 transition">Why different</a>
           <Link href="/pricing" className="hover:text-white/70 transition">Pricing</Link>
           <a href="/sign-up" className="hover:text-white/70 transition">Open Studio</a>
         </div>
