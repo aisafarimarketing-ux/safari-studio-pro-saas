@@ -195,6 +195,29 @@ app.post("/pdf", async (req, res) => {
         try { if (document.fonts?.ready) await document.fonts.ready; } catch {}
       });
 
+      // Wait for every <img> in the DOM to finish decoding. Without this,
+      // Leaflet map tiles + Supabase-hosted photos can still be pending
+      // when page.pdf() fires, leaving grey rectangles where the map
+      // should render. 6s per-image cap so one slow image can't hang the
+      // whole render.
+      await page.evaluate(async () => {
+        const imgs = Array.from(document.querySelectorAll("img"));
+        await Promise.all(imgs.map((img) => {
+          if (img.complete && img.naturalWidth > 0) return null;
+          return new Promise((resolve) => {
+            const done = () => resolve(null);
+            img.addEventListener("load", done, { once: true });
+            img.addEventListener("error", done, { once: true });
+            setTimeout(done, 6000);
+          });
+        }));
+      });
+
+      // Network idle catches the Leaflet tile XHR batch specifically — the
+      // map fires N tile requests in parallel and we need them all to
+      // finish before snapshotting. 3s of no activity is a strong signal.
+      await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+
       return page.pdf({
         format: "A4",
         printBackground: true,

@@ -433,14 +433,8 @@ body {
     min-height: 100vh !important;
   }
 
-  /* Pricing block: keep tiers + inclusions together; never split the
-     4-row editorial block across a page. */
-  [data-section-type="pricing"] {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  /* Itinerary table: let rows flow between pages but never split a row. */
+  /* Itinerary table: let rows flow between pages but never split a row.
+     Repeat thead on each page so multi-page tables stay readable. */
   [data-section-type="itineraryTable"] table {
     page-break-inside: auto !important;
   }
@@ -449,22 +443,44 @@ body {
     break-inside: avoid !important;
   }
   [data-section-type="itineraryTable"] thead {
-    display: table-header-group !important; /* repeat header on each page */
+    display: table-header-group !important;
   }
 
-  /* Map + practical info: try to keep each block intact on one page. */
-  [data-section-type="map"] > *,
-  [data-section-type="practicalInfo"] > * {
+  /* Keep the map container itself intact — but not the whole map
+     section. The section may include a caption + stops table + map; we
+     only care that the map <div> doesn't get sliced in half. */
+  [data-section-type="map"] .leaflet-container,
+  [data-section-type="map"] [class*="rounded-2xl"] {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
 
-  /* Personal note and greeting: signature block shouldn't split from
-     the name, so treat the whole inner content as one unit. */
-  [data-section-type="personalNote"],
-  [data-section-type="greeting"] {
+  /* Personal note signature block: keep the pad + name together as one
+     unit — but let the narrative above flow naturally if it's long. */
+  [data-section-type="personalNote"] [class*="mt-5"],
+  [data-section-type="personalNote"] [class*="pt-8"] {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+
+  /* Generic card-keep-together heuristic: any rounded card tries not to
+     split across pages. Applies across sections so practical-info tiles,
+     pricing tier rows, property blocks etc. stay intact without locking
+     the whole parent section to one page. */
+  [data-section-type] .relative.p-7.rounded-xl,
+  [data-section-type] .rounded-2xl,
+  [data-section-type] article {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Opposite problem: section wrappers with their own background colour
+     can leave a full-width band when they end mid-page. Strip the empty
+     trailing background by not letting the section claim the remainder
+     of the page. */
+  [data-section-type]:not([data-section-type="cover"]) {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
   /* ── Section spacing for print ── */
