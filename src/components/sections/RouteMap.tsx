@@ -54,13 +54,22 @@ export function RouteMap({
   const [state, setState] = useState<GeocodeState>({ status: "idle" });
   // Import leaflet once on the client so we can build custom div icons.
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  // Mirror the ref into state so we can block the MapContainer render until
+  // leaflet has actually initialised. Without this, a cached-coords render
+  // path would produce status === "ready" synchronously on mount and the
+  // MapContainer would mount before leaflet is loaded — crashing on
+  // createIcon / _leaflet_events from Marker construction.
+  const [leafletReady, setLeafletReady] = useState(false);
   // Hold on to the Leaflet map instance so parent-driven flyTo works.
   const mapRef = useRef<import("leaflet").Map | null>(null);
 
   // Signature of current days used to invalidate the cache when destinations
-  // change. The cache is stale if a destination was renamed.
+  // change. Two signatures must share the same format or the startsWith
+  // prefix check below always fails — historically the main signature
+  // included country and the cached one did not, so every cache miss
+  // silently fell through to a live geocode round-trip.
   const signature = useMemo(
-    () => days.map((d) => `${d.id}:${d.destination}:${d.country}`).join("|"),
+    () => days.map((d) => `${d.id}:${d.destination}`).join("|"),
     [days],
   );
   const cachedSignature = useMemo(
@@ -162,13 +171,18 @@ export function RouteMap({
         iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
         shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
+      setLeafletReady(true);
     });
     return () => {
       mounted = false;
     };
   }, []);
 
-  if (state.status === "idle" || state.status === "loading") {
+  // Render a loading placeholder until BOTH the coord state is ready AND
+  // leaflet has finished loading. Either alone is insufficient: "ready"
+  // with cached coords can arrive synchronously on first render, well
+  // before the async leaflet import resolves.
+  if (state.status === "idle" || state.status === "loading" || !leafletReady) {
     return (
       <div
         className="w-full flex items-center justify-center"
