@@ -15,7 +15,7 @@ const BONE_2 = "#f3f0ea";
 
 export const metadata = {
   title: "Pricing — Safari Studio",
-  description: "Two simple tiers. No free plan. Close one safari and Safari Studio pays for itself.",
+  description: "Three tiers, starting at $29. No free plan. Close one safari and Safari Studio pays for the year.",
 };
 
 export default function PricingPage() {
@@ -109,8 +109,8 @@ function Hero() {
           clients <em className="not-italic" style={{ color: GOLD }}>say yes to.</em>
         </h1>
         <p className="mt-6 text-[16px] md:text-[17px] text-white/60 max-w-xl mx-auto leading-relaxed">
-          Two simple tiers. No free plan. Close one safari and Safari Studio
-          pays for itself for the year.
+          From $29 for solo consultants. No free plan. Close one safari and
+          Safari Studio pays for itself for the year.
         </p>
       </div>
     </section>
@@ -119,19 +119,32 @@ function Hero() {
 
 // ─── Plans ─────────────────────────────────────────────────────────────────
 
-const EXPLORER_FEATURES = [
-  "Up to 5 proposals / month",
+const CONSULTANT_FEATURES = [
+  "3 proposals / month",
+  "Single seat",
+  "Full editor + AI autopilot",
   "Property library",
-  "AI generation (basic)",
+  "Brand DNA — single voice",
+  "Web view sharing",
+  "PDF export",
+];
+
+const EXPLORER_FEATURES = [
+  "10 proposals / month",
+  "Single seat",
+  "Full editor + AI autopilot",
+  "Property library",
+  "Brand DNA — single voice",
   "Web view sharing",
   "PDF export",
 ];
 
 const OPERATOR_FEATURES = [
   "Unlimited proposals",
-  "Full property system",
-  "Brand DNA — full tone control",
+  "Up to 5 team seats",
   "Priority AI",
+  "Brand DNA — full tone control",
+  "Smart property ranking",
   "Advanced exports",
   "Priority support",
 ];
@@ -139,8 +152,18 @@ const OPERATOR_FEATURES = [
 function Plans() {
   return (
     <section className="-mt-20 pb-20" style={{ background: BONE }}>
-      <div className="relative max-w-4xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="relative max-w-6xl mx-auto px-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <PlanCard
+            tier="Consultant"
+            price="$29"
+            cadence="/ month"
+            tagline="For solo bookers and freelance consultants who still want to look like a brand."
+            features={CONSULTANT_FEATURES}
+            cta="Start Consultant"
+            featured={false}
+            badge="New"
+          />
           <PlanCard
             tier="Explorer"
             price="$50"
@@ -176,6 +199,7 @@ function PlanCard({
   features,
   cta,
   featured,
+  badge,
 }: {
   tier: string;
   price: string;
@@ -184,6 +208,7 @@ function PlanCard({
   features: string[];
   cta: string;
   featured: boolean;
+  badge?: string;
 }) {
   const bg = featured ? FOREST : "white";
   const text = featured ? "white" : "rgba(0,0,0,0.85)";
@@ -204,6 +229,14 @@ function PlanCard({
           style={{ background: GOLD, color: FOREST }}
         >
           Most popular
+        </div>
+      )}
+      {!featured && badge && (
+        <div
+          className="absolute -top-3 right-7 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.18em] font-bold"
+          style={{ background: FOREST, color: "white" }}
+        >
+          {badge}
         </div>
       )}
       <div className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
@@ -268,6 +301,7 @@ function Comparison() {
             <thead>
               <tr className="border-b border-black/8 bg-black/[0.02]">
                 <th className="text-left px-5 py-4 font-medium text-black/55"></th>
+                <th className="text-center px-5 py-4 font-semibold text-black/85">Consultant</th>
                 <th className="text-center px-5 py-4 font-semibold text-black/85">Explorer</th>
                 <th className="text-center px-5 py-4 font-semibold" style={{ color: FOREST }}>
                   Operator
@@ -278,6 +312,9 @@ function Comparison() {
               {COMPARISON_ROWS.map((row) => (
                 <tr key={row.label} className="border-b border-black/6 last:border-0">
                   <td className="px-5 py-3.5 text-black/70">{row.label}</td>
+                  <td className="px-5 py-3.5 text-center text-black/65">
+                    <Cell value={row.consultant} />
+                  </td>
                   <td className="px-5 py-3.5 text-center text-black/65">
                     <Cell value={row.explorer} />
                   </td>
@@ -304,18 +341,23 @@ function Cell({ value, accent = false }: { value: string | boolean; accent?: boo
   return <span>{value}</span>;
 }
 
-const COMPARISON_ROWS: { label: string; explorer: string | boolean; operator: string | boolean }[] = [
-  { label: "Proposals per month",          explorer: "5",          operator: "Unlimited" },
-  { label: "Property library",             explorer: true,         operator: true },
-  { label: "Smart property ranking",       explorer: false,        operator: true },
-  { label: "AI writing",                   explorer: "Basic",      operator: "Priority" },
-  { label: "Brand DNA tone control",       explorer: false,        operator: true },
-  { label: "Destination image library",    explorer: "Read-only",  operator: "Full" },
-  { label: "Web view sharing",             explorer: true,         operator: true },
-  { label: "Client comments",              explorer: true,         operator: true },
-  { label: "PDF export",                   explorer: true,         operator: "Advanced" },
-  { label: "Team seats",                   explorer: "1",          operator: "Up to 5" },
-  { label: "Support",                      explorer: "Email",      operator: "Priority" },
+const COMPARISON_ROWS: {
+  label: string;
+  consultant: string | boolean;
+  explorer: string | boolean;
+  operator: string | boolean;
+}[] = [
+  { label: "Proposals per month",          consultant: "3",        explorer: "10",         operator: "Unlimited" },
+  { label: "Team seats",                   consultant: "1",        explorer: "1",          operator: "Up to 5" },
+  { label: "Property library",             consultant: true,       explorer: true,         operator: true },
+  { label: "Smart property ranking",       consultant: false,      explorer: false,        operator: true },
+  { label: "AI writing",                   consultant: "Basic",    explorer: "Basic",      operator: "Priority" },
+  { label: "Brand DNA tone control",       consultant: "Single",   explorer: "Single",     operator: "Full" },
+  { label: "Destination image library",    consultant: "Read-only",explorer: "Read-only",  operator: "Full" },
+  { label: "Web view sharing",             consultant: true,       explorer: true,         operator: true },
+  { label: "Client comments",              consultant: true,       explorer: true,         operator: true },
+  { label: "PDF export",                   consultant: true,       explorer: true,         operator: "Advanced" },
+  { label: "Support",                      consultant: "Email",    explorer: "Email",      operator: "Priority" },
 ];
 
 // ─── Value pillars ─────────────────────────────────────────────────────────
@@ -392,20 +434,24 @@ function FAQ() {
 
 const FAQS: { q: string; a: string }[] = [
   {
+    q: "Which tier is right for me?",
+    a: "Solo bookers and freelance consultants who send a handful of proposals a month → Consultant. Solo operators sending weekly → Explorer. Teams, DMCs, and lodges selling every day → Operator.",
+  },
+  {
     q: "Can I switch tiers later?",
     a: "Yes. Upgrade or downgrade any time from your settings — billing prorates automatically.",
   },
   {
     q: "Is there a free plan?",
-    a: "No. We're not selling lite features to a wide audience — we're selling a serious tool to operators who close real safaris. Both tiers include the full editor and library.",
+    a: "No. We're not selling lite features to a wide audience — we're selling a serious tool to people who close real safaris. Every tier includes the full editor, AI autopilot, and property library.",
   },
   {
-    q: "What happens if I exceed 5 proposals on Explorer?",
-    a: "We won't lock anything mid-month. You'll be prompted to upgrade to Operator at the start of the next billing cycle.",
+    q: "What happens if I hit my proposal limit?",
+    a: "We won't lock anything mid-month. You'll be prompted to upgrade at the start of the next billing cycle.",
   },
   {
     q: "Can I bring my team?",
-    a: "Operator tier includes up to 5 team seats inside one workspace, with role-based permissions. Larger teams: get in touch.",
+    a: "Operator tier includes up to 5 team seats inside one workspace, with role-based permissions. Consultant and Explorer are single-seat. Larger teams: get in touch.",
   },
   {
     q: "Do you offer annual billing?",
