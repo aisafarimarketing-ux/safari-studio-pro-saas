@@ -7,24 +7,30 @@
 // the extracted text to the API. Keeps sensitive client data (names,
 // pricing, flight numbers) out of our server logs.
 //
-// IMPORTANT: pdfjs-dist references DOMMatrix at module evaluation. A
-// top-level `import * as pdfjsLib from "pdfjs-dist"` therefore crashes
-// during Next.js SSR/prerender even on "use client" files, because the
-// JS module still gets evaluated server-side for hydration boundary
-// analysis. We lazy-import the module inside the call site — the
-// dynamic import only fires in the browser when the user actually
-// picks a PDF.
+// Two gotchas worth flagging for future-me:
+//
+// 1. Server-side prerender — pdfjs-dist references DOMMatrix at module
+//    evaluation, which crashes Next.js SSR even on "use client" files
+//    because the module graph is still walked server-side for hydration
+//    boundaries. We lazy-import the module inside the call site so the
+//    import only fires in the browser.
+//
+// 2. Modern ESM build vs Turbopack — the default `pdfjs-dist/build/pdf.mjs`
+//    uses top-level `await` + worker-URL patterns Turbopack doesn't fully
+//    chunk in dev, producing the runtime "Failed to load chunk … pdf.mjs"
+//    error you hit once. pdfjs-dist ships a `legacy/` build specifically
+//    for bundlers that don't handle the modern entry — we import from
+//    there (and likewise point the worker at the legacy file on unpkg).
 
-type PdfJs = typeof import("pdfjs-dist");
+type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 let pdfjsLibCached: PdfJs | null = null;
 
 async function loadPdfJs(): Promise<PdfJs> {
   if (pdfjsLibCached) return pdfjsLibCached;
-  const mod = (await import("pdfjs-dist")) as PdfJs;
+  const mod = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJs;
   // Worker — pinned to the loaded version, served by unpkg so no bundler
-  // config is needed. Turbopack + Next 16 compat: keep this outside any
-  // build-time URL graph.
-  mod.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${mod.version}/build/pdf.worker.min.mjs`;
+  // config is needed. Must match the legacy build used above.
+  mod.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${mod.version}/legacy/build/pdf.worker.min.mjs`;
   pdfjsLibCached = mod;
   return mod;
 }
