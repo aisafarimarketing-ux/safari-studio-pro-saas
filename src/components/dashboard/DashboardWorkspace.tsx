@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@clerk/nextjs";
-import { AppHeader } from "@/components/properties/AppHeader";
+import { DashboardShell } from "./DashboardShell";
 import { CompletionRing } from "@/components/brand-dna/CompletionRing";
 import type { BrandDNACompletion } from "@/lib/brandDNA";
 import { buildDemoProposal } from "@/lib/defaults";
@@ -254,59 +254,86 @@ export function DashboardWorkspace() {
   const recentProposals = proposals?.slice(1, 4) ?? [];
   const propertyCount = properties?.length ?? null;
 
-  return (
-    <div className="min-h-screen text-[#1a1a1a] relative overflow-hidden" style={{ background: "#f8f5ef" }}>
-      <DashboardBackdrop />
-      <AppHeader />
+  const mainContent = (
+    <>
+      {/* Welcome */}
+      <header className="mb-7">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-black/85" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+          Welcome back, <span style={{ color: "#1b3a2d" }}>{orgName}</span>.
+        </h1>
+        <p className="mt-2 text-[14px] text-black/55">
+          {activeProposal
+            ? "Pick up where you left off, or start something new."
+            : "Draft your first proposal, or bring your existing ones in from Safariportal, Wetu, or Safari Office."}
+        </p>
+      </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10 md:py-12 relative">
-        {/* Welcome */}
-        <header className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-black/85">
-            Welcome back, <span className="text-[#1b3a2d]">{orgName}</span>.
-          </h1>
-          <p className="mt-2 text-[15px] text-black/55">
-            {activeProposal
-              ? "Pick up where you left off, or start something new."
-              : "Start your first proposal — or build out the property library that powers them."}
-          </p>
-        </header>
+      <TierBanner />
 
-        <TierBanner />
+      {error && (
+        <div className="mb-6 rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-4 text-[#b34334] text-sm">
+          {error}
+        </div>
+      )}
 
-        {error && (
-          <div className="mb-6 rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-4 text-[#b34334] text-sm">
-            {error}
+      {/* Onboarding checklist — derived from real workspace data, auto-
+          disappears once everything's done. Dismissible per session. */}
+      {proposals !== null && properties !== null && (
+        <OnboardingChecklist
+          progress={{
+            hasProperties: (properties?.length ?? 0) > 0,
+            hasProposals: (proposals?.length ?? 0) > 0,
+            brandDNAComplete: (completion?.overall ?? 0) >= 60,
+          }}
+        />
+      )}
+
+      {/* Primary create CTA for first-run operators. Sits at top of the
+          grid when empty so new users have an unmistakable path in
+          without taking over the whole page. */}
+      {proposals !== null && proposals.length === 0 && (
+        <div
+          className="rounded-2xl border-2 border-dashed p-6 mb-8 text-center"
+          style={{ borderColor: "rgba(201,168,76,0.45)", background: "rgba(201,168,76,0.04)" }}
+        >
+          <div className="text-[11px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#8a7125" }}>
+            First time here
           </div>
-        )}
+          <h2 className="mt-2 text-lg font-semibold text-black/85">
+            Draft your first proposal — or import one you already sent.
+          </h2>
+          <p className="mt-1 text-[13px] text-black/55 max-w-md mx-auto">
+            The dashboard lights up with real numbers the moment you do.
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
+            <button
+              onClick={openNewProposal}
+              disabled={creating}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
+              style={{ background: "#1b3a2d", color: "white" }}
+            >
+              {creating ? "Creating…" : "+ New proposal"}
+            </button>
+            <Link
+              href="/import"
+              className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
+              style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+            >
+              Import existing →
+            </Link>
+            <button
+              onClick={handleImportSample}
+              disabled={importing}
+              className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
+            >
+              {importing ? "Loading…" : "Try demo"}
+            </button>
+          </div>
+        </div>
+      )}
 
-        {/* Onboarding checklist — derived from real workspace data, auto-
-            disappears once everything's done. Dismissible per session. */}
-        {proposals !== null && properties !== null && (
-          <OnboardingChecklist
-            progress={{
-              hasProperties: (properties?.length ?? 0) > 0,
-              hasProposals: (proposals?.length ?? 0) > 0,
-              brandDNAComplete: (completion?.overall ?? 0) >= 60,
-            }}
-          />
-        )}
-
-        {/* Empty state — full-width CTA card when the workspace has no
-            proposals yet. Otherwise we fall into the tile grid below. */}
-        {proposals !== null && proposals.length === 0 && (
-          <ActiveProposalCard
-            loaded
-            proposal={null}
-            onNew={openNewProposal}
-            creating={creating}
-            onImportSample={handleImportSample}
-            importing={importing}
-          />
-        )}
-
-        {proposals !== null && proposals.length > 0 && (
-          <>
+      {proposals !== null && (
+        <>
             {/* ── Overview — modern KPI strip ──────────────────────────
                 Four tiles with big numbers + sparkline + month-on-month
                 delta. Summary endpoint drives all four; falls back to
@@ -462,7 +489,20 @@ export function DashboardWorkspace() {
             )}
           </>
         )}
-      </main>
+    </>
+  );
+
+  const rightRail = (
+    <div className="space-y-4">
+      <RightRailProfile />
+      <RightRailQuickLinks />
+      <RightRailTip />
+    </div>
+  );
+
+  return (
+    <>
+      <DashboardShell main={mainContent} rightRail={rightRail} />
 
       {tripSetupOpen && (
         <TripSetupDialog
@@ -472,6 +512,103 @@ export function DashboardWorkspace() {
           submitting={creating}
         />
       )}
+    </>
+  );
+}
+
+// ─── Right rail ────────────────────────────────────────────────────────────
+
+function RightRailProfile() {
+  // Simple shortcut card — the sidebar's user card covers identity; this
+  // is the "what's next for you" nudge anchored to the eye-line.
+  return (
+    <div
+      className="rounded-2xl border p-5"
+      style={{
+        background: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
+        borderColor: "rgba(201,168,76,0.25)",
+        color: "white",
+      }}
+    >
+      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#c9a84c" }}>
+        Today
+      </div>
+      <h3
+        className="mt-2 text-lg font-bold leading-tight"
+        style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+      >
+        Make one proposal better.
+      </h3>
+      <p className="mt-2 text-[12.5px] text-white/70 leading-relaxed">
+        Open your most-recent draft. Read one day aloud. If it reads like
+        a brochure, hit AI Rewrite. Ship it.
+      </p>
+      <Link
+        href="/proposals"
+        className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold transition hover:brightness-110"
+        style={{ color: "#c9a84c" }}
+      >
+        Open proposals →
+      </Link>
+    </div>
+  );
+}
+
+function RightRailQuickLinks() {
+  const links: { href: string; label: string; hint: string; glyph: string }[] = [
+    { href: "/import",    label: "Import existing",    hint: "Safariportal · Wetu · PDF",  glyph: "↓" },
+    { href: "/templates", label: "Browse templates",   hint: "20 shapes to clone",           glyph: "✦" },
+    { href: "/settings/profile", label: "Your profile", hint: "Photo · signature · role",  glyph: "◈" },
+    { href: "/settings/brand",   label: "Brand DNA",    hint: "Teach the AI your voice",    glyph: "◆" },
+  ];
+  return (
+    <div className="rounded-2xl bg-white border p-4" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
+      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3 px-1">
+        Quick links
+      </div>
+      <ul className="space-y-0.5">
+        {links.map((l) => (
+          <li key={l.href}>
+            <Link
+              href={l.href}
+              className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-black/[0.03] transition group"
+            >
+              <span
+                className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-semibold shrink-0"
+                style={{ background: "rgba(27,58,45,0.08)", color: "#1b3a2d" }}
+              >
+                {l.glyph}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-black/80 truncate">{l.label}</div>
+                <div className="text-[11px] text-black/45 truncate">{l.hint}</div>
+              </div>
+              <span className="text-black/30 group-hover:text-black/65 transition text-[12px]">→</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RightRailTip() {
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{
+        background: "rgba(201,168,76,0.06)",
+        borderColor: "rgba(201,168,76,0.35)",
+      }}
+    >
+      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#8a7125" }}>
+        Pro tip
+      </div>
+      <p className="mt-2 text-[12.5px] text-black/70 leading-relaxed">
+        When clients reply &quot;can you do it cheaper?&quot; — use{" "}
+        <strong className="font-semibold">⋯ → Rebuild to a budget</strong> in
+        the editor. Claude swaps lodges and reprices in 20 seconds.
+      </p>
     </div>
   );
 }
