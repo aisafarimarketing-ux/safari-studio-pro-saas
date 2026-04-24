@@ -26,6 +26,7 @@ type ProposalRow = {
   title: string;
   status: string;
   updatedAt: string;
+  createdAt?: string;
   clientName: string | null;
 };
 type LocationLite = { id: string; name: string; country: string | null };
@@ -35,6 +36,18 @@ type PropertyRow = {
   location: LocationLite | null;
   images: { id: string; url: string }[];
 };
+type RequestRow = {
+  id: string;
+  referenceNumber: string | null;
+  status: string;
+  source: string | null;
+  receivedAt: string;
+  client: {
+    name: string | null;
+    email: string | null;
+    country: string | null;
+  } | null;
+};
 
 export function DashboardWorkspace() {
   const router = useRouter();
@@ -43,6 +56,7 @@ export function DashboardWorkspace() {
   const [properties, setProperties] = useState<PropertyRow[] | null>(null);
   const [locationCount, setLocationCount] = useState<number | null>(null);
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
+  const [requests, setRequests] = useState<RequestRow[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
@@ -51,11 +65,13 @@ export function DashboardWorkspace() {
   useEffect(() => {
     (async () => {
       try {
-        const [propRes, propertyRes, locRes, brandRes] = await Promise.all([
+        const [propRes, propertyRes, locRes, brandRes, reqRes] = await Promise.all([
           fetch("/api/proposals", { cache: "no-store" }),
           fetch("/api/properties", { cache: "no-store" }),
           fetch("/api/locations", { cache: "no-store" }),
           fetch("/api/brand-dna", { cache: "no-store" }),
+          // Open-stage requests only, capped — this feeds the inbox tile.
+          fetch("/api/requests?limit=20", { cache: "no-store" }),
         ]);
         if (propRes.status === 401) { window.location.href = "/sign-in?redirect_url=/dashboard"; return; }
         if (propRes.status === 409) { window.location.href = "/select-organization"; return; }
@@ -65,11 +81,13 @@ export function DashboardWorkspace() {
         const propertyData = propertyRes.ok ? await propertyRes.json() : { properties: [] };
         const locData = locRes.ok ? await locRes.json() : { locations: [] };
         const brandData = brandRes.ok ? await brandRes.json() : null;
+        const reqData = reqRes.ok ? await reqRes.json() : { requests: [] };
 
         setProposals(propData.proposals ?? []);
         setProperties(propertyData.properties ?? []);
         setLocationCount((locData.locations ?? []).length);
         setCompletion(brandData?.completion ?? null);
+        setRequests(reqData.requests ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load workspace");
       }
@@ -203,70 +221,121 @@ export function DashboardWorkspace() {
           />
         )}
 
-        {/* Active proposal hero */}
-        <ActiveProposalCard
-          loaded={proposals !== null}
-          proposal={activeProposal}
-          onNew={openNewProposal}
-          creating={creating}
-          onImportSample={handleImportSample}
-          importing={importing}
-        />
-
-        {/* Triple snapshot row */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <QuickActionsCard
+        {/* Empty state — full-width CTA card when the workspace has no
+            proposals yet. Otherwise we fall into the tile grid below. */}
+        {proposals !== null && proposals.length === 0 && (
+          <ActiveProposalCard
+            loaded
+            proposal={null}
             onNew={openNewProposal}
             creating={creating}
             onImportSample={handleImportSample}
             importing={importing}
-            hasProposals={(proposals?.length ?? 0) > 0}
           />
-          <PropertiesCard
-            count={propertyCount}
-            locations={locationCount}
-            recent={properties?.slice(0, 3) ?? []}
-          />
-          <BrandDNACard completion={completion} />
-        </div>
+        )}
 
-        {/* Recent proposals */}
-        {recentProposals.length > 0 && (
-          <section className="mt-10">
-            <div className="flex items-baseline justify-between mb-4">
-              <h2 className="text-[18px] font-semibold text-black/80">Recent proposals</h2>
-              <Link
-                href="/proposals"
-                className="text-[13px] text-black/45 hover:text-[#1b3a2d] transition"
-              >
-                View all →
-              </Link>
-            </div>
-            <ul className="bg-white rounded-2xl border border-black/8 divide-y divide-black/8 overflow-hidden">
-              {recentProposals.map((p) => (
-                <li key={p.id}>
-                  <button
-                    onClick={() => {
-                      try { localStorage.setItem("activeProposalId", p.id); } catch {}
-                      router.push("/studio");
-                    }}
-                    className="w-full text-left px-5 py-3 flex items-center gap-4 hover:bg-black/[0.02] transition"
+        {proposals !== null && proposals.length > 0 && (
+          <>
+            {/* ── Today ─────────────────────────────────────────────────
+                Three tiles: the active proposal, the open-requests inbox,
+                and a this-month stats snapshot. Anchored at the top so
+                the operator sees the day's signal first. */}
+            <section className="mb-8">
+              <SectionTitle>Today</SectionTitle>
+              <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <ActiveProposalTile proposal={activeProposal} />
+                <InboxTile requests={requests} />
+                <MonthStatsTile proposals={proposals} requests={requests} />
+              </div>
+            </section>
+
+            {/* ── Start something (action bar) ─────────────────────────
+                Persistent launchpad — new proposal, import from SP / SO /
+                Wetu, browse templates, add a property. */}
+            <section className="mb-8">
+              <SectionTitle>Start something</SectionTitle>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <ActionTile
+                  onClick={openNewProposal}
+                  disabled={creating}
+                  title={creating ? "Creating…" : "New proposal"}
+                  hint="Trip setup + AI autopilot"
+                  accent
+                />
+                <ActionTile
+                  href="/import"
+                  title="Import existing"
+                  hint="Bring a PDF from Safariportal, Wetu…"
+                  gold
+                />
+                <ActionTile
+                  href="/templates"
+                  title="Browse templates"
+                  hint="20 proven East-Africa shapes"
+                />
+                <ActionTile
+                  href="/properties/new"
+                  title="Add property"
+                  hint="Grow your camp library"
+                />
+              </div>
+            </section>
+
+            {/* ── Your workspace ──────────────────────────────────────
+                Property library snapshot, brand DNA ring, templates
+                (placeholder until Step 6 ships). */}
+            <section className="mb-8">
+              <SectionTitle>Your workspace</SectionTitle>
+              <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <PropertiesCard
+                  count={propertyCount}
+                  locations={locationCount}
+                  recent={properties?.slice(0, 3) ?? []}
+                />
+                <BrandDNACard completion={completion} />
+                <TemplatesTile />
+              </div>
+            </section>
+
+            {/* ── Recent proposals ───────────────────────────────────── */}
+            {recentProposals.length > 0 && (
+              <section>
+                <div className="flex items-baseline justify-between mb-3">
+                  <SectionTitle>Recent proposals</SectionTitle>
+                  <Link
+                    href="/proposals"
+                    className="text-[12.5px] text-black/45 hover:text-[#1b3a2d] transition"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-[14px] text-black/85 truncate">
-                        {p.title || "Untitled Proposal"}
-                      </div>
-                      <div className="text-[12px] text-black/45 mt-0.5 truncate">
-                        {p.clientName ? `${p.clientName} · ` : ""}
-                        Edited {formatRelative(p.updatedAt)}
-                      </div>
-                    </div>
-                    <span className="text-black/30 group-hover:text-[#1b3a2d] text-base shrink-0">→</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+                    View all →
+                  </Link>
+                </div>
+                <ul className="bg-white rounded-2xl border border-black/8 divide-y divide-black/8 overflow-hidden">
+                  {recentProposals.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => {
+                          try { localStorage.setItem("activeProposalId", p.id); } catch {}
+                          router.push("/studio");
+                        }}
+                        className="w-full text-left px-5 py-3 flex items-center gap-4 hover:bg-black/[0.02] transition"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-[14px] text-black/85 truncate">
+                            {p.title || "Untitled Proposal"}
+                          </div>
+                          <div className="text-[12px] text-black/45 mt-0.5 truncate">
+                            {p.clientName ? `${p.clientName} · ` : ""}
+                            Edited {formatRelative(p.updatedAt)}
+                          </div>
+                        </div>
+                        <span className="text-black/30 group-hover:text-[#1b3a2d] text-base shrink-0">→</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </main>
 
@@ -283,9 +352,11 @@ export function DashboardWorkspace() {
 
 // ─── Active proposal card ───────────────────────────────────────────────────
 
+// Empty-state hero. Rendered only when proposals[] is an empty array —
+// first-time operators land here. Once they have a proposal, the Today
+// row takes over (ActiveProposalTile + InboxTile + MonthStatsTile) and
+// this card disappears.
 function ActiveProposalCard({
-  loaded,
-  proposal,
   onNew,
   creating,
   onImportSample,
@@ -298,174 +369,49 @@ function ActiveProposalCard({
   onImportSample: () => void;
   importing: boolean;
 }) {
-  const router = useRouter();
-
-  if (!loaded) {
-    return <div className="rounded-2xl bg-white border border-black/8 h-40 animate-pulse" />;
-  }
-
-  if (!proposal) {
-    return (
-      <div className="rounded-2xl bg-white border border-dashed border-black/15 p-10 text-center">
-        <div
-          className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-[#c9a84c] text-xl font-bold mb-4"
-          style={{ background: "rgba(201,168,76,0.15)" }}
-        >
-          ✦
-        </div>
-        <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
-        <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
-          Fill in a few facts about your guests and the trip — we&apos;ll automate a fully-personalised draft in seconds.
-        </p>
-        <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
-          <button
-            onClick={onNew}
-            disabled={creating}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
-            style={{ background: "#1b3a2d", color: "white" }}
-          >
-            {creating ? "Creating…" : "+ New proposal"}
-          </button>
-          <Link
-            href="/import"
-            className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
-            style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
-            title="Import an existing proposal from Safariportal, Safari Office, Wetu — or any PDF"
-          >
-            Import existing →
-          </Link>
-          <button
-            onClick={onImportSample}
-            disabled={importing}
-            className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
-            title="Load a pre-filled demo proposal for exploration only — not a real trip"
-          >
-            {importing ? "Loading…" : "Try demo"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const open = () => {
-    try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
-    router.push("/studio");
-  };
-  const share = async () => {
-    try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
-    const url = `${window.location.origin}/p/${proposal.id}`;
-    try { await navigator.clipboard.writeText(url); } catch {}
-  };
-
   return (
-    <div
-      className="rounded-2xl border overflow-hidden text-white relative"
-      style={{
-        background: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
-        borderColor: "rgba(201,168,76,0.18)",
-      }}
-    >
-      {/* Texture */}
+    <div className="rounded-2xl bg-white border border-dashed border-black/15 p-10 text-center">
       <div
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, #c9a84c 1px, transparent 0)",
-          backgroundSize: "32px 32px",
-        }}
-      />
-      <div className="relative px-7 py-7 md:px-9 md:py-8 flex items-center gap-6 flex-wrap">
-        <div className="flex-1 min-w-[260px]">
-          <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-[#c9a84c]">
-            Active proposal
-          </div>
-          <h2
-            className="mt-2 text-2xl md:text-3xl font-bold tracking-tight leading-tight"
-            style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
-          >
-            {proposal.title || "Untitled Proposal"}
-          </h2>
-          <div className="mt-2 text-[13px] text-white/55">
-            {proposal.clientName ? `${proposal.clientName} · ` : ""}
-            Edited {formatRelative(proposal.updatedAt)}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={share}
-            className="px-4 py-2 rounded-lg text-sm font-semibold transition active:scale-95 hover:brightness-110"
-            style={{ background: "#c9a84c", color: "#1b3a2d" }}
-          >
-            Share
-          </button>
-          <button
-            onClick={open}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white border border-white/20 hover:bg-white/[0.06] transition"
-          >
-            Continue editing
-          </button>
-        </div>
+        className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-[#c9a84c] text-xl font-bold mb-4"
+        style={{ background: "rgba(201,168,76,0.15)" }}
+      >
+        ✦
+      </div>
+      <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
+      <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
+        Fill in a few facts about your guests and the trip — we&apos;ll automate a fully-personalised draft in seconds.
+      </p>
+      <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+        <button
+          onClick={onNew}
+          disabled={creating}
+          className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
+          style={{ background: "#1b3a2d", color: "white" }}
+        >
+          {creating ? "Creating…" : "+ New proposal"}
+        </button>
+        <Link
+          href="/import"
+          className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
+          style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
+          title="Import an existing proposal from Safariportal, Safari Office, Wetu — or any PDF"
+        >
+          Import existing →
+        </Link>
+        <button
+          onClick={onImportSample}
+          disabled={importing}
+          className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
+          title="Load a pre-filled demo proposal for exploration only — not a real trip"
+        >
+          {importing ? "Loading…" : "Try demo"}
+        </button>
       </div>
     </div>
   );
 }
 
 // ─── Snapshot cards ─────────────────────────────────────────────────────────
-
-function QuickActionsCard({
-  onNew,
-  creating,
-  onImportSample,
-  importing,
-  hasProposals,
-}: {
-  onNew: () => void;
-  creating: boolean;
-  onImportSample: () => void;
-  importing: boolean;
-  hasProposals: boolean;
-}) {
-  return (
-    <div className="rounded-2xl bg-white border border-black/8 p-5 flex flex-col">
-      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-        Quick actions
-      </div>
-      <h3 className="text-[15px] font-semibold text-black/85 mb-4">
-        Start something new
-      </h3>
-      <div className="flex flex-col gap-2">
-        <button
-          onClick={onNew}
-          disabled={creating}
-          className="px-4 py-2.5 rounded-xl bg-[#1b3a2d] text-white text-sm font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60 text-left"
-        >
-          {creating ? "Creating…" : "+ New proposal"}
-        </button>
-        <Link
-          href="/import"
-          className="px-4 py-2.5 rounded-xl border text-sm font-medium transition active:scale-95"
-          style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
-          title="Bring a PDF from Safariportal / Safari Office / Wetu"
-        >
-          Import existing proposal →
-        </Link>
-        <Link
-          href="/properties/new"
-          className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 transition active:scale-95"
-        >
-          + Add property
-        </Link>
-        <button
-          onClick={onImportSample}
-          disabled={importing}
-          className="px-4 py-2.5 rounded-xl border border-black/12 text-black/70 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60 text-left"
-          title="Load a pre-filled demo proposal for exploration only — not a real trip"
-        >
-          {importing ? "Loading…" : "Try demo proposal"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Subtle safari backdrop ─────────────────────────────────────────────────
 //
@@ -598,6 +544,307 @@ function BrandDNACard({ completion }: { completion: BrandDNACompletion | null })
       </div>
       <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
         Open Brand DNA →
+      </div>
+    </Link>
+  );
+}
+
+// ─── Section header ────────────────────────────────────────────────────────
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/45">
+      {children}
+    </h2>
+  );
+}
+
+// ─── Active proposal tile (compact, 1-col) ─────────────────────────────────
+
+function ActiveProposalTile({ proposal }: { proposal: ProposalRow | null }) {
+  const router = useRouter();
+  if (!proposal) {
+    return (
+      <div className="rounded-2xl border border-black/8 bg-white p-5 flex flex-col">
+        <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
+          Active proposal
+        </div>
+        <div className="text-[14px] text-black/55">No proposal open yet.</div>
+      </div>
+    );
+  }
+  const open = () => {
+    try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
+    router.push("/studio");
+  };
+  const copyShare = async () => {
+    const url = `${window.location.origin}/p/${proposal.id}`;
+    try { await navigator.clipboard.writeText(url); } catch {}
+  };
+  return (
+    <div
+      className="rounded-2xl border overflow-hidden text-white relative flex flex-col"
+      style={{
+        background: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
+        borderColor: "rgba(201,168,76,0.22)",
+      }}
+    >
+      <div
+        className="absolute inset-0 opacity-[0.05] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, #c9a84c 1px, transparent 0)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+      <div className="relative p-5 flex-1 flex flex-col">
+        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-[#c9a84c]">
+          Active proposal
+        </div>
+        <h3
+          className="mt-2 text-lg font-bold tracking-tight leading-snug line-clamp-2"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          {proposal.title || "Untitled Proposal"}
+        </h3>
+        <div className="mt-1.5 text-[12px] text-white/55 truncate">
+          {proposal.clientName ? `${proposal.clientName} · ` : ""}
+          Edited {formatRelative(proposal.updatedAt)}
+        </div>
+        <div className="mt-auto pt-4 flex items-center gap-2">
+          <button
+            onClick={open}
+            className="flex-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition active:scale-95 hover:brightness-110"
+            style={{ background: "#c9a84c", color: "#1b3a2d" }}
+          >
+            Open
+          </button>
+          <button
+            onClick={copyShare}
+            className="px-3 py-2 rounded-lg text-[13px] font-semibold text-white border border-white/20 hover:bg-white/[0.06] transition"
+            title="Copy the public share link"
+          >
+            Share link
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inbox tile (top open requests) ────────────────────────────────────────
+
+function InboxTile({ requests }: { requests: RequestRow[] | null }) {
+  const loaded = requests !== null;
+  const top = (requests ?? []).slice(0, 3);
+  const openCount = (requests ?? []).length;
+  return (
+    <Link
+      href="/requests"
+      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/40">
+          Inbox
+        </div>
+        {loaded && openCount > 0 && (
+          <div className="text-[11px] font-semibold text-[#1b3a2d] tabular-nums">
+            {openCount} open
+          </div>
+        )}
+      </div>
+
+      {!loaded ? (
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-black/5 rounded animate-pulse" />
+          <div className="h-4 bg-black/5 rounded animate-pulse w-4/5" />
+          <div className="h-4 bg-black/5 rounded animate-pulse w-3/5" />
+        </div>
+      ) : top.length === 0 ? (
+        <div className="flex-1 flex flex-col justify-center text-[13px] text-black/50">
+          <div>No open requests.</div>
+          <div className="text-[12px] text-black/40 mt-1">
+            New client enquiries show up here.
+          </div>
+        </div>
+      ) : (
+        <ul className="flex-1 space-y-2.5">
+          {top.map((r) => (
+            <li key={r.id} className="flex items-baseline gap-2">
+              <div className="text-[10.5px] font-mono text-black/35 shrink-0 tabular-nums">
+                {r.referenceNumber ?? "—"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-black/80 truncate">
+                  {r.client?.name || r.client?.email || "Unknown"}
+                </div>
+                <div className="text-[11px] text-black/45 truncate">
+                  {r.source ? `${r.source} · ` : ""}
+                  {formatRelative(r.receivedAt)}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
+        Open inbox →
+      </div>
+    </Link>
+  );
+}
+
+// ─── This-month stats tile ─────────────────────────────────────────────────
+
+function MonthStatsTile({
+  proposals,
+  requests,
+}: {
+  proposals: ProposalRow[] | null;
+  requests: RequestRow[] | null;
+}) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthLabel = now.toLocaleDateString(undefined, { month: "long" });
+
+  const proposalsThisMonth = (proposals ?? []).filter((p) => {
+    const d = new Date(p.updatedAt);
+    return d >= monthStart;
+  }).length;
+
+  const requestsThisMonth = (requests ?? []).filter((r) => {
+    const d = new Date(r.receivedAt);
+    return d >= monthStart;
+  }).length;
+
+  return (
+    <Link
+      href="/analytics"
+      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/40">
+          This month
+        </div>
+        <div className="text-[10.5px] tracking-wider text-black/35 uppercase">{monthLabel}</div>
+      </div>
+
+      <div className="flex-1 flex flex-col gap-3 justify-center">
+        <StatRow label="Proposals edited" value={proposalsThisMonth} />
+        <StatRow label="New requests" value={requestsThisMonth} />
+      </div>
+
+      <div className="mt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
+        View analytics →
+      </div>
+    </Link>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <div
+        className="text-3xl font-bold tabular-nums text-[#1b3a2d] min-w-[3ch] text-right"
+        style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+      >
+        {value}
+      </div>
+      <div className="text-[13px] text-black/60">{label}</div>
+    </div>
+  );
+}
+
+// ─── Action tile (launchpad buttons) ───────────────────────────────────────
+
+function ActionTile({
+  onClick,
+  href,
+  disabled,
+  title,
+  hint,
+  accent,
+  gold,
+}: {
+  onClick?: () => void;
+  href?: string;
+  disabled?: boolean;
+  title: string;
+  hint: string;
+  accent?: boolean;
+  gold?: boolean;
+}) {
+  const bodyCls = `group rounded-xl border p-4 flex flex-col h-full transition active:scale-[0.98] ${
+    accent
+      ? "text-white border-transparent"
+      : gold
+        ? "border-transparent"
+        : "bg-white border-black/8 hover:border-black/20"
+  }`;
+  const accentStyle: React.CSSProperties = accent
+    ? { background: "#1b3a2d" }
+    : gold
+      ? { background: "rgba(201,168,76,0.1)", borderColor: "rgba(201,168,76,0.55)" }
+      : {};
+
+  const inner = (
+    <>
+      <div
+        className={`text-[14px] font-semibold leading-tight ${
+          accent ? "text-white" : gold ? "text-[#8a7125]" : "text-black/85"
+        }`}
+      >
+        {title}
+      </div>
+      <div
+        className={`mt-1 text-[11.5px] leading-snug ${
+          accent ? "text-white/65" : gold ? "text-[#8a7125]/75" : "text-black/50"
+        }`}
+      >
+        {hint}
+      </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={bodyCls} style={accentStyle}>
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${bodyCls} text-left disabled:opacity-60 disabled:cursor-not-allowed`}
+      style={accentStyle}
+    >
+      {inner}
+    </button>
+  );
+}
+
+// ─── Templates placeholder tile ────────────────────────────────────────────
+// Real /templates page arrives in Step 6; for now this link lands on a
+// 404 which we accept for the duration of the redesign → templates arc.
+
+function TemplatesTile() {
+  return (
+    <Link
+      href="/templates"
+      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
+    >
+      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
+        Templates
+      </div>
+      <div className="text-[15px] font-semibold text-black/85">Proven shapes</div>
+      <p className="mt-1 text-[12px] text-black/45 leading-relaxed">
+        20 Kenya + Tanzania starting points. Clone one, customise everything — keep the voice yours.
+      </p>
+      <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
+        Browse →
       </div>
     </Link>
   );
