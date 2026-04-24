@@ -53,10 +53,16 @@ export interface TripSetupResult {
 
 export function TripSetupDialog({
   onClose,
+  onCancel,
   onSubmit,
   submitting = false,
 }: {
   onClose: () => void;
+  // onCancel — optional, distinct from onClose. Fires while submitting
+  // and surfaces as the "Cancel and go back" link in the loading overlay.
+  // Aborts the in-flight autopilot request in the parent so the user can
+  // edit their inputs and resubmit.
+  onCancel?: () => void;
   onSubmit: (result: TripSetupResult) => void;
   submitting?: boolean;
 }) {
@@ -115,7 +121,10 @@ export function TripSetupDialog({
       {/* Full-screen overlay while the autopilot is drafting. Auto-runs
           simulated progress, chases 100% the moment `submitting` flips
           back to false, then fades out. */}
-      <AutomatingOverlay active={Boolean(submitting && autopilot)} />
+      <AutomatingOverlay
+        active={Boolean(submitting && autopilot)}
+        onCancel={onCancel}
+      />
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}

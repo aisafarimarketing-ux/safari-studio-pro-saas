@@ -25,7 +25,17 @@ const STEPS: { at: number; label: string }[] = [
   { at: 82, label: "Finalising the signature" },
 ];
 
-export function AutomatingOverlay({ active }: { active: boolean }) {
+export function AutomatingOverlay({
+  active,
+  onCancel,
+}: {
+  active: boolean;
+  // When provided, renders a Cancel button that aborts the in-flight
+  // autopilot and returns control to the Trip Setup form. Without this
+  // the overlay is uninterruptible — which locks the user in for 15-30s
+  // with no recourse if they realise they got an input wrong.
+  onCancel?: () => void;
+}) {
   const [phase, setPhase] = useState<Phase>("hidden");
   const [progress, setProgress] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -172,6 +182,22 @@ export function AutomatingOverlay({ active }: { active: boolean }) {
           Usually takes 10–20 seconds. Brand DNA + library camps are
           informing every paragraph.
         </div>
+
+        {/* Cancel — only rendered while the overlay is in "running" phase
+            so the user can't accidentally cancel the 300ms rush-to-100%
+            finalisation (which is cosmetic and shouldn't be interrupted). */}
+        {onCancel && phase === "running" && (
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-[12.5px] font-medium transition hover:text-white"
+              style={{ color: "rgba(255,255,255,0.45)" }}
+            >
+              Cancel and go back to the form
+            </button>
+          </div>
+        )}
       </div>
 
       <style jsx global>{`

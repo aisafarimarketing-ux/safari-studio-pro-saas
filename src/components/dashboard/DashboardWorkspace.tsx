@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@clerk/nextjs";
@@ -99,31 +99,41 @@ export function DashboardWorkspace() {
   // proposal and POSTs it, then routes to /studio.
   const openNewProposal = () => setTripSetupOpen(true);
 
+  // Abort-controller for the in-flight autopilot request. Lets the user
+  // cancel mid-draft and return to the form — see handleCancelSubmit.
+  const submitAbortRef = useRef<AbortController | null>(null);
+
   const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
     if (creating) return;
     setCreating(true);
+    const controller = new AbortController();
+    submitAbortRef.current = controller;
+
     try {
-      // 1. Always save the blank-but-configured proposal first. If anything
-      //    later fails the user still lands in the editor with their setup.
+      // 1. Always save the blank-but-configured proposal first. If
+      //    autopilot later fails (or is cancelled) the operator still has
+      //    their Trip Setup data safely persisted.
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposal }),
+        signal: controller.signal,
       });
       if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (res.status === 402) { window.location.href = "/account-suspended"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
 
-      // 2. Optional AI draft — fills every section of the proposal from the
-      //    Trip Setup facts. Soft-fails: if the model errors out, we still
-      //    open the editor with the blank-but-configured proposal.
+      // 2. Optional AI draft — cancellable via the shared AbortController.
+      //    Soft-fails: if the model errors out, we still open the editor
+      //    with the blank-but-configured proposal. On cancel we bail
+      //    without navigating so the user stays on the Trip Setup form.
       if (autopilot) {
         try {
           const ai = await fetch("/api/ai/autopilot", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ proposal }),
+            signal: controller.signal,
           });
           if (ai.ok) {
             const draft = (await ai.json()) as AutopilotResult;
@@ -132,20 +142,42 @@ export function DashboardWorkspace() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ proposal: merged }),
+              signal: controller.signal,
             });
           } else {
             console.warn("[autopilot] non-OK:", ai.status);
           }
         } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            // User cancelled — leave the blank proposal in the DB as a
+            // harmless draft and return control to the form.
+            return;
+          }
           console.warn("[autopilot] failed; opening blank editor instead:", err);
         }
       }
 
-      router.push("/studio");
+      // Only set activeProposalId + navigate once we've committed to
+      // opening this proposal. Earlier writes would leave a stale
+      // pointer if the user cancelled.
+      if (!controller.signal.aborted) {
+        try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
+        setTripSetupOpen(false);
+        router.push(`/studio/${proposal.id}`);
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not create proposal");
+    } finally {
+      if (submitAbortRef.current === controller) submitAbortRef.current = null;
       setCreating(false);
     }
+  };
+
+  const handleCancelSubmit = () => {
+    submitAbortRef.current?.abort();
   };
 
   // Import-sample uses the existing Family Safari template — fully populated
@@ -342,6 +374,7 @@ export function DashboardWorkspace() {
       {tripSetupOpen && (
         <TripSetupDialog
           onClose={() => { if (!creating) setTripSetupOpen(false); }}
+          onCancel={handleCancelSubmit}
           onSubmit={handleTripSetupSubmit}
           submitting={creating}
         />

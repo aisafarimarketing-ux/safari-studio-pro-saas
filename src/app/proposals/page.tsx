@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -61,20 +61,28 @@ export default function ProposalsPage() {
     setTripSetupOpen(true);
   };
 
+  // Abort-controller for the in-flight autopilot. Powers the Cancel
+  // button on the AutomatingOverlay so the user can abandon a long
+  // draft and return to the form with their inputs intact.
+  const submitAbortRef = useRef<AbortController | null>(null);
+
   const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
     if (creating) return;
     setCreating(true);
+    const controller = new AbortController();
+    submitAbortRef.current = controller;
+
     try {
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposal }),
+        signal: controller.signal,
       });
       if (res.status === 401) { window.location.href = "/sign-in?redirect_url=/proposals"; return; }
       if (res.status === 402) { window.location.href = "/account-suspended"; return; }
       if (res.status === 409) { window.location.href = "/select-organization"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
 
       if (autopilot) {
         try {
@@ -82,6 +90,7 @@ export default function ProposalsPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ proposal }),
+            signal: controller.signal,
           });
           if (ai.ok) {
             const draft = (await ai.json()) as AutopilotResult;
@@ -90,17 +99,36 @@ export default function ProposalsPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ proposal: merged }),
+              signal: controller.signal,
             });
           }
         } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            return;
+          }
           console.warn("[autopilot] soft-fail; opening editor anyway:", err);
         }
       }
-      router.push("/studio");
+
+      // Only commit to opening the proposal if we weren't cancelled.
+      if (!controller.signal.aborted) {
+        try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
+        setTripSetupOpen(false);
+        router.push(`/studio/${proposal.id}`);
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not create proposal");
+    } finally {
+      if (submitAbortRef.current === controller) submitAbortRef.current = null;
       setCreating(false);
     }
+  };
+
+  const handleCancelSubmit = () => {
+    submitAbortRef.current?.abort();
   };
 
   const handleOpen = (id: string) => {
@@ -277,6 +305,7 @@ export default function ProposalsPage() {
       {tripSetupOpen && (
         <TripSetupDialog
           onClose={() => { if (!creating) setTripSetupOpen(false); }}
+          onCancel={handleCancelSubmit}
           onSubmit={handleTripSetupSubmit}
           submitting={creating}
         />
