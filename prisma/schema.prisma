@@ -33,6 +33,7 @@ model User {
   authoredNotes    RequestNote[]   @relation("RequestNoteAuthor")
   presence         Presence?
   activityEvents   ActivityEvent[]
+  createdReservations Reservation[]
 
   @@index([clerkUserId])
 }
@@ -134,6 +135,7 @@ model Organization {
   requestCounters RequestCounter[]
   presences       Presence[]
   activityEvents  ActivityEvent[]
+  reservations    Reservation[]
 
   @@index([clerkOrgId])
 }
@@ -299,7 +301,8 @@ model Proposal {
 
   contentJson Json // Full Proposal object — see src/lib/types.ts
 
-  deposits ProposalDeposit[]
+  deposits     ProposalDeposit[]
+  reservations Reservation[]
 
   // Optional link to the inbound Request this proposal was drafted for.
   // Nullable because legacy proposals + "blank canvas" drafts have no
@@ -383,6 +386,53 @@ model ProposalViewEvent {
 //
 // Status flips between "open" and "resolved" so the operator can clear
 // out handled requests without losing history.
+
+// ─── Reservations (supplier hold workflow) ─────────────────────────────────
+//
+// Lightweight layer for tracking the camp-hold request cycle operators
+// do after a proposal is accepted: email the camp, wait for confirmation,
+// chase if silent. No booking API integration — we just formalise the
+// email + status dance so nothing slips.
+
+model Reservation {
+  id         String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  proposalId String?
+  proposal   Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  // Freetext camp name at the time the hold was requested — so the
+  // reservation survives if the operator later swaps the camp on the
+  // proposal. propertyId links to the library when there's a match.
+  campName   String
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  reservationsEmail String
+  guestName   String
+  startDate   DateTime
+  endDate     DateTime
+  adults      Int @default(2)
+  children    Int @default(0)
+  roomConfig  String? // "1 double + 1 twin" — free text
+  notes       String?
+
+  status      String   @default("pending") // "pending" | "sent" | "confirmed" | "declined" | "tentative" | "released"
+  sentAt      DateTime?
+  confirmedAt DateTime?
+  heldUntil   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdByUserId String?
+  createdBy       User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([proposalId])
+}
 
 // ─── Proposal deposits ──────────────────────────────────────────────────────
 //
@@ -515,6 +565,10 @@ model Property {
   spokenLanguages  String[]
   specialInterests String[]
 
+  // Camp reservations email — used by the supplier-hold workflow
+  // (Step 8). Operator enters once, re-used on every hold request.
+  reservationsEmail String?
+
   // Internal — never rendered client-side
   internalNotes String?
 
@@ -527,6 +581,7 @@ model Property {
   tags           PropertyTagOnProperty[]
   customSections PropertyCustomSection[]
   rooms          PropertyRoom[]
+  reservations   Reservation[]
 
   @@index([organizationId])
   @@index([organizationId, archived])
