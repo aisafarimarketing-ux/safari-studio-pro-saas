@@ -7,6 +7,7 @@ import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
 import { ViewTracker } from "@/components/proposal-share/ViewTracker";
+import { DepositPayButton } from "@/components/proposal-share/DepositPayButton";
 import type { Proposal, Section } from "@/lib/types";
 
 export default function ClientProposalPage({
@@ -105,6 +106,14 @@ export default function ClientProposalPage({
           <SectionRenderer key={section.id} section={section} />
         ))}
       </div>
+
+      {proposal.depositConfig?.enabled && (
+        <DepositPayButton
+          proposalId={id}
+          config={proposal.depositConfig}
+          accent={theme.tokens.accent}
+        />
+      )}
 
       {operator.companyName && (
         <footer

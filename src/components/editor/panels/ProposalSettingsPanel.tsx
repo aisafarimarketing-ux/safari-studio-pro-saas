@@ -4,8 +4,9 @@ import { useProposalStore } from "@/store/proposalStore";
 import { uploadImage } from "@/lib/uploadImage";
 
 export function ProposalSettingsPanel() {
-  const { proposal, updateClient, updateOperator, updateTrip, updateTierLabel, toggleTierVisibility, setActiveTier } = useProposalStore();
+  const { proposal, updateClient, updateOperator, updateTrip, updateDepositConfig, updateTierLabel, toggleTierVisibility, setActiveTier } = useProposalStore();
   const { client, operator, trip, visibleTiers, pricing, activeTier } = proposal;
+  const deposit = proposal.depositConfig ?? { enabled: false, amount: "", currency: "USD", description: "", termsUrl: "" };
 
   const adults = client.adults ?? 2;
   const children = client.children ?? 0;
@@ -212,6 +213,32 @@ export function ProposalSettingsPanel() {
           {field("WhatsApp", operator.whatsapp ?? "", (v) => updateOperator({ whatsapp: v }))}
           {field("Website", operator.website ?? "", (v) => updateOperator({ website: v }))}
         </div>
+      </div>
+
+      {/* Deposits — optional pay button on the share view */}
+      <div>
+        <div className="text-[11px] uppercase tracking-widest text-black/40 mb-3">Deposits</div>
+        <label className="flex items-center gap-2 mb-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={deposit.enabled}
+            onChange={(e) => updateDepositConfig({ enabled: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <span className="text-sm text-black/75">Accept deposit payments on the share view</span>
+        </label>
+        {deposit.enabled && (
+          <div className="space-y-2.5 pl-6 border-l-2" style={{ borderColor: "rgba(201,168,76,0.4)" }}>
+            {field("Amount", deposit.amount, (v) => updateDepositConfig({ amount: v }), "500")}
+            {field("Currency", deposit.currency, (v) => updateDepositConfig({ currency: v || "USD" }), "USD")}
+            {field("Description", deposit.description ?? "", (v) => updateDepositConfig({ description: v }), "Secure your booking — 30% deposit, refundable until…")}
+            {field("Terms URL (optional)", deposit.termsUrl ?? "", (v) => updateDepositConfig({ termsUrl: v }), "https://…")}
+            <div className="text-[11px] text-black/45 leading-relaxed pt-1">
+              Paid via Paystack — card, M-Pesa, bank transfer. Payments
+              flow to your merchant account; we never touch the money.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

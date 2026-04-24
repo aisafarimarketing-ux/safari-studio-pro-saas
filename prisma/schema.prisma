@@ -299,6 +299,8 @@ model Proposal {
 
   contentJson Json // Full Proposal object — see src/lib/types.ts
 
+  deposits ProposalDeposit[]
+
   // Optional link to the inbound Request this proposal was drafted for.
   // Nullable because legacy proposals + "blank canvas" drafts have no
   // request. When the operator creates a request-first flow, the proposal
@@ -381,6 +383,44 @@ model ProposalViewEvent {
 //
 // Status flips between "open" and "resolved" so the operator can clear
 // out handled requests without losing history.
+
+// ─── Proposal deposits ──────────────────────────────────────────────────────
+//
+// Payment records for the "Pay deposit" affordance on the public share
+// view. One proposal can have many deposit attempts (failed card,
+// retry etc.); the app shows the most-recent status to the operator.
+// Paystack is the only processor wired for now.
+
+model ProposalDeposit {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  payerName  String?
+  payerEmail String
+
+  // Amount in smallest currency unit (cents for USD, kobo for NGN, etc.)
+  amountInCents Int
+  currency      String @default("USD")
+
+  status String @default("pending") // "pending" | "paid" | "failed" | "abandoned"
+
+  processor       String  @default("paystack")
+  paystackReference String @unique
+  paidAt          DateTime?
+
+  // Digital acceptance — "I agree to terms" checkbox + typed name.
+  // Not legally binding e-sig but gives the operator a clear audit
+  // record of what the client saw at the moment of payment.
+  termsAcceptedAt DateTime?
+  termsAcceptedText String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([proposalId, createdAt])
+  @@index([status])
+}
 
 model ProposalComment {
   id         String   @id @default(cuid())

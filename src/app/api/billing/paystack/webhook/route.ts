@@ -60,6 +60,9 @@ export async function POST(req: Request) {
       case "invoice.payment_failed":
         await handlePaymentFailed(evt.data);
         break;
+      case "charge.failed":
+        await handleDepositFailed(evt.data);
+        break;
       default:
         // Unhandled event — Paystack retries on 5xx so we still 200.
         break;
@@ -89,6 +92,14 @@ type ChargeSuccessData = {
 async function handleChargeSuccess(data: Record<string, unknown>) {
   const d = data as ChargeSuccessData;
   if (d.status !== "success") return;
+
+  // Deposit charges route differently — metadata.kind === "deposit"
+  // targets the ProposalDeposit row; no subscription involved.
+  const meta = (d.metadata ?? {}) as { kind?: string; depositId?: string; proposalId?: string };
+  if (meta.kind === "deposit") {
+    await handleDepositSuccess(d);
+    return;
+  }
 
   // Locate the org: prefer metadata.organizationId (reliable — we stamp
   // this on init); fall back to customer_code match if the webhook fires
@@ -167,6 +178,41 @@ async function handleSubscriptionDisable(data: Record<string, unknown>) {
     data: {
       cancelAtPeriodEnd: true,
     },
+  });
+}
+
+// ─── Deposit handlers ──────────────────────────────────────────────────────
+// Proposal-deposit charges are one-off (not subscriptions) and target
+// the ProposalDeposit table instead of Organization.plan.
+
+async function handleDepositSuccess(d: ChargeSuccessData) {
+  const reference = d.reference;
+  if (!reference) return;
+  const deposit = await prisma.proposalDeposit.findUnique({
+    where: { paystackReference: reference },
+  });
+  if (!deposit) {
+    console.warn("[deposit.success] unknown reference:", reference);
+    return;
+  }
+  if (deposit.status === "paid") return; // idempotent
+
+  await prisma.proposalDeposit.update({
+    where: { id: deposit.id },
+    data: {
+      status: "paid",
+      paidAt: d.paid_at ? new Date(d.paid_at) : new Date(),
+    },
+  });
+}
+
+async function handleDepositFailed(data: Record<string, unknown>) {
+  const d = data as ChargeSuccessData;
+  const reference = d.reference;
+  if (!reference) return;
+  await prisma.proposalDeposit.updateMany({
+    where: { paystackReference: reference, status: "pending" },
+    data: { status: "failed" },
   });
 }
 

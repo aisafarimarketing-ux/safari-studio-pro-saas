@@ -254,6 +254,25 @@ export interface Proposal {
   /** Client-selected optional activities (from the share view "Add to my
    *  itinerary" toggles). Written only in non-editor mode. */
   selectedAddOns?: SelectedAddOn[];
+  /** Deposit-payment configuration for the share view. Operator toggles
+   *  this in the editor; when enabled the public /p/[id] page shows a
+   *  "Pay deposit" affordance backed by Paystack. Payment records live
+   *  in the ProposalDeposit table, not in the proposal JSON. */
+  depositConfig?: DepositConfig;
+}
+
+export interface DepositConfig {
+  enabled: boolean;
+  /** Deposit amount as a human-readable string ("500", "1,500"). Parsed
+   *  to cents before hitting Paystack. */
+  amount: string;
+  currency: string;
+  /** Marketing copy shown on the share view above the Pay button. */
+  description?: string;
+  /** Optional URL to the operator's terms and conditions; when present
+   *  the share view shows a checkbox "I agree to [Terms]" next to the
+   *  Pay button and records the acceptance against the deposit row. */
+  termsUrl?: string;
 }
 
 export interface SelectedAddOn {

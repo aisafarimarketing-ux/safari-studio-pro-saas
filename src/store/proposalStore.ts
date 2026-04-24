@@ -31,6 +31,7 @@ interface ProposalState {
   updateClient: (patch: Partial<Proposal["client"]>) => void;
   updateOperator: (patch: Partial<Proposal["operator"]>) => void;
   updateTrip: (patch: Partial<Proposal["trip"]>) => void;
+  updateDepositConfig: (patch: Partial<NonNullable<Proposal["depositConfig"]>>) => void;
 
   // ── Theme ───────────────────────────────────────────────────────────────────
   updateThemeTokens: (patch: Partial<ThemeTokens>) => void;
@@ -170,6 +171,17 @@ export const useProposalStore = create<ProposalState>()(
     updateTrip: (patch) =>
       set((state) => {
         Object.assign(state.proposal.trip, patch);
+      }),
+
+    updateDepositConfig: (patch) =>
+      set((state) => {
+        const current = state.proposal.depositConfig ?? {
+          enabled: false,
+          amount: "",
+          currency: "USD",
+          description: "",
+        };
+        state.proposal.depositConfig = { ...current, ...patch };
       }),
 
     // ── Theme ─────────────────────────────────────────────────────────────────
