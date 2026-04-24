@@ -1,6 +1,36 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { planProposalLimit, planLabel, type PlanKey } from "@/lib/billing/plans";
+
+// Enforce the monthly proposal limit tied to the org's paid plan. Returns
+// a 402 response when the limit is hit; otherwise null. Trial / pilot
+// lifecycle orgs bypass this — super-admin governs their quotas via
+// tierExpiresAt and the kill switch.
+async function enforceProposalLimit(
+  organizationId: string,
+  plan: string,
+  tier: string,
+): Promise<NextResponse | null> {
+  if (tier === "pilot" || tier === "trial") return null;
+  const limit = planProposalLimit(plan as PlanKey);
+  if (!Number.isFinite(limit)) return null;
+  const windowStart = new Date();
+  windowStart.setDate(windowStart.getDate() - 30);
+  const count = await prisma.proposal.count({
+    where: { organizationId, createdAt: { gte: windowStart } },
+  });
+  if (count < limit) return null;
+  return NextResponse.json(
+    {
+      error: `You've reached the ${planLabel(plan as PlanKey)} plan limit of ${limit} proposals in a 30-day window. Upgrade to keep going.`,
+      code: "PROPOSAL_LIMIT_REACHED",
+      planLimit: limit,
+      usage: count,
+    },
+    { status: 402 },
+  );
+}
 
 // GET /api/proposals — list proposals for the caller's active organization
 // (newest first). 409 if the caller has no active organization; the UI
@@ -108,6 +138,15 @@ export async function POST(req: Request) {
   });
   if (existing && existing.organizationId && existing.organizationId !== ctx.organization.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Plan proposal-count enforcement. Only triggers on CREATE — saving
+  // (upserting) an existing proposal is always allowed so an operator
+  // mid-edit on their last allowed proposal can keep working. `trial`
+  // and `pilot` lifecycles skip the check (handled by super-admin).
+  if (!existing) {
+    const limitError = await enforceProposalLimit(ctx.organization.id, ctx.organization.plan, ctx.organization.tier);
+    if (limitError) return limitError;
   }
 
   const saved = await prisma.proposal.upsert({
