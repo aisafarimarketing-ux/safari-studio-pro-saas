@@ -33,6 +33,12 @@ export type BuildOptions = {
     phone?: string;
     logoUrl?: string;
   };
+  // Optional pool of operator-provided images (data URLs from the
+  // ImageUploader on /templates/[slug]). When present, these override
+  // the starter library images on cover, day heroes, property leads,
+  // and property galleries — in that priority order, cycling if fewer
+  // images than slots need filling. Empty/omitted = starter images only.
+  userImages?: string[];
 };
 
 export function buildProposalFromTemplate(
@@ -41,6 +47,7 @@ export function buildProposalFromTemplate(
 ): Proposal {
   const mode: BuildMode = opts.mode ?? "preview";
   const proposal = buildBlankProposal();
+  const pool = buildImagePool(opts.userImages ?? []);
 
   // ── Metadata + trip ────────────────────────────────────────────────
   const destinations = deriveDestinations(tpl);
@@ -91,11 +98,13 @@ export function buildProposalFromTemplate(
 
   proposal.days = tpl.days.map((td): Day => {
     const id = nanoid();
-    // Resolve active-tier camp → starter library → set hero image
+    // Resolve active-tier camp → starter library → set hero image.
+    // User-uploaded images take priority over starter gallery shots.
     const activeCampName = td.tiers[activeTier].libraryName;
     const starter = libraryByName.get(normaliseName(activeCampName));
-    const heroImageUrl = starter?.galleryUrls[0] ?? starter?.leadImageUrl;
-    // Record all tier camps for the properties list
+    const heroImageUrl =
+      pool.take() ?? starter?.galleryUrls[0] ?? starter?.leadImageUrl;
+    // Record all tier camps for the properties list.
     for (const t of ["classic", "premier", "signature"] as const) {
       const name = td.tiers[t].libraryName;
       const s = libraryByName.get(normaliseName(name));
@@ -121,11 +130,25 @@ export function buildProposalFromTemplate(
 
   // proposal.properties[] — StayCard looks up by camp name.
   // Nights per property = how many active-tier days point at it.
+  // If the operator uploaded images, their pool overrides the starter
+  // lead image and seeds the gallery; starter gallery entries fill any
+  // remaining slots up to four.
   proposal.properties = Array.from(usedStarters.values()).map((s): Property => {
     const nights = proposal.days.reduce((n, d) => {
       const match = d.tiers[activeTier]?.camp?.trim().toLowerCase() === s.name.toLowerCase();
       return n + (match ? 1 : 0);
     }, 0) || 1;
+    const leadUser = pool.take();
+    const leadImageUrl = leadUser ?? s.leadImageUrl;
+    const userGallery: string[] = [];
+    while (userGallery.length < 3 && pool.hasAny()) {
+      const next = pool.take();
+      if (next) userGallery.push(next);
+      else break;
+    }
+    const galleryUrls = userGallery.length > 0
+      ? [...userGallery, ...s.galleryUrls].slice(0, 4)
+      : s.galleryUrls.slice(0, 4);
     return {
       id: nanoid(),
       name: s.name,
@@ -137,8 +160,8 @@ export function buildProposalFromTemplate(
       mealPlan: s.mealPlan,
       roomType: s.propertyClass,
       nights,
-      leadImageUrl: s.leadImageUrl,
-      galleryUrls: s.galleryUrls,
+      leadImageUrl,
+      galleryUrls,
       checkInTime: s.checkInTime,
       checkOutTime: s.checkOutTime,
       totalRooms: s.totalRooms,
@@ -260,4 +283,24 @@ function buildRouteCoords(days: Day[]): RouteCoord[] {
 function formatPax(adults: number, children: number): string {
   if (children > 0) return `${adults} adults · ${children} children`;
   return `${adults} ${adults === 1 ? "adult" : "adults"}`;
+}
+
+// Cycling image pool. If the operator provided photos, they get first
+// pick on every "next image" request; if the caller asks for more than
+// were provided we cycle back to the start. Empty pool returns null so
+// the caller can fall back to starter-library images.
+function buildImagePool(userImages: string[]) {
+  let cursor = 0;
+  const pool = userImages.slice();
+  return {
+    take(): string | null {
+      if (pool.length === 0) return null;
+      const img = pool[cursor % pool.length];
+      cursor += 1;
+      return img;
+    },
+    hasAny(): boolean {
+      return pool.length > 0;
+    },
+  };
 }
