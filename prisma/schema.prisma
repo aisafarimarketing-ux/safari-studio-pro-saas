@@ -88,13 +88,34 @@ model Organization {
   suspendedAt     DateTime?
   suspendedReason String?
 
-  // Commercial tier — mostly informational while Stripe isn't wired up.
-  // "trial" is the default for new orgs; "pilot" is a hand-picked zero-cost
-  // engagement with a `tierExpiresAt`; "paid" is what an operator becomes
-  // once they start paying (manual or Stripe later).
+  // Commercial lifecycle — orthogonal to the paid plan below.
+  // "trial" default; "pilot" is a hand-picked zero-cost engagement with
+  // tierExpiresAt; "paid" is what an operator becomes once they subscribe.
   tier          String    @default("trial") // "trial" | "pilot" | "paid"
   tierExpiresAt DateTime?
   tierNote      String?
+
+  // ── Paid plan (what they're actually subscribed to) ────────────────
+  // Set to "consultant" | "explorer" | "operator" when they subscribe
+  // via Paystack. "none" until then. Distinct from `tier` above, which
+  // tracks free-access state (trial / pilot / paid).
+  plan String @default("none") // "none" | "consultant" | "explorer" | "operator"
+
+  // ── Payment processor linkage ──────────────────────────────────────
+  // paymentProcessor identifies which rail the subscription runs on.
+  // Paystack is the EA primary (card + M-Pesa for Kenya). Stripe
+  // arrives later for international card coverage.
+  paymentProcessor       String? // "paystack" | "stripe" | null
+  paystackCustomerCode   String?
+  paystackSubscriptionCode String?
+  paystackEmailToken     String? // Required by Paystack for subscription actions
+  currentPeriodEnd       DateTime?
+  lastPaymentAt          DateTime?
+  // Set by a user-initiated cancel; the subscription runs until
+  // currentPeriodEnd and then does not renew. Paystack still charges
+  // until we call their /subscription/disable API (done server-side on
+  // cancel), so this flag is belt-and-braces.
+  cancelAtPeriodEnd      Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
