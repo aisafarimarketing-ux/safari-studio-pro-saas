@@ -118,7 +118,7 @@ export function ClosingSection({ section }: { section: Section }) {
     const currency = tier?.currency ?? "USD";
     const totalLabel = buildTotalLabel(perPerson, currency, pax);
 
-    const confirmBookingHref = buildMailtoHref(operator.email, proposal, totalLabel);
+    const confirmBookingHref = resolveBookingHref(operator, proposal, totalLabel);
     const whatsappShareHref = typeof window !== "undefined"
       ? `https://wa.me/?text=${encodeURIComponent(`${trip.title || "Safari proposal"} — ${window.location.href}`)}`
       : "#";
@@ -783,6 +783,32 @@ function buildTotalLabel(perPerson: string, currency: string, pax: number): stri
 
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+// Resolve the target for the "Book / Confirm Booking" CTAs. Priority:
+//   1. operator.bookingUrl — dedicated reservation surface on the operator's
+//      own site (a calendar embed, Stripe checkout, branded form, etc.).
+//   2. operator.website — their homepage. Less specific but still on their
+//      turf, not ours.
+//   3. mailto: operator.email — last-resort fallback. The classic "send
+//      us an email" flow, kept so the button never dead-ends.
+//
+// Clients returning via the booking URL / website open in a new tab so
+// they don't lose the proposal context.
+function resolveBookingHref(
+  operator: {
+    bookingUrl?: string;
+    website?: string;
+    email?: string;
+  },
+  proposal: { id: string; trip: { title: string }; client: { guestNames: string } },
+  totalLabel: string,
+): string {
+  const booking = operator.bookingUrl?.trim();
+  if (booking) return normaliseUrl(booking);
+  const website = operator.website?.trim();
+  if (website) return normaliseUrl(website);
+  return buildMailtoHref(operator.email, proposal, totalLabel);
 }
 
 function buildMailtoHref(

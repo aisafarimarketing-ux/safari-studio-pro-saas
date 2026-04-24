@@ -213,6 +213,7 @@ export function ProposalSettingsPanel() {
           {field("Phone", operator.phone, (v) => updateOperator({ phone: v }))}
           {field("WhatsApp", operator.whatsapp ?? "", (v) => updateOperator({ whatsapp: v }))}
           {field("Website", operator.website ?? "", (v) => updateOperator({ website: v }))}
+          {field("Booking URL", operator.bookingUrl ?? "", (v) => updateOperator({ bookingUrl: v }), "https://book.yourcompany.com")}
         </div>
       </div>
 

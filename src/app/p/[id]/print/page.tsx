@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
+import { compressPrintImages } from "@/lib/compressImagesForPrint";
 import type { Proposal, Section } from "@/lib/types";
 
 // Chrome-free render of a public proposal — same content as /p/[id] but
@@ -91,7 +92,27 @@ export default function PrintProposalPage({
               }),
         ),
       );
-      // One extra paint to let layout settle after images land.
+
+      // Compress data-URL images before PDF capture. Playwright embeds
+      // images at their source-bytes size, so a 1.5MB data-URL becomes
+      // 1.5MB of PDF payload. Re-encoding at ~0.62 JPEG quality and a
+      // 1400px long-edge typically halves the PDF on image-heavy
+      // proposals. Runs BEFORE the __SS_READY__ flag flips so the
+      // renderer waits for the swap.
+      try {
+        const stats = await compressPrintImages();
+        if (stats.processed > 0) {
+          const savedMb = Math.round((stats.bytesBefore - stats.bytesAfter) / 1024 / 1024 * 10) / 10;
+          console.info(
+            `[print-compress] ${stats.processed} image${stats.processed === 1 ? "" : "s"} · saved ~${savedMb}MB`,
+          );
+        }
+      } catch (err) {
+        console.warn("[print-compress] failed; continuing with originals:", err);
+      }
+
+      // One extra paint to let layout settle after images land (and
+      // to reflect any size-change from the compressed swap-ins).
       await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
       if (cancelled) return;
       (window as unknown as { __SS_READY__?: boolean }).__SS_READY__ = true;

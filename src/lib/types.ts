@@ -40,6 +40,12 @@ export interface OperatorProfile {
   phone: string;
   whatsapp?: string;
   logoUrl?: string;
+  /** Dedicated booking URL — if set, the closing section's "Confirm
+   *  Booking" / "Book your Safari" CTAs link here. Falls back to
+   *  website + mailto when absent. Lets operators route guests to their
+   *  own reservation system (a specific form, calendar, Stripe page…)
+   *  rather than an email. Full URL expected ("https://…"). */
+  bookingUrl?: string;
   address?: string;
   /** Country shown as a separate row in the closing-farewell contact block
    *  (e.g. "Tanzania"). Free-form so operators can use "Kenya & Tanzania"
