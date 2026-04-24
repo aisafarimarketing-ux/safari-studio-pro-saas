@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTemplateBySlug, listTemplates } from "@/lib/templates";
 import { TemplateRenderer } from "@/components/templates/TemplateRenderer";
+import { UseTemplateButton } from "@/components/templates/UseTemplateButton";
 
 // ─── /templates/[slug] ──────────────────────────────────────────────────────
 //
@@ -48,16 +49,16 @@ export default async function TemplatePage({
 
   return (
     <div className="min-h-screen" style={{ background: "#f8f5ef" }}>
-      <TemplateHeader title={tpl.title} summary={tpl.summary} />
+      <TemplateHeader title={tpl.title} summary={tpl.summary} slug={tpl.slug} />
       <TemplateRenderer template={tpl} />
-      <TemplateFooterCTA title={tpl.title} />
+      <TemplateFooterCTA title={tpl.title} slug={tpl.slug} />
     </div>
   );
 }
 
 // ─── Sticky header with sign-up nudge ──────────────────────────────────────
 
-function TemplateHeader({ title, summary }: { title: string; summary: string }) {
+function TemplateHeader({ title, summary, slug }: { title: string; summary: string; slug: string }) {
   const FOREST = "#1b3a2d";
   const GOLD = "#c9a84c";
   return (
@@ -87,19 +88,17 @@ function TemplateHeader({ title, summary }: { title: string; summary: string }) 
         >
           All templates
         </Link>
-        <Link
-          href="/sign-up"
+        <UseTemplateButton
+          slug={slug}
           className="px-4 py-2 rounded-lg text-[13px] font-semibold transition hover:brightness-110 active:scale-95"
           style={{ background: GOLD, color: FOREST }}
-        >
-          Use this template →
-        </Link>
+        />
       </div>
     </div>
   );
 }
 
-function TemplateFooterCTA({ title }: { title: string }) {
+function TemplateFooterCTA({ title, slug }: { title: string; slug: string }) {
   const FOREST_DEEP = "#142a20";
   const FOREST = "#1b3a2d";
   const GOLD = "#c9a84c";
@@ -124,13 +123,13 @@ function TemplateFooterCTA({ title }: { title: string }) {
           send your client is uniquely theirs.
         </p>
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/sign-up"
+          <UseTemplateButton
+            slug={slug}
             className="px-7 py-3.5 rounded-xl text-[15px] font-semibold transition hover:brightness-110 active:scale-95"
             style={{ background: GOLD, color: FOREST }}
           >
-            Open Studio — free trial
-          </Link>
+            Use this template →
+          </UseTemplateButton>
           <Link
             href="/pricing"
             className="px-5 py-3 rounded-xl text-[14px] text-white/75 hover:text-white transition border border-white/15"
