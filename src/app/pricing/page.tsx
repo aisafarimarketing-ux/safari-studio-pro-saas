@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CheckoutButton } from "@/components/billing/CheckoutButton";
 
 // ─── Pricing page ───────────────────────────────────────────────────────────
 //
@@ -155,6 +156,7 @@ function Plans() {
       <div className="relative max-w-6xl mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <PlanCard
+            planKey="consultant"
             tier="Consultant"
             price="$29"
             cadence="/ month"
@@ -165,6 +167,7 @@ function Plans() {
             badge="New"
           />
           <PlanCard
+            planKey="explorer"
             tier="Explorer"
             price="$50"
             cadence="/ month"
@@ -174,6 +177,7 @@ function Plans() {
             featured={false}
           />
           <PlanCard
+            planKey="operator"
             tier="Operator"
             price="$100"
             cadence="/ month"
@@ -192,6 +196,7 @@ function Plans() {
 }
 
 function PlanCard({
+  planKey,
   tier,
   price,
   cadence,
@@ -201,6 +206,7 @@ function PlanCard({
   featured,
   badge,
 }: {
+  planKey: "consultant" | "explorer" | "operator";
   tier: string;
   price: string;
   cadence: string;
@@ -256,17 +262,19 @@ function PlanCard({
       <p className="mt-3 text-[14px] leading-relaxed" style={{ color: sub }}>
         {tagline}
       </p>
-      <Link
-        href="/sign-up"
-        className="mt-6 block w-full py-3 rounded-xl text-center text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
-        style={
-          featured
-            ? { background: GOLD, color: FOREST }
-            : { background: FOREST, color: "white" }
-        }
-      >
-        {cta}
-      </Link>
+      <div className="mt-6">
+        <CheckoutButton
+          plan={planKey}
+          className="block w-full py-3 rounded-xl text-center text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
+          style={
+            featured
+              ? { background: GOLD, color: FOREST }
+              : { background: FOREST, color: "white" }
+          }
+        >
+          {cta}
+        </CheckoutButton>
+      </div>
       <ul className="mt-7 space-y-2.5 pt-5 border-t" style={{ borderColor: divider }}>
         {features.map((f) => (
           <li key={f} className="flex items-start gap-2.5 text-[14px]" style={{ color: sub }}>
