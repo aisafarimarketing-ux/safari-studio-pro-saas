@@ -12,6 +12,7 @@ import {
 import { BrandDNADashboardCard } from "@/components/brand-dna/BrandDNADashboardCard";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
+import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
 
 type ProposalSummary = {
   id: string;
@@ -33,6 +34,25 @@ export default function ProposalsPage() {
   const [deleting, setDeleting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
+  const [identity, setIdentity] = useState<ConsultantIdentity | null>(null);
+
+  // Load the current user's identity once so we can stamp it onto new
+  // proposals before POSTing. Keeps per-user name/photo/signature on
+  // every draft this user creates, regardless of org defaults.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const me = await res.json();
+        if (!cancelled && me?.user) setIdentity(identityFromMe(me));
+      } catch {
+        // best-effort — identity stamp is a nice-to-have, not required
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -71,6 +91,13 @@ export default function ProposalsPage() {
     setCreating(true);
     const controller = new AbortController();
     submitAbortRef.current = controller;
+
+    // Stamp consultant identity (name / photo / signature / role) onto
+    // the operator block before save. Only fills empty fields so a
+    // manually-customised operator block survives.
+    if (identity) {
+      proposal.operator = applyIdentityToOperator(proposal.operator, identity);
+    }
 
     try {
       const res = await fetch("/api/proposals", {

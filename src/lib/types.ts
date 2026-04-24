@@ -27,6 +27,11 @@ export interface OperatorProfile {
   companyName: string;
   consultantName: string;
   consultantPhoto?: string;
+  /** Job title / role — shown under the consultant's name in closing
+   *  blocks and personal notes (e.g. "Founder · Safari Specialist").
+   *  Auto-populated from OrgMembership.roleTitle when the user creates
+   *  a proposal; can be overridden per-proposal. */
+  consultantRole?: string;
   /** Handwritten signature image — rendered above the consultant's name on
    *  the hero-letter cover variant. Optional; the name renders alone when
    *  no signature has been uploaded. */

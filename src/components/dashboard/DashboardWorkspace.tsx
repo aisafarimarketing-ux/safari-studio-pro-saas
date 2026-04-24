@@ -13,6 +13,7 @@ import { OnboardingChecklist } from "./OnboardingChecklist";
 import { TierBanner } from "./TierBanner";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
+import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -78,6 +79,7 @@ export function DashboardWorkspace() {
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
   const [requests, setRequests] = useState<RequestRow[] | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [identity, setIdentity] = useState<ConsultantIdentity | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
@@ -86,7 +88,7 @@ export function DashboardWorkspace() {
   useEffect(() => {
     (async () => {
       try {
-        const [propRes, propertyRes, locRes, brandRes, reqRes, sumRes] = await Promise.all([
+        const [propRes, propertyRes, locRes, brandRes, reqRes, sumRes, meRes] = await Promise.all([
           fetch("/api/proposals", { cache: "no-store" }),
           fetch("/api/properties", { cache: "no-store" }),
           fetch("/api/locations", { cache: "no-store" }),
@@ -94,6 +96,10 @@ export function DashboardWorkspace() {
           // Open-stage requests only, capped — this feeds the inbox tile.
           fetch("/api/requests?limit=20", { cache: "no-store" }),
           fetch("/api/dashboard/summary", { cache: "no-store" }),
+          // /api/me drives the consultant-identity stamp on new proposals —
+          // name, role, photo, signature flow into operator fields on
+          // Trip Setup submit. No-op if the user hasn't set up their profile yet.
+          fetch("/api/me", { cache: "no-store" }),
         ]);
         if (propRes.status === 401) { window.location.href = "/sign-in?redirect_url=/dashboard"; return; }
         if (propRes.status === 409) { window.location.href = "/select-organization"; return; }
@@ -105,6 +111,7 @@ export function DashboardWorkspace() {
         const brandData = brandRes.ok ? await brandRes.json() : null;
         const reqData = reqRes.ok ? await reqRes.json() : { requests: [] };
         const sumData = sumRes.ok ? await sumRes.json() : null;
+        const meData = meRes.ok ? await meRes.json() : null;
 
         setProposals(propData.proposals ?? []);
         setProperties(propertyData.properties ?? []);
@@ -112,6 +119,7 @@ export function DashboardWorkspace() {
         setCompletion(brandData?.completion ?? null);
         setRequests(reqData.requests ?? []);
         if (sumData) setSummary(sumData as Summary);
+        if (meData?.user) setIdentity(identityFromMe(meData));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load workspace");
       }
@@ -132,6 +140,13 @@ export function DashboardWorkspace() {
     setCreating(true);
     const controller = new AbortController();
     submitAbortRef.current = controller;
+
+    // Stamp the current user's identity onto the proposal before saving.
+    // Name / photo / role / signature come from OrgMembership via /api/me.
+    // Harmless if the user hasn't set their profile yet (identity is null).
+    if (identity) {
+      proposal.operator = applyIdentityToOperator(proposal.operator, identity);
+    }
 
     try {
       // 1. Always save the blank-but-configured proposal first. If

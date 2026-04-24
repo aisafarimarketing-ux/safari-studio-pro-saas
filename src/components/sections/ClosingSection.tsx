@@ -401,6 +401,14 @@ export function ClosingSection({ section }: { section: Section }) {
                   >
                     {operator.consultantName}
                   </div>
+                  {operator.consultantRole && (
+                    <div
+                      className="text-[11.5px] mt-0.5"
+                      style={{ color: color.muted }}
+                    >
+                      {operator.consultantRole}
+                    </div>
+                  )}
                   <div
                     className="text-[12.5px] mt-0.5"
                     style={{ color: color.muted }}

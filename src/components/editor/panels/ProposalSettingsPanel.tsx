@@ -208,6 +208,7 @@ export function ProposalSettingsPanel() {
           </div>
           {field("Company name", operator.companyName, (v) => updateOperator({ companyName: v }))}
           {field("Consultant name", operator.consultantName, (v) => updateOperator({ consultantName: v }))}
+          {field("Role title", operator.consultantRole ?? "", (v) => updateOperator({ consultantRole: v }), "e.g. Founder · Safari Specialist")}
           {field("Email", operator.email, (v) => updateOperator({ email: v }))}
           {field("Phone", operator.phone, (v) => updateOperator({ phone: v }))}
           {field("WhatsApp", operator.whatsapp ?? "", (v) => updateOperator({ whatsapp: v }))}

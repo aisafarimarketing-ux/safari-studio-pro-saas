@@ -180,6 +180,20 @@ export function PersonalNoteSection({ section }: { section: Section }) {
           >
             {operator.consultantName || "Your name"}
           </div>
+          {/* Role title — appears under the name when set. Editable in the editor. */}
+          {(operator.consultantRole || isEditor) && (
+            <div
+              className="mt-0.5 text-[12px] outline-none"
+              style={{ color: tokens.mutedText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateOperator({ consultantRole: e.currentTarget.textContent?.trim() ?? operator.consultantRole })
+              }
+            >
+              {operator.consultantRole || (isEditor ? "Your role (optional)" : "")}
+            </div>
+          )}
         </div>
 
         {/* Branded contact strip — consultant photo · company info · logo */}

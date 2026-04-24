@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
+import { applyIdentityToOperator } from "@/lib/consultantIdentity";
 
 // ─── POST /api/proposals/from-template ─────────────────────────────────────
 //
@@ -37,8 +38,10 @@ export async function POST(req: Request) {
   const tpl = getTemplateBySlug(slug);
   if (!tpl) return NextResponse.json({ error: "Template not found" }, { status: 404 });
 
-  // Build the proposal in clone mode with operator info from the caller.
-  // Empty user/org name fields stay empty; operator fills in from the editor.
+  // Build the proposal in clone mode with org + user info from the
+  // caller. The cloned operator block starts with org/email basics; we
+  // then layer the user's full consultant identity (photo, signature,
+  // role title) on top so the proposal carries the drafter's brand.
   const proposal = buildProposalFromTemplate(tpl, {
     mode: "clone",
     operator: {
@@ -46,6 +49,13 @@ export async function POST(req: Request) {
       consultantName: ctx.user.name ?? "",
       email: ctx.user.email ?? "",
     },
+  });
+
+  proposal.operator = applyIdentityToOperator(proposal.operator, {
+    name: ctx.user.name ?? "",
+    roleTitle: ctx.membership?.roleTitle ?? null,
+    photoUrl: ctx.membership?.profilePhotoUrl ?? null,
+    signatureUrl: ctx.membership?.signatureUrl ?? null,
   });
 
   // Persist via Prisma directly (same shape the existing /api/proposals
