@@ -49,6 +49,26 @@ type RequestRow = {
   } | null;
 };
 
+type Summary = {
+  proposals: { thisMonth: number; lastMonth: number; sparkline30d: number[] };
+  deposits: { thisMonthCents: number; lastMonthCents: number; currency: string };
+  requests: {
+    windowDays: number;
+    total: number;
+    funnel: { new: number; working: number; open: number; booked: number; completed: number; notBooked: number };
+    conversionRate: number;
+  };
+  engagement: { medianSessionSeconds: number; sampledViews: number };
+  pipeline: { valueCents: number; currency: string; activeProposalCount: number };
+  activity: Array<{
+    at: string;
+    kind: "deposit" | "reservation-confirmed" | "reservation-sent" | "proposal-created";
+    label: string;
+    detail?: string;
+    link: string;
+  }>;
+};
+
 export function DashboardWorkspace() {
   const router = useRouter();
   const { organization } = useOrganization();
@@ -57,6 +77,7 @@ export function DashboardWorkspace() {
   const [locationCount, setLocationCount] = useState<number | null>(null);
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
   const [requests, setRequests] = useState<RequestRow[] | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
@@ -65,13 +86,14 @@ export function DashboardWorkspace() {
   useEffect(() => {
     (async () => {
       try {
-        const [propRes, propertyRes, locRes, brandRes, reqRes] = await Promise.all([
+        const [propRes, propertyRes, locRes, brandRes, reqRes, sumRes] = await Promise.all([
           fetch("/api/proposals", { cache: "no-store" }),
           fetch("/api/properties", { cache: "no-store" }),
           fetch("/api/locations", { cache: "no-store" }),
           fetch("/api/brand-dna", { cache: "no-store" }),
           // Open-stage requests only, capped — this feeds the inbox tile.
           fetch("/api/requests?limit=20", { cache: "no-store" }),
+          fetch("/api/dashboard/summary", { cache: "no-store" }),
         ]);
         if (propRes.status === 401) { window.location.href = "/sign-in?redirect_url=/dashboard"; return; }
         if (propRes.status === 409) { window.location.href = "/select-organization"; return; }
@@ -82,12 +104,14 @@ export function DashboardWorkspace() {
         const locData = locRes.ok ? await locRes.json() : { locations: [] };
         const brandData = brandRes.ok ? await brandRes.json() : null;
         const reqData = reqRes.ok ? await reqRes.json() : { requests: [] };
+        const sumData = sumRes.ok ? await sumRes.json() : null;
 
         setProposals(propData.proposals ?? []);
         setProperties(propertyData.properties ?? []);
         setLocationCount((locData.locations ?? []).length);
         setCompletion(brandData?.completion ?? null);
         setRequests(reqData.requests ?? []);
+        if (sumData) setSummary(sumData as Summary);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load workspace");
       }
@@ -268,10 +292,47 @@ export function DashboardWorkspace() {
 
         {proposals !== null && proposals.length > 0 && (
           <>
+            {/* ── Overview — modern KPI strip ──────────────────────────
+                Four tiles with big numbers + sparkline + month-on-month
+                delta. Summary endpoint drives all four; falls back to
+                client-derived counts on load error. */}
+            <section className="mb-8">
+              <SectionTitle>Overview</SectionTitle>
+              <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiTile
+                  label="Proposals"
+                  value={summary?.proposals.thisMonth ?? proposals.filter(p => new Date(p.updatedAt) >= monthStart()).length}
+                  deltaNow={summary?.proposals.thisMonth}
+                  deltaThen={summary?.proposals.lastMonth}
+                  sparkline={summary?.proposals.sparkline30d}
+                  suffix="this month"
+                />
+                <KpiTile
+                  label="Deposits"
+                  value={summary ? formatMoney(summary.deposits.thisMonthCents, summary.deposits.currency) : "—"}
+                  deltaNow={summary?.deposits.thisMonthCents}
+                  deltaThen={summary?.deposits.lastMonthCents}
+                  suffix="received"
+                  accent="gold"
+                />
+                <KpiTile
+                  label="Engagement"
+                  value={summary ? formatSeconds(summary.engagement.medianSessionSeconds) : "—"}
+                  suffix={summary && summary.engagement.sampledViews > 0
+                    ? `median · ${summary.engagement.sampledViews} visit${summary.engagement.sampledViews === 1 ? "" : "s"}`
+                    : "no visits yet"}
+                />
+                <KpiTile
+                  label="Pipeline"
+                  value={summary ? formatMoney(summary.pipeline.valueCents, summary.pipeline.currency) : "—"}
+                  suffix={summary ? `${summary.pipeline.activeProposalCount} live proposals` : ""}
+                />
+              </div>
+            </section>
+
             {/* ── Today ─────────────────────────────────────────────────
                 Three tiles: the active proposal, the open-requests inbox,
-                and a this-month stats snapshot. Anchored at the top so
-                the operator sees the day's signal first. */}
+                and a this-month stats snapshot. */}
             <section className="mb-8">
               <SectionTitle>Today</SectionTitle>
               <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -280,6 +341,23 @@ export function DashboardWorkspace() {
                 <MonthStatsTile proposals={proposals} requests={requests} />
               </div>
             </section>
+
+            {/* ── Funnel + Activity ────────────────────────────────────
+                Data-rich two-column. Left: request funnel. Right:
+                activity feed. Skipped when summary hasn't arrived yet. */}
+            {summary && (
+              <section className="mb-8">
+                <SectionTitle>Operations</SectionTitle>
+                <div className="mt-3 grid grid-cols-1 lg:grid-cols-5 gap-4">
+                  <div className="lg:col-span-3">
+                    <FunnelTile summary={summary} />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <ActivityFeedTile activity={summary.activity} />
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* ── Start something (action bar) ─────────────────────────
                 Persistent launchpad — new proposal, import from SP / SO /
@@ -589,6 +667,253 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <h2 className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/45">
       {children}
     </h2>
+  );
+}
+
+// ─── KPI tile (modern) ─────────────────────────────────────────────────────
+//
+// Big number in Playfair, optional sparkline, optional month-on-month
+// delta. Accent="gold" for the revenue tile — subtle gold gradient in
+// the background, nothing shouty.
+
+function KpiTile({
+  label,
+  value,
+  suffix,
+  deltaNow,
+  deltaThen,
+  sparkline,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  suffix?: string;
+  deltaNow?: number;
+  deltaThen?: number;
+  sparkline?: number[];
+  accent?: "gold" | null;
+}) {
+  const delta = computeDelta(deltaNow, deltaThen);
+  const bgStyle: React.CSSProperties = accent === "gold"
+    ? {
+        background: "linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.02) 100%)",
+        borderColor: "rgba(201,168,76,0.35)",
+      }
+    : { background: "white", borderColor: "rgba(0,0,0,0.08)" };
+
+  return (
+    <div
+      className="rounded-2xl border p-5 flex flex-col transition hover:shadow-[0_6px_24px_rgba(0,0,0,0.04)]"
+      style={bgStyle}
+    >
+      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3">
+        {label}
+      </div>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <div
+          className="text-[28px] md:text-[32px] font-bold text-black/85 leading-none tracking-tight"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          {value}
+        </div>
+        {delta && (
+          <div
+            className="text-[11.5px] font-semibold tabular-nums"
+            style={{ color: delta.direction === "up" ? "#1b3a2d" : delta.direction === "down" ? "#b34334" : "rgba(0,0,0,0.4)" }}
+          >
+            {delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "·"} {delta.label}
+          </div>
+        )}
+      </div>
+      {suffix && (
+        <div className="mt-1 text-[12px] text-black/50">{suffix}</div>
+      )}
+      {sparkline && sparkline.length > 0 && (
+        <div className="mt-3">
+          <Sparkline values={sparkline} accent={accent === "gold" ? "#c9a84c" : "#1b3a2d"} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sparkline({ values, accent }: { values: number[]; accent: string }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 1);
+  const w = 140;
+  const h = 36;
+  const step = w / (values.length - 1);
+  const points = values
+    .map((v, i) => `${i * step},${h - (v / max) * h}`)
+    .join(" ");
+  const fillPoints = `0,${h} ${points} ${w},${h}`;
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-9 block">
+      <polygon points={fillPoints} fill={accent} opacity="0.1" />
+      <polyline points={points} fill="none" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function computeDelta(now?: number, then?: number): { direction: "up" | "down" | "flat"; label: string } | null {
+  if (typeof now !== "number" || typeof then !== "number") return null;
+  if (now === 0 && then === 0) return null;
+  if (then === 0) {
+    if (now === 0) return null;
+    return { direction: "up", label: "new" };
+  }
+  const diff = now - then;
+  const pct = Math.round((diff / then) * 100);
+  const absPct = Math.abs(pct);
+  if (absPct < 1) return { direction: "flat", label: "flat" };
+  return {
+    direction: pct > 0 ? "up" : "down",
+    label: `${absPct}% vs last mo`,
+  };
+}
+
+function formatMoney(cents: number, currency: string): string {
+  const amount = Math.round(cents / 100);
+  if (amount === 0) return `${currency} 0`;
+  const formatted = amount.toLocaleString();
+  return `${currency} ${formatted}`;
+}
+
+function formatSeconds(total: number): string {
+  if (total < 60) return `${total}s`;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function monthStart(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+// ─── Funnel tile ──────────────────────────────────────────────────────────
+
+function FunnelTile({ summary }: { summary: Summary }) {
+  const f = summary.requests.funnel;
+  const total = summary.requests.total;
+  const stages: { label: string; count: number; accent: string }[] = [
+    { label: "Received", count: total, accent: "#1b3a2d" },
+    { label: "Working", count: f.working + f.open, accent: "#2d5a40" },
+    { label: "Booked", count: f.booked + f.completed, accent: "#c9a84c" },
+    { label: "Not booked", count: f.notBooked, accent: "#b34334" },
+  ];
+  const denom = Math.max(1, total);
+  const conversionPct = Math.round(summary.requests.conversionRate * 100);
+
+  return (
+    <div
+      className="rounded-2xl border bg-white p-5 md:p-6 h-full"
+      style={{ borderColor: "rgba(0,0,0,0.08)" }}
+    >
+      <div className="flex items-baseline justify-between gap-3 mb-4">
+        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45">
+          Request funnel · last {summary.requests.windowDays} days
+        </div>
+        <div
+          className="text-[11.5px] font-semibold tabular-nums"
+          style={{ color: conversionPct >= 20 ? "#1b3a2d" : "rgba(0,0,0,0.5)" }}
+        >
+          {conversionPct}% conversion
+        </div>
+      </div>
+
+      {total === 0 ? (
+        <div className="py-8 text-center text-[13px] text-black/50">
+          No requests received in this window yet. Inbound enquiries show up here once they arrive.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {stages.map((s) => {
+            const pct = Math.round((s.count / denom) * 100);
+            return (
+              <div key={s.label} className="flex items-center gap-3">
+                <div className="w-24 text-[12.5px] text-black/65 shrink-0">{s.label}</div>
+                <div className="flex-1 h-6 rounded-md overflow-hidden" style={{ background: "rgba(0,0,0,0.04)" }}>
+                  <div
+                    className="h-full transition-all flex items-center px-2"
+                    style={{
+                      width: `${Math.max(4, pct)}%`,
+                      background: `linear-gradient(90deg, ${s.accent} 0%, ${s.accent}dd 100%)`,
+                    }}
+                  />
+                </div>
+                <div className="w-20 text-right tabular-nums">
+                  <span className="text-[13px] font-semibold text-black/80">{s.count}</span>
+                  <span className="text-[11px] text-black/40 ml-1">{pct}%</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Activity feed tile ───────────────────────────────────────────────────
+
+function ActivityFeedTile({ activity }: { activity: Summary["activity"] }) {
+  return (
+    <div
+      className="rounded-2xl border bg-white p-5 h-full"
+      style={{ borderColor: "rgba(0,0,0,0.08)" }}
+    >
+      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3">
+        Recent activity
+      </div>
+      {activity.length === 0 ? (
+        <div className="py-6 text-[13px] text-black/50 text-center">
+          No activity yet. Drafts, payments, and hold confirmations show up here.
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {activity.map((e, i) => (
+            <li key={i}>
+              <Link
+                href={e.link}
+                className="flex items-start gap-3 rounded-lg px-2 -mx-2 py-1.5 hover:bg-black/[0.03] transition group"
+              >
+                <ActivityIcon kind={e.kind} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-black/80 leading-snug truncate">
+                    {e.label}
+                  </div>
+                  {e.detail && (
+                    <div className="text-[11.5px] text-black/50 truncate mt-0.5">{e.detail}</div>
+                  )}
+                </div>
+                <div className="text-[10.5px] text-black/40 shrink-0 tabular-nums">
+                  {formatRelative(e.at)}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ActivityIcon({ kind }: { kind: Summary["activity"][number]["kind"] }) {
+  const map: Record<string, { bg: string; fg: string; glyph: string }> = {
+    "deposit":               { bg: "rgba(201,168,76,0.15)", fg: "#8a7125", glyph: "$" },
+    "reservation-confirmed": { bg: "rgba(27,58,45,0.1)",    fg: "#1b3a2d", glyph: "✓" },
+    "reservation-sent":      { bg: "rgba(0,0,0,0.05)",       fg: "rgba(0,0,0,0.55)", glyph: "✉" },
+    "proposal-created":      { bg: "rgba(27,58,45,0.08)",    fg: "#1b3a2d", glyph: "✦" },
+  };
+  const s = map[kind] ?? map["proposal-created"];
+  return (
+    <div
+      className="w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+      style={{ background: s.bg, color: s.fg }}
+    >
+      {s.glyph}
+    </div>
   );
 }
 
