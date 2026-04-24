@@ -46,10 +46,28 @@ type ActivityEvent = {
   user: { id: string; name: string | null; email: string | null } | null;
 };
 
+type PerformanceMember = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: "owner" | "admin" | "member";
+  roleTitle: string | null;
+  profilePhotoUrl: string | null;
+  metrics: {
+    proposalsThisMonth: number;
+    proposalsLastMonth: number;
+    depositsThisMonthCents: number;
+    engagementMedianSeconds: number;
+    engagementSampleSize: number;
+    pipelineValueCents: number;
+  };
+};
+
 export function TeamSupervisionPage() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [you, setYou] = useState<{ userId: string; role: "owner" | "admin" | "member" } | null>(null);
+  const [performance, setPerformance] = useState<PerformanceMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Load team list + poll.
@@ -91,6 +109,25 @@ export function TeamSupervisionPage() {
     };
     load();
     const interval = setInterval(load, 20_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Load per-member performance metrics. Refreshes on a slower cadence
+  // than presence — the numbers don't move minute-to-minute.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/team/performance", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setPerformance(data.members as PerformanceMember[]);
+      } catch {
+        // best-effort
+      }
+    };
+    load();
+    const interval = setInterval(load, 60_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
@@ -148,6 +185,20 @@ export function TeamSupervisionPage() {
               value={summary.teamMedian != null ? formatMinutes(summary.teamMedian) : "—"}
             />
           </div>
+        )}
+
+        {/* Performance — per-member output. Admin/owner see full table;
+            members see only their own row so they can track themselves
+            without becoming a leaderboard-of-shame for juniors. */}
+        {performance && performance.length > 0 && (
+          <PerformancePanel
+            rows={
+              isAdmin
+                ? performance
+                : performance.filter((m) => m.userId === you?.userId)
+            }
+            isAdmin={isAdmin}
+          />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
@@ -357,6 +408,166 @@ function describeEvent(e: ActivityEvent): string {
     case "viewTeam":      return "opened the team view";
     default:              return e.type;
   }
+}
+
+// ─── Performance panel ────────────────────────────────────────────────────
+//
+// Per-member output table. Shown in full to admin/owner (ranked by
+// proposals-this-month); members see only their own row.
+//
+// Columns sit in a responsive grid — on narrow screens the secondary
+// metrics collapse to a comma list under the name.
+
+function PerformancePanel({
+  rows,
+  isAdmin,
+}: {
+  rows: PerformanceMember[];
+  isAdmin: boolean;
+}) {
+  return (
+    <section className="bg-white rounded-2xl border border-black/8 overflow-hidden mb-6">
+      <header className="px-5 py-4 border-b border-black/8 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55">
+          {isAdmin ? "Performance · per member" : "Your performance"}
+        </div>
+        <div className="text-[11px] text-black/40">This month · 30-day engagement · live pipeline</div>
+      </header>
+
+      {/* Column headers — hidden on mobile, shown from sm breakpoint */}
+      <div
+        className="hidden sm:grid px-5 py-2 text-[10px] uppercase tracking-[0.22em] font-semibold text-black/40 border-b border-black/5"
+        style={{ gridTemplateColumns: "2fr 0.8fr 1fr 1fr 1.1fr" }}
+      >
+        <div>Member</div>
+        <div className="text-right">Proposals</div>
+        <div className="text-right">Revenue</div>
+        <div className="text-right">Engagement</div>
+        <div className="text-right">Pipeline</div>
+      </div>
+
+      <ul className="divide-y divide-black/5">
+        {rows.map((m) => (
+          <PerformanceRow key={m.userId} member={m} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PerformanceRow({ member }: { member: PerformanceMember }) {
+  const { metrics } = member;
+  const delta = computeProposalDelta(metrics.proposalsThisMonth, metrics.proposalsLastMonth);
+
+  return (
+    <li>
+      <div
+        className="grid items-center gap-3 px-5 py-4 sm:gap-0 hover:bg-black/[0.015] transition"
+        style={{ gridTemplateColumns: "2fr 0.8fr 1fr 1fr 1.1fr" }}
+      >
+        {/* Member */}
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar photo={member.profilePhotoUrl} name={member.name} />
+          <div className="min-w-0">
+            <div className="text-[14px] font-semibold text-black/85 truncate">
+              {member.name || member.email}
+            </div>
+            {member.roleTitle && (
+              <div className="text-[11px] text-black/45 truncate">{member.roleTitle}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Proposals + MoM delta */}
+        <div className="text-right tabular-nums">
+          <div className="text-[15px] font-semibold text-black/85">
+            {metrics.proposalsThisMonth}
+          </div>
+          {delta && (
+            <div
+              className="text-[10.5px] font-semibold"
+              style={{ color: delta.direction === "up" ? "#1b3a2d" : delta.direction === "down" ? "#b34334" : "rgba(0,0,0,0.4)" }}
+            >
+              {delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "·"} {delta.label}
+            </div>
+          )}
+        </div>
+
+        {/* Revenue (deposits) this month */}
+        <div className="text-right tabular-nums">
+          <div className="text-[14px] font-semibold text-black/85">
+            {metrics.depositsThisMonthCents > 0
+              ? `$${Math.round(metrics.depositsThisMonthCents / 100).toLocaleString()}`
+              : "—"}
+          </div>
+          <div className="text-[10.5px] text-black/40">deposits</div>
+        </div>
+
+        {/* Engagement median */}
+        <div className="text-right tabular-nums">
+          <div className="text-[14px] font-semibold text-black/85">
+            {metrics.engagementMedianSeconds > 0
+              ? formatShortDuration(metrics.engagementMedianSeconds)
+              : "—"}
+          </div>
+          <div className="text-[10.5px] text-black/40">
+            {metrics.engagementSampleSize > 0
+              ? `${metrics.engagementSampleSize} visit${metrics.engagementSampleSize === 1 ? "" : "s"}`
+              : "no visits yet"}
+          </div>
+        </div>
+
+        {/* Pipeline */}
+        <div className="text-right tabular-nums">
+          <div className="text-[14px] font-semibold text-black/85">
+            {metrics.pipelineValueCents > 0
+              ? `$${Math.round(metrics.pipelineValueCents / 100).toLocaleString()}`
+              : "—"}
+          </div>
+          <div className="text-[10.5px] text-black/40">live proposals</div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function Avatar({ photo, name }: { photo: string | null; name: string | null }) {
+  if (photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photo}
+        alt={name ?? ""}
+        className="w-9 h-9 rounded-full object-cover shrink-0"
+        style={{ background: "rgba(0,0,0,0.05)" }}
+      />
+    );
+  }
+  const initial = (name?.[0] ?? "?").toUpperCase();
+  return (
+    <div
+      className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-semibold text-white shrink-0"
+      style={{ background: "#1b3a2d" }}
+    >
+      {initial}
+    </div>
+  );
+}
+
+function computeProposalDelta(now: number, then: number): { direction: "up" | "down" | "flat"; label: string } | null {
+  if (now === 0 && then === 0) return null;
+  if (then === 0) return { direction: "up", label: "new" };
+  const diff = now - then;
+  const pct = Math.round((diff / then) * 100);
+  if (Math.abs(pct) < 1) return { direction: "flat", label: "flat" };
+  return { direction: pct > 0 ? "up" : "down", label: `${Math.abs(pct)}%` };
+}
+
+function formatShortDuration(total: number): string {
+  if (total < 60) return `${total}s`;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
 // ─── Tiny UI helpers ──────────────────────────────────────────────────────
