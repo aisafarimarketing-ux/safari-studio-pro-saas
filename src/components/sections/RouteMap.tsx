@@ -257,7 +257,12 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        boundsOptions={{ padding: [48, 48] }}
+        // Generous padding + a hard cap on the auto-zoom so even a single-
+        // destination route (Day 1 = Day 7 = Arusha) shows the surrounding
+        // ground — parks, lakes, region names — instead of zooming so
+        // tight that the markers fill the viewport with no context.
+        boundsOptions={{ padding: [120, 120], maxZoom: 7 }}
+        minZoom={3}
         style={{ width: "100%", height: "100%" }}
         ref={(instance) => {
           mapRef.current = instance as unknown as import("leaflet").Map | null;

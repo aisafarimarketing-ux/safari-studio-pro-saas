@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
 import { nanoid } from "@/lib/nanoid";
+import { orderDestinations } from "@/lib/destinationOrdering";
 import type { Day, TierKey } from "@/lib/types";
 
 // AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
@@ -131,7 +132,14 @@ export async function POST(req: Request) {
   }
 
   const nights = Math.max(1, Math.min(60, Number(proposal.trip?.nights ?? 0) || 7));
-  const destinations = (proposal.trip?.destinations ?? []).filter((d): d is string => !!d?.trim());
+  // Reorder destinations into the typical safari sequence before drafting.
+  // Operators often type stops in any order ("Serengeti, Tarangire, Arusha");
+  // we route them through gateway → inner → coast so Day 1 lands at a
+  // sensible arrival city and the journey makes geographic sense. The
+  // editor can still override day-by-day after generation.
+  const destinations = orderDestinations(
+    (proposal.trip?.destinations ?? []).filter((d): d is string => !!d?.trim()),
+  );
   const tripStyle = proposal.trip?.tripStyle?.trim() || "Mid-range";
   const notes = proposal.trip?.operatorNote?.trim() || "";
   const guestNames = proposal.client?.guestNames?.trim() || "";
