@@ -292,24 +292,29 @@ export function ClosingSection({ section }: { section: Section }) {
                 </div>
               )}
 
-              {/* Primary CTAs — same height, same width on desktop */}
-              <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
+              {/* Primary CTAs — Confirm Booking is the moment of conversion;
+                  size it for prominence over the Download Quote alternate. */}
+              <a
+                href={confirmBookingHref}
+                className="h-14 mb-3 w-full flex items-center justify-center text-[15px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99]"
+                style={{
+                  background: isDark ? "white" : color.accent,
+                  color: isDark ? "#1d1d1f" : "white",
+                  maxWidth: 420,
+                  boxShadow: isDark
+                    ? "0 4px 18px rgba(255,255,255,0.18)"
+                    : "0 4px 18px rgba(0,0,0,0.18)",
+                }}
+              >
+                Confirm Booking →
+              </a>
+              <div className="mb-3" style={{ maxWidth: 420 }}>
                 <DownloadPdfButton
                   proposalId={proposal.id}
                   background={color.button}
                   textColor={color.heading}
                   borderColor={color.buttonBorder}
                 />
-                <a
-                  href={confirmBookingHref}
-                  className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
-                  style={{
-                    background: isDark ? "white" : color.accent,
-                    color: isDark ? "#1d1d1f" : "white",
-                  }}
-                >
-                  Confirm Booking
-                </a>
               </div>
               <button
                 type="button"
