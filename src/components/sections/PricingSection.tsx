@@ -333,23 +333,37 @@ function EditableList({
           {subhead}
         </div>
       )}
-      <ul className="mt-3 grid sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-2xl">
+      <ul className="mt-3 grid sm:grid-cols-2 gap-x-8 gap-y-2 max-w-2xl">
         {items.map((item, i) => (
           <li
             key={i}
-            className="group flex items-start gap-3 text-[14px] leading-[1.55]"
+            className="group flex items-center gap-3 text-[14px] leading-[1.45]"
             style={{ color: tokens.bodyText }}
           >
+            {/* ✓ for included, literal X for not included — matches the
+                operator's mental model better than identical bullet dots. */}
             <span
               aria-hidden
-              className="shrink-0 mt-[9px]"
+              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full"
               style={{
-                width: 4,
-                height: 4,
-                borderRadius: 999,
-                background: accentBullet ? tokens.accent : tokens.border,
+                background: accentBullet ? tokens.accent : tokens.mutedText,
+                color: "white",
               }}
-            />
+            >
+              {accentBullet ? (
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M2.5 6.5 L5 9 L9.5 3.5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                <span className="text-[10.5px] font-bold leading-none">X</span>
+              )}
+            </span>
             <span
               className="flex-1 outline-none"
               contentEditable={isEditor}
