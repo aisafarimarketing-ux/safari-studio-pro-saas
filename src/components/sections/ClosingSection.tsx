@@ -206,13 +206,10 @@ export function ClosingSection({ section }: { section: Section }) {
             style={{ height: 1, width: 80, background: color.border }}
           />
 
-          {/* ── Two-column footer ──────────────────────────────────── */}
-          <div
-            className="grid md:grid-cols-2"
-            style={{ gap: 0 }}
-          >
-            {/* Book your Safari */}
-            <div className="md:pr-12 md:border-r" style={{ borderColor: color.border }}>
+          {/* ── Booking-only footer — contact details now live in the
+              standalone Footer section that renders right after this one. */}
+          <div className="max-w-xl mx-auto">
+            <div>
               <div
                 className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
                 style={{ color: color.muted }}
@@ -359,152 +356,6 @@ export function ClosingSection({ section }: { section: Section }) {
               </div>
             </div>
 
-            {/* Contact Us */}
-            <div className="md:pl-12 mt-16 md:mt-0">
-              <div
-                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
-                style={{ color: color.muted }}
-              >
-                Contact Us
-              </div>
-
-              {/* Consultant */}
-              <div className="flex items-center gap-4 mb-8">
-                <div
-                  className="shrink-0 w-14 h-14 rounded-full overflow-hidden"
-                  style={{ background: color.coverLift }}
-                >
-                  {operator.consultantPhoto ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={operator.consultantPhoto}
-                      alt={operator.consultantName}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center text-lg font-bold"
-                      style={{ color: color.accent }}
-                    >
-                      {operator.consultantName?.charAt(0) ?? "·"}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div
-                    className="text-[15px] font-semibold leading-tight"
-                    style={{
-                      color: color.heading,
-                      fontFamily: `'${theme.displayFont}', serif`,
-                    }}
-                  >
-                    {operator.consultantName}
-                  </div>
-                  {operator.consultantRole && (
-                    <div
-                      className="text-[11.5px] mt-0.5"
-                      style={{ color: color.muted }}
-                    >
-                      {operator.consultantRole}
-                    </div>
-                  )}
-                  <div
-                    className="text-[12.5px] mt-0.5"
-                    style={{ color: color.muted }}
-                  >
-                    {operator.companyName}
-                  </div>
-                </div>
-              </div>
-
-              {/* Fact rows — aligned label column */}
-              <dl className="grid grid-cols-[92px_1fr] gap-y-2.5 text-[13px]">
-                {(operator.address || isEditor) && (
-                  <>
-                    <dt className="font-semibold" style={{ color: color.heading }}>Address</dt>
-                    <dd
-                      className="outline-none whitespace-pre-line"
-                      style={{ color: color.body }}
-                      contentEditable={isEditor}
-                      suppressContentEditableWarning
-                      onBlur={(e) =>
-                        updateOperator({
-                          address: e.currentTarget.textContent?.trim() ?? operator.address ?? "",
-                        })
-                      }
-                    >
-                      {operator.address || (isEditor ? "Street, city" : "")}
-                    </dd>
-                  </>
-                )}
-                {(operator.country || isEditor) && (
-                  <>
-                    <dt className="font-semibold" style={{ color: color.heading }}>Country</dt>
-                    <dd
-                      className="outline-none"
-                      style={{ color: color.body }}
-                      contentEditable={isEditor}
-                      suppressContentEditableWarning
-                      onBlur={(e) =>
-                        updateOperator({
-                          country: e.currentTarget.textContent?.trim() ?? operator.country ?? "",
-                        })
-                      }
-                    >
-                      {operator.country || (isEditor ? "Country" : "")}
-                    </dd>
-                  </>
-                )}
-                {(operator.whatsapp || isEditor) && (
-                  <>
-                    <dt className="font-semibold" style={{ color: color.heading }}>WhatsApp</dt>
-                    <dd
-                      className="outline-none"
-                      style={{ color: color.body }}
-                      contentEditable={isEditor}
-                      suppressContentEditableWarning
-                      onBlur={(e) =>
-                        updateOperator({
-                          whatsapp: e.currentTarget.textContent?.trim() ?? operator.whatsapp ?? "",
-                        })
-                      }
-                    >
-                      {operator.whatsapp || (isEditor ? "+1 555 …" : "")}
-                    </dd>
-                  </>
-                )}
-                <dt className="font-semibold" style={{ color: color.heading }}>Email</dt>
-                <dd
-                  className="outline-none truncate"
-                  style={{ color: color.body }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) =>
-                    updateOperator({
-                      email: e.currentTarget.textContent?.trim() ?? operator.email,
-                    })
-                  }
-                >
-                  {operator.email || (isEditor ? "email@…" : "")}
-                </dd>
-              </dl>
-
-              {(operator.website || isEditor) && (
-                <a
-                  href={normaliseUrl(operator.website)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-8 inline-block text-[13px] font-semibold transition hover:opacity-80"
-                  style={{
-                    color: color.heading,
-                    textDecoration: "underline",
-                    textUnderlineOffset: 4,
-                  }}
-                >
-                  Visit our website →
-                </a>
-              )}
-            </div>
           </div>
         </div>
       </div>

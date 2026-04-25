@@ -221,14 +221,15 @@ function buildDefaultSections(): Section[] {
     // in the default flow — still available in the registry for legacy.
     makeSection("pricing", 6, "editorial"),
     makeSection("practicalInfo", 7, "two-column-notes"),
-    // Closing-farewell carries the branded footer — no standalone footer
-    // section in the default flow anymore.
+    // Closing — focused booking moment. The contact details that used to
+    // live in this section's right column now live in the Footer below.
     makeSection("closing", 8, "closing-farewell", {
       quote: "Take only memories, leave only footprints.",
       attribution: "— Chief Seattle",
       signOff:
         "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
+    makeSection("footer", 9, "default"),
   ];
 }
 
@@ -400,14 +401,26 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
     if (sections.length !== before) changed = true;
   }
 
-  // ── 0a. Drop standalone footer sections — the closing-farewell variant
-  //    now renders the branded footer. Only drop when a closing section
-  //    exists so we don't strip the only contact block a user has.
+  // ── 0a. Add a standalone Footer section after Closing if one isn't
+  //    already present. Earlier versions baked the contact block into
+  //    the closing-farewell variant; the design has since split, so any
+  //    legacy proposal opened today gets a Footer auto-appended so the
+  //    consultant's contact details still appear on the last page.
   const hasClosing = sections.some((s) => s.type === "closing");
-  if (hasClosing) {
-    const before = sections.length;
-    sections = sections.filter((s) => s.type !== "footer");
-    if (sections.length !== before) changed = true;
+  const hasFooter = sections.some((s) => s.type === "footer");
+  if (hasClosing && !hasFooter) {
+    const closingIdx = sections.findIndex((s) => s.type === "closing");
+    const insertOrder =
+      closingIdx >= 0
+        ? (sections[closingIdx].order ?? closingIdx) + 1
+        : sections.length;
+    sections = [
+      ...sections,
+      {
+        ...makeSection("footer", insertOrder, "default"),
+      },
+    ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    changed = true;
   }
 
   // ── 0b. Drop standalone inclusions sections — the pricing editorial
