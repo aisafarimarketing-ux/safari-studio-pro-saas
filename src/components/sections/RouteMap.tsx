@@ -257,11 +257,12 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        // Generous padding + a hard cap on the auto-zoom so even a single-
-        // destination route (Day 1 = Day 7 = Arusha) shows the surrounding
-        // ground — parks, lakes, region names — instead of zooming so
-        // tight that the markers fill the viewport with no context.
-        boundsOptions={{ padding: [120, 120], maxZoom: 7 }}
+        // Modest padding so markers have breathing room without being lost
+        // in a sea of unrelated terrain. maxZoom of 9 lets compact routes
+        // (single park / one country) zoom in tight enough that the
+        // surrounding parks, lakes, and towns are *named* — that's the
+        // visible-ground test the operator's customer asked for.
+        boundsOptions={{ padding: [40, 40], maxZoom: 9 }}
         minZoom={3}
         style={{ width: "100%", height: "100%" }}
         ref={(instance) => {
