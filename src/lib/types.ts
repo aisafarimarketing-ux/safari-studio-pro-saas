@@ -110,6 +110,10 @@ export interface Day {
   description: string;
   board: string;
   heroImageUrl?: string;
+  /** CSS object-position for the hero image — operators drag the image in
+   *  the editor to recompose the crop. Format: "X% Y%" (e.g. "62.5% 38%").
+   *  Defaults to centered ("50% 50%") when absent. */
+  heroImagePosition?: string;
   transfer?: string;
   highlights?: string[];
   /** Operator-curated add-ons for this day (priced extras the guest can

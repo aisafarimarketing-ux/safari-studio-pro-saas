@@ -56,6 +56,7 @@ export function resolveDayCard(
     narrative: day.description ?? "",
     highlights: (day.highlights ?? []).slice(0, 3),
     destinationImageUrl: day.heroImageUrl?.trim() || null,
+    destinationImagePosition: day.heroImagePosition?.trim() || null,
     property,
     optionalActivities: day.optionalActivities ?? [],
     layoutVariant: getDayCardVariant(sectionLayoutVariant),

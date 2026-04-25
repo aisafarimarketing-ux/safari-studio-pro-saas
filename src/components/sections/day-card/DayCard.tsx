@@ -177,6 +177,8 @@ export function DayCard({
     onBoardChange,
     onDestinationImageUpload,
     onDestinationImagePickerOpen: () => setImagePickerOpen(true),
+    onDestinationImagePositionChange: (next: string) =>
+      updateDay(day.id, { heroImagePosition: next }),
     onOpenPropertyPicker: () => setPropPickerOpen(true),
     onPropertyImageUpload,
     onAddOptionalActivity: () => addOptionalActivity(day.id),

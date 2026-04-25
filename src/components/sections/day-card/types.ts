@@ -54,6 +54,9 @@ export type DayCardData = {
 
   // Imagery
   destinationImageUrl: string | null;  // day.heroImageUrl
+  /** Object-position for the destination hero, set when the operator
+   *  drags the image to recompose the crop. */
+  destinationImagePosition: string | null;
 
   // Property
   property: ResolvedProperty | null;
@@ -83,6 +86,8 @@ export type DayCardLayoutProps = {
   // Image actions — destination hero
   onDestinationImageUpload: (file: File) => void;
   onDestinationImagePickerOpen: () => void;
+  /** Persists a new object-position when the operator drags the hero. */
+  onDestinationImagePositionChange: (next: string) => void;
 
   // Property actions
   onOpenPropertyPicker: () => void;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { ThemeTokens } from "@/lib/types";
 
 // Universal image slot for day cards. Handles every interaction the brief
@@ -31,6 +31,11 @@ type Props = {
   children?: React.ReactNode;
   /** Gradient overlay on top of image (for when text sits on it). */
   overlay?: "none" | "bottom" | "top" | "both";
+  /** CSS object-position string ("X% Y%") for the image — operator drags
+   *  the image in editor mode to reposition. */
+  position?: string;
+  /** Persists the new object-position when the operator finishes dragging. */
+  onPositionChange?: (next: string) => void;
 };
 
 export function ImageSlot({
@@ -47,10 +52,67 @@ export function ImageSlot({
   style,
   children,
   overlay = "none",
+  position,
+  onPositionChange,
 }: Props) {
   const [dragging, setDragging] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Live drag-to-reposition. We store the in-flight position in state so
+  // the image follows the cursor smoothly, then persist once on mouse-up
+  // so a single drag doesn't fire 50 autosaves.
+  const dragPosRef = useRef<{
+    baseX: number;
+    baseY: number;
+    startX: number;
+    startY: number;
+    rectW: number;
+    rectH: number;
+    final: string;
+  } | null>(null);
+  const [livePosition, setLivePosition] = useState<string>(position?.trim() || "50% 50%");
+  useEffect(() => {
+    if (!dragPosRef.current) setLivePosition(position?.trim() || "50% 50%");
+  }, [position]);
+
+  const repositionEnabled = isEditor && !!url && !!onPositionChange;
+  const onImageMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!repositionEnabled || e.button !== 0) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const [bx, by] = parseObjectPosition(livePosition);
+    dragPosRef.current = {
+      baseX: bx,
+      baseY: by,
+      startX: e.clientX,
+      startY: e.clientY,
+      rectW: rect.width,
+      rectH: rect.height,
+      final: livePosition,
+    };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragPosRef.current;
+      if (!d) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      // Drag image right → visible window slides left → object-position X falls.
+      const nx = clampPct(d.baseX - (dx / d.rectW) * 100);
+      const ny = clampPct(d.baseY - (dy / d.rectH) * 100);
+      const next = `${nx.toFixed(1)}% ${ny.toFixed(1)}%`;
+      d.final = next;
+      setLivePosition(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      const finalPos = dragPosRef.current?.final;
+      dragPosRef.current = null;
+      if (finalPos && finalPos !== position) onPositionChange?.(finalPos);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   const triggerPicker = () => inputRef.current?.click();
 
@@ -116,6 +178,11 @@ export function ImageSlot({
           src={url}
           alt={alt}
           className="absolute inset-0 w-full h-full object-cover"
+          style={{
+            objectPosition: livePosition,
+            cursor: repositionEnabled ? "move" : undefined,
+          }}
+          onMouseDown={onImageMouseDown}
           draggable={false}
         />
       ) : (
@@ -269,6 +336,16 @@ function EmptySlot({
       )}
     </button>
   );
+}
+
+function parseObjectPosition(p: string): [number, number] {
+  const m = /(-?\d+(?:\.\d+)?)\s*%\s+(-?\d+(?:\.\d+)?)\s*%/.exec(p);
+  if (!m) return [50, 50];
+  return [Number(m[1]), Number(m[2])];
+}
+
+function clampPct(n: number): number {
+  return Math.max(0, Math.min(100, n));
 }
 
 function MenuItem({

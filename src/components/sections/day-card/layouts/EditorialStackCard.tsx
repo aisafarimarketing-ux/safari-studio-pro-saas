@@ -35,6 +35,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
     onNarrativeChange,
     onDestinationImageUpload,
     onDestinationImagePickerOpen,
+    onDestinationImagePositionChange,
   } = props;
 
   return (
@@ -105,7 +106,8 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         </div>
       </div>
 
-      {/* Hero image — dominant */}
+      {/* Hero image — dominant. Operator can drag it in editor mode to
+          recompose the crop. */}
       <ImageSlot
         url={data.destinationImageUrl}
         alt={data.destinationName}
@@ -116,6 +118,8 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         placeholderLabel="Add a wildlife or location photo"
         placeholderHint="Pick something cinematic — this is the face of the day."
         style={{ aspectRatio: "21 / 9" }}
+        position={data.destinationImagePosition ?? undefined}
+        onPositionChange={onDestinationImagePositionChange}
       />
 
       {/* Narrative body + AI write/rewrite */}

@@ -4,6 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
+import { DraggableImage } from "@/components/ui/DraggableImage";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 function CoverMeta({
@@ -40,7 +41,10 @@ export function CoverSection({ section }: { section: Section }) {
   const { client, trip, operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const heroUrl = section.content.heroImageUrl as string | undefined;
+  const heroPosition = section.content.heroImagePosition as string | undefined;
   const variant = section.layoutVariant;
+  const onHeroPositionChange = (next: string) =>
+    updateSectionContent(section.id, { heroImagePosition: next });
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,11 +136,13 @@ export function CoverSection({ section }: { section: Section }) {
             onContextMenu={handleImageContextMenu}
           >
             {heroUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <DraggableImage
                 src={heroUrl}
                 alt="Cover"
                 className="absolute inset-0 w-full h-full object-cover"
+                position={heroPosition}
+                onPositionChange={onHeroPositionChange}
+                isEditor={isEditor}
               />
             ) : isEditor ? (
               <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
@@ -326,11 +332,13 @@ export function CoverSection({ section }: { section: Section }) {
           onContextMenu={handleImageContextMenu}
         >
           {heroUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <DraggableImage
               src={heroUrl}
               alt="Cover"
               className="absolute inset-0 w-full h-full object-cover"
+              position={heroPosition}
+              onPositionChange={onHeroPositionChange}
+              isEditor={isEditor}
             />
           ) : isEditor ? (
             <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
@@ -461,8 +469,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Hero */}
         {heroUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group bg-black/30">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -613,8 +620,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Full-bleed hero */}
         {heroUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -816,7 +822,7 @@ export function CoverSection({ section }: { section: Section }) {
         style={{ background: tokens.accent }}
       >
         {heroUrl ? (
-          <img src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex items-center justify-center">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -888,7 +894,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Full-bleed image */}
         <div className="absolute inset-0">
           {heroUrl ? (
-            <img src={heroUrl} alt="Cover" className="w-full h-full object-cover" />
+            <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
           ) : isEditor ? (
             <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer" style={{ background: tokens.accent }}>
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -969,7 +975,7 @@ export function CoverSection({ section }: { section: Section }) {
       {/* Right: full-bleed image */}
       <div className="absolute inset-0">
         {heroUrl ? (
-          <img src={heroUrl} alt="Cover" className="w-full h-full object-cover" />
+          <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
         ) : isEditor ? (
           <label
             className="w-full h-full flex flex-col items-center justify-center cursor-pointer"
