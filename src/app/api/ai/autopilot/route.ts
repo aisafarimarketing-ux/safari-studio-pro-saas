@@ -62,7 +62,15 @@ type AutopilotDayOut = {
   description?: string;
   board?: string;
   highlights?: string[];
+  optionalActivities?: AutopilotOptionalActivity[];
   tiers?: Partial<Record<TierKey, { slot?: number; note?: string }>>;
+};
+
+type AutopilotOptionalActivity = {
+  title?: string;
+  location?: string;
+  timeOfDay?: string;
+  description?: string;
 };
 
 type AutopilotPracticalCard = {
@@ -190,9 +198,12 @@ The JSON shape (all keys required unless marked optional):
       "destination": "Place name",
       "country": "Country",
       "subtitle": "One short line (≤8 words) — optional, can be empty string",
-      "description": "2-3 grounded sentences. Open with a fact: a distance, a time, a named feature. No clichés.",
+      "description": "Lead line + supporting paragraphs separated by blank lines. The first paragraph is one sentence — the day's headline action — and MUST end on the named place wrapped in **double-asterisk bold**, e.g. '…drive southwestwards to **Tarangire National Park**.' Then 1–3 supporting paragraphs of grounded prose, also wrapping any park / region / camp names in **bold**. No clichés.",
       "board": "Full board" | "Half board" | "B&B" | "All inclusive",
       "highlights": ["short bullet", "short bullet"],
+      "optionalActivities": [
+        { "title": "Short activity name", "location": "Where it happens", "timeOfDay": "Morning" | "Afternoon" | "Evening" | "All Day", "description": "Optional 1-sentence note (≤25 words), or empty string" }
+      ],
       "tiers": {
         "classic":   { "slot": 3, "note": "optional short note" },
         "premier":   { "slot": 7, "note": "" },
@@ -240,6 +251,12 @@ DAYS:
 - Spread the destinations across the days sensibly (no single-night stops unless the trip demands it).
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
+
+OPTIONAL ACTIVITIES:
+- Produce 2–4 optional add-ons per day that genuinely belong to the day's destination. Real, specific things — named walks, named viewpoints, cultural visits, cooking classes, balloon safaris, hot springs, bike rides — not generic filler.
+- Each title is a short noun phrase (≤8 words). Each location is the named place it happens at (will be bolded in the UI). timeOfDay must be one of: Morning, Afternoon, Evening, All Day.
+- Do NOT include price — the operator sets prices manually.
+- Arrival days, departure days, and long-transit days can have fewer optionals (1–2 is fine). Game-drive days in iconic parks should have 3–4.
 
 FIRST AND LAST DAYS ARE FIXED POINTS — no exceptions:
 - Day 1 MUST use the FIRST destination in the input "destinations" list. This is the arrival gateway (usually Arusha, Nairobi, or similar). Never invent a different Day 1 city.
@@ -324,6 +341,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     highlights: Array.isArray(d.highlights)
       ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5)
       : undefined,
+    optionalActivities: pickOptionalActivities(d.optionalActivities),
     tiers: {
       classic: pickTier(d.tiers?.classic, library),
       premier: pickTier(d.tiers?.premier, library),
@@ -432,6 +450,31 @@ function stringArray(v: unknown, max: number): string[] {
 function stripFences(text: string): string {
   const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(text.trim());
   return fence ? fence[1].trim() : text.trim();
+}
+
+const ALLOWED_TIME_OF_DAY = new Set(["Morning", "Afternoon", "Evening", "All Day"]);
+
+function pickOptionalActivities(
+  raw: AutopilotOptionalActivity[] | undefined,
+): import("@/lib/types").OptionalActivity[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned = raw
+    .map((a) => {
+      const title = stringOr(a?.title, "").slice(0, 80);
+      if (!title) return null;
+      const rawTime = stringOr(a?.timeOfDay, "");
+      const timeOfDay = ALLOWED_TIME_OF_DAY.has(rawTime) ? rawTime : "Morning";
+      return {
+        id: nanoid(),
+        title,
+        location: stringOr(a?.location, "").slice(0, 80) || undefined,
+        timeOfDay,
+        description: stringOr(a?.description, "").slice(0, 240) || undefined,
+      };
+    })
+    .filter((a): a is NonNullable<typeof a> => a !== null)
+    .slice(0, 6);
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 function pickTier(

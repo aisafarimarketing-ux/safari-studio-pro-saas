@@ -128,16 +128,42 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
             />
           </div>
         )}
-        <div
-          className="text-[15px] leading-[1.85] whitespace-pre-line outline-none max-w-[68ch]"
-          style={{ color: tokens.bodyText }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          data-ai-editable="day-narrative"
-          onBlur={(e) => onNarrativeChange(e.currentTarget.textContent ?? "")}
-        >
-          {data.narrative || (isEditor ? "Write the day's narrative…" : "")}
+
+        {/* Activity / Activities Day N — pluralizes when optional add-ons exist */}
+        <div className="mb-2">
+          <h3
+            className="text-[20px] font-bold leading-tight"
+            style={{ color: tokens.headingText }}
+          >
+            {(data.optionalActivities?.length ?? 0) > 0 ? "Activities" : "Activity"}{" "}
+            <span style={{ color: tokens.mutedText, fontWeight: 500 }}>
+              Day {data.dayNumber}
+            </span>
+          </h3>
         </div>
+
+        {/* Time-of-day subhead for the main activity block */}
+        <div
+          className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
+          style={{ color: tokens.headingText }}
+        >
+          All Day
+        </div>
+
+        {isEditor ? (
+          <div
+            className="text-[15px] leading-[1.85] whitespace-pre-line outline-none max-w-[68ch]"
+            style={{ color: tokens.bodyText }}
+            contentEditable
+            suppressContentEditableWarning
+            data-ai-editable="day-narrative"
+            onBlur={(e) => onNarrativeChange(e.currentTarget.textContent ?? "")}
+          >
+            {data.narrative || "Write the day's narrative… use **bold** for place names."}
+          </div>
+        ) : (
+          <NarrativeBody narrative={data.narrative ?? ""} tokens={tokens} />
+        )}
       </div>
 
       {/* Optional add-ons — subtle upsell block */}
@@ -173,7 +199,7 @@ function OptionalBlock(props: DayCardLayoutProps) {
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
           style={{ color: tokens.mutedText }}
         >
-          Optional add-ons
+          Optional
         </div>
         {isEditor && (
           <button
@@ -507,4 +533,64 @@ function AccommodationBlock(props: DayCardLayoutProps) {
       )}
     </div>
   );
+}
+
+// ─── Narrative body (read-mode renderer) ──────────────────────────────────
+// Splits the day's prose into a lead arrow line + supporting paragraphs.
+// Recognizes **bold** for inline place-name emphasis. Editor mode keeps the
+// raw markdown so contentEditable doesn't strip our formatting on save.
+
+function NarrativeBody({
+  narrative,
+  tokens,
+}: {
+  narrative: string;
+  tokens: DayCardLayoutProps["tokens"];
+}) {
+  const paragraphs = narrative
+    .split(/\n{2,}|\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return null;
+  const [lead, ...rest] = paragraphs;
+  return (
+    <div className="max-w-[68ch] space-y-4">
+      <div
+        className="flex gap-3 text-[15px] leading-[1.85]"
+        style={{ color: tokens.bodyText }}
+      >
+        <span
+          className="shrink-0 select-none"
+          style={{ color: tokens.accent }}
+          aria-hidden
+        >
+          →
+        </span>
+        <span>{renderInlineBold(lead)}</span>
+      </div>
+      {rest.map((p, i) => (
+        <p
+          key={i}
+          className="text-[15px] leading-[1.85]"
+          style={{ color: tokens.bodyText }}
+        >
+          {renderInlineBold(p)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function renderInlineBold(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} style={{ fontWeight: 700 }}>
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }

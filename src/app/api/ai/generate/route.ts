@@ -60,11 +60,20 @@ Return ONLY the title text. No quotes, no preamble, no explanation.
 Context:
 ${ctx}`;
     case "day":
-      return `Write a 2-3 sentence day narrative for a safari proposal.
-Open with a concrete observation — a time, terrain feature, season, conservancy/region name, or wildlife behaviour. Not the destination as hero, not an adjective.
-Use named camps, regions, conservancies, board basis, and activities from the context. Skip what isn't there. Don't fabricate camp names, guides, or experiences.
-If the context is thin, write less.
-Return ONLY the narrative paragraph.
+      return `Write a day narrative for a safari proposal in this exact two-part shape:
+
+PART 1 — LEAD LINE (one sentence):
+- A single concrete sentence describing the headline action of the day.
+- Open with a fact (a time, distance, terrain feature, or behaviour). Not the destination as hero, not an adjective.
+- The sentence MUST end on the day's main named place wrapped in **double-asterisk bold** — e.g. "…drive southwestwards to **Tarangire National Park**."
+
+PART 2 — SUPPORTING PROSE (1–3 short paragraphs, separated from the lead by a blank line):
+- Grounded prose about what happens in the place: terrain, wildlife, camp life, what fills the day.
+- Wrap any park, region, river, conservancy, or camp name in **bold** the first time it appears.
+- Use named camps, regions, board basis, and activities from the context. Skip what isn't there. Don't fabricate.
+
+If the context is thin, write less — one short supporting paragraph is fine. Never pad.
+Return ONLY the narrative text (lead line + blank line + paragraphs). No headings, no labels.
 
 Context:
 ${ctx}`;
