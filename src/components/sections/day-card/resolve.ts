@@ -48,6 +48,7 @@ export function resolveDayCard(
   return {
     dayId: day.id,
     dayNumber: day.dayNumber,
+    dayDate: resolveDayDate(day, proposal.trip?.arrivalDate),
     destinationName: day.destination?.trim() || "New Destination",
     destinationCountry: day.country?.trim() || "",
     phaseLabel: day.subtitle?.trim() ?? "",
@@ -65,4 +66,35 @@ function firstSentences(text: string, n: number): string {
   if (!text) return "";
   const parts = text.split(/(?<=[.!?])\s+/);
   return parts.slice(0, n).join(" ").trim();
+}
+
+// Use UTC throughout — the trip's arrivalDate is stored as a calendar date
+// (YYYY-MM-DD) with no timezone, so doing the math in local time would
+// drift the day by ±1 for any guest viewing the proposal from a different
+// region than the operator who set it up.
+function resolveDayDate(day: Day, arrivalDateISO: string | undefined): string | null {
+  const explicit = day.date?.trim();
+  if (explicit) {
+    const parsed = parseISODate(explicit);
+    if (parsed) return formatDayDate(parsed);
+  }
+  if (!arrivalDateISO) return null;
+  const start = parseISODate(arrivalDateISO);
+  if (!start) return null;
+  start.setUTCDate(start.getUTCDate() + Math.max(0, day.dayNumber - 1));
+  return formatDayDate(start);
+}
+
+function parseISODate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDayDate(d: Date): string {
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  const month = d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  return `${weekday} ${day} ${month}`;
 }

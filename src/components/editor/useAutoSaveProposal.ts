@@ -116,12 +116,28 @@ export function useAutoSaveProposal(enabled: boolean): {
       setState("saving");
       setError(null);
       try {
-        const res = await fetch("/api/proposals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
-        });
-        if (res.status === 401) { window.location.href = "/sign-in"; return; }
+        const postOnce = () =>
+          fetch("/api/proposals", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+          });
+
+        let res = await postOnce();
+
+        // Transient 401s happen when a Clerk session token is refreshing
+        // mid-flight. Retrying once after a short pause lets the new token
+        // attach. Auto-redirecting on the first 401 used to yank the user
+        // out of the editor mid-edit — the sign-in page sees them as still
+        // signed in and bounces them to /dashboard, which presents as the
+        // editor "randomly jumping to dashboard". Don't do that.
+        if (res.status === 401) {
+          await new Promise((r) => setTimeout(r, 1500));
+          res = await postOnce();
+        }
+        if (res.status === 401) {
+          throw new Error("Session expired — refresh the page to sign in again.");
+        }
         if (res.status === 402) { window.location.href = "/account-suspended"; return; }
         if (res.status === 409) { window.location.href = "/select-organization"; return; }
         if (!res.ok) {

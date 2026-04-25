@@ -38,6 +38,9 @@ export type DayCardData = {
   // Identity
   dayId: string;
   dayNumber: number;
+  /** Formatted calendar date for this day, derived from proposal.trip.arrivalDate
+   *  + (dayNumber - 1) — e.g. "Mon 12 Aug". Null when no arrival date is set. */
+  dayDate: string | null;
 
   // Place + phase
   destinationName: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
@@ -293,19 +294,12 @@ export function ClosingSection({ section }: { section: Section }) {
 
               {/* Primary CTAs — same height, same width on desktop */}
               <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
-                <a
-                  href={`/p/${proposal.id}/print`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85"
-                  style={{
-                    background: color.button,
-                    color: color.heading,
-                    border: `1px solid ${color.buttonBorder}`,
-                  }}
-                >
-                  Download Quote
-                </a>
+                <DownloadPdfButton
+                  proposalId={proposal.id}
+                  background={color.button}
+                  textColor={color.heading}
+                  borderColor={color.buttonBorder}
+                />
                 <a
                   href={confirmBookingHref}
                   className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
@@ -1013,19 +1007,12 @@ function BookAndContactFooter({
         )}
 
         <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
-          <a
-            href={`/p/${proposal.id}/print`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85"
-            style={{
-              background: color.button,
-              color: color.heading,
-              border: `1px solid ${color.buttonBorder}`,
-            }}
-          >
-            Download Quote
-          </a>
+          <DownloadPdfButton
+            proposalId={proposal.id}
+            background={color.button}
+            textColor={color.heading}
+            borderColor={color.buttonBorder}
+          />
           <a
             href={confirmBookingHref}
             className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
@@ -1209,5 +1196,67 @@ function BookAndContactFooter({
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Download Quote button ────────────────────────────────────────────────
+// POSTs to the public PDF endpoint (no org auth — guests viewing the share
+// link don't have one) and triggers a real file download. Replaces the old
+// "open the print webview in a new tab" behaviour, which left guests
+// staring at the on-screen rendition and wondering where the download was.
+
+function DownloadPdfButton({
+  proposalId,
+  background,
+  textColor,
+  borderColor,
+}: {
+  proposalId: string;
+  background: string;
+  textColor: string;
+  borderColor: string;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/public/proposals/${proposalId}/pdf`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = /filename="?([^"]+)"?/.exec(cd);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = match ? match[1] : `proposal-${proposalId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Download failed";
+      alert(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85 disabled:opacity-65 disabled:cursor-wait"
+      style={{ background, color: textColor, border: `1px solid ${borderColor}` }}
+    >
+      {busy ? "Preparing PDF…" : "Download Quote"}
+    </button>
   );
 }

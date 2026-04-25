@@ -308,7 +308,7 @@ export function CoverSection({ section }: { section: Section }) {
           <div className="flex items-center gap-3">
             {operator.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-9 object-contain" />
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
             ) : (
               <span
                 className="text-[10px] uppercase tracking-[0.32em] font-semibold"
@@ -428,7 +428,7 @@ export function CoverSection({ section }: { section: Section }) {
           <div className="flex items-center gap-3">
             {operator.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-9 object-contain" />
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
             ) : (
               <span
                 className="text-[11px] uppercase tracking-[0.32em] font-semibold text-white/85"
@@ -592,7 +592,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Top bar */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-10">
           {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-9 object-contain" />
+            <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
           ) : (
             <span className="text-white/70 text-xs uppercase tracking-[0.25em] font-semibold">
               {operator.companyName}
@@ -687,7 +687,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Operator top-left */}
         <div className="absolute top-8 left-10">
           {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-7 object-contain" />
+            <img src={operator.logoUrl} alt={operator.companyName} className="h-14 md:h-16 object-contain" />
           ) : (
             <span className="text-[10px] uppercase tracking-[0.3em] font-semibold" style={{ color: tokens.mutedText }}>
               {operator.companyName}
@@ -850,7 +850,7 @@ export function CoverSection({ section }: { section: Section }) {
         <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
           <div className="flex items-center justify-end gap-3">
             {operator.logoUrl ? (
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-8 object-contain" />
+              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
             ) : (
               <span className="text-white/60 text-xs uppercase tracking-[0.25em] font-semibold">{operator.companyName}</span>
             )}
@@ -946,7 +946,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Top: operator */}
         <div className="flex items-center gap-3">
           {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-8 object-contain" />
+            <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
           ) : (
             <span className="text-white/60 text-xs uppercase tracking-[0.25em] font-semibold">
               {operator.companyName}

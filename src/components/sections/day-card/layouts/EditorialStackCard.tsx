@@ -45,14 +45,24 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         style={{ background: tokens.sectionSurface }}
       >
         <div
-          className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold tabular-nums"
+          className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-[0.18em]"
           style={{
             background: tokens.accent,
             color: "white",
             fontFamily: `'${theme.bodyFont}', sans-serif`,
           }}
         >
-          {data.dayNumber}
+          <span className="tabular-nums">
+            Day {String(data.dayNumber).padStart(2, "0")}
+          </span>
+          {data.dayDate && (
+            <>
+              <span aria-hidden style={{ opacity: 0.55 }}>·</span>
+              <span className="tabular-nums" style={{ opacity: 0.92 }}>
+                {data.dayDate}
+              </span>
+            </>
+          )}
         </div>
         <div className="flex-1 min-w-0 flex items-baseline gap-3 flex-wrap">
           <span
