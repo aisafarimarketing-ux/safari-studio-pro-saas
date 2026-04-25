@@ -14,6 +14,10 @@ export type AutopilotResult = {
   closing?: { quote?: string; signOff?: string };
   map?: { caption?: string };
   quote?: { quote?: string; attribution?: string };
+  /** Destinations reordered into typical safari sequence — the cover and
+   *  other sections render this list directly, so we persist the sorted
+   *  order back into the proposal rather than just using it for drafting. */
+  trip?: { destinations?: string[] };
   days?: Day[];
   inclusions?: string[];
   exclusions?: string[];
@@ -41,6 +45,13 @@ export function mergeAutopilotIntoProposal(
   next.days = draft.days && draft.days.length > 0 ? draft.days : proposal.days;
   next.inclusions = draft.inclusions?.length ? draft.inclusions : proposal.inclusions;
   next.exclusions = draft.exclusions?.length ? draft.exclusions : proposal.exclusions;
+
+  // ── Trip — replace destinations with the AI-routed order so the cover
+  //    and other sections show stops in geographic safari sequence even
+  //    if the operator typed them in any order at Trip Setup.
+  if (draft.trip?.destinations && draft.trip.destinations.length > 0) {
+    next.trip = { ...proposal.trip, destinations: draft.trip.destinations };
+  }
   next.practicalInfo =
     draft.practicalInfo && draft.practicalInfo.length > 0
       ? draft.practicalInfo

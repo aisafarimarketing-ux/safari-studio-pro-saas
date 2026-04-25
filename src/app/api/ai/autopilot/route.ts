@@ -410,6 +410,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     closing,
     map,
     quote,
+    trip: { destinations },
     days,
     inclusions,
     exclusions,

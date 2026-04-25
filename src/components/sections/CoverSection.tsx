@@ -4,8 +4,17 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
+import { orderDestinations } from "@/lib/destinationOrdering";
 import { DraggableImage } from "@/components/ui/DraggableImage";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
+
+// "8 days / 7 nights" — safari convention is nights+1 days. Operators
+// asked for both numbers everywhere on the cover, in that order.
+function formatDuration(nights: number | undefined): string {
+  if (!nights || nights < 1) return "—";
+  const days = nights + 1;
+  return `${days} days / ${nights} nights`;
+}
 
 function CoverMeta({
   label,
@@ -45,6 +54,12 @@ export function CoverSection({ section }: { section: Section }) {
   const variant = section.layoutVariant;
   const onHeroPositionChange = (next: string) =>
     updateSectionContent(section.id, { heroImagePosition: next });
+
+  // Always render destinations in geographic safari order, regardless of
+  // the order the operator typed them in at Trip Setup. Old proposals
+  // that pre-date the autopilot reorder still get a sensible cover.
+  const orderedDestinations = orderDestinations(trip.destinations);
+  const durationLabel = formatDuration(trip.nights);
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -185,12 +200,12 @@ export function CoverSection({ section }: { section: Section }) {
               >
                 {trip.title}
               </h1>
-              {trip.destinations.length > 0 && (
+              {orderedDestinations.length > 0 && (
                 <div
                   className="mt-4 text-[11px] uppercase tracking-[0.32em] text-white/70 font-semibold"
                   aria-label="Destinations"
                 >
-                  {trip.destinations.slice(0, 6).join("  ·  ")}
+                  {orderedDestinations.slice(0, 6).join("  ·  ")}
                 </div>
               )}
             </div>
@@ -386,12 +401,12 @@ export function CoverSection({ section }: { section: Section }) {
 
           {/* Middle — destinations + title + tagline */}
           <div className="py-10">
-            {trip.destinations.length > 0 && (
+            {orderedDestinations.length > 0 && (
               <div
                 className="text-[10px] uppercase tracking-[0.36em] mb-5"
                 style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
               >
-                {trip.destinations.slice(0, 4).join("  ·  ")}
+                {orderedDestinations.slice(0, 4).join("  ·  ")}
               </div>
             )}
             <h1
@@ -446,7 +461,7 @@ export function CoverSection({ section }: { section: Section }) {
               </span>
             </CoverMeta>
             <CoverMeta label="Duration" tokens={tokens} theme={theme}>
-              {trip.nights ? `${trip.nights} nights` : "—"}
+              {durationLabel}
             </CoverMeta>
             <CoverMeta label="Party" tokens={tokens} theme={theme}>
               {client.pax || "—"}
@@ -520,12 +535,12 @@ export function CoverSection({ section }: { section: Section }) {
             }}
           >
             <div className="max-w-[820px]">
-              {trip.destinations.length > 0 && (
+              {orderedDestinations.length > 0 && (
                 <div
                   className="text-[10px] uppercase tracking-[0.36em] mb-5"
                   style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
                 >
-                  {trip.destinations.slice(0, 4).join("  ·  ")}
+                  {orderedDestinations.slice(0, 4).join("  ·  ")}
                 </div>
               )}
 
@@ -582,7 +597,7 @@ export function CoverSection({ section }: { section: Section }) {
                   </span>
                 </CoverMeta>
                 <CoverMeta label="Duration" tokens={tokens} theme={theme}>
-                  {trip.nights ? `${trip.nights} nights` : "—"}
+                  {durationLabel}
                 </CoverMeta>
                 <CoverMeta label="Party" tokens={tokens} theme={theme}>
                   {client.pax || "—"}
@@ -670,9 +685,9 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Centre — destination tags + giant title */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-8 py-16">
-          {trip.destinations.length > 0 && (
+          {orderedDestinations.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2 mb-8">
-              {trip.destinations.map((d) => (
+              {orderedDestinations.map((d) => (
                 <span
                   key={d}
                   className="px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase"
@@ -726,7 +741,7 @@ export function CoverSection({ section }: { section: Section }) {
               </div>
               <div className="text-white/55 text-sm mt-0.5 outline-none" contentEditable={isEditor} suppressContentEditableWarning
                 onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}>
-                {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+                {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
               </div>
             </div>
             {client.pax && (
@@ -760,9 +775,9 @@ export function CoverSection({ section }: { section: Section }) {
 
         <div className="max-w-3xl">
           {/* Destinations as overline */}
-          {trip.destinations.length > 0 && (
+          {orderedDestinations.length > 0 && (
             <div className="text-[10px] uppercase tracking-[0.35em] mb-6" style={{ color: tokens.accent }}>
-              {trip.destinations.join(" · ")}
+              {orderedDestinations.join(" · ")}
             </div>
           )}
 
@@ -806,7 +821,7 @@ export function CoverSection({ section }: { section: Section }) {
               suppressContentEditableWarning
               onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
             >
-              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
             </div>
           </div>
         </div>
@@ -872,7 +887,7 @@ export function CoverSection({ section }: { section: Section }) {
               suppressContentEditableWarning
               onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
             >
-              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
             </div>
           </div>
         </div>
@@ -920,9 +935,9 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
 
           <div className="space-y-6 text-right">
-            {trip.destinations.length > 0 && (
+            {orderedDestinations.length > 0 && (
               <div className="flex flex-wrap justify-end gap-2">
-                {trip.destinations.map((d) => (
+                {orderedDestinations.map((d) => (
                   <span key={d} className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
                     style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)", border: "1px solid rgba(255,255,255,0.18)" }}>
                     {d}
@@ -954,7 +969,7 @@ export function CoverSection({ section }: { section: Section }) {
             <div className="text-white/55 text-sm outline-none"
               contentEditable={isEditor} suppressContentEditableWarning
               onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}>
-              {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}{client.pax ? ` · ${client.pax}` : ""}
+              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}{client.pax ? ` · ${client.pax}` : ""}
             </div>
           </div>
         </div>
@@ -1019,9 +1034,9 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Middle: destinations + title + tagline */}
         <div className="space-y-6">
-          {trip.destinations.length > 0 && (
+          {orderedDestinations.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {trip.destinations.map((d) => (
+              {orderedDestinations.map((d) => (
                 <span
                   key={d}
                   className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
@@ -1079,7 +1094,7 @@ export function CoverSection({ section }: { section: Section }) {
             suppressContentEditableWarning
             onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
           >
-            {trip.dates}{trip.nights ? ` · ${trip.nights} nights` : ""}
+            {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
             {client.pax ? ` · ${client.pax}` : ""}
           </div>
           {operator.consultantName && (
