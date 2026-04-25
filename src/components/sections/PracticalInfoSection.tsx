@@ -57,7 +57,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   // ── Icon-list — compact list with icons ──────────────────────────────────────
   if (variant === "icon-list") {
     return (
-      <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.pageBg }}>
+      <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
         <div className="max-w-3xl mx-auto">
           <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
             Good to know
@@ -140,7 +140,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   const isGrid = variant === "card-grid";
 
   return (
-    <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.pageBg }}>
+    <div className="py-20 md:py-24 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
         <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
           Good to know
