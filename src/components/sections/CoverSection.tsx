@@ -803,7 +803,7 @@ export function CoverSection({ section }: { section: Section }) {
             {(section.content.tagline as string) || trip.subtitle}
           </p>
 
-          <div className="mt-10 flex items-center gap-6" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
             <div
               className="text-base font-semibold outline-none"
               style={{ color: tokens.headingText }}
@@ -811,7 +811,7 @@ export function CoverSection({ section }: { section: Section }) {
               suppressContentEditableWarning
               onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
             >
-              {client.guestNames}
+              For {client.guestNames}
             </div>
             <span style={{ color: tokens.border }}>|</span>
             <div
@@ -823,6 +823,14 @@ export function CoverSection({ section }: { section: Section }) {
             >
               {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
             </div>
+            {client.pax && (
+              <>
+                <span style={{ color: tokens.border }}>|</span>
+                <div className="text-sm" style={{ color: tokens.mutedText }}>
+                  {client.pax}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -857,11 +865,19 @@ export function CoverSection({ section }: { section: Section }) {
             className="max-w-lg text-center p-12 md:p-16 rounded-2xl"
             style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)" }}
           >
-            {operator.companyName && (
+            {operator.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={operator.logoUrl}
+                alt={operator.companyName}
+                className="h-14 md:h-16 mx-auto mb-6 object-contain"
+                style={{ filter: "brightness(0) invert(1)", opacity: 0.92 }}
+              />
+            ) : operator.companyName ? (
               <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 mb-8 font-semibold">
                 {operator.companyName}
               </div>
-            )}
+            ) : null}
             <h1
               className="text-[clamp(2rem,5vw,3.5rem)] font-bold text-white leading-[1.05] outline-none"
               style={{ fontFamily: `'${theme.displayFont}', serif` }}
@@ -871,6 +887,11 @@ export function CoverSection({ section }: { section: Section }) {
             >
               {trip.title}
             </h1>
+            {orderedDestinations.length > 0 && (
+              <div className="mt-4 text-[10.5px] uppercase tracking-[0.32em] text-white/65 font-semibold">
+                {orderedDestinations.slice(0, 5).join("  ·  ")}
+              </div>
+            )}
             <div className="w-10 mx-auto my-6" style={{ height: "1px", background: "rgba(255,255,255,0.25)" }} />
             <div
               className="text-white/70 text-sm outline-none"
@@ -879,7 +900,7 @@ export function CoverSection({ section }: { section: Section }) {
               suppressContentEditableWarning
               onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
             >
-              {client.guestNames}
+              For {client.guestNames}
             </div>
             <div
               className="text-white/45 text-xs mt-2 outline-none"
@@ -887,7 +908,7 @@ export function CoverSection({ section }: { section: Section }) {
               suppressContentEditableWarning
               onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
             >
-              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
+              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}{client.pax ? ` · ${client.pax}` : ""}
             </div>
           </div>
         </div>
