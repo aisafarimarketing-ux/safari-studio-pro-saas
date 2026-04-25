@@ -100,8 +100,30 @@ export function CoverSection({ section }: { section: Section }) {
         {/* 1mm-ish taupe top border — brand chrome */}
         <div style={{ height: 8, background: taupe }} />
 
-        {/* Hero zone — full-width photo + title overlay (logo moved to the
-            sign-off block below so the cover photo reads cleanly). */}
+        {/* Logo strip — operator branding above the hero. Used to live only
+            in the PersonalNote sign-off; operators told us the cover felt
+            anonymous without it. */}
+        {(operator.logoUrl || operator.companyName) && (
+          <div className="px-10 md:px-14 pt-7 pb-5 flex items-center">
+            {operator.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={operator.logoUrl}
+                alt={operator.companyName}
+                className="h-16 md:h-20 object-contain"
+              />
+            ) : (
+              <span
+                className="text-[12px] uppercase tracking-[0.32em] font-semibold"
+                style={{ color: tokens.headingText }}
+              >
+                {operator.companyName}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Hero zone — full-width photo + title overlay */}
         <div className="relative">
           {/* Full-width hero photo */}
           <div
@@ -127,7 +149,7 @@ export function CoverSection({ section }: { section: Section }) {
               </label>
             ) : null}
 
-            {/* Dark overlay at bottom with title */}
+            {/* Dark overlay at bottom with title + destinations */}
             <div
               className="absolute inset-x-0 bottom-0 px-10 md:px-14 pt-16 pb-8"
               style={{
@@ -157,6 +179,14 @@ export function CoverSection({ section }: { section: Section }) {
               >
                 {trip.title}
               </h1>
+              {trip.destinations.length > 0 && (
+                <div
+                  className="mt-4 text-[11px] uppercase tracking-[0.32em] text-white/70 font-semibold"
+                  aria-label="Destinations"
+                >
+                  {trip.destinations.slice(0, 6).join("  ·  ")}
+                </div>
+              )}
             </div>
 
             {heroUrl && isEditor && (
@@ -168,57 +198,84 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
         </div>
 
-        {/* Meta band — two labelled columns */}
+        {/* Meta band — For / Dates / Days·Nights / Travelers in the order
+            operators asked for at onboarding. */}
         <div
-          className="grid grid-cols-2 gap-10 px-10 md:px-14 py-5"
+          className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-5 px-10 md:px-14 py-6"
           style={{ background: metaBand }}
         >
           <div>
             <div
-              className="text-[13px] font-semibold mb-0.5 outline-none"
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
+              style={{ color: tokens.mutedText }}
+            >
+              For
+            </div>
+            <div
+              className="text-[14px] font-medium outline-none"
               style={{ color: tokens.headingText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
-              onBlur={(e) =>
-                updateSectionContent(section.id, { tourLengthLabel: e.currentTarget.textContent ?? "" })
-              }
+              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+            >
+              {client.guestNames || "Your Guests"}
+            </div>
+          </div>
+          <div>
+            <div
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
+              style={{ color: tokens.mutedText }}
+            >
+              Dates
+            </div>
+            <div
+              className="text-[14px] font-medium outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+            >
+              {trip.dates || "—"}
+            </div>
+          </div>
+          <div>
+            <div
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold outline-none"
+              style={{ color: tokens.mutedText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateSectionContent(section.id, { tourLengthLabel: e.currentTarget.textContent ?? "" })}
             >
               {tourLengthLabel}
             </div>
             <div
-              className="text-[14px] outline-none"
-              style={{ color: tokens.bodyText }}
+              className="text-[14px] font-medium outline-none"
+              style={{ color: tokens.headingText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
-              onBlur={(e) =>
-                updateSectionContent(section.id, { tourLengthValue: e.currentTarget.textContent ?? "" })
-              }
+              onBlur={(e) => updateSectionContent(section.id, { tourLengthValue: e.currentTarget.textContent ?? "" })}
             >
               {tourLengthValue}
             </div>
           </div>
           <div>
             <div
-              className="text-[13px] font-semibold mb-0.5 outline-none"
-              style={{ color: tokens.headingText }}
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold outline-none"
+              style={{ color: tokens.mutedText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
-              onBlur={(e) =>
-                updateSectionContent(section.id, { travelersLabel: e.currentTarget.textContent ?? "" })
-              }
+              onBlur={(e) => updateSectionContent(section.id, { travelersLabel: e.currentTarget.textContent ?? "" })}
             >
               {travelersLabel}
             </div>
             <div
-              className="text-[14px] outline-none"
-              style={{ color: tokens.bodyText }}
+              className="text-[14px] font-medium outline-none"
+              style={{ color: tokens.headingText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
               onBlur={(e) => {
                 const next = e.currentTarget.textContent ?? "";
                 updateSectionContent(section.id, { travelersValue: next });
-                // Also keep client.pax in sync when the field is still the
-                // derived default (so Trip Setup and other sections see it).
                 if (!section.content.travelersValue) updateClient({ pax: next });
               }}
             >
