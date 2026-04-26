@@ -68,15 +68,34 @@ export function mergeAutopilotIntoProposal(
     };
   }
 
-  // ── Section content patches (cover / greeting / closing / map) ────────
+  // ── Section content patches ────────────────────────────────────────────
+  // Patches every section type that can carry AI-generated copy. The
+  // default proposal uses `personalNote` (not the legacy `greeting`)
+  // and the cover defaults to the `hero-letter` variant which carries
+  // its own greetingBody slot. Both need the AI's greeting body — so
+  // we patch all three. Without these branches the AI's draft greeting
+  // never reached the visible sections.
   next.sections = proposal.sections.map((section) => {
     switch (section.type) {
-      case "cover":
-        if (!draft.cover?.tagline) return section;
+      case "cover": {
+        const content = { ...section.content };
+        if (draft.cover?.tagline) content.tagline = draft.cover.tagline;
+        // hero-letter variant renders cover-side greeting; only patch
+        // when that's the active variant so we don't inject body copy
+        // into a split / minimal cover that has no greeting slot.
+        if (section.layoutVariant === "hero-letter" && draft.greeting?.body) {
+          content.greetingBody = draft.greeting.body;
+        }
+        if (content === section.content) return section;
+        return { ...section, content };
+      }
+      case "personalNote": {
+        if (!draft.greeting?.body) return section;
         return {
           ...section,
-          content: { ...section.content, tagline: draft.cover.tagline },
+          content: { ...section.content, body: draft.greeting.body },
         };
+      }
       case "greeting":
         if (!draft.greeting?.body) return section;
         return {

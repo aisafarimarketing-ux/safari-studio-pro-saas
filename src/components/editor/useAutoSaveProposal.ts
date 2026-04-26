@@ -83,8 +83,9 @@ export function useAutoSaveProposal(enabled: boolean): {
         if (healingRef.current) return;
         // Auto-heal: if the payload is fat because the proposal still
         // carries inline base64 images (legacy proposals created before
-        // Supabase Storage was wired up), silently recompress and upload
-        // them, then let the subscribe loop retry the save.
+        // Supabase Storage was wired up, or images that fell back to
+        // data URLs because the storage upload failed), recompress and
+        // upload them, then let the subscribe loop retry the save.
         const hasInlineImages = payload.includes('"data:image/');
         if (hasInlineImages && !healedOnceRef.current) {
           healedOnceRef.current = true;
@@ -106,9 +107,18 @@ export function useAutoSaveProposal(enabled: boolean): {
           }
         }
         const mb = (payload.length / 1024 / 1024).toFixed(1);
-        setError(
-          `Proposal is ${mb}MB — too big to auto-save. Remove or replace some uploaded images, then try again.`,
-        );
+        // Distinguish the two failure modes so the operator knows what
+        // to do: re-encode (heal already tried) or remove images.
+        // After the heal latch is set we know recompression has run
+        // once already and didn't get the payload under the cap — so
+        // the only remaining lever is fewer / smaller images.
+        const headline = healedOnceRef.current
+          ? `Proposal is ${mb}MB after compression — still too big to auto-save.`
+          : `Proposal is ${mb}MB — too big to auto-save.`;
+        const action = hasInlineImages
+          ? "Most likely cause: images are stored inline (Supabase Storage isn't configured, so uploads fell back to data URLs). Remove a few of the larger images, or ask an admin to set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY so future uploads land in object storage."
+          : "Remove or replace some uploaded images, then try again.";
+        setError(`${headline} ${action}`);
         setState("error");
         return;
       }

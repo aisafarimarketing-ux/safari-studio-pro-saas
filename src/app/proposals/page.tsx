@@ -121,19 +121,39 @@ export default function ProposalsPage() {
           });
           if (ai.ok) {
             const draft = (await ai.json()) as AutopilotResult;
-            const merged = mergeAutopilotIntoProposal(proposal, draft);
-            await fetch("/api/proposals", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ proposal: merged }),
-              signal: controller.signal,
-            });
+            // Honest signal: if the AI returned no days at all, the
+            // editor will open with a blank proposal — surface that
+            // instead of silently saving an empty merge.
+            if (!draft.days || draft.days.length === 0) {
+              setError(
+                "AI generated no days for this trip. The editor will open with your blank proposal — try the Regenerate button inside, or fill the days manually.",
+              );
+            } else {
+              const merged = mergeAutopilotIntoProposal(proposal, draft);
+              await fetch("/api/proposals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ proposal: merged }),
+                signal: controller.signal,
+              });
+            }
+          } else {
+            // Surface the server's error reason rather than swallowing.
+            // Operators were seeing "I hit Generate but nothing
+            // appeared" with no clue why — usually a 500 (missing
+            // ANTHROPIC_API_KEY) or a 502 (model output didn't parse).
+            const body = await ai.json().catch(() => ({}));
+            const reason = body?.error || `HTTP ${ai.status}`;
+            setError(`AI couldn't draft this proposal: ${reason}. The editor will open with your blank proposal — try the Regenerate button inside.`);
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") {
             return;
           }
           console.warn("[autopilot] soft-fail; opening editor anyway:", err);
+          setError(
+            "AI couldn't reach the server. The editor will open with your blank proposal — check your connection and try Regenerate inside the editor.",
+          );
         }
       }
 
