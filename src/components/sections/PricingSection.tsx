@@ -333,35 +333,57 @@ function EditableList({
           {subhead}
         </div>
       )}
-      <ul className="mt-3 grid sm:grid-cols-2 gap-x-8 gap-y-2 max-w-2xl">
+      <ul className="mt-3 space-y-2 max-w-2xl">
         {items.map((item, i) => (
           <li
             key={i}
-            className="group flex items-center gap-3 text-[14px] leading-[1.45]"
+            className="group flex items-start gap-2.5 text-[13.5px] leading-[1.5]"
             style={{ color: tokens.bodyText }}
           >
-            {/* ✓ for included, literal X for not included — matches the
-                operator's mental model better than identical bullet dots. */}
+            {/* Outline-style ✓/× — matches the trust-badge glyph used in
+                the booking-recap closing so the two lists look like
+                kin. Stays on a single line per item; long copy wraps
+                under the icon, not beside it. */}
             <span
               aria-hidden
-              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full"
-              style={{
-                background: accentBullet ? tokens.accent : tokens.mutedText,
-                color: "white",
-              }}
+              className="shrink-0 inline-flex items-center justify-center mt-[1.5px]"
+              style={{ width: 16, height: 16 }}
             >
               {accentBullet ? (
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="7.25"
+                    stroke={tokens.accent}
+                    strokeOpacity="0.4"
+                    strokeWidth="1.2"
+                  />
                   <path
-                    d="M2.5 6.5 L5 9 L9.5 3.5"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
+                    d="M5 8.4 L7 10.4 L11 6.2"
+                    stroke={tokens.accent}
+                    strokeWidth="1.6"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                 </svg>
               ) : (
-                <span className="text-[10.5px] font-bold leading-none">X</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="7.25"
+                    stroke={tokens.mutedText}
+                    strokeOpacity="0.4"
+                    strokeWidth="1.2"
+                  />
+                  <path
+                    d="M5.4 5.4 L10.6 10.6 M10.6 5.4 L5.4 10.6"
+                    stroke={tokens.mutedText}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
               )}
             </span>
             <span
