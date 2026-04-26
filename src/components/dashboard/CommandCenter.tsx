@@ -134,6 +134,34 @@ export function CommandCenter() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | "sending" | undefined>>({});
   const [flash, setFlash] = useState<{ requestId: string; message: string; tone: "success" | "info" } | null>(null);
+  // Mobile / tablet: sidebar + task rail collapse into slide-in drawers
+  // controlled here. Both default to closed; the top bar's hamburger
+  // and tasks buttons toggle them. lg+ ignores these flags.
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileTaskRailOpen, setMobileTaskRailOpen] = useState(false);
+
+  // Body scroll-lock while a mobile drawer is open. Re-enables on
+  // close so the desktop view never inherits a frozen body.
+  useEffect(() => {
+    const anyOpen = mobileSidebarOpen || mobileTaskRailOpen;
+    if (typeof document === "undefined") return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = anyOpen ? "hidden" : previous || "";
+    return () => { document.body.style.overflow = previous || ""; };
+  }, [mobileSidebarOpen, mobileTaskRailOpen]);
+
+  // Close mobile drawers on Esc.
+  useEffect(() => {
+    if (!(mobileSidebarOpen || mobileTaskRailOpen)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileSidebarOpen(false);
+        setMobileTaskRailOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileSidebarOpen, mobileTaskRailOpen]);
 
   const loadPriorities = useMemo(() => async (filterKey: FilterKey = filter) => {
     try {
@@ -287,7 +315,7 @@ export function CommandCenter() {
 
   return (
     <div
-      className="grid min-h-screen"
+      className="min-h-screen lg:grid"
       style={{
         background: PALETTE.pageBg,
         gridTemplateColumns: "260px minmax(0, 1fr) 320px",
@@ -295,7 +323,7 @@ export function CommandCenter() {
     >
       <CommandSidebar
         currentFilter={filter}
-        onFilter={setFilter}
+        onFilter={(f) => { setFilter(f); setMobileSidebarOpen(false); }}
         sidebarCounts={counts}
         actionCenter={{
           hot: summary?.hotDealsCount ?? 0,
@@ -303,10 +331,35 @@ export function CommandCenter() {
           unread: summary?.unreadMessages ?? 0,
           atRisk: summary?.pipelineAtRiskCount ?? 0,
         }}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
-      <main className="px-7 py-5 min-w-0">
-        <CommandTopBar greetingName={greetingName} />
+      {/* Mobile / tablet backdrop — closes either drawer on click. */}
+      {(mobileSidebarOpen || mobileTaskRailOpen) && (
+        <div
+          className="fixed inset-0 z-30 lg:hidden"
+          style={{
+            background: "rgba(13,38,32,0.36)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            animation: "ss-cmdk-fade 140ms ease-out",
+          }}
+          onClick={() => {
+            setMobileSidebarOpen(false);
+            setMobileTaskRailOpen(false);
+          }}
+          aria-hidden
+        />
+      )}
+
+      <main className="px-4 py-4 md:px-7 md:py-5 min-w-0">
+        <CommandTopBar
+          greetingName={greetingName}
+          openTasksCount={tasksData?.counts.open ?? 0}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onOpenTaskRail={() => setMobileTaskRailOpen(true)}
+        />
 
         <CommandHero
           summary={summary ?? null}
@@ -357,7 +410,11 @@ export function CommandCenter() {
         </section>
       </main>
 
-      <CommandTaskRail tasksData={tasksData} />
+      <CommandTaskRail
+        tasksData={tasksData}
+        mobileOpen={mobileTaskRailOpen}
+        onMobileClose={() => setMobileTaskRailOpen(false)}
+      />
     </div>
   );
 }
@@ -365,16 +422,27 @@ export function CommandCenter() {
 // ─── LEFT — Sidebar ──────────────────────────────────────────────────────
 
 function CommandSidebar({
-  currentFilter, onFilter, sidebarCounts, actionCenter,
+  currentFilter, onFilter, sidebarCounts, actionCenter, mobileOpen, onMobileClose,
 }: {
   currentFilter: FilterKey;
   onFilter: (f: FilterKey) => void;
   sidebarCounts: SidebarCounts | undefined;
   actionCenter: { hot: number; followups: number; unread: number; atRisk: number };
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }) {
+  // On lg+ the sidebar is `static` and lives in the grid's first
+  // column. Below lg it's a fixed drawer translated off-screen
+  // unless `mobileOpen` is true. `lg:translate-x-0` overrides the
+  // mobile transform at lg+ so resize never traps the drawer offscreen.
   return (
     <aside
-      className="border-r flex flex-col"
+      className={`
+        z-40 w-[260px] border-r flex flex-col
+        fixed inset-y-0 left-0 transition-transform duration-200 ease-out
+        lg:static lg:transition-none lg:translate-x-0
+        ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
+      `}
       style={{
         background: PALETTE.cardBg,
         borderColor: PALETTE.line,
@@ -395,7 +463,7 @@ function CommandSidebar({
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="flex-1 overflow-y-auto py-4" onClick={onMobileClose}>
         {/* WORK */}
         <SidebarGroup label="Work">
           <SidebarItem href="/dashboard" label="Overview" active />
@@ -565,7 +633,14 @@ function ActionCenterRow({
 
 // ─── TOP BAR ─────────────────────────────────────────────────────────────
 
-function CommandTopBar({ greetingName }: { greetingName: string }) {
+function CommandTopBar({
+  greetingName, openTasksCount, onOpenSidebar, onOpenTaskRail,
+}: {
+  greetingName: string;
+  openTasksCount: number;
+  onOpenSidebar: () => void;
+  onOpenTaskRail: () => void;
+}) {
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 5) return "Working late";
@@ -574,18 +649,34 @@ function CommandTopBar({ greetingName }: { greetingName: string }) {
     return "Good evening";
   }, []);
   return (
-    <div className="flex items-center justify-between gap-4 mb-5">
-      <div className="min-w-0">
-        <h1
-          className="text-[22px] md:text-[24px] font-bold leading-tight truncate"
-          style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
+    <div className="flex items-center justify-between gap-3 mb-4 md:mb-5">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {/* Hamburger — mobile / tablet only. */}
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          aria-label="Open menu"
+          className="lg:hidden w-9 h-9 rounded-full flex items-center justify-center transition shrink-0"
+          style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
         >
-          {greeting}{greetingName ? `, ${greetingName}.` : "."}
-        </h1>
-        <div className="text-[13px] mt-0.5" style={{ color: PALETTE.muted }}>
-          Here&apos;s who needs your attention today.
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M2.5 4 H13.5 M2.5 8 H13.5 M2.5 12 H13.5" />
+          </svg>
+        </button>
+
+        <div className="min-w-0">
+          <h1
+            className="text-[20px] md:text-[24px] font-bold leading-tight truncate"
+            style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
+          >
+            {greeting}{greetingName ? `, ${greetingName}.` : "."}
+          </h1>
+          <div className="text-[12.5px] md:text-[13px] mt-0.5 truncate" style={{ color: PALETTE.muted }}>
+            Here&apos;s who needs your attention today.
+          </div>
         </div>
       </div>
+
       <div className="flex items-center gap-2 shrink-0">
         <IconBtn label="Search (⌘K)" onClick={openCommandPalette}>
           <SearchIcon />
@@ -593,6 +684,29 @@ function CommandTopBar({ greetingName }: { greetingName: string }) {
         <IconBtn label="Notifications">
           <BellIcon />
         </IconBtn>
+        {/* Tasks toggle — mobile / tablet only. Surface the open-count
+            so the operator knows the rail has something in it. */}
+        <button
+          type="button"
+          onClick={onOpenTaskRail}
+          aria-label={`Tasks (${openTasksCount} open)`}
+          title={`Tasks (${openTasksCount} open)`}
+          className="lg:hidden relative w-9 h-9 rounded-full flex items-center justify-center transition"
+          style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
+        >
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2.5" y="3" width="10" height="9" rx="1.5" />
+            <path d="M5 6.5 L7 8.5 L10 5.5" />
+          </svg>
+          {openTasksCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 text-[9.5px] font-bold tabular-nums px-1.5 rounded-full leading-[1.4]"
+              style={{ background: PALETTE.forest, color: "white", minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              {openTasksCount > 9 ? "9+" : openTasksCount}
+            </span>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -869,8 +983,10 @@ function PriorityCard({
 
         {/* Main column */}
         <div className="flex-1 min-w-0">
-          {/* Header row: HOT badge + name + (right) value/score/intent */}
-          <div className="flex items-start justify-between gap-3">
+          {/* Header row: HOT badge + name + (right) value/score/intent.
+              Stacks vertically below md so the value doesn't get
+              squished against the name on narrow viewports. */}
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between md:gap-3 gap-1.5">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
@@ -905,10 +1021,10 @@ function PriorityCard({
               </div>
             </div>
 
-            <div className="text-right shrink-0">
+            <div className="md:text-right shrink-0 flex md:block items-center gap-3 md:gap-0">
               {priority.valueCents > 0 ? (
                 <div
-                  className="text-[20px] font-bold tabular-nums leading-none"
+                  className="text-[18px] md:text-[20px] font-bold tabular-nums leading-none"
                   style={{ color: PALETTE.ink }}
                 >
                   {formatMoney(priority.valueCents, priority.currency)}
@@ -916,7 +1032,7 @@ function PriorityCard({
               ) : (
                 <div className="text-[12px]" style={{ color: PALETTE.muted }}>No quote yet</div>
               )}
-              <div className="flex items-center justify-end gap-1.5 mt-1">
+              <div className="flex items-center md:justify-end gap-1.5 md:mt-1">
                 <span className="text-[15px] font-bold tabular-nums" style={{ color: intentColor }}>
                   {priority.score.total}
                 </span>
@@ -1168,14 +1284,25 @@ function EmptyCard({ message }: { message: string }) {
 
 // ─── RIGHT — Task rail ──────────────────────────────────────────────────
 
-function CommandTaskRail({ tasksData }: { tasksData: TasksResponse | null }) {
+function CommandTaskRail({
+  tasksData, mobileOpen, onMobileClose,
+}: {
+  tasksData: TasksResponse | null;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}) {
   const tasks = tasksData?.tasks ?? [];
   return (
     <aside
-      className="border-l flex flex-col"
+      className={`
+        z-40 w-[320px] border-l flex flex-col
+        fixed inset-y-0 right-0 transition-transform duration-200 ease-out
+        lg:static lg:transition-none lg:translate-x-0
+        ${mobileOpen ? "translate-x-0 shadow-2xl" : "translate-x-full"}
+      `}
       style={{ background: PALETTE.cardBg, borderColor: PALETTE.line }}
     >
-      <div className="px-5 py-5 border-b flex items-center justify-between" style={{ borderColor: PALETTE.line }}>
+      <div className="px-5 py-5 border-b flex items-center justify-between gap-2" style={{ borderColor: PALETTE.line }}>
         <div>
           <div className="text-[10px] uppercase tracking-[0.22em] font-semibold" style={{ color: PALETTE.muted }}>
             Today
@@ -1184,14 +1311,30 @@ function CommandTaskRail({ tasksData }: { tasksData: TasksResponse | null }) {
             {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
           </div>
         </div>
-        {tasksData && tasksData.counts.overdue > 0 && (
-          <span
-            className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full tabular-nums"
-            style={{ background: "#fee2e2", color: PALETTE.hot }}
+        <div className="flex items-center gap-2">
+          {tasksData && tasksData.counts.overdue > 0 && (
+            <span
+              className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full tabular-nums"
+              style={{ background: "#fee2e2", color: PALETTE.hot }}
+            >
+              {tasksData.counts.overdue} overdue
+            </span>
+          )}
+          {/* Close button on mobile only — hidden on lg+ since the drawer is static there. */}
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="lg:hidden w-7 h-7 rounded-md flex items-center justify-center transition"
+            style={{ background: "transparent", color: PALETTE.muted }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            aria-label="Close tasks"
           >
-            {tasksData.counts.overdue} overdue
-          </span>
-        )}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+              <path d="M3 3 L11 11 M11 3 L3 11" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3">
