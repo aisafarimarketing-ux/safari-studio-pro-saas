@@ -133,6 +133,12 @@ model Organization {
   //   "proposal_sent" | "proposal_viewed" | "deposit_paid" | "reservation_followup"
   ghlWorkflowIds Json?
 
+  // ── Intelligence — Phase 5 follow-up automation ───────────────────
+  // When true, the priorities dashboard auto-creates open tasks for
+  // HOT deals that don't already have one. Default off so existing
+  // workspaces aren't surprised by inbox-full of auto-tasks on day one.
+  autoCreateHotTasks Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -864,11 +870,29 @@ model RequestTask {
   createdByUserId String?
   order           Int     @default(0)
 
+  // ── Phase 5 — intelligence-driven follow-ups ────────────────────────
+  // Task came from the priorities-dashboard "Add task" button. The
+  // actionType matches NextActionType in dealScoring.ts and is the
+  // dedup key — we only allow one open task per (requestId, actionType)
+  // so re-clicking "Add task" returns the existing row.
+  actionType    String? // "reply" | "send_proposal" | "draft_quote" | "nudge" | "ask_for_booking" | "follow_up" | "confirm_reservation" | "stay_in_touch" | "wait"
+  // Priority level mirrors the priority card label at task-creation time.
+  priorityLevel String? @default("normal") // "high" | "normal" | "low"
+  // Reason from the scoring engine — why this action was suggested.
+  // Surfaces in the task detail so the operator remembers why they
+  // committed to it later.
+  reason        String?
+  // True when system-created (auto-fill / hot-deal cron); false when a
+  // human typed the title themselves. Used to filter system noise out
+  // of "what did I commit to" reports.
+  auto          Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([requestId, order])
   @@index([requestId, doneAt])
+  @@index([requestId, actionType, doneAt])
 }
 
 model RequestNote {

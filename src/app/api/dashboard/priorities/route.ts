@@ -36,6 +36,8 @@ export async function GET(req: Request) {
   const nowIso = new Date().toISOString();
 
   // ── Pull every active request with the joins we need to score it ────────
+  // tasks: filter to OPEN (doneAt null) — drives the "Mark done" affordance
+  // on each priority card and the "Task active" badge.
   const requests = await prisma.request.findMany({
     where: { organizationId: orgId, status: { in: ACTIVE_STATUSES } },
     include: {
@@ -58,6 +60,19 @@ export async function GET(req: Request) {
           },
         },
         take: 5, // most recent quotes — only the latest is used
+      },
+      tasks: {
+        where: { doneAt: null },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          actionType: true,
+          priorityLevel: true,
+          dueAt: true,
+          auto: true,
+          createdAt: true,
+        },
       },
       _count: {
         select: {
@@ -205,6 +220,11 @@ function buildPriority(
         events: { sectionId: string | null; kind: string }[];
       }>;
     }>;
+    tasks: Array<{
+      id: string; title: string; actionType: string | null;
+      priorityLevel: string | null; dueAt: Date | null; auto: boolean;
+      createdAt: Date;
+    }>;
   },
   ctx: {
     inboundMessages: number;
@@ -264,6 +284,25 @@ function buildPriority(
     ? [r.client.firstName, r.client.lastName].filter(Boolean).join(" ").trim() || r.client.email
     : "Unknown";
 
+  // Match an open task to the current next-action. We look for an exact
+  // actionType match first (the operator clicked "Add task" on this
+  // exact recommendation); fall back to any open task so the card
+  // still shows "Mark done" / "Task active" when the operator added
+  // something manually from the request page.
+  const activeTaskExact = r.tasks.find((t) => t.actionType === s.nextAction.type) ?? null;
+  const activeTaskAny = activeTaskExact ?? r.tasks[0] ?? null;
+  const activeTask = activeTaskAny
+    ? {
+        id: activeTaskAny.id,
+        title: activeTaskAny.title,
+        actionType: activeTaskAny.actionType,
+        priorityLevel: activeTaskAny.priorityLevel,
+        dueAt: activeTaskAny.dueAt?.toISOString() ?? null,
+        auto: activeTaskAny.auto,
+        matchesNextAction: !!activeTaskExact,
+      }
+    : null;
+
   // Pick a "last activity preview" — prefer the last inbound message
   // (we surface that we have unread context), then status, then created.
   const lastActivityKind: "message" | "view" | "status" = ctx.lastInboundIso
@@ -297,6 +336,7 @@ function buildPriority(
     lastActivityKind,
     needsFollowup: needsFollowup(s, signals, ctx.nowIso),
     atRisk: atRisk(s, signals, ctx.nowIso),
+    activeTask,
   };
 }
 

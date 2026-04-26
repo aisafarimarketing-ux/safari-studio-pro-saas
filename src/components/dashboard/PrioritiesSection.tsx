@@ -32,6 +32,19 @@ type Score = {
   label: "hot" | "warm" | "cold"; nextAction: NextAction;
 };
 
+type ActiveTask = {
+  id: string;
+  title: string;
+  actionType: string | null;
+  priorityLevel: string | null;
+  dueAt: string | null;
+  auto: boolean;
+  /** True when the open task's actionType matches the current
+   *  nextAction — i.e., the operator already committed to this exact
+   *  follow-up. Drives "Task active" badge vs generic "Mark done". */
+  matchesNextAction: boolean;
+};
+
 type Priority = {
   requestId: string;
   referenceNumber: string;
@@ -54,6 +67,7 @@ type Priority = {
   lastActivityKind: "message" | "view" | "status";
   needsFollowup: boolean;
   atRisk: boolean;
+  activeTask: ActiveTask | null;
 };
 
 type Summary = {
@@ -95,26 +109,165 @@ export function PrioritiesSection() {
   const [data, setData] = useState<PrioritiesResponse | null>(null);
   const [tasksData, setTasksData] = useState<TasksResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // Per-card UI state — busy spinners while a button is in flight, plus
+  // the most-recent action so we can flash a confirmation toast.
+  const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | undefined>>({});
+  const [flash, setFlash] = useState<{ requestId: string; message: string; tone: "success" | "info" } | null>(null);
 
   // Load priorities. Refetches when filter changes.
+  const loadPriorities = useMemo(() => async () => {
+    try {
+      const res = await fetch(`/api/dashboard/priorities?filter=${filter}&limit=15`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as PrioritiesResponse;
+    } catch {
+      return null;
+    }
+  }, [filter]);
+
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/dashboard/priorities?filter=${filter}&limit=15`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as PrioritiesResponse;
-        if (!cancelled) {
-          setData(json);
-          setLoadFailed(false);
-        }
-      } catch {
-        if (!cancelled) setLoadFailed(true);
+    void loadPriorities().then((json) => {
+      if (cancelled) return;
+      if (json) {
+        setData(json);
+        setLoadFailed(false);
+      } else {
+        setLoadFailed(true);
       }
-    };
-    void load();
+    });
     return () => { cancelled = true; };
-  }, [filter]);
+  }, [loadPriorities]);
+
+  const refreshTasks = async () => {
+    try {
+      const res = await fetch("/api/dashboard/tasks?limit=12", { cache: "no-store" });
+      if (!res.ok) return;
+      setTasksData((await res.json()) as TasksResponse);
+    } catch {
+      // tasks are secondary
+    }
+  };
+
+  // ── Optimistic task creation ─────────────────────────────────────────
+  // Stamps activeTask on the priority immediately, kicks off the POST,
+  // then refetches priorities + tasks so summary metrics + counts stay
+  // in sync. On failure we revert + surface the error.
+  const handleAddTask = async (priority: Priority) => {
+    if (busyByRequestId[priority.requestId]) return;
+    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "creating" }));
+
+    const optimistic: ActiveTask = {
+      id: `temp-${Date.now()}`,
+      title: priority.score.nextAction.label,
+      actionType: priority.score.nextAction.type,
+      priorityLevel: priority.score.label === "hot" ? "high" : priority.score.label === "cold" ? "low" : "normal",
+      dueAt: null,
+      auto: false,
+      matchesNextAction: true,
+    };
+    setData((prev) => prev && {
+      ...prev,
+      priorities: prev.priorities.map((p) =>
+        p.requestId === priority.requestId ? { ...p, activeTask: optimistic } : p,
+      ),
+    });
+
+    try {
+      const res = await fetch(`/api/requests/${priority.requestId}/tasks/auto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionType: priority.score.nextAction.type,
+          actionLabel: priority.score.nextAction.label,
+          reason: priority.score.nextAction.reason,
+          priorityLevel: priority.score.label,
+        }),
+      });
+      const json = (await res.json()) as { task?: { id: string; dueAt: string | null }; alreadyExisted?: boolean; error?: string };
+      if (!res.ok || !json.task) throw new Error(json.error || `HTTP ${res.status}`);
+      // Refetch — keeps summary metrics + filter counts honest.
+      const fresh = await loadPriorities();
+      if (fresh) setData(fresh);
+      void refreshTasks();
+      setFlash({
+        requestId: priority.requestId,
+        message: json.alreadyExisted ? "Task already active." : "Task added — see right panel.",
+        tone: json.alreadyExisted ? "info" : "success",
+      });
+      setTimeout(() => setFlash(null), 2200);
+    } catch (err) {
+      // Revert optimistic state.
+      setData((prev) => prev && {
+        ...prev,
+        priorities: prev.priorities.map((p) =>
+          p.requestId === priority.requestId ? { ...p, activeTask: priority.activeTask } : p,
+        ),
+      });
+      setFlash({
+        requestId: priority.requestId,
+        message: err instanceof Error ? err.message : "Couldn't add task.",
+        tone: "info",
+      });
+      setTimeout(() => setFlash(null), 3000);
+    } finally {
+      setBusyByRequestId((s) => {
+        const next = { ...s };
+        delete next[priority.requestId];
+        return next;
+      });
+    }
+  };
+
+  // ── Mark done — closes the loop ──────────────────────────────────────
+  const handleMarkDone = async (priority: Priority) => {
+    const task = priority.activeTask;
+    if (!task || busyByRequestId[priority.requestId]) return;
+    if (task.id.startsWith("temp-")) return; // optimistic row, can't mark done yet
+    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "completing" }));
+
+    // Optimistic clear.
+    setData((prev) => prev && {
+      ...prev,
+      priorities: prev.priorities.map((p) =>
+        p.requestId === priority.requestId ? { ...p, activeTask: null } : p,
+      ),
+    });
+
+    try {
+      const res = await fetch(`/api/requests/${priority.requestId}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: true }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const fresh = await loadPriorities();
+      if (fresh) setData(fresh);
+      void refreshTasks();
+      setFlash({ requestId: priority.requestId, message: "Marked done.", tone: "success" });
+      setTimeout(() => setFlash(null), 1800);
+    } catch (err) {
+      // Revert.
+      setData((prev) => prev && {
+        ...prev,
+        priorities: prev.priorities.map((p) =>
+          p.requestId === priority.requestId ? { ...p, activeTask: task } : p,
+        ),
+      });
+      setFlash({
+        requestId: priority.requestId,
+        message: err instanceof Error ? err.message : "Couldn't complete task.",
+        tone: "info",
+      });
+      setTimeout(() => setFlash(null), 3000);
+    } finally {
+      setBusyByRequestId((s) => {
+        const next = { ...s };
+        delete next[priority.requestId];
+        return next;
+      });
+    }
+  };
 
   // Load tasks (independent — same cadence as the priorities polling).
   useEffect(() => {
@@ -220,7 +373,17 @@ export function PrioritiesSection() {
             />
           ) : (
             <ul className="space-y-2">
-              {priorities.map((p) => <PriorityCard key={p.requestId} priority={p} tokens={tokens} />)}
+              {priorities.map((p) => (
+                <PriorityCard
+                  key={p.requestId}
+                  priority={p}
+                  tokens={tokens}
+                  busy={busyByRequestId[p.requestId]}
+                  flash={flash?.requestId === p.requestId ? flash : null}
+                  onAddTask={() => handleAddTask(p)}
+                  onMarkDone={() => handleMarkDone(p)}
+                />
+              ))}
             </ul>
           )}
         </div>
@@ -305,23 +468,51 @@ function FilterTab({
 // ─── Priority card ───────────────────────────────────────────────────────
 
 function PriorityCard({
-  priority, tokens,
+  priority, tokens, busy, flash, onAddTask, onMarkDone,
 }: {
   priority: Priority;
   tokens: ReturnType<typeof useDashboardTheme>["tokens"];
+  busy: "creating" | "completing" | undefined;
+  flash: { message: string; tone: "success" | "info" } | null;
+  onAddTask: () => void;
+  onMarkDone: () => void;
 }) {
   const labelColor = priority.score.label === "hot" ? "#dc2626" : priority.score.label === "warm" ? "#d97706" : tokens.muted;
   const labelBg = priority.score.label === "hot" ? "#fee2e2" : priority.score.label === "warm" ? "#fef3c7" : tokens.ring;
   const messageHref = `/requests/${priority.requestId}`;
 
+  // Once a matching task exists, dial down urgency styling — the
+  // operator has committed and we don't want to keep nagging.
+  const hasActiveCommitment = !!priority.activeTask?.matchesNextAction;
+  const showUrgentStyling = priority.score.nextAction.urgent && !hasActiveCommitment;
+
   return (
     <li
-      className="rounded-xl p-3.5 border transition"
+      className="rounded-xl p-3.5 border transition relative"
       style={{
         background: tokens.pageBg,
-        borderColor: priority.score.nextAction.urgent ? `${labelColor}66` : tokens.ring,
+        borderColor: showUrgentStyling
+          ? `${labelColor}66`
+          : hasActiveCommitment
+            ? "#16a34a44"
+            : tokens.ring,
       }}
     >
+      {/* Toast — slides in for ~2s after add/done actions */}
+      {flash && (
+        <div
+          className="absolute top-2 right-2 z-10 text-[10.5px] font-semibold px-2 py-1 rounded-md shadow-sm"
+          style={{
+            background: flash.tone === "success" ? "#dcfce7" : "#e0f2fe",
+            color: flash.tone === "success" ? "#166534" : "#075985",
+            border: `1px solid ${flash.tone === "success" ? "#86efac" : "#7dd3fc"}`,
+            animation: "ss-flash-in 180ms ease-out",
+          }}
+        >
+          {flash.message}
+        </div>
+      )}
+
       <div className="flex items-start gap-3">
         {/* Priority badge column */}
         <div className="shrink-0">
@@ -342,14 +533,25 @@ function PriorityCard({
         {/* Main content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <Link
-              href={`/requests/${priority.requestId}`}
-              className="text-[14px] font-semibold truncate hover:underline"
-              style={{ color: tokens.heading }}
-              title={priority.clientName}
-            >
-              {priority.clientName}
-            </Link>
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/requests/${priority.requestId}`}
+                className="text-[14px] font-semibold truncate hover:underline"
+                style={{ color: tokens.heading }}
+                title={priority.clientName}
+              >
+                {priority.clientName}
+              </Link>
+              {hasActiveCommitment && (
+                <span
+                  className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{ background: "#dcfce7", color: "#166534" }}
+                  title={`Task active: ${priority.activeTask?.title}`}
+                >
+                  ✓ Task active
+                </span>
+              )}
+            </div>
             {priority.valueCents > 0 && (
               <div className="text-[12.5px] font-semibold tabular-nums shrink-0" style={{ color: tokens.heading }}>
                 {formatMoney(priority.valueCents, priority.currency)}
@@ -379,7 +581,7 @@ function PriorityCard({
             {priority.engagement.inboundMessages > 0 && (
               <Chip icon="→" tokens={tokens}>{priority.engagement.inboundMessages} {priority.engagement.inboundMessages === 1 ? "reply" : "replies"}</Chip>
             )}
-            {priority.atRisk && (
+            {priority.atRisk && !hasActiveCommitment && (
               <Chip icon="!" tokens={tokens} variant="warn">At risk</Chip>
             )}
           </div>
@@ -391,7 +593,7 @@ function PriorityCard({
               style={{ color: tokens.muted }}
               title={priority.score.nextAction.reason}
             >
-              <span className="font-semibold" style={{ color: priority.score.nextAction.urgent ? "#dc2626" : tokens.heading }}>
+              <span className="font-semibold" style={{ color: showUrgentStyling ? "#dc2626" : tokens.heading }}>
                 Next:
               </span>{" "}
               {priority.score.nextAction.label}
@@ -406,10 +608,33 @@ function PriorityCard({
                   Open quote
                 </Link>
               )}
+              {hasActiveCommitment ? (
+                <button
+                  type="button"
+                  onClick={onMarkDone}
+                  disabled={busy === "completing"}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
+                  style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac" }}
+                  title="Mark this follow-up task as done"
+                >
+                  {busy === "completing" ? "…" : "✓ Mark done"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onAddTask}
+                  disabled={busy === "creating"}
+                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
+                  style={{ background: tokens.ring, color: tokens.heading, border: `1px solid ${tokens.ring}` }}
+                  title="Commit this as a follow-up task"
+                >
+                  {busy === "creating" ? "Adding…" : "+ Add task"}
+                </button>
+              )}
               <Link
                 href={messageHref}
                 className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md transition text-white"
-                style={{ background: priority.score.nextAction.urgent ? "#dc2626" : FOREST }}
+                style={{ background: showUrgentStyling ? "#dc2626" : FOREST }}
               >
                 Message client →
               </Link>
