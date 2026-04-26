@@ -23,13 +23,15 @@ export type ActivityType =
   | "archiveProperty"
   | "editBrandDNA"
   | "viewLibrary"
-  | "viewTeam";
+  | "viewTeam"
+  | "messageSent"
+  | "messageReceived";
 
 export async function recordActivity(params: {
   userId: string;
   organizationId: string;
   type: ActivityType;
-  targetType?: "request" | "proposal" | "property" | "client" | "brand_dna";
+  targetType?: "request" | "proposal" | "property" | "client" | "brand_dna" | "message";
   targetId?: string;
   detail?: Record<string, unknown>;
 }): Promise<void> {

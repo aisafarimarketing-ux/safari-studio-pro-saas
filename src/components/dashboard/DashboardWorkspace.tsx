@@ -17,6 +17,7 @@ import { buildDemoProposal } from "@/lib/defaults";
 import { nanoid } from "@/lib/nanoid";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { TierBanner } from "./TierBanner";
+import { MessagesTile } from "./MessagesTile";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
@@ -472,13 +473,14 @@ function DashboardBody({
             />
           </motion.div>
 
-          {/* Flagship row — Active proposal + Inbox */}
+          {/* Flagship row — Active proposal + Requests inbox + Messages */}
           <motion.div
             variants={item}
-            className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-3.5"
+            className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_1fr] gap-3.5"
           >
             <ActiveProposalTile proposal={activeProposal} onNew={openNewProposal} creating={creating} />
             <InboxTile requests={requests} />
+            <MessagesTile />
           </motion.div>
 
           {/* Compact triplet — Funnel + Activity + Quick Actions */}

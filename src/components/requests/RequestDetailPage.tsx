@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/properties/AppHeader";
 import { TasksPanel } from "./TasksPanel";
+import { ConversationPanel } from "./ConversationPanel";
 
 // ─── Request detail — split view ───────────────────────────────────────────
 //
@@ -70,7 +71,7 @@ export function RequestDetailPage({ id }: { id: string }) {
   const [noteText, setNoteText] = useState("");
   const [posting, setPosting] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [railTab, setRailTab] = useState<"notes" | "tasks">("notes");
+  const [railTab, setRailTab] = useState<"conversation" | "notes" | "tasks">("conversation");
 
   const load = useCallback(async () => {
     try {
@@ -365,6 +366,17 @@ export function RequestDetailPage({ id }: { id: string }) {
             <nav className="px-5 pt-4 pb-0 border-b border-black/8 shrink-0 flex items-center gap-4 text-[11px] uppercase tracking-[0.28em] font-semibold">
               <button
                 type="button"
+                onClick={() => setRailTab("conversation")}
+                className="pb-3 -mb-[1px]"
+                style={{
+                  color: railTab === "conversation" ? "#1b3a2d" : "rgba(0,0,0,0.45)",
+                  borderBottom: railTab === "conversation" ? "2px solid #1b3a2d" : "2px solid transparent",
+                }}
+              >
+                Conversation
+              </button>
+              <button
+                type="button"
                 onClick={() => setRailTab("notes")}
                 className="pb-3 -mb-[1px]"
                 style={{
@@ -387,7 +399,15 @@ export function RequestDetailPage({ id }: { id: string }) {
               </button>
             </nav>
 
-            {railTab === "tasks" ? (
+            {railTab === "conversation" ? (
+              <ConversationPanel
+                requestId={id}
+                clientId={data.client?.id ?? null}
+                clientName={clientName}
+                clientEmail={data.client?.email ?? null}
+                clientPhone={data.client?.phone ?? null}
+              />
+            ) : railTab === "tasks" ? (
               <TasksPanel requestId={id} />
             ) : (
               <>
