@@ -142,6 +142,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     icon: "◐",
     description: "Elegant sign-off from the consultant",
     variants: [
+      "decision-card",
       "conversion-card",
       "closing-farewell",
       "booking-recap",
@@ -150,14 +151,17 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "centered-minimal",
       "cta-card",
     ],
-    defaultVariant: "conversion-card",
+    defaultVariant: "decision-card",
     defaultContent: {
       quote: "Africa changes you.",
       signOff:
-        "Hand-picked camps, drivers who know the ground, and a consultant on call from the moment you board to the moment you fly home.",
+        "We've secured the camps, mapped every route, and prepared everything for your journey. This is your moment to lock it in.",
       urgency:
-        "Availability at selected camps is limited and subject to confirmation.",
-      ctaLabel: "Secure This Safari",
+        "Availability is limited — we recommend confirming within 48 hours.",
+      ctaLabel: "Secure Your Safari →",
+      ctaSubtext: "Secure booking · No payment today",
+      proofTitle: "Your safari, personally managed",
+      proofBody: "We're with you from planning to arrival.",
     },
   },
   footer: {

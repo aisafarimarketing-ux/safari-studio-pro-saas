@@ -100,6 +100,14 @@ export function ClosingSection({ section }: { section: Section }) {
   const common = { proposal, section, isEditor, aiButtons } as const;
 
   switch (variant) {
+    case "decision-card":
+      return (
+        <DecisionCardLayout
+          {...common}
+          signOff={signOff}
+          onSignOff={onSignOff}
+        />
+      );
     case "closing-farewell":
       return (
         <FarewellLayout
@@ -133,8 +141,9 @@ export function ClosingSection({ section }: { section: Section }) {
     case "cta-card":
       return <CtaCardLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
     case "conversion-card":
-    default:
       return <ConversionLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
+    default:
+      return <DecisionCardLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
   }
 }
 
@@ -1118,6 +1127,616 @@ function CtaCardLayout({
         </div>
       </TwoColGrid>
     </ClosingShell>
+  );
+}
+
+// ─── Variant 8: decision-card (new default) ─────────────────────────────
+//
+// The conversion module — not a section.
+//
+// Forest-green canvas, 60/40 split. Left: emotional headline + body +
+// gold-accented urgency box. Right: white decision card with full-
+// width gradient CTA, OR-divider, secondary actions, trust indicators,
+// and human-proof signature. A single horizontal contact strip pinned
+// at the bottom of the dark canvas — replaces the standalone
+// FooterSection for proposals that use this variant (operators can
+// remove the FooterSection from the section list when they switch).
+
+const DC_DARK    = "#0d2620"; // section background top
+const DC_DARKER  = "#0a1d18"; // section background bottom
+const DC_FOREST  = "#1F3D2B";
+const DC_FOREST2 = "#2F6F4E";
+const DC_GOLD    = "#C7A76C";
+const DC_LINE    = "rgba(255,255,255,0.10)";
+
+function DecisionCardLayout({
+  proposal, section, isEditor, signOff, onSignOff, aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
+  const { operator, trip, client, days, theme, activeTier, pricing } = proposal;
+
+  const country = deriveCountry(days, trip.destinations);
+  const headline =
+    (section.content.headline as string | undefined) ??
+    `Your ${country || "safari"} is ready — all that's left is your confirmation.`;
+  const body = signOff?.trim()
+    ? signOff
+    : "We've secured the camps, mapped every route, and prepared everything for your journey. This is your moment to lock it in.";
+  const urgency =
+    (section.content.urgency as string | undefined) ??
+    "Availability is limited — we recommend confirming within 48 hours.";
+  const ctaLabel = (section.content.ctaLabel as string | undefined) ?? "Secure Your Safari →";
+  const ctaSubtext =
+    (section.content.ctaSubtext as string | undefined) ?? "Secure booking · No payment today";
+  const proofTitle =
+    (section.content.proofTitle as string | undefined) ?? "Your safari, personally managed";
+  const proofBody =
+    (section.content.proofBody as string | undefined) ?? "We're with you from planning to arrival.";
+
+  const { confirmHref } = computeCta(proposal);
+
+  const onHeadline = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, { headline: e.currentTarget.textContent ?? "" });
+  const onUrgency = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, { urgency: e.currentTarget.textContent ?? "" });
+  const onProofTitle = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, { proofTitle: e.currentTarget.textContent ?? "" });
+  const onProofBody = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, { proofBody: e.currentTarget.textContent ?? "" });
+
+  const trustBadges = (operator.trustBadges && operator.trustBadges.length > 0)
+    ? operator.trustBadges
+    : ["No-risk adjustments", "Fast confirmations", "Dedicated support"];
+
+  const consultantName = operator.consultantName?.trim() || "Your consultant";
+  const consultantInitial = consultantName.charAt(0).toUpperCase();
+  const companyName = operator.companyName?.trim() || "Safari Studio";
+  const consultantRole = operator.consultantRole?.trim() || "Your Safari Expert";
+  const signatureName = `${consultantName} & Team`;
+
+  const requestChanges = () => requestChangesPrefill(trip.title);
+
+  // Page bg behind the section — we use the default proposal page bg
+  // unless the operator overrides via styleOverrides.
+  const overrides = section.styleOverrides as Record<string, string> | undefined;
+  const pageBg = overrides?.pageBg ?? proposal.theme.tokens.pageBg ?? "#ffffff";
+
+  return (
+    <section
+      className="relative px-3 py-10 md:px-6 md:py-16"
+      style={{ background: pageBg }}
+    >
+      {aiButtons}
+
+      <div
+        className="relative mx-auto rounded-3xl overflow-hidden"
+        style={{
+          maxWidth: 1140,
+          background: `linear-gradient(180deg, ${DC_DARK}, ${DC_DARKER})`,
+          boxShadow: "0 32px 80px -24px rgba(0,0,0,0.42)",
+        }}
+      >
+        {/* Decorative grain — gold dot pattern, very faint */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none opacity-[0.04]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, ${DC_GOLD} 1px, transparent 0)`,
+            backgroundSize: "32px 32px",
+          }}
+        />
+
+        <div className="relative px-6 py-10 md:px-12 md:py-14">
+          {/* ── Two-column body ───────────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-10 lg:gap-12 items-start">
+            {/* LEFT — emotional hook */}
+            <div className="min-w-0">
+              <h2
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={onHeadline}
+                className="outline-none"
+                style={{
+                  margin: 0,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontSize: "clamp(28px, 4vw, 42px)",
+                  fontWeight: 600,
+                  lineHeight: 1.12,
+                  letterSpacing: "-0.012em",
+                  color: "#ffffff",
+                }}
+              >
+                {headline}
+              </h2>
+              <p
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={onSignOff}
+                data-ai-editable="closing"
+                className="outline-none"
+                style={{
+                  marginTop: 20,
+                  marginBottom: 0,
+                  fontSize: 17,
+                  lineHeight: 1.6,
+                  color: "rgba(255,255,255,0.78)",
+                  whiteSpace: "pre-line",
+                }}
+              >
+                {body}
+              </p>
+
+              {/* Urgency box */}
+              <div
+                className="flex items-start gap-3"
+                style={{
+                  marginTop: 28,
+                  padding: "16px 20px",
+                  borderRadius: 12,
+                  background: "rgba(199,167,108,0.08)",
+                  border: `1px solid ${DC_GOLD}52`,
+                }}
+              >
+                <ClockIcon color={DC_GOLD} />
+                <p
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={onUrgency}
+                  className="outline-none"
+                  style={{
+                    margin: 0,
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    color: DC_GOLD,
+                    fontWeight: 500,
+                  }}
+                >
+                  {urgency}
+                </p>
+              </div>
+            </div>
+
+            {/* RIGHT — Decision card */}
+            <div
+              className="rounded-2xl"
+              style={{
+                background: "#FFFFFF",
+                padding: "32px 32px 28px",
+                boxShadow: "0 24px 60px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04)",
+              }}
+            >
+              {/* Primary CTA */}
+              <a
+                href={confirmHref}
+                className="group flex w-full items-center justify-center transition-transform"
+                style={{
+                  height: 64,
+                  borderRadius: 14,
+                  background: `linear-gradient(180deg, ${DC_FOREST}, ${DC_FOREST2})`,
+                  color: "#ffffff",
+                  fontSize: 16.5,
+                  fontWeight: 600,
+                  letterSpacing: "0.2px",
+                  boxShadow: "0 10px 30px rgba(31,61,43,0.28)",
+                  textDecoration: "none",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.02)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                {ctaLabel}
+              </a>
+              <div
+                className="mt-2.5 text-center"
+                style={{ fontSize: 11.5, color: "rgba(13,38,32,0.55)" }}
+              >
+                {ctaSubtext}
+              </div>
+
+              {/* OR divider */}
+              <div className="flex items-center gap-3" style={{ margin: "22px 0 16px" }}>
+                <div className="flex-1" style={{ height: 1, background: "rgba(13,38,32,0.10)" }} />
+                <span
+                  className="text-[10px] font-bold uppercase tabular-nums"
+                  style={{ letterSpacing: "0.24em", color: "rgba(13,38,32,0.35)" }}
+                >
+                  Or
+                </span>
+                <div className="flex-1" style={{ height: 1, background: "rgba(13,38,32,0.10)" }} />
+              </div>
+
+              {/* Secondary buttons */}
+              <div className="grid grid-cols-2" style={{ gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={requestChanges}
+                  className="flex items-center justify-center transition hover:bg-black/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F3D2B]/40"
+                  style={{
+                    height: 44,
+                    padding: "0 14px",
+                    borderRadius: 10,
+                    background: "transparent",
+                    border: "1px solid rgba(13,38,32,0.16)",
+                    color: "rgba(13,38,32,0.78)",
+                    fontSize: 13,
+                    fontWeight: 500,
+                  }}
+                >
+                  Request Changes
+                </button>
+                <DecisionDownloadBtn proposalId={proposal.id} />
+              </div>
+
+              {/* Trust indicators */}
+              <ul className="flex flex-wrap items-center" style={{ marginTop: 22, gap: "6px 14px" }}>
+                {trustBadges.slice(0, 4).map((b, i) => (
+                  <li
+                    key={`${i}-${b.slice(0, 12)}`}
+                    className="flex items-center gap-1.5 text-[11.5px] font-medium"
+                    style={{ color: "rgba(13,38,32,0.62)" }}
+                  >
+                    <CheckBadge color={DC_FOREST2} />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Human proof */}
+              <div
+                className="flex items-start gap-3"
+                style={{
+                  marginTop: 22,
+                  paddingTop: 22,
+                  borderTop: "1px solid rgba(13,38,32,0.08)",
+                }}
+              >
+                <AvatarGroup
+                  primaryUrl={operator.consultantPhoto}
+                  primaryInitial={consultantInitial}
+                />
+                <div className="min-w-0">
+                  <div
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={onProofTitle}
+                    className="outline-none"
+                    style={{ fontSize: 13, fontWeight: 600, color: "#0d2620", lineHeight: 1.3 }}
+                  >
+                    {proofTitle}
+                  </div>
+                  <div
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={onProofBody}
+                    className="outline-none"
+                    style={{ fontSize: 11.5, color: "rgba(13,38,32,0.58)", marginTop: 2, lineHeight: 1.4 }}
+                  >
+                    {proofBody}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "rgba(13,38,32,0.58)",
+                      marginTop: 6,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    — {signatureName} · {companyName}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Contact strip ───────────────────────────────────────── */}
+          <ContactStrip
+            companyName={companyName}
+            consultantInitial={consultantInitial}
+            consultantPhoto={operator.consultantPhoto}
+            roleLabel={consultantRole}
+            email={operator.email}
+            phone={operator.phone}
+            whatsapp={operator.whatsapp}
+            website={operator.website}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Decision-card sub-pieces ───────────────────────────────────────────
+
+function DecisionDownloadBtn({ proposalId }: { proposalId: string }) {
+  const [busy, setBusy] = useState(false);
+
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/public/proposals/${proposalId}/pdf`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = /filename="?([^"]+)"?/.exec(cd);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = match ? match[1] : `proposal-${proposalId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="flex items-center justify-center transition hover:bg-black/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F3D2B]/40 disabled:cursor-wait disabled:opacity-65"
+      style={{
+        height: 44,
+        padding: "0 14px",
+        borderRadius: 10,
+        background: "transparent",
+        border: "1px solid rgba(13,38,32,0.16)",
+        color: "rgba(13,38,32,0.78)",
+        fontSize: 13,
+        fontWeight: 500,
+      }}
+    >
+      {busy ? "Preparing…" : "Download Quote"}
+    </button>
+  );
+}
+
+function AvatarGroup({
+  primaryUrl, primaryInitial,
+}: {
+  primaryUrl?: string;
+  primaryInitial: string;
+}) {
+  const palette = [`${DC_FOREST}`, `${DC_FOREST2}`, "#5a7a66"];
+  return (
+    <div className="flex items-center shrink-0" style={{ height: 32 }}>
+      {/* Primary — operator's consultant photo or initial chip */}
+      {primaryUrl ? (
+        <div
+          className="rounded-full overflow-hidden shrink-0"
+          style={{ width: 32, height: 32, border: "2px solid white" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={primaryUrl} alt="" className="w-full h-full object-cover" />
+        </div>
+      ) : (
+        <div
+          className="rounded-full flex items-center justify-center shrink-0"
+          style={{
+            width: 32, height: 32,
+            background: palette[0],
+            color: "white",
+            fontSize: 12,
+            fontWeight: 700,
+            border: "2px solid white",
+          }}
+        >
+          {primaryInitial}
+        </div>
+      )}
+      {/* Two soft team chips overlapping */}
+      <div
+        className="rounded-full shrink-0"
+        style={{
+          width: 32, height: 32,
+          background: `linear-gradient(135deg, ${palette[1]}, ${palette[2]})`,
+          marginLeft: -10,
+          border: "2px solid white",
+        }}
+        aria-hidden
+      />
+      <div
+        className="rounded-full shrink-0"
+        style={{
+          width: 32, height: 32,
+          background: `linear-gradient(135deg, ${palette[2]}, ${palette[0]})`,
+          marginLeft: -10,
+          border: "2px solid white",
+        }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+function ContactStrip({
+  companyName, consultantInitial, consultantPhoto, roleLabel,
+  email, phone, whatsapp, website,
+}: {
+  companyName: string;
+  consultantInitial: string;
+  consultantPhoto?: string;
+  roleLabel: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  website?: string;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between flex-wrap gap-5"
+      style={{
+        marginTop: 40,
+        paddingTop: 28,
+        borderTop: `1px solid ${DC_LINE}`,
+      }}
+    >
+      {/* Left — brand mini-block */}
+      <div className="flex items-center gap-3 min-w-0">
+        {consultantPhoto ? (
+          <div
+            className="rounded-full overflow-hidden shrink-0"
+            style={{ width: 40, height: 40 }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={consultantPhoto} alt="" className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div
+            className="rounded-full flex items-center justify-center shrink-0 font-bold"
+            style={{
+              width: 40, height: 40,
+              background: `linear-gradient(135deg, ${DC_FOREST}, ${DC_FOREST2})`,
+              color: DC_GOLD,
+              fontSize: 16,
+            }}
+            aria-hidden
+          >
+            {consultantInitial}
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="text-[14px] font-semibold leading-tight truncate" style={{ color: "white" }}>
+            {companyName}
+          </div>
+          <div className="text-[11.5px] mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.55)" }}>
+            {roleLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Right — pill rail */}
+      <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+        {whatsapp && (
+          <ContactPill
+            href={`https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}`}
+            label="WhatsApp"
+            icon={<WhatsAppGlyph />}
+          />
+        )}
+        {email && (
+          <ContactPill
+            href={`mailto:${email}`}
+            label="Email"
+            icon={<MailGlyph />}
+          />
+        )}
+        {phone && (
+          <ContactPill
+            href={`tel:${phone.replace(/\s+/g, "")}`}
+            label="Phone"
+            icon={<PhoneGlyph />}
+          />
+        )}
+        {website && (
+          <ContactPill
+            href={normaliseUrl(website)}
+            label="Website"
+            icon={<GlobeGlyph />}
+            external
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ContactPill({
+  href, label, icon, external = false,
+}: {
+  href: string; label: string; icon: React.ReactNode; external?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      className="inline-flex items-center gap-2 transition"
+      style={{
+        height: 36,
+        padding: "0 14px",
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        color: "rgba(255,255,255,0.92)",
+        fontSize: 12.5,
+        fontWeight: 500,
+        textDecoration: "none",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.10)";
+        e.currentTarget.style.borderColor = "rgba(199,167,108,0.36)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+      }}
+    >
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
+    </a>
+  );
+}
+
+// ─── Tiny icons ──────────────────────────────────────────────────────────
+
+function ClockIcon({ color }: { color: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5 V8 L10.5 9.5" />
+    </svg>
+  );
+}
+function CheckBadge({ color }: { color: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="7" stroke={color} strokeOpacity="0.42" strokeWidth="1.2" />
+      <path d="M5 8.4 L7 10.4 L11 6.2" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+function WhatsAppGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 3.4L3 21" />
+      <path d="M9 10a3 3 0 0 0 3 3l1.5-1.5a1 1 0 0 1 1 0l2 1.3a1 1 0 0 1 .3 1.2l-.3.6a3 3 0 0 1-3 2" />
+    </svg>
+  );
+}
+function MailGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="2" y="3.5" width="12" height="9" rx="1.5" />
+      <path d="M2.5 4.5 L8 9 L13.5 4.5" />
+    </svg>
+  );
+}
+function PhoneGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3.2 4.5 a1.5 1.5 0 0 1 1.5-1.5h1.4a1 1 0 0 1 1 .8l.4 2.2a1 1 0 0 1-.3 1l-1.1 1.1a8 8 0 0 0 4.2 4.2l1.1-1.1a1 1 0 0 1 1-.3l2.2.4a1 1 0 0 1 .8 1v1.4a1.5 1.5 0 0 1-1.5 1.5C7.6 14 3 9.4 3.2 4.5z" />
+    </svg>
+  );
+}
+function GlobeGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M2 8 H14" />
+      <path d="M8 2 a8 8 0 0 1 0 12" />
+      <path d="M8 2 a8 8 0 0 0 0 12" />
+    </svg>
   );
 }
 
