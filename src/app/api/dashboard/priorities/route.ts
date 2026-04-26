@@ -271,6 +271,26 @@ export async function GET(req: Request) {
   for (const t of tasksDoneToday) if (t.requestId) progressedIds.add(t.requestId);
   for (const m of messagesSentToday) if (m.requestId) progressedIds.add(m.requestId);
 
+  // ── Sidebar / action-center counts — single API call powers every
+  //    badge in the new command-center layout.
+  const [requestsActive, proposalsActive, reservationsOpen, inboxUnread, openTaskCount] = await Promise.all([
+    prisma.request.count({
+      where: { organizationId: orgId, status: { in: ["new", "working", "open"] } },
+    }),
+    prisma.proposal.count({
+      where: { organizationId: orgId, status: { in: ["draft", "sent"] } },
+    }),
+    prisma.reservation.count({
+      where: { organizationId: orgId, status: { in: ["pending", "sent", "tentative"] } },
+    }),
+    prisma.message.count({
+      where: { organizationId: orgId, direction: "inbound", readAt: null },
+    }),
+    prisma.requestTask.count({
+      where: { request: { organizationId: orgId }, doneAt: null },
+    }),
+  ]);
+
   const summary = {
     hotDealsCount: hotPriorities.length,
     hotDealsValueCents: sum(hotPriorities.map((p) => p.valueCents)),
@@ -289,6 +309,16 @@ export async function GET(req: Request) {
       messagesSent: messagesSentToday.length,
     },
     autoCreateHotEnabled,
+    // Sidebar badges — every count rendered in the left rail comes
+    // from this single object so the dashboard never fans out across
+    // routes for nav state.
+    sidebarCounts: {
+      requests: requestsActive,
+      proposals: proposalsActive,
+      reservations: reservationsOpen,
+      inboxUnread,
+      tasks: openTaskCount,
+    },
   };
 
   // ── Apply the filter, sort by score desc, slice to the limit ──────────
@@ -372,6 +402,7 @@ function buildPriority(
   const depositPaid = !!proposal && proposal.deposits.length > 0;
   const hasReservation = !!proposal && proposal.reservations.length > 0;
   const { valueCents, currency } = deriveValue(proposal?.contentJson);
+  const thumbnailUrl = deriveThumbnail(proposal?.contentJson);
 
   const signals: ScoringSignals = {
     status: r.status,
@@ -451,7 +482,82 @@ function buildPriority(
     needsFollowup: needsFollowup(s, signals, ctx.nowIso),
     atRisk: atRisk(s, signals, ctx.nowIso),
     activeTask,
+    thumbnailUrl,
+    insightText: deriveInsightText({
+      unreadCount: ctx.unreadInboundMessages,
+      views: totalViews,
+      totalSeconds: totalDwellSeconds,
+      pricingViewed,
+      lastActivityIso: r.lastActivityAt.toISOString(),
+      proposalSent,
+    }),
+    intentLabel:
+      s.total >= 75 ? "high" :
+      s.total >= 45 ? "medium" :
+      "low",
   };
+}
+
+// ─── Thumbnail picker — proposal cover image → first day → null ──────────
+
+function deriveThumbnail(contentJson: unknown): string | null {
+  if (!contentJson || typeof contentJson !== "object") return null;
+  const c = contentJson as {
+    sections?: Array<{ type?: string; content?: { heroImageUrl?: string } }>;
+    days?: Array<{ heroImageUrl?: string }>;
+  };
+  const cover = c.sections?.find((s) => s.type === "cover");
+  if (cover?.content?.heroImageUrl) return cover.content.heroImageUrl;
+  for (const d of c.days ?? []) {
+    if (d.heroImageUrl) return d.heroImageUrl;
+  }
+  return null;
+}
+
+// ─── Insight text — narrative summary of engagement signals ──────────────
+
+function deriveInsightText(args: {
+  unreadCount: number;
+  views: number;
+  totalSeconds: number;
+  pricingViewed: boolean;
+  lastActivityIso: string;
+  proposalSent: boolean;
+}): string | null {
+  const { unreadCount, views, totalSeconds, pricingViewed, lastActivityIso, proposalSent } = args;
+
+  if (unreadCount > 0) {
+    return unreadCount === 1
+      ? "Unread reply waiting for you"
+      : `${unreadCount} unread replies waiting`;
+  }
+
+  if (!proposalSent) return null; // pre-share signals don't merit narrative
+
+  const hoursSinceActivity = (Date.now() - new Date(lastActivityIso).getTime()) / 3_600_000;
+
+  if (pricingViewed && views >= 2) {
+    return "Returned and viewed pricing — ready to close";
+  }
+  if (pricingViewed) {
+    return "Viewed pricing carefully — strong intent";
+  }
+  if (views >= 3) {
+    return `Returned ${views} times — high intent`;
+  }
+  if (views >= 1 && totalSeconds >= 120) {
+    return "Read carefully but hasn't replied yet";
+  }
+  if (views === 1) {
+    return "Viewed once but hasn't responded";
+  }
+  if (views === 0 && hoursSinceActivity >= 48) {
+    return "Not opened yet — consider a nudge";
+  }
+  if (views === 0) {
+    return "Not opened yet";
+  }
+  return null;
 }
 
 // ─── deriveValue — proposal pricing × pax in cents + currency ─────────────
