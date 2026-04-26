@@ -34,6 +34,15 @@ export async function GET(req: Request) {
   const limit = clampInt(url.searchParams.get("limit"), 1, 50, 25);
   const orgId = ctx.organization.id;
   const nowIso = new Date().toISOString();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // Read the org row so we know whether to auto-create HOT tasks.
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { autoCreateHotTasks: true },
+  });
+  const autoCreateHotEnabled = org?.autoCreateHotTasks ?? false;
 
   // ── Pull every active request with the joins we need to score it ────────
   // tasks: filter to OPEN (doneAt null) — drives the "Mark done" affordance
@@ -144,7 +153,7 @@ export async function GET(req: Request) {
   }
 
   // ── Score every request, drop terminals, build the response shape ──────
-  const scored = requests
+  let scored = requests
     .map((r) => buildPriority(r, {
       inboundMessages: inboundByRequest.get(r.id) ?? 0,
       outboundMessages: outboundByRequest.get(r.id) ?? 0,
@@ -153,6 +162,79 @@ export async function GET(req: Request) {
       nowIso,
     }))
     .filter((p): p is NonNullable<typeof p> => p !== null);
+
+  // ── Auto-create HOT tasks ─────────────────────────────────────────────
+  // When the org has `autoCreateHotTasks` enabled, we look for HOT
+  // priorities that don't have a matching open task and create one
+  // automatically. Idempotent — re-checked inside the loop in case
+  // another request created the row first. The newly-created tasks
+  // are stitched back into the priority response so the UI reflects
+  // them on the same render.
+  if (autoCreateHotEnabled) {
+    const candidates = scored.filter(
+      (p) => p.score.label === "hot" && !p.activeTask &&
+        // No "wait" / "stay_in_touch" auto-tasks — they're not actionable.
+        p.score.nextAction.type !== "wait" &&
+        p.score.nextAction.type !== "stay_in_touch",
+    );
+    if (candidates.length > 0) {
+      const newTasks = await Promise.all(
+        candidates.map(async (p) => {
+          const action = p.score.nextAction;
+          // Re-check inside the loop — another tab may have created a
+          // matching task between our priorities GET and now.
+          const racing = await prisma.requestTask.findFirst({
+            where: { requestId: p.requestId, actionType: action.type, doneAt: null },
+            select: { id: true, title: true, actionType: true, priorityLevel: true, dueAt: true, auto: true },
+          });
+          if (racing) return { requestId: p.requestId, task: racing };
+          const dueAt = new Date();
+          dueAt.setHours(23, 59, 59, 999);
+          try {
+            const task = await prisma.requestTask.create({
+              data: {
+                requestId: p.requestId,
+                title: action.label,
+                notes: action.reason,
+                reason: action.reason,
+                actionType: action.type,
+                priorityLevel: "high",
+                auto: true,
+                dueAt,
+              },
+            });
+            return { requestId: p.requestId, task };
+          } catch {
+            // Race lost. Best-effort.
+            return null;
+          }
+        }),
+      );
+      // Stitch the new tasks into the scored array so the response
+      // reflects the auto-creation immediately.
+      const taskByRequestId = new Map<string, { id: string; title: string; actionType: string | null; priorityLevel: string | null; dueAt: Date | null; auto: boolean }>();
+      for (const row of newTasks) {
+        if (row && row.task) taskByRequestId.set(row.requestId, row.task);
+      }
+      scored = scored.map((p) => {
+        if (p.activeTask) return p;
+        const t = taskByRequestId.get(p.requestId);
+        if (!t) return p;
+        return {
+          ...p,
+          activeTask: {
+            id: t.id,
+            title: t.title,
+            actionType: t.actionType,
+            priorityLevel: t.priorityLevel,
+            dueAt: t.dueAt?.toISOString() ?? null,
+            auto: t.auto,
+            matchesNextAction: t.actionType === p.score.nextAction.type,
+          },
+        };
+      });
+    }
+  }
 
   // ── Compute filter counts BEFORE applying the user's filter, so the
   //    UI tab counts stay stable across selections. ──────────────────────
@@ -166,6 +248,29 @@ export async function GET(req: Request) {
   // Summary metrics — computed off the full set, not the filtered slice.
   const hotPriorities = scored.filter((p) => p.score.label === "hot");
   const atRiskPriorities = scored.filter((p) => p.atRisk);
+
+  // ── Today's wins — momentum metrics for the dashboard hero strip ─────
+  // Counts the operator's own progress today rather than abstract
+  // pipeline state. "Deals progressed" = distinct request IDs touched
+  // today by any of (task completed, message sent, status flipped).
+  // "Bookings confirmed" = requests that hit `booked` today.
+  const [tasksDoneToday, messagesSentToday, bookingsToday] = await Promise.all([
+    prisma.requestTask.findMany({
+      where: { request: { organizationId: orgId }, doneAt: { gte: startOfToday } },
+      select: { requestId: true },
+    }),
+    prisma.message.findMany({
+      where: { organizationId: orgId, direction: "outbound", createdAt: { gte: startOfToday } },
+      select: { requestId: true },
+    }),
+    prisma.request.count({
+      where: { organizationId: orgId, status: "booked", updatedAt: { gte: startOfToday } },
+    }),
+  ]);
+  const progressedIds = new Set<string>();
+  for (const t of tasksDoneToday) if (t.requestId) progressedIds.add(t.requestId);
+  for (const m of messagesSentToday) if (m.requestId) progressedIds.add(m.requestId);
+
   const summary = {
     hotDealsCount: hotPriorities.length,
     hotDealsValueCents: sum(hotPriorities.map((p) => p.valueCents)),
@@ -175,6 +280,15 @@ export async function GET(req: Request) {
     followupsDueCount: scored.filter((p) => p.needsFollowup).length,
     totalActiveValueCents: sum(scored.map((p) => p.valueCents)),
     currency: scored.find((p) => p.currency)?.currency ?? "USD",
+    // Momentum strip — drives the "3 deals progressed today" / "1
+    // booking confirmed" copy at the top of the priorities section.
+    todaysWins: {
+      dealsProgressed: progressedIds.size,
+      bookingsConfirmed: bookingsToday,
+      tasksCompleted: tasksDoneToday.length,
+      messagesSent: messagesSentToday.length,
+    },
+    autoCreateHotEnabled,
   };
 
   // ── Apply the filter, sort by score desc, slice to the limit ──────────

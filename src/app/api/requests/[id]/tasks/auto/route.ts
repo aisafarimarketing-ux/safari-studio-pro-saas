@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/activity";
 
 // ─── POST /api/requests/[id]/tasks/auto ────────────────────────────────────
 //
@@ -134,6 +135,16 @@ export async function POST(
   await prisma.request.update({
     where: { id: request.id },
     data: { lastActivityAt: now },
+  });
+
+  // Activity feed — drives "today's wins" momentum metric.
+  void recordActivity({
+    userId: ctx.user.id,
+    organizationId: ctx.organization.id,
+    type: "taskCreated",
+    targetType: "task",
+    targetId: task.id,
+    detail: { requestId: request.id, actionType, priorityLevel, auto: false },
   });
 
   return NextResponse.json({ task, alreadyExisted: false });

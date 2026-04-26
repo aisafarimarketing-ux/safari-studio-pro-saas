@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useDashboardTheme } from "./DashboardTheme";
 
@@ -79,6 +79,13 @@ type Summary = {
   followupsDueCount: number;
   totalActiveValueCents: number;
   currency: string;
+  todaysWins: {
+    dealsProgressed: number;
+    bookingsConfirmed: number;
+    tasksCompleted: number;
+    messagesSent: number;
+  };
+  autoCreateHotEnabled: boolean;
 };
 
 type FilterCounts = Record<FilterKey, number>;
@@ -111,8 +118,9 @@ export function PrioritiesSection() {
   const [loadFailed, setLoadFailed] = useState(false);
   // Per-card UI state — busy spinners while a button is in flight, plus
   // the most-recent action so we can flash a confirmation toast.
-  const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | undefined>>({});
+  const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | "sending" | undefined>>({});
   const [flash, setFlash] = useState<{ requestId: string; message: string; tone: "success" | "info" } | null>(null);
+  const [celebrate, setCelebrate] = useState<string | null>(null); // requestId animating "Deal progressed ✓"
 
   // Load priorities. Refetches when filter changes.
   const loadPriorities = useMemo(() => async () => {
@@ -219,6 +227,60 @@ export function PrioritiesSection() {
     }
   };
 
+  // ── Quick reply — one-click send via the existing messages API ───────
+  // Picks the channel: SMS/WhatsApp when phone exists, else email
+  // (server auto-derives subject when quickReply: true). Records
+  // followupSent activity so today's wins counter updates.
+  const handleQuickReply = async (priority: Priority, body: string) => {
+    if (!priority.clientId || busyByRequestId[priority.requestId]) return;
+    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "sending" }));
+    setFlash({ requestId: priority.requestId, message: "Sending…", tone: "info" });
+
+    // Channel: prefer email for international clients (universal); fall
+    // back to WhatsApp/SMS only if explicitly preferred. Email keeps
+    // the message in the operator's existing inbox flow without
+    // surprises about phone numbers we don't fully validate.
+    const channel = "email";
+
+    try {
+      const res = await fetch("/api/messages/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: priority.requestId,
+          clientId: priority.clientId,
+          channel,
+          body,
+          quickReply: true,
+        }),
+      });
+      const json = (await res.json()) as { message?: { status?: string }; error?: string };
+      if (!res.ok && !json.message) throw new Error(json.error || `HTTP ${res.status}`);
+      const status = json.message?.status;
+      if (status === "failed") {
+        throw new Error(json.error || "Send failed.");
+      }
+      setFlash({ requestId: priority.requestId, message: "Message sent ✓", tone: "success" });
+      setTimeout(() => setFlash(null), 1800);
+      // Refetch — recency sub-score moves and the priorities reorder.
+      const fresh = await loadPriorities();
+      if (fresh) setData(fresh);
+    } catch (err) {
+      setFlash({
+        requestId: priority.requestId,
+        message: err instanceof Error ? err.message : "Send failed.",
+        tone: "info",
+      });
+      setTimeout(() => setFlash(null), 3000);
+    } finally {
+      setBusyByRequestId((s) => {
+        const next = { ...s };
+        delete next[priority.requestId];
+        return next;
+      });
+    }
+  };
+
   // ── Mark done — closes the loop ──────────────────────────────────────
   const handleMarkDone = async (priority: Priority) => {
     const task = priority.activeTask;
@@ -244,8 +306,10 @@ export function PrioritiesSection() {
       const fresh = await loadPriorities();
       if (fresh) setData(fresh);
       void refreshTasks();
-      setFlash({ requestId: priority.requestId, message: "Marked done.", tone: "success" });
-      setTimeout(() => setFlash(null), 1800);
+      setFlash({ requestId: priority.requestId, message: "Deal progressed ✓", tone: "success" });
+      setCelebrate(priority.requestId);
+      setTimeout(() => setFlash(null), 2000);
+      setTimeout(() => setCelebrate(null), 700);
     } catch (err) {
       // Revert.
       setData((prev) => prev && {
@@ -300,7 +364,7 @@ export function PrioritiesSection() {
       }}
     >
       {/* Header */}
-      <header className="flex items-baseline justify-between gap-4 mb-5">
+      <header className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
           <div className="text-[10px] uppercase tracking-[0.28em] font-semibold" style={{ color: tokens.muted }}>
             Today's Priorities
@@ -312,6 +376,7 @@ export function PrioritiesSection() {
             Who to follow up with — right now.
           </h2>
         </div>
+        {summary && <TodaysWinsStrip wins={summary.todaysWins} tokens={tokens} />}
       </header>
 
       {/* Summary metrics strip */}
@@ -380,8 +445,10 @@ export function PrioritiesSection() {
                   tokens={tokens}
                   busy={busyByRequestId[p.requestId]}
                   flash={flash?.requestId === p.requestId ? flash : null}
+                  celebrate={celebrate === p.requestId}
                   onAddTask={() => handleAddTask(p)}
                   onMarkDone={() => handleMarkDone(p)}
+                  onQuickReply={(body) => handleQuickReply(p, body)}
                 />
               ))}
             </ul>
@@ -468,27 +535,31 @@ function FilterTab({
 // ─── Priority card ───────────────────────────────────────────────────────
 
 function PriorityCard({
-  priority, tokens, busy, flash, onAddTask, onMarkDone,
+  priority, tokens, busy, flash, celebrate, onAddTask, onMarkDone, onQuickReply,
 }: {
   priority: Priority;
   tokens: ReturnType<typeof useDashboardTheme>["tokens"];
-  busy: "creating" | "completing" | undefined;
+  busy: "creating" | "completing" | "sending" | undefined;
   flash: { message: string; tone: "success" | "info" } | null;
+  celebrate: boolean;
   onAddTask: () => void;
   onMarkDone: () => void;
+  onQuickReply: (body: string) => void;
 }) {
   const labelColor = priority.score.label === "hot" ? "#dc2626" : priority.score.label === "warm" ? "#d97706" : tokens.muted;
   const labelBg = priority.score.label === "hot" ? "#fee2e2" : priority.score.label === "warm" ? "#fef3c7" : tokens.ring;
   const messageHref = `/requests/${priority.requestId}`;
 
-  // Once a matching task exists, dial down urgency styling — the
-  // operator has committed and we don't want to keep nagging.
   const hasActiveCommitment = !!priority.activeTask?.matchesNextAction;
   const showUrgentStyling = priority.score.nextAction.urgent && !hasActiveCommitment;
+  const isHot = priority.score.label === "hot" && !hasActiveCommitment;
+  const isAutoTask = !!priority.activeTask?.auto;
+  const quickReplyOptions = QUICK_REPLY_OPTIONS[priority.score.nextAction.type] ?? [];
+  const quickReplyAvailable = quickReplyOptions.length > 0 && !!priority.clientId;
 
   return (
     <li
-      className="rounded-xl p-3.5 border transition relative"
+      className={`rounded-xl p-3.5 border relative transition-all duration-200 ease-out ${isHot ? "ss-hot-pulse" : ""} ${celebrate ? "ss-celebrate" : ""}`}
       style={{
         background: tokens.pageBg,
         borderColor: showUrgentStyling
@@ -498,7 +569,6 @@ function PriorityCard({
             : tokens.ring,
       }}
     >
-      {/* Toast — slides in for ~2s after add/done actions */}
       {flash && (
         <div
           className="absolute top-2 right-2 z-10 text-[10.5px] font-semibold px-2 py-1 rounded-md shadow-sm"
@@ -514,7 +584,6 @@ function PriorityCard({
       )}
 
       <div className="flex items-start gap-3">
-        {/* Priority badge column */}
         <div className="shrink-0">
           <div
             className="text-[10px] uppercase tracking-[0.18em] font-bold px-2 py-1 rounded-md"
@@ -530,7 +599,6 @@ function PriorityCard({
           </div>
         </div>
 
-        {/* Main content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 min-w-0">
@@ -545,10 +613,13 @@ function PriorityCard({
               {hasActiveCommitment && (
                 <span
                   className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
-                  style={{ background: "#dcfce7", color: "#166534" }}
-                  title={`Task active: ${priority.activeTask?.title}`}
+                  style={{
+                    background: isAutoTask ? "#fef3c7" : "#dcfce7",
+                    color: isAutoTask ? "#92400e" : "#166534",
+                  }}
+                  title={priority.activeTask?.title}
                 >
-                  ✓ Task active
+                  {isAutoTask ? "⚡ Auto task" : "✓ Task active"}
                 </span>
               )}
             </div>
@@ -586,65 +657,236 @@ function PriorityCard({
             )}
           </div>
 
-          {/* Next action + CTAs */}
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <div
-              className="text-[11.5px] flex-1 min-w-0 truncate"
-              style={{ color: tokens.muted }}
-              title={priority.score.nextAction.reason}
-            >
+          {/* Best move / Because — replaces the previous one-line "Next: X". */}
+          <div className="mt-3 leading-snug">
+            <div className="text-[11.5px]">
               <span className="font-semibold" style={{ color: showUrgentStyling ? "#dc2626" : tokens.heading }}>
-                Next:
+                Best move:
               </span>{" "}
-              {priority.score.nextAction.label}
+              <span style={{ color: tokens.heading }}>{priority.score.nextAction.label}</span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {priority.proposalId && priority.score.nextAction.type === "ask_for_booking" && (
-                <Link
-                  href={`/studio/${priority.proposalId}`}
-                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition"
-                  style={{ background: tokens.ring, color: tokens.heading }}
-                >
-                  Open quote
-                </Link>
-              )}
-              {hasActiveCommitment ? (
-                <button
-                  type="button"
-                  onClick={onMarkDone}
-                  disabled={busy === "completing"}
-                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
-                  style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac" }}
-                  title="Mark this follow-up task as done"
-                >
-                  {busy === "completing" ? "…" : "✓ Mark done"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onAddTask}
-                  disabled={busy === "creating"}
-                  className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
-                  style={{ background: tokens.ring, color: tokens.heading, border: `1px solid ${tokens.ring}` }}
-                  title="Commit this as a follow-up task"
-                >
-                  {busy === "creating" ? "Adding…" : "+ Add task"}
-                </button>
-              )}
+            <div className="text-[11.5px] mt-0.5" style={{ color: tokens.muted }}>
+              <span className="font-semibold">Because:</span> {priority.score.nextAction.reason}
+            </div>
+          </div>
+
+          {/* CTA row */}
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap justify-end">
+            {quickReplyAvailable && (
+              <QuickReplyButton
+                options={quickReplyOptions}
+                onPick={onQuickReply}
+                busy={busy === "sending"}
+                tokens={tokens}
+              />
+            )}
+            {priority.proposalId && priority.score.nextAction.type === "ask_for_booking" && (
               <Link
-                href={messageHref}
-                className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md transition text-white"
-                style={{ background: showUrgentStyling ? "#dc2626" : FOREST }}
+                href={`/studio/${priority.proposalId}`}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition"
+                style={{ background: tokens.ring, color: tokens.heading }}
               >
-                Message client →
+                Open quote
               </Link>
-            </div>
+            )}
+            {hasActiveCommitment ? (
+              <button
+                type="button"
+                onClick={onMarkDone}
+                disabled={busy === "completing"}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
+                style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac" }}
+                title="Mark this follow-up task as done"
+              >
+                {busy === "completing" ? "…" : "✓ Mark done"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onAddTask}
+                disabled={busy === "creating"}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
+                style={{ background: tokens.ring, color: tokens.heading, border: `1px solid ${tokens.ring}` }}
+                title="Commit this as a follow-up task"
+              >
+                {busy === "creating" ? "Adding…" : "+ Add task"}
+              </button>
+            )}
+            <Link
+              href={messageHref}
+              className="text-[11.5px] font-semibold px-3 py-1.5 rounded-md transition text-white"
+              style={{ background: showUrgentStyling ? "#dc2626" : FOREST }}
+            >
+              Message client →
+            </Link>
           </div>
         </div>
       </div>
     </li>
   );
 }
+
+// ─── Quick reply dropdown ────────────────────────────────────────────────
+
+function QuickReplyButton({
+  options, onPick, busy, tokens,
+}: {
+  options: string[];
+  onPick: (body: string) => void;
+  busy: boolean;
+  tokens: ReturnType<typeof useDashboardTheme>["tokens"];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={busy}
+        className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md transition disabled:opacity-50"
+        style={{
+          background: tokens.primarySoft,
+          color: tokens.primary,
+          border: `1px solid ${tokens.primarySoft}`,
+        }}
+        title="Send a quick reply with one click"
+      >
+        {busy ? "Sending…" : "Quick reply ▾"}
+      </button>
+      {open && !busy && (
+        <div
+          className="absolute z-30 right-0 mt-1.5 w-[280px] rounded-xl shadow-lg overflow-hidden"
+          style={{
+            background: "white",
+            border: `1px solid ${tokens.ring}`,
+            boxShadow: "0 10px 24px -8px rgba(0,0,0,0.15)",
+            animation: "ss-flash-in 140ms ease-out",
+          }}
+        >
+          <div
+            className="px-3 py-2 text-[10px] uppercase tracking-[0.22em] font-semibold"
+            style={{ color: tokens.muted, borderBottom: `1px solid ${tokens.ring}` }}
+          >
+            Quick reply
+          </div>
+          <ul>
+            {options.map((opt) => (
+              <li key={opt}>
+                <button
+                  type="button"
+                  onClick={() => { onPick(opt); setOpen(false); }}
+                  className="block w-full text-left text-[12.5px] px-3 py-2.5 transition"
+                  style={{ color: tokens.heading }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = tokens.ring; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                >
+                  {opt}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Today's wins strip ──────────────────────────────────────────────────
+
+function TodaysWinsStrip({
+  wins, tokens,
+}: {
+  wins: Summary["todaysWins"];
+  tokens: ReturnType<typeof useDashboardTheme>["tokens"];
+}) {
+  const items: { count: number; label: string; tone: "primary" | "success" }[] = [];
+  if (wins.dealsProgressed > 0) {
+    items.push({
+      count: wins.dealsProgressed,
+      label: wins.dealsProgressed === 1 ? "deal progressed today" : "deals progressed today",
+      tone: "primary",
+    });
+  }
+  if (wins.bookingsConfirmed > 0) {
+    items.push({
+      count: wins.bookingsConfirmed,
+      label: wins.bookingsConfirmed === 1 ? "booking confirmed" : "bookings confirmed",
+      tone: "success",
+    });
+  }
+  if (items.length === 0) return null;
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {items.map((it) => (
+        <div
+          key={it.label}
+          className="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full"
+          style={{
+            background: it.tone === "success" ? "#dcfce7" : tokens.primarySoft,
+            color: it.tone === "success" ? "#166534" : tokens.primary,
+          }}
+        >
+          <span className="text-[16px] font-bold tabular-nums leading-none">{it.count}</span>
+          <span className="text-[11.5px] font-medium">{it.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Quick-reply options keyed by next-action type ───────────────────────
+// Curated lines per scenario — voice matches the operator brief tone
+// from the AI prompts (specific, unfussy, no clichés). Empty arrays
+// hide the Quick reply button for actions where it doesn't fit
+// (draft_quote: nothing to reply to yet · wait: too soon).
+
+const QUICK_REPLY_OPTIONS: Record<string, string[]> = {
+  reply: [
+    "Thanks for getting back — let me digest and reply with options shortly.",
+    "Got it. I'll come back with adjustments by end of day.",
+    "Noted — leaving this with you to mull and ping me with thoughts.",
+  ],
+  follow_up: [
+    "Just checking in — how's the proposal sitting with you?",
+    "Happy to adjust anything; let me know what's on your mind.",
+    "Want to jump on a quick call this week to walk through it?",
+  ],
+  ask_for_booking: [
+    "Shall I go ahead and confirm this for you?",
+    "Ready to secure the camps before they release?",
+    "Want me to lock the dates? They're moving fast for that window.",
+  ],
+  nudge: [
+    "Just checking if you saw the proposal — let me know your thoughts.",
+    "Anything I can clarify? Happy to walk you through it.",
+    "Re-sending in case the first email got buried.",
+  ],
+  send_proposal: [
+    "Just shared your itinerary — would love your feedback.",
+    "Have a look when you get a chance, happy to adjust anything.",
+  ],
+  confirm_reservation: [
+    "Reservations are in motion — I'll keep you posted.",
+    "All booked. Pre-trip pack will be with you closer to departure.",
+  ],
+  stay_in_touch: [
+    "Just keeping in touch — anything I can help with?",
+  ],
+  // No quick replies for these states.
+  draft_quote: [],
+  wait: [],
+};
 
 // ─── Engagement chip ─────────────────────────────────────────────────────
 

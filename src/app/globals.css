@@ -564,3 +564,20 @@ body {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Phase 5+ — HOT card pulse and completion celebration */
+@keyframes ss-hot-pulse-anim {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18); }
+}
+.ss-hot-pulse {
+  animation: ss-hot-pulse-anim 2.4s ease-in-out infinite;
+}
+@keyframes ss-celebrate-anim {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.012); box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.18); }
+  100% { transform: scale(1); }
+}
+.ss-celebrate {
+  animation: ss-celebrate-anim 600ms ease-out;
+}

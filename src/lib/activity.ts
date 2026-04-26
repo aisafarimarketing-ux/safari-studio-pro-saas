@@ -25,13 +25,16 @@ export type ActivityType =
   | "viewLibrary"
   | "viewTeam"
   | "messageSent"
-  | "messageReceived";
+  | "messageReceived"
+  | "followupSent"
+  | "taskCreated"
+  | "taskCompleted";
 
 export async function recordActivity(params: {
   userId: string;
   organizationId: string;
   type: ActivityType;
-  targetType?: "request" | "proposal" | "property" | "client" | "brand_dna" | "message";
+  targetType?: "request" | "proposal" | "property" | "client" | "brand_dna" | "message" | "task";
   targetId?: string;
   detail?: Record<string, unknown>;
 }): Promise<void> {

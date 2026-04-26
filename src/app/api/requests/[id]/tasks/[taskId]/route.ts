@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/activity";
 
 // PATCH  /api/requests/[id]/tasks/[taskId] — toggle done, edit title/notes/dueAt
 // DELETE /api/requests/[id]/tasks/[taskId]
@@ -59,6 +60,20 @@ export async function PATCH(
     where: { id: request.id },
     data: { lastActivityAt: new Date() },
   });
+
+  // Log a `taskCompleted` activity on the done-true transition only —
+  // unchecking a task shouldn't fire the momentum metric. Compares
+  // before/after so reopening a closed task doesn't double-count.
+  if (typeof body.done === "boolean" && body.done && !existing.doneAt) {
+    void recordActivity({
+      userId: ctx.user.id,
+      organizationId: ctx.organization.id,
+      type: "taskCompleted",
+      targetType: "task",
+      targetId: task.id,
+      detail: { requestId: request.id, actionType: existing.actionType ?? null, auto: existing.auto },
+    });
+  }
 
   return NextResponse.json({ task });
 }

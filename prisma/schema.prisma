@@ -887,6 +887,16 @@ model RequestTask {
   // of "what did I commit to" reports.
   auto          Boolean @default(false)
 
+  // Outcome — drives the future feedback loop ("which suggestions
+  // converted into bookings?"). "pending" until the task is completed
+  // and the system can attribute a result.
+  //   pending     — task open, or no resolution detected yet
+  //   converted   — task closed AND a booking was confirmed for the
+  //                 same request within a follow-up window
+  //   no_response — task closed AND no booking landed
+  // Phase 5+ reserves the field; the attribution job is a future commit.
+  taskOutcome   String  @default("pending")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

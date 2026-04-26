@@ -33,6 +33,12 @@ type Body = {
   channel?: string;
   subject?: string;
   body?: string;
+  /** Marks this as a quick-reply send from the priorities dashboard.
+   *  When true, an email subject is auto-derived if missing and a
+   *  `followupSent` activity event is logged in addition to
+   *  `messageSent`. Drives the "1 booking confirmed today" / "3 deals
+   *  progressed today" momentum metrics. */
+  quickReply?: boolean;
 };
 
 export async function POST(req: Request) {
@@ -63,9 +69,17 @@ export async function POST(req: Request) {
   if (!messageBody) {
     return NextResponse.json({ error: "body is required" }, { status: 400 });
   }
-  const subject = body.subject?.trim() || null;
+  // For quick replies on email we auto-derive a subject when the
+  // operator clicked a one-button action — friction-free is the whole
+  // point of the feature. For everything else, the operator must
+  // supply a subject explicitly.
+  let subject = body.subject?.trim() || null;
   if (channel === "email" && !subject) {
-    return NextResponse.json({ error: "subject is required for email" }, { status: 400 });
+    if (body.quickReply) {
+      subject = "Following up on your safari";
+    } else {
+      return NextResponse.json({ error: "subject is required for email" }, { status: 400 });
+    }
   }
 
   const clientId = body.clientId?.trim();
@@ -222,17 +236,28 @@ export async function POST(req: Request) {
       });
     }
 
-    // Activity feed entry — the dashboard's recent-activity tile reads
-    // from this. Fire-and-forget; an audit-log failure must not turn a
-    // successful send into a failure response.
+    // Activity feed entries — the dashboard's recent-activity + the
+    // "today's wins" momentum metrics read from these. Fire-and-forget;
+    // a logging failure must never turn a successful send into a
+    // failure response.
     void recordActivity({
       userId: ctx.user.id,
       organizationId: ctx.organization.id,
       type: "messageSent",
       targetType: "message",
       targetId: updated.id,
-      detail: { channel, requestId, clientId: client.id },
+      detail: { channel, requestId, clientId: client.id, quickReply: body.quickReply ?? false },
     });
+    if (body.quickReply) {
+      void recordActivity({
+        userId: ctx.user.id,
+        organizationId: ctx.organization.id,
+        type: "followupSent",
+        targetType: "message",
+        targetId: updated.id,
+        detail: { channel, requestId, clientId: client.id },
+      });
+    }
 
     return NextResponse.json({ message: updated });
   } catch (err) {
