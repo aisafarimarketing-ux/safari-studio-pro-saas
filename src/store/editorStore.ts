@@ -14,6 +14,15 @@ export type EditorMode = "editor" | "preview" | "print";
 // selected; theme is always available.
 export type ContextTab = "section" | "trip" | "theme";
 
+// Editor view — three discrete chrome modes from the design spec:
+//   "edit"      — canvas only, panels collapsed, inline editing rules
+//   "structure" — left sidebar expanded for section reordering
+//   "style"     — right panel slides in for theme / colors / fonts
+// setEditorView() flips the per-panel flags as a side effect, but the
+// existing toggleLeftPanel / toggleRightPanel still work for power
+// users who want to override.
+export type EditorView = "edit" | "structure" | "style";
+
 export interface FloatingPickerState {
   x: number;
   y: number;
@@ -24,6 +33,7 @@ export interface FloatingPickerState {
 
 interface EditorState {
   mode: EditorMode;
+  editorView: EditorView;
   selectedSectionId: string | null;
   selectedDayId: string | null;
   selectedPropertyId: string | null;
@@ -35,6 +45,7 @@ interface EditorState {
   rightPanelOpen: boolean;
 
   setMode: (mode: EditorMode) => void;
+  setEditorView: (view: EditorView) => void;
   selectSection: (id: string | null) => void;
   selectDay: (id: string | null) => void;
   selectProperty: (id: string | null) => void;
@@ -51,6 +62,10 @@ interface EditorState {
 
 export const useEditorStore = create<EditorState>()((set) => ({
   mode: "editor",
+  // Default to "edit" — canvas-first feel from the design spec. Both
+  // panels start hidden so the proposal dominates the screen the
+  // moment the editor loads.
+  editorView: "edit",
   selectedSectionId: null,
   selectedDayId: null,
   selectedPropertyId: null,
@@ -58,10 +73,21 @@ export const useEditorStore = create<EditorState>()((set) => ({
   newProposalOpen: false,
   addSectionAfterOrder: null,
   floatingPicker: null,
-  leftPanelOpen: true,
-  rightPanelOpen: true,
+  leftPanelOpen: false,
+  rightPanelOpen: false,
 
   setMode: (mode) => set({ mode }),
+  setEditorView: (view) =>
+    set((s) => ({
+      editorView: view,
+      // Edit       → both closed
+      // Structure  → left only
+      // Style      → right only (force theme tab so the right panel
+      //              shows global tokens, not a section's local panel)
+      leftPanelOpen: view === "structure",
+      rightPanelOpen: view === "style",
+      contextTab: view === "style" ? "theme" : s.contextTab,
+    })),
   selectSection: (id) =>
     set((s) => ({
       selectedSectionId: id,

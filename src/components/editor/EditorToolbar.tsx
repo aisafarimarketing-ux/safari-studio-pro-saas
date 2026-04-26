@@ -13,7 +13,7 @@ import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
 import { CommentsDrawer } from "./CommentsDrawer";
 import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
-import { useEditorStore } from "@/store/editorStore";
+import { useEditorStore, type EditorView } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
 import { recompressProposalImages } from "@/lib/recompressProposalImages";
@@ -43,7 +43,9 @@ export function EditorToolbar({
   lastSavedAt: Date | null;
 }) {
   const router = useRouter();
-  const { setMode } = useEditorStore();
+  const setMode = useEditorStore((s) => s.setMode);
+  const editorView = useEditorStore((s) => s.editorView);
+  const setEditorView = useEditorStore((s) => s.setEditorView);
   const { proposal } = useProposalStore();
 
   const [shareState, setShareState] = useState<ShareState>("idle");
@@ -229,9 +231,17 @@ export function EditorToolbar({
         </div>
       </div>
 
-      {/* Centre: Brand DNA hint (non-blocking, dismissible) */}
-      <div className="hidden lg:flex items-center shrink-0 min-w-0 mx-2">
-        <BrandDNAHint />
+      {/* Centre: 3-mode editor view switch — Edit / Structure / Style.
+          Edit hides both panels (canvas dominates). Structure expands
+          the left sidebar for section reordering. Style slides the
+          right panel in for theme controls. The Brand DNA hint chip
+          tucks below at smaller widths so the switch stays the focal
+          centre. */}
+      <div className="hidden md:flex items-center gap-3 shrink-0 min-w-0 mx-2">
+        <EditorViewSwitch view={editorView} onChange={setEditorView} />
+        <div className="hidden xl:flex items-center">
+          <BrandDNAHint />
+        </div>
       </div>
 
       {/* Right: action stack — Save indicator · Comments · ⋯ · Preview · SHARE */}
@@ -253,6 +263,17 @@ export function EditorToolbar({
           onDuplicate={handleDuplicate}
           duplicating={duplicating}
         />
+
+        {/* Preview — outline button, visible. Promoted out of the ⋯
+            menu per spec so the path to "see it as a guest will" is
+            one click. */}
+        <button
+          onClick={handlePreview}
+          className="hidden md:inline-flex items-center px-3.5 py-1.5 text-sm rounded-lg transition active:scale-95 font-medium border border-black/12 text-black/75 hover:bg-black/[0.03]"
+          title="Preview as a guest"
+        >
+          Preview
+        </button>
 
         <button
           onClick={handleShare}
@@ -328,6 +349,61 @@ export function EditorToolbar({
         open={rebuildOpen}
         onClose={() => setRebuildOpen(false)}
       />
+    </div>
+  );
+}
+
+// ─── Editor view switch — Edit / Structure / Style ─────────────────────────
+//
+// Segmented control. The selected pill carries the forest-green
+// background; the others sit on a soft sand track that matches the
+// closing/footer brand language. Centered between the breadcrumb (left)
+// and the action stack (right) so it reads as the primary navigation
+// of the editor surface.
+
+function EditorViewSwitch({
+  view,
+  onChange,
+}: {
+  view: EditorView;
+  onChange: (view: EditorView) => void;
+}) {
+  const items: { key: EditorView; label: string }[] = [
+    { key: "edit", label: "Edit" },
+    { key: "structure", label: "Structure" },
+    { key: "style", label: "Style" },
+  ];
+  return (
+    <div
+      className="inline-flex items-center p-0.5 rounded-full"
+      style={{
+        background: "rgba(13,38,32,0.05)",
+        border: "1px solid rgba(13,38,32,0.06)",
+      }}
+      role="tablist"
+      aria-label="Editor view"
+    >
+      {items.map((it) => {
+        const active = view === it.key;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(it.key)}
+            className="text-[12px] font-semibold px-3.5 py-1 rounded-full transition"
+            style={{
+              background: active ? "#1b3a2d" : "transparent",
+              color: active ? "white" : "rgba(13,38,32,0.65)",
+              boxShadow: active ? "0 1px 2px rgba(13,38,32,0.18)" : "none",
+              letterSpacing: "0.01em",
+            }}
+          >
+            {it.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
