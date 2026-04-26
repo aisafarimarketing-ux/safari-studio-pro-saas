@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { triggerReservationFollowup } from "@/lib/ghl/workflowEvents";
 
 // ─── PATCH /api/reservations/:id ───────────────────────────────────────────
 // Status update — operator flipping through the lifecycle:
@@ -69,6 +70,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     where: { id },
     data: patch,
   });
+
+  // Fire-and-forget GHL `reservation_followup` workflow on the FIRST
+  // transition to "sent" — uses existing.sentAt as the idempotency
+  // marker (set above only when it was previously null). No-op when
+  // GHL isn't configured for the org.
+  if (body.status === "sent" && !existing.sentAt) {
+    void triggerReservationFollowup(updated.id);
+  }
 
   return NextResponse.json({ reservation: updated });
 }

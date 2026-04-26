@@ -85,9 +85,13 @@ export function EditorToolbar({
   }>({ open: false, message: "" });
 
   // ── Share (= Copy link, with primary affordance) ──
+  // Side effect: notifies the server so it can flip Proposal.status from
+  // "draft" → "sent" on first share and fire the GHL `proposal_sent`
+  // workflow. Fire-and-forget — clipboard copy never waits on this.
   const handleShare = async () => {
     const id = useProposalStore.getState().proposal.id;
     const url = `${window.location.origin}/p/${id}`;
+    void fetch(`/api/proposals/${id}/share`, { method: "POST" }).catch(() => {});
     try {
       await navigator.clipboard.writeText(url);
       setShareState("copied");

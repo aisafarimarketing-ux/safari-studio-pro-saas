@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { triggerProposalViewed } from "@/lib/ghl/workflowEvents";
 
 // POST /api/public/proposals/:id/track
 //   Body: { sessionId, kind: "open" | "section" | "close",
@@ -83,6 +84,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       dwellSeconds,
     },
   });
+
+  // First-view detection — only on "open" kinds. We count ProposalView
+  // rows for this proposal AFTER the upsert; if exactly one exists, the
+  // row we just created is the first ever view. Fire the GHL
+  // `proposal_viewed` workflow once. Fire-and-forget; never block the
+  // tracking response.
+  if (kind === "open") {
+    const sessionCount = await prisma.proposalView.count({ where: { proposalId: id } });
+    if (sessionCount === 1) {
+      void triggerProposalViewed(id);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

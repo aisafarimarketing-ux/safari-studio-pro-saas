@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyWebhookSignature } from "@/lib/billing/paystack";
+import { triggerDepositPaid } from "@/lib/ghl/workflowEvents";
 
 // ─── POST /api/billing/paystack/webhook ────────────────────────────────────
 //
@@ -204,6 +205,10 @@ async function handleDepositSuccess(d: ChargeSuccessData) {
       paidAt: d.paid_at ? new Date(d.paid_at) : new Date(),
     },
   });
+
+  // Fire-and-forget GHL `deposit_paid` workflow. No-op when GHL isn't
+  // configured for the proposal's org. Failures land in IntegrationLog.
+  void triggerDepositPaid(deposit.id);
 }
 
 async function handleDepositFailed(data: Record<string, unknown>) {
