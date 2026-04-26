@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity";
 import { notifyAssignment } from "@/lib/notifications";
 import { syncRequestStatus } from "@/lib/ghl/pipelineSync";
+import { attributeBookedRequest } from "@/lib/outcomeAttribution";
 
 // /api/requests/[id] — detail (GET) + status/assignment update (PATCH) +
 // soft delete (DELETE). Every mutation emits a system note into the
@@ -164,6 +165,13 @@ export async function PATCH(
     // Fire-and-forget GHL sync — moves the opportunity to the mapped
     // pipeline stage. No-op when GHL isn't configured for this org.
     void syncRequestStatus(existing.id);
+    // Phase 6 — outcome attribution. When the request flips to
+    // "booked", every completed task in the prior 7-day window gets
+    // marked converted with bookedAt + linkedMessageId. Fire-and-
+    // forget; attribution failures shouldn't block the status change.
+    if (updates.status === "booked") {
+      void attributeBookedRequest(existing.id, new Date());
+    }
   }
   if (Object.prototype.hasOwnProperty.call(updates, "assignedToUserId")) {
     await recordActivity({

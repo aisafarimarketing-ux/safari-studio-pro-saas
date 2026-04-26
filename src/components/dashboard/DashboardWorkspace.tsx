@@ -19,6 +19,7 @@ import { OnboardingChecklist } from "./OnboardingChecklist";
 import { TierBanner } from "./TierBanner";
 import { MessagesTile } from "./MessagesTile";
 import { PrioritiesSection } from "./PrioritiesSection";
+import { PerformanceSection } from "./PerformanceSection";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
@@ -489,6 +490,13 @@ function DashboardBody({
               "who do I follow up with right now?" without scrolling. */}
           <motion.div variants={item}>
             <PrioritiesSection />
+          </motion.div>
+
+          {/* Performance Insights — proves what works. Sits below
+              priorities so the operator's first read is action-
+              oriented; the analytical layer comes after. */}
+          <motion.div variants={item}>
+            <PerformanceSection />
           </motion.div>
 
           {/* Compact triplet — Funnel + Activity + Quick Actions */}

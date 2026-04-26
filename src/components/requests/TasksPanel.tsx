@@ -15,6 +15,11 @@ type Task = {
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+  // Phase 6 — outcome attribution. Set by the real-time hook when the
+  // request books, or by the daily cron after the window elapses.
+  taskOutcome?: "pending" | "converted" | "no_response";
+  bookedAt?: string | null;
+  auto?: boolean;
 };
 
 export function TasksPanel({ requestId }: { requestId: string }) {
@@ -179,14 +184,37 @@ function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: () => voi
         {done && <span className="text-white text-[10px] leading-none">✓</span>}
       </button>
       <div className="flex-1 min-w-0">
-        <div
-          className="text-[13px] break-words"
-          style={{
-            color: done ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.85)",
-            textDecoration: done ? "line-through" : "none",
-          }}
-        >
-          {task.title}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div
+            className="text-[13px] break-words"
+            style={{
+              color: done ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.85)",
+              textDecoration: done ? "line-through" : "none",
+            }}
+          >
+            {task.title}
+          </div>
+          {/* Outcome badge — only on completed tasks. "pending" means
+              the attribution window hasn't elapsed yet, so we don't
+              show a chip until the cron makes a decision. */}
+          {done && task.taskOutcome === "converted" && (
+            <span
+              className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: "#dcfce7", color: "#166534" }}
+              title={task.bookedAt ? `Booked ${formatDue(task.bookedAt)}` : "Booking attributed"}
+            >
+              Converted ✓
+            </span>
+          )}
+          {done && task.taskOutcome === "no_response" && (
+            <span
+              className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: "rgba(0,0,0,0.06)", color: "rgba(0,0,0,0.55)" }}
+              title="No booking landed within the attribution window"
+            >
+              No response
+            </span>
+          )}
         </div>
         {task.dueAt && (
           <div

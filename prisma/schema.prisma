@@ -887,15 +887,26 @@ model RequestTask {
   // of "what did I commit to" reports.
   auto          Boolean @default(false)
 
-  // Outcome — drives the future feedback loop ("which suggestions
-  // converted into bookings?"). "pending" until the task is completed
-  // and the system can attribute a result.
-  //   pending     — task open, or no resolution detected yet
-  //   converted   — task closed AND a booking was confirmed for the
-  //                 same request within a follow-up window
-  //   no_response — task closed AND no booking landed
-  // Phase 5+ reserves the field; the attribution job is a future commit.
-  taskOutcome   String  @default("pending")
+  // Outcome attribution — Phase 6.
+  //   pending     — task open, or completed but the attribution
+  //                 window hasn't elapsed yet
+  //   converted   — task closed AND a booking landed for the same
+  //                 request within ATTRIBUTION_WINDOW_DAYS
+  //   no_response — task closed AND no booking landed in window
+  // Set by:
+  //   - real-time hook in PATCH /api/requests/[id] when status flips
+  //     to "booked" (immediate "converted" attribution)
+  //   - daily cron at /api/cron/attribute-outcomes (eventual
+  //     "no_response" attribution after window elapses)
+  taskOutcome     String    @default("pending")
+  // When the linked Request was booked. Denormalised so the
+  // performance API doesn't have to rejoin per task. Null for
+  // tasks that never converted.
+  bookedAt        DateTime?
+  // First outbound message sent on this request between task
+  // creation and task completion. Lets us prove "this follow-up
+  // led to a reply" later. Null when no message was sent.
+  linkedMessageId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
