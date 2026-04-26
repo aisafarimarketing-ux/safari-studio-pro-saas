@@ -212,3 +212,100 @@ function EyeOffIcon() {
     </svg>
   );
 }
+
+// ─── Collapsed sidebar rail ──────────────────────────────────────────────
+//
+// Narrow ~52px column with section-type icons. Rendered in Edit and
+// Style modes — the canvas dominates but the operator can still jump
+// between sections at a glance. Top of the rail has an "expand"
+// button that flips the editor view to Structure for full reordering.
+//
+// Click an icon → selects + scrolls to that section. Hover → tooltip
+// with the section label. Selected section gets the forest-green
+// pill treatment that mirrors the expanded sidebar's selection cue.
+
+export function CollapsedSidebarRail() {
+  const { proposal } = useProposalStore();
+  const selectedSectionId = useEditorStore((s) => s.selectedSectionId);
+  const selectSection = useEditorStore((s) => s.selectSection);
+  const setEditorView = useEditorStore((s) => s.setEditorView);
+
+  const sorted: Section[] = [...proposal.sections]
+    .filter((s) => s.visible)
+    .sort((a, b) => a.order - b.order);
+
+  const scrollTo = (id: string) => {
+    selectSection(id);
+    document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <div
+      className="border-r border-black/10 bg-[#faf8f3] flex flex-col shrink-0 overflow-hidden"
+      style={{ width: 52 }}
+    >
+      {/* Expand → Structure mode */}
+      <button
+        type="button"
+        onClick={() => setEditorView("structure")}
+        title="Open Structure view (rearrange sections)"
+        className="h-12 flex items-center justify-center border-b border-black/8 text-black/40 hover:text-black/70 hover:bg-black/[0.04] transition shrink-0"
+        aria-label="Open structure view"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M2 4 H12 M2 7 H12 M2 10 H8" />
+        </svg>
+      </button>
+
+      <div className="flex-1 overflow-y-auto py-1.5">
+        {sorted.map((section) => {
+          const def = SECTION_REGISTRY[section.type];
+          const isSelected = selectedSectionId === section.id;
+          return (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => scrollTo(section.id)}
+              title={def?.label ?? section.type}
+              aria-label={def?.label ?? section.type}
+              className="group relative w-full flex items-center justify-center transition"
+              style={{
+                height: 40,
+              }}
+            >
+              {/* Active indicator — gold left bar that mirrors the expanded sidebar. */}
+              <span
+                aria-hidden
+                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r"
+                style={{
+                  background: isSelected ? "#c9a84c" : "transparent",
+                  transition: "background 140ms",
+                }}
+              />
+              <span
+                className="flex items-center justify-center transition"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background: isSelected ? "#1b3a2d" : "transparent",
+                  color: isSelected ? "white" : "rgba(0,0,0,0.55)",
+                  fontSize: 14,
+                  lineHeight: 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = "rgba(0,0,0,0.05)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = "transparent";
+                }}
+              >
+                {def?.icon ?? "▣"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { EditorToolbar } from "./EditorToolbar";
-import { LeftSidebar } from "./LeftSidebar";
+import { LeftSidebar, CollapsedSidebarRail } from "./LeftSidebar";
 import { ProposalCanvas } from "./ProposalCanvas";
 import { AISelectionToolbar } from "./AISelectionToolbar";
 import { ContextPanel } from "./ContextPanel";
@@ -201,14 +201,21 @@ export function ProposalEditor() {
       />
 
       <div className="flex flex-1 min-h-0 relative">
-        {/* Left sidebar — collapsible */}
-        {leftPanelOpen && <LeftSidebar />}
+        {/* Left sidebar — full when leftPanelOpen, collapsed icon rail
+            otherwise. The rail keeps section navigation reachable in
+            Edit / Style modes without breaking the canvas-first feel.
+            Click any rail icon to jump to that section; click the rail
+            header to expand into Structure mode for reordering. */}
+        {leftPanelOpen ? <LeftSidebar /> : <CollapsedSidebarRail />}
 
-        {/* Left panel toggle */}
+        {/* Left panel toggle — escape hatch alongside the toolbar's
+            Edit / Structure / Style switch. Useful for power users
+            who want to keep Edit-view chrome but hide the rail
+            entirely (e.g., screen-share). */}
         <button
           onClick={toggleLeftPanel}
           className={`absolute z-40 top-3 flex items-center justify-center w-6 h-6 rounded-full bg-white border border-black/10 shadow-sm text-black/40 hover:text-black/70 hover:bg-black/5 text-[10px] transition-all duration-200 ${
-            leftPanelOpen ? "left-[212px]" : "left-2"
+            leftPanelOpen ? "left-[212px]" : "left-[44px]"
           }`}
           title={leftPanelOpen ? "Collapse sidebar" : "Expand sidebar"}
         >
