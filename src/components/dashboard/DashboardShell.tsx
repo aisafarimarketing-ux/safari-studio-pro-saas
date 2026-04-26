@@ -59,16 +59,27 @@ type NavItem = {
 export function DashboardShell({
   main,
   rightRail,
+  mainBackground,
 }: {
   main: React.ReactNode;
   rightRail?: React.ReactNode;
+  /** Optional full-bleed paint behind the main column. Used by the
+   *  dashboard mosaic so its theme wash fills the whole canvas without
+   *  bleeding through to the sidebar. */
+  mainBackground?: string;
 }) {
+  // Wider canvas when no rightRail is supplied — the dashboard mosaic
+  // fills horizontally instead of being squeezed into a 4xl column.
+  const mainMaxWidth = rightRail ? "max-w-4xl" : "max-w-7xl";
   return (
     <div className="min-h-screen flex" style={{ background: "#faf8f3" }}>
       <LeftSidebar />
       <div className="flex-1 flex flex-col lg:flex-row min-w-0">
-        <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div className="max-w-4xl mx-auto px-6 py-8 lg:py-10">
+        <main
+          className="flex-1 min-w-0 overflow-x-hidden"
+          style={mainBackground ? { background: mainBackground } : undefined}
+        >
+          <div className={`${mainMaxWidth} mx-auto px-6 py-8 lg:py-10`}>
             {main}
           </div>
         </main>

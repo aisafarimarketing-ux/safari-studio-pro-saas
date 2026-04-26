@@ -4,8 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrganization } from "@clerk/nextjs";
+import { motion } from "framer-motion";
 import { DashboardShell } from "./DashboardShell";
-import { CompletionRing } from "@/components/brand-dna/CompletionRing";
+import {
+  DashboardThemeProvider,
+  ThemeToggle,
+  useDashboardTheme,
+  type DashboardTokens,
+} from "./DashboardTheme";
 import type { BrandDNACompletion } from "@/lib/brandDNA";
 import { buildDemoProposal } from "@/lib/defaults";
 import { nanoid } from "@/lib/nanoid";
@@ -17,10 +23,10 @@ import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
-// One-page operator workspace. Welcome → active proposal → quick actions →
-// properties + brand DNA snapshots → recent work. Designed to answer
-// "what should I do next?" at a glance, without ever feeling like an admin
-// panel. Pulls all state from existing endpoints in parallel — no new API.
+// One-viewport operator workspace. Welcome strip + KPI row + flagship pair
+// (active proposal · inbox) + compact triplet (funnel · activity · quick
+// actions). Library and recent proposals live in the sidebar — not here —
+// so the page never scrolls. Theme-aware via DashboardTheme.
 
 type ProposalRow = {
   id: string;
@@ -74,8 +80,8 @@ export function DashboardWorkspace() {
   const router = useRouter();
   const { organization } = useOrganization();
   const [proposals, setProposals] = useState<ProposalRow[] | null>(null);
-  const [properties, setProperties] = useState<PropertyRow[] | null>(null);
-  const [locationCount, setLocationCount] = useState<number | null>(null);
+  const [, setProperties] = useState<PropertyRow[] | null>(null);
+  const [, setLocationCount] = useState<number | null>(null);
   const [completion, setCompletion] = useState<BrandDNACompletion | null>(null);
   const [requests, setRequests] = useState<RequestRow[] | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -84,6 +90,10 @@ export function DashboardWorkspace() {
   const [importing, setImporting] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // We track raw counts for the onboarding checklist but no longer surface
+  // the "Workspace" library tiles on the dashboard — Properties and Brand
+  // DNA each have their own pages reachable from the sidebar.
+  const [hasProperties, setHasProperties] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -93,12 +103,8 @@ export function DashboardWorkspace() {
           fetch("/api/properties", { cache: "no-store" }),
           fetch("/api/locations", { cache: "no-store" }),
           fetch("/api/brand-dna", { cache: "no-store" }),
-          // Open-stage requests only, capped — this feeds the inbox tile.
           fetch("/api/requests?limit=20", { cache: "no-store" }),
           fetch("/api/dashboard/summary", { cache: "no-store" }),
-          // /api/me drives the consultant-identity stamp on new proposals —
-          // name, role, photo, signature flow into operator fields on
-          // Trip Setup submit. No-op if the user hasn't set up their profile yet.
           fetch("/api/me", { cache: "no-store" }),
         ]);
         if (propRes.status === 401) { window.location.href = "/sign-in?redirect_url=/dashboard"; return; }
@@ -115,6 +121,7 @@ export function DashboardWorkspace() {
 
         setProposals(propData.proposals ?? []);
         setProperties(propertyData.properties ?? []);
+        setHasProperties(((propertyData.properties ?? []) as PropertyRow[]).length > 0);
         setLocationCount((locData.locations ?? []).length);
         setCompletion(brandData?.completion ?? null);
         setRequests(reqData.requests ?? []);
@@ -126,13 +133,7 @@ export function DashboardWorkspace() {
     })();
   }, []);
 
-  // New proposal now runs through Trip Setup — a fast structured entry flow.
-  // Click "+ New proposal" → modal opens → submit builds a configured
-  // proposal and POSTs it, then routes to /studio.
   const openNewProposal = () => setTripSetupOpen(true);
-
-  // Abort-controller for the in-flight autopilot request. Lets the user
-  // cancel mid-draft and return to the form — see handleCancelSubmit.
   const submitAbortRef = useRef<AbortController | null>(null);
 
   const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
@@ -141,17 +142,11 @@ export function DashboardWorkspace() {
     const controller = new AbortController();
     submitAbortRef.current = controller;
 
-    // Stamp the current user's identity onto the proposal before saving.
-    // Name / photo / role / signature come from OrgMembership via /api/me.
-    // Harmless if the user hasn't set their profile yet (identity is null).
     if (identity) {
       proposal.operator = applyIdentityToOperator(proposal.operator, identity);
     }
 
     try {
-      // 1. Always save the blank-but-configured proposal first. If
-      //    autopilot later fails (or is cancelled) the operator still has
-      //    their Trip Setup data safely persisted.
       const res = await fetch("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -162,10 +157,6 @@ export function DashboardWorkspace() {
       if (res.status === 402) { window.location.href = "/account-suspended"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      // 2. Optional AI draft — cancellable via the shared AbortController.
-      //    Soft-fails: if the model errors out, we still open the editor
-      //    with the blank-but-configured proposal. On cancel we bail
-      //    without navigating so the user stays on the Trip Setup form.
       if (autopilot) {
         try {
           const ai = await fetch("/api/ai/autopilot", {
@@ -187,27 +178,18 @@ export function DashboardWorkspace() {
             console.warn("[autopilot] non-OK:", ai.status);
           }
         } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") {
-            // User cancelled — leave the blank proposal in the DB as a
-            // harmless draft and return control to the form.
-            return;
-          }
+          if (err instanceof DOMException && err.name === "AbortError") return;
           console.warn("[autopilot] failed; opening blank editor instead:", err);
         }
       }
 
-      // Only set activeProposalId + navigate once we've committed to
-      // opening this proposal. Earlier writes would leave a stale
-      // pointer if the user cancelled.
       if (!controller.signal.aborted) {
         try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
         setTripSetupOpen(false);
         router.push(`/studio/${proposal.id}`);
       }
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return;
-      }
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Could not create proposal");
     } finally {
       if (submitAbortRef.current === controller) submitAbortRef.current = null;
@@ -219,15 +201,11 @@ export function DashboardWorkspace() {
     submitAbortRef.current?.abort();
   };
 
-  // Import-sample uses the existing Family Safari template — fully populated
-  // with days, properties, pricing, inclusions. Onboarding (Part 5) replaces
-  // this with a richer "Best of Kenya" demo + checklist.
   const handleImportSample = async () => {
     if (importing) return;
     setImporting(true);
     try {
       const sample = buildDemoProposal();
-      // Always assign a fresh id so re-importing creates a new copy.
       sample.id = nanoid();
       sample.metadata = {
         ...sample.metadata,
@@ -251,259 +229,23 @@ export function DashboardWorkspace() {
 
   const orgName = organization?.name ?? "your workspace";
   const activeProposal = proposals?.[0] ?? null;
-  const recentProposals = proposals?.slice(1, 4) ?? [];
-  const propertyCount = properties?.length ?? null;
-
-  const mainContent = (
-    <>
-      {/* Welcome */}
-      <header className="mb-7">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-black/85" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
-          Welcome back, <span style={{ color: "#1b3a2d" }}>{orgName}</span>.
-        </h1>
-        <p className="mt-2 text-[14px] text-black/55">
-          {activeProposal
-            ? "Pick up where you left off, or start something new."
-            : "Draft your first proposal, or bring your existing ones in from Safariportal, Wetu, or Safari Office."}
-        </p>
-      </header>
-
-      <TierBanner />
-
-      {error && (
-        <div className="mb-6 rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-4 text-[#b34334] text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Onboarding checklist — derived from real workspace data, auto-
-          disappears once everything's done. Dismissible per session. */}
-      {proposals !== null && properties !== null && (
-        <OnboardingChecklist
-          progress={{
-            hasProperties: (properties?.length ?? 0) > 0,
-            hasProposals: (proposals?.length ?? 0) > 0,
-            brandDNAComplete: (completion?.overall ?? 0) >= 60,
-          }}
-        />
-      )}
-
-      {/* Primary create CTA for first-run operators. Sits at top of the
-          grid when empty so new users have an unmistakable path in
-          without taking over the whole page. */}
-      {proposals !== null && proposals.length === 0 && (
-        <div
-          className="rounded-2xl border-2 border-dashed p-6 mb-8 text-center"
-          style={{ borderColor: "rgba(201,168,76,0.45)", background: "rgba(201,168,76,0.04)" }}
-        >
-          <div className="text-[11px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#8a7125" }}>
-            First time here
-          </div>
-          <h2 className="mt-2 text-lg font-semibold text-black/85">
-            Draft your first proposal — or import one you already sent.
-          </h2>
-          <p className="mt-1 text-[13px] text-black/55 max-w-md mx-auto">
-            The dashboard lights up with real numbers the moment you do.
-          </p>
-          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
-            <button
-              onClick={openNewProposal}
-              disabled={creating}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
-              style={{ background: "#1b3a2d", color: "white" }}
-            >
-              {creating ? "Creating…" : "+ New proposal"}
-            </button>
-            <Link
-              href="/import"
-              className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
-              style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
-            >
-              Import existing →
-            </Link>
-            <button
-              onClick={handleImportSample}
-              disabled={importing}
-              className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
-            >
-              {importing ? "Loading…" : "Try demo"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {proposals !== null && (
-        <>
-            {/* ── Overview — modern KPI strip ──────────────────────────
-                Four tiles with big numbers + sparkline + month-on-month
-                delta. Summary endpoint drives all four; falls back to
-                client-derived counts on load error. */}
-            <section className="mb-8">
-              <SectionTitle>Overview</SectionTitle>
-              <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiTile
-                  label="Proposals"
-                  value={summary?.proposals.thisMonth ?? proposals.filter(p => new Date(p.updatedAt) >= monthStart()).length}
-                  deltaNow={summary?.proposals.thisMonth}
-                  deltaThen={summary?.proposals.lastMonth}
-                  sparkline={summary?.proposals.sparkline30d}
-                  suffix="this month"
-                />
-                <KpiTile
-                  label="Deposits"
-                  value={summary ? formatMoney(summary.deposits.thisMonthCents, summary.deposits.currency) : "—"}
-                  deltaNow={summary?.deposits.thisMonthCents}
-                  deltaThen={summary?.deposits.lastMonthCents}
-                  suffix="received"
-                  accent="gold"
-                />
-                <KpiTile
-                  label="Engagement"
-                  value={summary ? formatSeconds(summary.engagement.medianSessionSeconds) : "—"}
-                  suffix={summary && summary.engagement.sampledViews > 0
-                    ? `median · ${summary.engagement.sampledViews} visit${summary.engagement.sampledViews === 1 ? "" : "s"}`
-                    : "no visits yet"}
-                />
-                <KpiTile
-                  label="Pipeline"
-                  value={summary ? formatMoney(summary.pipeline.valueCents, summary.pipeline.currency) : "—"}
-                  suffix={summary ? `${summary.pipeline.activeProposalCount} live proposals` : ""}
-                />
-              </div>
-            </section>
-
-            {/* ── Today ─────────────────────────────────────────────────
-                Three tiles: the active proposal, the open-requests inbox,
-                and a this-month stats snapshot. */}
-            <section className="mb-8">
-              <SectionTitle>Today</SectionTitle>
-              <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <ActiveProposalTile proposal={activeProposal} />
-                <InboxTile requests={requests} />
-                <MonthStatsTile proposals={proposals} requests={requests} />
-              </div>
-            </section>
-
-            {/* ── Funnel + Activity ────────────────────────────────────
-                Data-rich two-column. Left: request funnel. Right:
-                activity feed. Skipped when summary hasn't arrived yet. */}
-            {summary && (
-              <section className="mb-8">
-                <SectionTitle>Operations</SectionTitle>
-                <div className="mt-3 grid grid-cols-1 lg:grid-cols-5 gap-4">
-                  <div className="lg:col-span-3">
-                    <FunnelTile summary={summary} />
-                  </div>
-                  <div className="lg:col-span-2">
-                    <ActivityFeedTile activity={summary.activity} />
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* ── Start something (action bar) ─────────────────────────
-                Persistent launchpad — new proposal, import from SP / SO /
-                Wetu, browse templates, add a property. */}
-            <section className="mb-8">
-              <SectionTitle>Start something</SectionTitle>
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <ActionTile
-                  onClick={openNewProposal}
-                  disabled={creating}
-                  title={creating ? "Creating…" : "New proposal"}
-                  hint="Trip setup + AI autopilot"
-                  accent
-                />
-                <ActionTile
-                  href="/import"
-                  title="Import existing"
-                  hint="Bring a PDF from Safariportal, Wetu…"
-                  gold
-                />
-                <ActionTile
-                  href="/templates"
-                  title="Browse templates"
-                  hint="20 proven East-Africa shapes"
-                />
-                <ActionTile
-                  href="/properties/new"
-                  title="Add property"
-                  hint="Grow your camp library"
-                />
-              </div>
-            </section>
-
-            {/* ── Your workspace ──────────────────────────────────────
-                Property library snapshot, brand DNA ring, templates
-                (placeholder until Step 6 ships). */}
-            <section className="mb-8">
-              <SectionTitle>Your workspace</SectionTitle>
-              <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <PropertiesCard
-                  count={propertyCount}
-                  locations={locationCount}
-                  recent={properties?.slice(0, 3) ?? []}
-                />
-                <BrandDNACard completion={completion} />
-                <TemplatesTile />
-              </div>
-            </section>
-
-            {/* ── Recent proposals ───────────────────────────────────── */}
-            {recentProposals.length > 0 && (
-              <section>
-                <div className="flex items-baseline justify-between mb-3">
-                  <SectionTitle>Recent proposals</SectionTitle>
-                  <Link
-                    href="/proposals"
-                    className="text-[12.5px] text-black/45 hover:text-[#1b3a2d] transition"
-                  >
-                    View all →
-                  </Link>
-                </div>
-                <ul className="bg-white rounded-2xl border border-black/8 divide-y divide-black/8 overflow-hidden">
-                  {recentProposals.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        onClick={() => {
-                          try { localStorage.setItem("activeProposalId", p.id); } catch {}
-                          router.push("/studio");
-                        }}
-                        className="w-full text-left px-5 py-3 flex items-center gap-4 hover:bg-black/[0.02] transition"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-[14px] text-black/85 truncate">
-                            {p.title || "Untitled Proposal"}
-                          </div>
-                          <div className="text-[12px] text-black/45 mt-0.5 truncate">
-                            {p.clientName ? `${p.clientName} · ` : ""}
-                            Edited {formatRelative(p.updatedAt)}
-                          </div>
-                        </div>
-                        <span className="text-black/30 group-hover:text-[#1b3a2d] text-base shrink-0">→</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </>
-        )}
-    </>
-  );
-
-  const rightRail = (
-    <div className="space-y-4">
-      <RightRailProfile />
-      <RightRailQuickLinks />
-      <RightRailTip />
-    </div>
-  );
 
   return (
-    <>
-      <DashboardShell main={mainContent} rightRail={rightRail} />
-
+    <DashboardThemeProvider>
+      <DashboardOrchestrator
+        orgName={orgName}
+        proposals={proposals}
+        activeProposal={activeProposal}
+        requests={requests}
+        summary={summary}
+        completion={completion}
+        hasProperties={hasProperties}
+        creating={creating}
+        importing={importing}
+        error={error}
+        openNewProposal={openNewProposal}
+        onImportSample={handleImportSample}
+      />
       {tripSetupOpen && (
         <TripSetupDialog
           onClose={() => { if (!creating) setTripSetupOpen(false); }}
@@ -512,321 +254,423 @@ export function DashboardWorkspace() {
           submitting={creating}
         />
       )}
-    </>
+    </DashboardThemeProvider>
   );
 }
 
-// ─── Right rail ────────────────────────────────────────────────────────────
+// Splits the rendering inside the theme provider so descendants can read
+// theme tokens via context.
 
-function RightRailProfile() {
-  // Simple shortcut card — the sidebar's user card covers identity; this
-  // is the "what's next for you" nudge anchored to the eye-line.
-  return (
-    <div
-      className="rounded-2xl border p-5"
-      style={{
-        background: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
-        borderColor: "rgba(201,168,76,0.25)",
-        color: "white",
-      }}
-    >
-      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#c9a84c" }}>
-        Today
-      </div>
-      <h3
-        className="mt-2 text-lg font-bold leading-tight"
-        style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
-      >
-        Make one proposal better.
-      </h3>
-      <p className="mt-2 text-[12.5px] text-white/70 leading-relaxed">
-        Open your most-recent draft. Read one day aloud. If it reads like
-        a brochure, hit AI Rewrite. Ship it.
-      </p>
-      <Link
-        href="/proposals"
-        className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold transition hover:brightness-110"
-        style={{ color: "#c9a84c" }}
-      >
-        Open proposals →
-      </Link>
-    </div>
-  );
-}
-
-function RightRailQuickLinks() {
-  const links: { href: string; label: string; hint: string; glyph: string }[] = [
-    { href: "/import",    label: "Import existing",    hint: "Safariportal · Wetu · PDF",  glyph: "↓" },
-    { href: "/templates", label: "Browse templates",   hint: "20 shapes to clone",           glyph: "✦" },
-    { href: "/settings/profile", label: "Your profile", hint: "Photo · signature · role",  glyph: "◈" },
-    { href: "/settings/brand",   label: "Brand DNA",    hint: "Teach the AI your voice",    glyph: "◆" },
-  ];
-  return (
-    <div className="rounded-2xl bg-white border p-4" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
-      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3 px-1">
-        Quick links
-      </div>
-      <ul className="space-y-0.5">
-        {links.map((l) => (
-          <li key={l.href}>
-            <Link
-              href={l.href}
-              className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-black/[0.03] transition group"
-            >
-              <span
-                className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-semibold shrink-0"
-                style={{ background: "rgba(27,58,45,0.08)", color: "#1b3a2d" }}
-              >
-                {l.glyph}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold text-black/80 truncate">{l.label}</div>
-                <div className="text-[11px] text-black/45 truncate">{l.hint}</div>
-              </div>
-              <span className="text-black/30 group-hover:text-black/65 transition text-[12px]">→</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function RightRailTip() {
-  return (
-    <div
-      className="rounded-2xl border p-4"
-      style={{
-        background: "rgba(201,168,76,0.06)",
-        borderColor: "rgba(201,168,76,0.35)",
-      }}
-    >
-      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold" style={{ color: "#8a7125" }}>
-        Pro tip
-      </div>
-      <p className="mt-2 text-[12.5px] text-black/70 leading-relaxed">
-        When clients reply &quot;can you do it cheaper?&quot; — use{" "}
-        <strong className="font-semibold">⋯ → Rebuild to a budget</strong> in
-        the editor. Claude swaps lodges and reprices in 20 seconds.
-      </p>
-    </div>
-  );
-}
-
-// ─── Active proposal card ───────────────────────────────────────────────────
-
-// Empty-state hero. Rendered only when proposals[] is an empty array —
-// first-time operators land here. Once they have a proposal, the Today
-// row takes over (ActiveProposalTile + InboxTile + MonthStatsTile) and
-// this card disappears.
-function ActiveProposalCard({
-  onNew,
-  creating,
-  onImportSample,
-  importing,
-}: {
-  loaded: boolean;
-  proposal: ProposalRow | null;
-  onNew: () => void;
+function DashboardOrchestrator(props: {
+  orgName: string;
+  proposals: ProposalRow[] | null;
+  activeProposal: ProposalRow | null;
+  requests: RequestRow[] | null;
+  summary: Summary | null;
+  completion: BrandDNACompletion | null;
+  hasProperties: boolean;
   creating: boolean;
-  onImportSample: () => void;
   importing: boolean;
+  error: string | null;
+  openNewProposal: () => void;
+  onImportSample: () => void;
 }) {
+  const { tokens } = useDashboardTheme();
   return (
-    <div className="rounded-2xl bg-white border border-dashed border-black/15 p-10 text-center">
-      <div
-        className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center text-[#c9a84c] text-xl font-bold mb-4"
-        style={{ background: "rgba(201,168,76,0.15)" }}
-      >
-        ✦
-      </div>
-      <h2 className="text-lg font-semibold text-black/85">Start your first proposal</h2>
-      <p className="mt-1.5 text-[14px] text-black/50 max-w-md mx-auto">
-        Fill in a few facts about your guests and the trip — we&apos;ll automate a fully-personalised draft in seconds.
-      </p>
-      <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
-        <button
-          onClick={onNew}
-          disabled={creating}
-          className="px-5 py-2.5 rounded-xl text-sm font-semibold transition active:scale-95 disabled:opacity-60"
-          style={{ background: "#1b3a2d", color: "white" }}
-        >
-          {creating ? "Creating…" : "+ New proposal"}
-        </button>
-        <Link
-          href="/import"
-          className="px-5 py-2.5 rounded-xl border text-sm font-medium active:scale-95 transition"
-          style={{ borderColor: "rgba(201,168,76,0.6)", background: "rgba(201,168,76,0.08)", color: "#8a7125" }}
-          title="Import an existing proposal from Safariportal, Safari Office, Wetu — or any PDF"
-        >
-          Import existing →
-        </Link>
-        <button
-          onClick={onImportSample}
-          disabled={importing}
-          className="px-5 py-2.5 rounded-xl border border-black/12 text-black/60 text-sm font-medium hover:bg-black/5 active:scale-95 transition disabled:opacity-60"
-          title="Load a pre-filled demo proposal for exploration only — not a real trip"
-        >
-          {importing ? "Loading…" : "Try demo"}
-        </button>
-      </div>
-    </div>
+    <DashboardShell
+      mainBackground={tokens.pageBg}
+      main={<DashboardBody {...props} />}
+    />
   );
 }
 
-// ─── Snapshot cards ─────────────────────────────────────────────────────────
-
-// ─── Subtle safari backdrop ─────────────────────────────────────────────────
-//
-// CSS-only ambience. No imagery dependency. Two heavily-blurred forest blobs
-// (top-right + bottom-left) plus a faint gold dot pattern. Sits at z-0 with
-// pointer-events: none so it never interferes with content.
-
-function DashboardBackdrop() {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
-      {/* Top-right forest halo */}
-      <div
-        className="absolute -top-40 -right-40 w-[640px] h-[640px] rounded-full opacity-[0.08]"
-        style={{
-          background: "radial-gradient(circle, #1b3a2d 0%, transparent 65%)",
-          filter: "blur(40px)",
-        }}
-      />
-      {/* Bottom-left gold halo — softer */}
-      <div
-        className="absolute -bottom-60 -left-40 w-[700px] h-[700px] rounded-full opacity-[0.07]"
-        style={{
-          background: "radial-gradient(circle, #c9a84c 0%, transparent 60%)",
-          filter: "blur(50px)",
-        }}
-      />
-      {/* Faint gold dot pattern across the page */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, #1b3a2d 1px, transparent 0)",
-          backgroundSize: "32px 32px",
-        }}
-      />
-    </div>
-  );
-}
-
-function PropertiesCard({
-  count,
-  locations,
-  recent,
+function DashboardBody({
+  orgName,
+  proposals,
+  activeProposal,
+  requests,
+  summary,
+  completion,
+  hasProperties,
+  creating,
+  importing,
+  error,
+  openNewProposal,
+  onImportSample,
 }: {
-  count: number | null;
-  locations: number | null;
-  recent: PropertyRow[];
+  orgName: string;
+  proposals: ProposalRow[] | null;
+  activeProposal: ProposalRow | null;
+  requests: RequestRow[] | null;
+  summary: Summary | null;
+  completion: BrandDNACompletion | null;
+  hasProperties: boolean;
+  creating: boolean;
+  importing: boolean;
+  error: string | null;
+  openNewProposal: () => void;
+  onImportSample: () => void;
 }) {
+  const { theme, tokens } = useDashboardTheme();
+
+  const stagger = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+  } as const;
+  const item = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+  } as const;
+
+  const showOnboarding =
+    proposals !== null &&
+    !((proposals?.length ?? 0) > 0 && hasProperties && (completion?.overall ?? 0) >= 60);
+
+  const isFirstRun = proposals !== null && proposals.length === 0;
+
   return (
-    <Link
-      href="/properties"
-      className="group rounded-2xl bg-white border border-black/8 p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
+    <motion.div
+      variants={stagger}
+      initial="hidden"
+      animate="show"
+      className="space-y-5"
     >
-      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-        Properties
-      </div>
-      <div className="flex items-baseline gap-3">
-        <div className="text-3xl font-bold text-black/85 tabular-nums">
-          {count ?? "—"}
+      {/* ── Welcome strip — one line, theme toggle on the right ── */}
+      <motion.header variants={item} className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1
+            className="text-[20px] md:text-[22px] font-semibold tracking-tight leading-tight truncate"
+            style={{
+              color: tokens.heading,
+              fontFamily: "'Playfair Display', Georgia, serif",
+            }}
+          >
+            Welcome back, <span style={{ color: tokens.accent }}>{orgName}</span>.
+          </h1>
+          <div className="text-[12px] mt-0.5 truncate" style={{ color: tokens.muted }}>
+            {activeProposal
+              ? "Pick up where you left off, or start something new."
+              : "Draft your first proposal — autopilot fills in the rest."}
+          </div>
         </div>
-        <div className="text-[12px] text-black/45">
-          across {locations ?? 0} location{locations === 1 ? "" : "s"}
+        <div className="shrink-0">
+          <ThemeToggle />
         </div>
-      </div>
-      {recent.length > 0 ? (
-        <div className="mt-4 flex -space-x-2">
-          {recent.map((p) => (
-            <div
-              key={p.id}
-              className="w-10 h-10 rounded-lg border-2 border-white bg-black/5 overflow-hidden shrink-0"
-              title={p.name}
-            >
-              {p.images[0]?.url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.images[0].url} alt="" className="w-full h-full object-cover" />
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-3 text-[12px] text-black/40">
-          Build the library that powers every proposal.
-        </p>
+      </motion.header>
+
+      <motion.div variants={item}>
+        <TierBanner />
+      </motion.div>
+
+      {error && (
+        <motion.div
+          variants={item}
+          className="rounded-2xl p-3.5 text-[13px]"
+          style={{
+            background: "rgba(179,67,52,0.08)",
+            color: "#b34334",
+            boxShadow: "inset 0 0 0 1px rgba(179,67,52,0.25)",
+          }}
+        >
+          {error}
+        </motion.div>
       )}
-      <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-        Open library →
-      </div>
-    </Link>
+
+      {/* Onboarding nudge — replaces the mosaic until the basics are set. */}
+      {showOnboarding && proposals !== null && (
+        <motion.div variants={item}>
+          <OnboardingChecklist
+            progress={{
+              hasProperties,
+              hasProposals: (proposals?.length ?? 0) > 0,
+              brandDNAComplete: (completion?.overall ?? 0) >= 60,
+            }}
+          />
+        </motion.div>
+      )}
+
+      {/* First-run CTA — when there are zero proposals at all. */}
+      {isFirstRun && (
+        <motion.div
+          variants={item}
+          className="rounded-2xl p-6 text-center"
+          style={{
+            background: tokens.tileBg,
+            boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+          }}
+        >
+          <div
+            className="text-[10.5px] uppercase tracking-[0.22em] font-semibold"
+            style={{ color: tokens.accent }}
+          >
+            First time here
+          </div>
+          <h2
+            className="mt-2 text-[18px] font-semibold"
+            style={{ color: tokens.heading }}
+          >
+            Draft your first proposal — or import one you already sent.
+          </h2>
+          <p
+            className="mt-1 text-[12.5px] max-w-md mx-auto"
+            style={{ color: tokens.muted }}
+          >
+            The dashboard lights up the moment you do.
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
+            <PrimaryButton onClick={openNewProposal} disabled={creating}>
+              {creating ? "Creating…" : "+ New proposal"}
+            </PrimaryButton>
+            <GoldButton href="/import">Import existing →</GoldButton>
+            <GhostButton onClick={onImportSample} disabled={importing}>
+              {importing ? "Loading…" : "Try demo"}
+            </GhostButton>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── The mosaic ─────────────────────────────────────────────────── */}
+      {proposals !== null && proposals.length > 0 && (
+        <>
+          {/* KPI row — 4 small tiles */}
+          <motion.div
+            variants={item}
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3.5"
+          >
+            <KpiTile
+              label="Proposals"
+              value={
+                summary?.proposals.thisMonth ??
+                proposals.filter((p) => new Date(p.updatedAt) >= monthStart()).length
+              }
+              suffix="this month"
+              deltaNow={summary?.proposals.thisMonth}
+              deltaThen={summary?.proposals.lastMonth}
+              sparkline={summary?.proposals.sparkline30d}
+            />
+            <KpiTile
+              label="Deposits"
+              value={summary ? formatMoney(summary.deposits.thisMonthCents, summary.deposits.currency) : "—"}
+              suffix="received"
+              deltaNow={summary?.deposits.thisMonthCents}
+              deltaThen={summary?.deposits.lastMonthCents}
+              accent="gold"
+            />
+            <KpiTile
+              label="Engagement"
+              value={summary ? formatSeconds(summary.engagement.medianSessionSeconds) : "—"}
+              suffix={
+                summary && summary.engagement.sampledViews > 0
+                  ? `median · ${summary.engagement.sampledViews} visit${summary.engagement.sampledViews === 1 ? "" : "s"}`
+                  : "no visits yet"
+              }
+            />
+            <KpiTile
+              label="Pipeline"
+              value={summary ? formatMoney(summary.pipeline.valueCents, summary.pipeline.currency) : "—"}
+              suffix={summary ? `${summary.pipeline.activeProposalCount} live` : ""}
+            />
+          </motion.div>
+
+          {/* Flagship row — Active proposal + Inbox */}
+          <motion.div
+            variants={item}
+            className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-3.5"
+          >
+            <ActiveProposalTile proposal={activeProposal} onNew={openNewProposal} creating={creating} />
+            <InboxTile requests={requests} />
+          </motion.div>
+
+          {/* Compact triplet — Funnel + Activity + Quick Actions */}
+          <motion.div
+            variants={item}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-3.5"
+          >
+            {summary ? (
+              <FunnelTile summary={summary} />
+            ) : (
+              <SkeletonTile label="Request funnel" />
+            )}
+            {summary ? (
+              <ActivityFeedTile activity={summary.activity} />
+            ) : (
+              <SkeletonTile label="Recent activity" />
+            )}
+            <QuickActionsTile
+              onNew={openNewProposal}
+              creating={creating}
+              theme={theme}
+            />
+          </motion.div>
+        </>
+      )}
+    </motion.div>
   );
 }
 
-function BrandDNACard({ completion }: { completion: BrandDNACompletion | null }) {
-  if (!completion) {
+// ─── Buttons ──────────────────────────────────────────────────────────────
+
+function PrimaryButton({
+  onClick,
+  disabled,
+  href,
+  children,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  href?: string;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
+  const cls =
+    "inline-flex items-center justify-center px-4 h-10 rounded-xl text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60";
+  const style: React.CSSProperties = {
+    background: tokens.primary,
+    color: "#ffffff",
+    boxShadow: `0 6px 18px -8px ${tokens.primary}`,
+  };
+  if (href) {
     return (
-      <Link
-        href="/settings/brand"
-        className="group rounded-2xl bg-white border border-black/8 p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
-      >
-        <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-          Brand DNA
-        </div>
-        <div className="text-[15px] font-semibold text-black/85">Set up your brand voice</div>
-        <p className="mt-1 text-[12px] text-black/45">
-          Optional but recommended — sharpens every proposal.
-        </p>
-        <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-          Open Brand DNA →
-        </div>
+      <Link href={href} className={cls} style={style}>
+        {children}
       </Link>
     );
   }
-  const { overall, nextBestAction } = completion;
   return (
-    <Link
-      href="/settings/brand"
-      className="group rounded-2xl bg-white border border-black/8 p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
-    >
-      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-        Brand DNA
-      </div>
-      <div className="flex items-center gap-4">
-        <CompletionRing percent={overall} size={56} stroke={5} />
-        <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-black/85">
-            {overall === 100 ? "Dialed in." : `${overall}% complete`}
-          </div>
-          <div className="text-[12px] text-black/50 mt-0.5 line-clamp-2">
-            {nextBestAction?.headline ?? "Your voice is anchored."}
-          </div>
-        </div>
-      </div>
-      <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-        Open Brand DNA →
-      </div>
-    </Link>
-  );
-}
-
-// ─── Section header ────────────────────────────────────────────────────────
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/45">
+    <button type="button" onClick={onClick} disabled={disabled} className={cls} style={style}>
       {children}
-    </h2>
+    </button>
   );
 }
 
-// ─── KPI tile (modern) ─────────────────────────────────────────────────────
-//
-// Big number in Playfair, optional sparkline, optional month-on-month
-// delta. Accent="gold" for the revenue tile — subtle gold gradient in
-// the background, nothing shouty.
+function GoldButton({
+  href,
+  onClick,
+  children,
+}: {
+  href?: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
+  const cls =
+    "inline-flex items-center justify-center px-4 h-10 rounded-xl text-[13px] font-semibold transition active:scale-[0.97]";
+  const style: React.CSSProperties = {
+    background: tokens.accent,
+    color: "#1d1d1f",
+    boxShadow: `0 6px 18px -10px ${tokens.accent}`,
+  };
+  if (href) {
+    return (
+      <Link href={href} className={cls} style={style}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={cls} style={style}>
+      {children}
+    </button>
+  );
+}
+
+function GhostButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center justify-center px-4 h-10 rounded-xl text-[13px] font-medium transition active:scale-[0.97] disabled:opacity-60"
+      style={{
+        background: tokens.tileBg,
+        color: tokens.body,
+        boxShadow: `inset 0 0 0 1px ${tokens.ring}`,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─── Tile shell — base styles for every box ───────────────────────────────
+
+function Tile({
+  children,
+  className = "",
+  style,
+  href,
+  onClick,
+  hero = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  href?: string;
+  onClick?: () => void;
+  hero?: boolean;
+}) {
+  const { tokens } = useDashboardTheme();
+  const baseStyle: React.CSSProperties = {
+    background: hero ? tokens.heroBg : tokens.tileBg,
+    boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+    ...style,
+  };
+  const motionProps = {
+    whileHover: { y: -2 },
+    transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const },
+  };
+  const cls = `relative rounded-2xl p-5 ${className}`;
+  if (href) {
+    return (
+      <motion.div {...motionProps}>
+        <Link href={href} className={`block ${cls}`} style={baseStyle}>
+          {children}
+        </Link>
+      </motion.div>
+    );
+  }
+  if (onClick) {
+    return (
+      <motion.button
+        type="button"
+        onClick={onClick}
+        {...motionProps}
+        className={`text-left w-full ${cls}`}
+        style={baseStyle}
+      >
+        {children}
+      </motion.button>
+    );
+  }
+  return (
+    <motion.div {...motionProps} className={cls} style={baseStyle}>
+      {children}
+    </motion.div>
+  );
+}
+
+function Eyebrow({ children, color }: { children: React.ReactNode; color?: string }) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <div
+      className="text-[10px] uppercase tracking-[0.24em] font-semibold"
+      style={{ color: color ?? tokens.muted }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─── KPI tile ─────────────────────────────────────────────────────────────
 
 function KpiTile({
   label,
@@ -843,66 +687,78 @@ function KpiTile({
   deltaNow?: number;
   deltaThen?: number;
   sparkline?: number[];
-  accent?: "gold" | null;
+  accent?: "gold";
 }) {
+  const { tokens } = useDashboardTheme();
   const delta = computeDelta(deltaNow, deltaThen);
-  const bgStyle: React.CSSProperties = accent === "gold"
-    ? {
-        background: "linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.02) 100%)",
-        borderColor: "rgba(201,168,76,0.35)",
-      }
-    : { background: "white", borderColor: "rgba(0,0,0,0.08)" };
+  const goldStyle: React.CSSProperties = accent === "gold"
+    ? { background: `linear-gradient(135deg, ${tokens.accentSoft} 0%, ${tokens.tileBg} 65%)` }
+    : {};
 
   return (
-    <div
-      className="rounded-2xl border p-5 flex flex-col transition hover:shadow-[0_6px_24px_rgba(0,0,0,0.04)]"
-      style={bgStyle}
-    >
-      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3">
-        {label}
-      </div>
-      <div className="flex items-baseline gap-2 flex-wrap">
+    <Tile className="p-4 md:p-5" style={goldStyle}>
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-2.5 flex items-baseline gap-2 flex-wrap">
         <div
-          className="text-[28px] md:text-[32px] font-bold text-black/85 leading-none tracking-tight"
-          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+          className="text-[26px] md:text-[30px] font-bold leading-none tracking-tight tabular-nums"
+          style={{
+            color: tokens.heading,
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
         >
           {value}
         </div>
         {delta && (
           <div
-            className="text-[11.5px] font-semibold tabular-nums"
-            style={{ color: delta.direction === "up" ? "#1b3a2d" : delta.direction === "down" ? "#b34334" : "rgba(0,0,0,0.4)" }}
+            className="text-[11px] font-semibold tabular-nums"
+            style={{
+              color:
+                delta.direction === "up"
+                  ? tokens.accent
+                  : delta.direction === "down"
+                    ? "#d97a6e"
+                    : tokens.muted,
+            }}
           >
             {delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "·"} {delta.label}
           </div>
         )}
       </div>
       {suffix && (
-        <div className="mt-1 text-[12px] text-black/50">{suffix}</div>
-      )}
-      {sparkline && sparkline.length > 0 && (
-        <div className="mt-3">
-          <Sparkline values={sparkline} accent={accent === "gold" ? "#c9a84c" : "#1b3a2d"} />
+        <div className="mt-1 text-[11.5px]" style={{ color: tokens.muted }}>
+          {suffix}
         </div>
       )}
-    </div>
+      {sparkline && sparkline.length > 1 && (
+        <div className="mt-2.5 -mb-1">
+          <Sparkline values={sparkline} stroke={accent === "gold" ? tokens.accent : tokens.primary} />
+        </div>
+      )}
+    </Tile>
   );
 }
 
-function Sparkline({ values, accent }: { values: number[]; accent: string }) {
+function Sparkline({ values, stroke }: { values: number[]; stroke: string }) {
   if (values.length < 2) return null;
   const max = Math.max(...values, 1);
   const w = 140;
-  const h = 36;
+  const h = 30;
   const step = w / (values.length - 1);
   const points = values
     .map((v, i) => `${i * step},${h - (v / max) * h}`)
     .join(" ");
   const fillPoints = `0,${h} ${points} ${w},${h}`;
   return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-9 block">
-      <polygon points={fillPoints} fill={accent} opacity="0.1" />
-      <polyline points={points} fill="none" stroke={accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-7 block">
+      <polygon points={fillPoints} fill={stroke} opacity="0.12" />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -910,25 +766,18 @@ function Sparkline({ values, accent }: { values: number[]; accent: string }) {
 function computeDelta(now?: number, then?: number): { direction: "up" | "down" | "flat"; label: string } | null {
   if (typeof now !== "number" || typeof then !== "number") return null;
   if (now === 0 && then === 0) return null;
-  if (then === 0) {
-    if (now === 0) return null;
-    return { direction: "up", label: "new" };
-  }
+  if (then === 0) return { direction: "up", label: "new" };
   const diff = now - then;
   const pct = Math.round((diff / then) * 100);
   const absPct = Math.abs(pct);
   if (absPct < 1) return { direction: "flat", label: "flat" };
-  return {
-    direction: pct > 0 ? "up" : "down",
-    label: `${absPct}% vs last mo`,
-  };
+  return { direction: pct > 0 ? "up" : "down", label: `${absPct}% vs last mo` };
 }
 
 function formatMoney(cents: number, currency: string): string {
   const amount = Math.round(cents / 100);
   if (amount === 0) return `${currency} 0`;
-  const formatted = amount.toLocaleString();
-  return `${currency} ${formatted}`;
+  return `${currency} ${amount.toLocaleString()}`;
 }
 
 function formatSeconds(total: number): string {
@@ -943,146 +792,48 @@ function monthStart(): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
-// ─── Funnel tile ──────────────────────────────────────────────────────────
+// ─── Active proposal hero tile ────────────────────────────────────────────
 
-function FunnelTile({ summary }: { summary: Summary }) {
-  const f = summary.requests.funnel;
-  const total = summary.requests.total;
-  const stages: { label: string; count: number; accent: string }[] = [
-    { label: "Received", count: total, accent: "#1b3a2d" },
-    { label: "Working", count: f.working + f.open, accent: "#2d5a40" },
-    { label: "Booked", count: f.booked + f.completed, accent: "#c9a84c" },
-    { label: "Not booked", count: f.notBooked, accent: "#b34334" },
-  ];
-  const denom = Math.max(1, total);
-  const conversionPct = Math.round(summary.requests.conversionRate * 100);
-
-  return (
-    <div
-      className="rounded-2xl border bg-white p-5 md:p-6 h-full"
-      style={{ borderColor: "rgba(0,0,0,0.08)" }}
-    >
-      <div className="flex items-baseline justify-between gap-3 mb-4">
-        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45">
-          Request funnel · last {summary.requests.windowDays} days
-        </div>
-        <div
-          className="text-[11.5px] font-semibold tabular-nums"
-          style={{ color: conversionPct >= 20 ? "#1b3a2d" : "rgba(0,0,0,0.5)" }}
-        >
-          {conversionPct}% conversion
-        </div>
-      </div>
-
-      {total === 0 ? (
-        <div className="py-8 text-center text-[13px] text-black/50">
-          No requests received in this window yet. Inbound enquiries show up here once they arrive.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {stages.map((s) => {
-            const pct = Math.round((s.count / denom) * 100);
-            return (
-              <div key={s.label} className="flex items-center gap-3">
-                <div className="w-24 text-[12.5px] text-black/65 shrink-0">{s.label}</div>
-                <div className="flex-1 h-6 rounded-md overflow-hidden" style={{ background: "rgba(0,0,0,0.04)" }}>
-                  <div
-                    className="h-full transition-all flex items-center px-2"
-                    style={{
-                      width: `${Math.max(4, pct)}%`,
-                      background: `linear-gradient(90deg, ${s.accent} 0%, ${s.accent}dd 100%)`,
-                    }}
-                  />
-                </div>
-                <div className="w-20 text-right tabular-nums">
-                  <span className="text-[13px] font-semibold text-black/80">{s.count}</span>
-                  <span className="text-[11px] text-black/40 ml-1">{pct}%</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Activity feed tile ───────────────────────────────────────────────────
-
-function ActivityFeedTile({ activity }: { activity: Summary["activity"] }) {
-  return (
-    <div
-      className="rounded-2xl border bg-white p-5 h-full"
-      style={{ borderColor: "rgba(0,0,0,0.08)" }}
-    >
-      <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/45 mb-3">
-        Recent activity
-      </div>
-      {activity.length === 0 ? (
-        <div className="py-6 text-[13px] text-black/50 text-center">
-          No activity yet. Drafts, payments, and hold confirmations show up here.
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {activity.map((e, i) => (
-            <li key={i}>
-              <Link
-                href={e.link}
-                className="flex items-start gap-3 rounded-lg px-2 -mx-2 py-1.5 hover:bg-black/[0.03] transition group"
-              >
-                <ActivityIcon kind={e.kind} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-black/80 leading-snug truncate">
-                    {e.label}
-                  </div>
-                  {e.detail && (
-                    <div className="text-[11.5px] text-black/50 truncate mt-0.5">{e.detail}</div>
-                  )}
-                </div>
-                <div className="text-[10.5px] text-black/40 shrink-0 tabular-nums">
-                  {formatRelative(e.at)}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ActivityIcon({ kind }: { kind: Summary["activity"][number]["kind"] }) {
-  const map: Record<string, { bg: string; fg: string; glyph: string }> = {
-    "deposit":               { bg: "rgba(201,168,76,0.15)", fg: "#8a7125", glyph: "$" },
-    "reservation-confirmed": { bg: "rgba(27,58,45,0.1)",    fg: "#1b3a2d", glyph: "✓" },
-    "reservation-sent":      { bg: "rgba(0,0,0,0.05)",       fg: "rgba(0,0,0,0.55)", glyph: "✉" },
-    "proposal-created":      { bg: "rgba(27,58,45,0.08)",    fg: "#1b3a2d", glyph: "✦" },
-  };
-  const s = map[kind] ?? map["proposal-created"];
-  return (
-    <div
-      className="w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-      style={{ background: s.bg, color: s.fg }}
-    >
-      {s.glyph}
-    </div>
-  );
-}
-
-// ─── Active proposal tile (compact, 1-col) ─────────────────────────────────
-
-function ActiveProposalTile({ proposal }: { proposal: ProposalRow | null }) {
+function ActiveProposalTile({
+  proposal,
+  onNew,
+  creating,
+}: {
+  proposal: ProposalRow | null;
+  onNew: () => void;
+  creating: boolean;
+}) {
   const router = useRouter();
+  const { tokens } = useDashboardTheme();
+
   if (!proposal) {
     return (
-      <div className="rounded-2xl border border-black/8 bg-white p-5 flex flex-col">
-        <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-          Active proposal
+      <Tile hero>
+        <Eyebrow color={tokens.accent}>Active proposal</Eyebrow>
+        <h3
+          className="mt-2 text-[20px] font-semibold leading-tight text-white/95"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          No proposal open yet.
+        </h3>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/65">
+          Trip Setup + autopilot drafts a personalised proposal in seconds.
+        </p>
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={onNew}
+            disabled={creating}
+            className="inline-flex items-center justify-center px-4 h-10 rounded-xl text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60"
+            style={{ background: tokens.accent, color: "#1d1d1f" }}
+          >
+            {creating ? "Creating…" : "+ New proposal"}
+          </button>
         </div>
-        <div className="text-[14px] text-black/55">No proposal open yet.</div>
-      </div>
+      </Tile>
     );
   }
+
   const open = () => {
     try { localStorage.setItem("activeProposalId", proposal.id); } catch {}
     router.push("/studio");
@@ -1091,103 +842,113 @@ function ActiveProposalTile({ proposal }: { proposal: ProposalRow | null }) {
     const url = `${window.location.origin}/p/${proposal.id}`;
     try { await navigator.clipboard.writeText(url); } catch {}
   };
+
   return (
-    <div
-      className="rounded-2xl border overflow-hidden text-white relative flex flex-col"
-      style={{
-        background: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
-        borderColor: "rgba(201,168,76,0.22)",
-      }}
-    >
+    <Tile hero>
+      {/* faint dot pattern for texture */}
       <div
-        className="absolute inset-0 opacity-[0.05] pointer-events-none"
+        aria-hidden
+        className="absolute inset-0 rounded-2xl opacity-[0.06] pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, #c9a84c 1px, transparent 0)",
-          backgroundSize: "28px 28px",
+          backgroundImage: `radial-gradient(circle at 1px 1px, ${tokens.accent} 1px, transparent 0)`,
+          backgroundSize: "26px 26px",
         }}
       />
-      <div className="relative p-5 flex-1 flex flex-col">
-        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-[#c9a84c]">
-          Active proposal
-        </div>
+      <div className="relative">
+        <Eyebrow color={tokens.accent}>Active proposal</Eyebrow>
         <h3
-          className="mt-2 text-lg font-bold tracking-tight leading-snug line-clamp-2"
+          className="mt-2 text-[19px] md:text-[21px] font-semibold leading-tight line-clamp-2 text-white/95"
           style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
         >
           {proposal.title || "Untitled Proposal"}
         </h3>
-        <div className="mt-1.5 text-[12px] text-white/55 truncate">
+        <div className="mt-1.5 text-[12.5px] truncate text-white/55">
           {proposal.clientName ? `${proposal.clientName} · ` : ""}
           Edited {formatRelative(proposal.updatedAt)}
         </div>
-        <div className="mt-auto pt-4 flex items-center gap-2">
+        <div className="mt-5 flex items-center gap-2">
           <button
+            type="button"
             onClick={open}
-            className="flex-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition active:scale-95 hover:brightness-110"
-            style={{ background: "#c9a84c", color: "#1b3a2d" }}
+            className="flex-1 px-3 h-10 rounded-xl text-[13px] font-semibold transition active:scale-[0.97] hover:brightness-105"
+            style={{
+              background: tokens.accent,
+              color: "#1b3a2d",
+              boxShadow: `0 6px 18px -8px ${tokens.accent}`,
+            }}
           >
-            Open
+            Open in editor
           </button>
           <button
+            type="button"
             onClick={copyShare}
-            className="px-3 py-2 rounded-lg text-[13px] font-semibold text-white border border-white/20 hover:bg-white/[0.06] transition"
+            className="px-3 h-10 rounded-xl text-[13px] font-semibold text-white transition hover:brightness-110"
+            style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.2)" }}
             title="Copy the public share link"
           >
             Share link
           </button>
         </div>
       </div>
-    </div>
+    </Tile>
   );
 }
 
-// ─── Inbox tile (top open requests) ────────────────────────────────────────
+// ─── Inbox tile ───────────────────────────────────────────────────────────
 
 function InboxTile({ requests }: { requests: RequestRow[] | null }) {
+  const { tokens } = useDashboardTheme();
   const loaded = requests !== null;
   const top = (requests ?? []).slice(0, 3);
   const openCount = (requests ?? []).length;
+
   return (
-    <Link
-      href="/requests"
-      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
-    >
+    <Tile href="/requests">
       <div className="flex items-baseline justify-between gap-2 mb-3">
-        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/40">
-          Inbox
-        </div>
+        <Eyebrow>Inbox</Eyebrow>
         {loaded && openCount > 0 && (
-          <div className="text-[11px] font-semibold text-[#1b3a2d] tabular-nums">
+          <span
+            className="text-[10.5px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+            style={{ background: tokens.primarySoft, color: tokens.primary }}
+          >
             {openCount} open
-          </div>
+          </span>
         )}
       </div>
 
       {!loaded ? (
-        <div className="flex-1 space-y-2">
-          <div className="h-4 bg-black/5 rounded animate-pulse" />
-          <div className="h-4 bg-black/5 rounded animate-pulse w-4/5" />
-          <div className="h-4 bg-black/5 rounded animate-pulse w-3/5" />
+        <div className="space-y-2">
+          <div className="h-3.5 rounded animate-pulse" style={{ background: tokens.ring }} />
+          <div className="h-3.5 rounded animate-pulse w-4/5" style={{ background: tokens.ring }} />
+          <div className="h-3.5 rounded animate-pulse w-3/5" style={{ background: tokens.ring }} />
         </div>
       ) : top.length === 0 ? (
-        <div className="flex-1 flex flex-col justify-center text-[13px] text-black/50">
-          <div>No open requests.</div>
-          <div className="text-[12px] text-black/40 mt-1">
+        <div>
+          <div className="text-[14px] font-medium" style={{ color: tokens.heading }}>
+            No open requests.
+          </div>
+          <div className="text-[11.5px] mt-0.5" style={{ color: tokens.muted }}>
             New client enquiries show up here.
           </div>
         </div>
       ) : (
-        <ul className="flex-1 space-y-2.5">
+        <ul className="space-y-2.5">
           {top.map((r) => (
             <li key={r.id} className="flex items-baseline gap-2">
-              <div className="text-[10.5px] font-mono text-black/35 shrink-0 tabular-nums">
+              <div
+                className="text-[10px] font-mono shrink-0 tabular-nums"
+                style={{ color: tokens.muted }}
+              >
                 {r.referenceNumber ?? "—"}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium text-black/80 truncate">
+                <div
+                  className="text-[12.5px] font-medium truncate"
+                  style={{ color: tokens.heading }}
+                >
                   {r.client?.name || r.client?.email || "Unknown"}
                 </div>
-                <div className="text-[11px] text-black/45 truncate">
+                <div className="text-[10.5px] truncate" style={{ color: tokens.muted }}>
                   {r.source ? `${r.source} · ` : ""}
                   {formatRelative(r.receivedAt)}
                 </div>
@@ -1197,180 +958,239 @@ function InboxTile({ requests }: { requests: RequestRow[] | null }) {
         </ul>
       )}
 
-      <div className="mt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-        Open inbox →
-      </div>
-    </Link>
-  );
-}
-
-// ─── This-month stats tile ─────────────────────────────────────────────────
-
-function MonthStatsTile({
-  proposals,
-  requests,
-}: {
-  proposals: ProposalRow[] | null;
-  requests: RequestRow[] | null;
-}) {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthLabel = now.toLocaleDateString(undefined, { month: "long" });
-
-  const proposalsThisMonth = (proposals ?? []).filter((p) => {
-    const d = new Date(p.updatedAt);
-    return d >= monthStart;
-  }).length;
-
-  const requestsThisMonth = (requests ?? []).filter((r) => {
-    const d = new Date(r.receivedAt);
-    return d >= monthStart;
-  }).length;
-
-  return (
-    <Link
-      href="/analytics"
-      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
-    >
-      <div className="flex items-baseline justify-between gap-2 mb-3">
-        <div className="text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/40">
-          This month
-        </div>
-        <div className="text-[10.5px] tracking-wider text-black/35 uppercase">{monthLabel}</div>
-      </div>
-
-      <div className="flex-1 flex flex-col gap-3 justify-center">
-        <StatRow label="Proposals edited" value={proposalsThisMonth} />
-        <StatRow label="New requests" value={requestsThisMonth} />
-      </div>
-
-      <div className="mt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-        View analytics →
-      </div>
-    </Link>
-  );
-}
-
-function StatRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-baseline gap-3">
       <div
-        className="text-3xl font-bold tabular-nums text-[#1b3a2d] min-w-[3ch] text-right"
-        style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+        className="mt-4 text-[12px] font-semibold inline-flex items-center gap-1"
+        style={{ color: tokens.primary }}
       >
-        {value}
+        Open inbox
+        <span aria-hidden>→</span>
       </div>
-      <div className="text-[13px] text-black/60">{label}</div>
+    </Tile>
+  );
+}
+
+// ─── Funnel tile ──────────────────────────────────────────────────────────
+
+function FunnelTile({ summary }: { summary: Summary }) {
+  const { tokens } = useDashboardTheme();
+  const f = summary.requests.funnel;
+  const total = summary.requests.total;
+  const stages: { label: string; count: number; color: string }[] = [
+    { label: "Received", count: total, color: tokens.primary },
+    { label: "Working", count: f.working + f.open, color: `${tokens.primary}cc` },
+    { label: "Booked", count: f.booked + f.completed, color: tokens.accent },
+    { label: "Not booked", count: f.notBooked, color: "#d97a6e" },
+  ];
+  const denom = Math.max(1, total);
+  const conversionPct = Math.round(summary.requests.conversionRate * 100);
+
+  return (
+    <Tile>
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <Eyebrow>Request funnel · {summary.requests.windowDays}d</Eyebrow>
+        <span
+          className="text-[10.5px] font-semibold tabular-nums"
+          style={{ color: conversionPct >= 20 ? tokens.accent : tokens.muted }}
+        >
+          {conversionPct}% conv
+        </span>
+      </div>
+      {total === 0 ? (
+        <div className="py-4 text-[12px]" style={{ color: tokens.muted }}>
+          No requests received yet. Inbound enquiries land here.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {stages.map((s) => {
+            const pct = Math.round((s.count / denom) * 100);
+            return (
+              <div key={s.label} className="flex items-center gap-2.5">
+                <div className="w-[68px] text-[11.5px] shrink-0" style={{ color: tokens.body }}>
+                  {s.label}
+                </div>
+                <div
+                  className="flex-1 h-5 rounded-md overflow-hidden"
+                  style={{ background: tokens.ring }}
+                >
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${Math.max(4, pct)}%`,
+                      background: s.color,
+                    }}
+                  />
+                </div>
+                <div className="w-12 text-right tabular-nums">
+                  <span className="text-[12px] font-semibold" style={{ color: tokens.heading }}>
+                    {s.count}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Tile>
+  );
+}
+
+// ─── Activity feed tile ───────────────────────────────────────────────────
+
+function ActivityFeedTile({ activity }: { activity: Summary["activity"] }) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <Tile className="overflow-hidden">
+      <Eyebrow>Recent activity</Eyebrow>
+      {activity.length === 0 ? (
+        <div className="mt-3 text-[12px]" style={{ color: tokens.muted }}>
+          No activity yet. Drafts, payments, and confirmations appear here.
+        </div>
+      ) : (
+        <ul className="mt-2.5 space-y-2">
+          {activity.slice(0, 4).map((e, i) => (
+            <li key={i}>
+              <Link
+                href={e.link}
+                className="flex items-start gap-2.5 rounded-lg p-1.5 -mx-1.5 transition group"
+                style={{ background: "transparent" }}
+              >
+                <ActivityIcon kind={e.kind} />
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-[12.5px] font-medium leading-snug truncate"
+                    style={{ color: tokens.heading }}
+                  >
+                    {e.label}
+                  </div>
+                  {e.detail && (
+                    <div className="text-[11px] truncate" style={{ color: tokens.muted }}>
+                      {e.detail}
+                    </div>
+                  )}
+                </div>
+                <div
+                  className="text-[10px] shrink-0 tabular-nums"
+                  style={{ color: tokens.muted }}
+                >
+                  {formatRelative(e.at)}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Tile>
+  );
+}
+
+function ActivityIcon({ kind }: { kind: Summary["activity"][number]["kind"] }) {
+  const { tokens } = useDashboardTheme();
+  const map: Record<string, { bg: string; fg: string; glyph: string }> = {
+    "deposit": { bg: tokens.accentSoft, fg: tokens.accent, glyph: "$" },
+    "reservation-confirmed": { bg: tokens.primarySoft, fg: tokens.primary, glyph: "✓" },
+    "reservation-sent": { bg: tokens.ring, fg: tokens.body, glyph: "✉" },
+    "proposal-created": { bg: tokens.primarySoft, fg: tokens.primary, glyph: "✦" },
+  };
+  const s = map[kind] ?? map["proposal-created"];
+  return (
+    <div
+      className="w-6 h-6 rounded-md flex items-center justify-center text-[10.5px] font-bold shrink-0 mt-0.5"
+      style={{ background: s.bg, color: s.fg }}
+    >
+      {s.glyph}
     </div>
   );
 }
 
-// ─── Action tile (launchpad buttons) ───────────────────────────────────────
+// ─── Quick actions tile ───────────────────────────────────────────────────
 
-function ActionTile({
-  onClick,
-  href,
-  disabled,
-  title,
-  hint,
-  accent,
-  gold,
+function QuickActionsTile({
+  onNew,
+  creating,
 }: {
-  onClick?: () => void;
-  href?: string;
-  disabled?: boolean;
-  title: string;
-  hint: string;
-  accent?: boolean;
-  gold?: boolean;
+  onNew: () => void;
+  creating: boolean;
+  theme: "light" | "dark";
 }) {
-  const bodyCls = `group rounded-xl border p-4 flex flex-col h-full transition active:scale-[0.98] ${
-    accent
-      ? "text-white border-transparent"
-      : gold
-        ? "border-transparent"
-        : "bg-white border-black/8 hover:border-black/20"
-  }`;
-  const accentStyle: React.CSSProperties = accent
-    ? { background: "#1b3a2d" }
-    : gold
-      ? { background: "rgba(201,168,76,0.1)", borderColor: "rgba(201,168,76,0.55)" }
-      : {};
-
-  const inner = (
-    <>
-      <div
-        className={`text-[14px] font-semibold leading-tight ${
-          accent ? "text-white" : gold ? "text-[#8a7125]" : "text-black/85"
-        }`}
-      >
-        {title}
-      </div>
-      <div
-        className={`mt-1 text-[11.5px] leading-snug ${
-          accent ? "text-white/65" : gold ? "text-[#8a7125]/75" : "text-black/50"
-        }`}
-      >
-        {hint}
-      </div>
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={bodyCls} style={accentStyle}>
-        {inner}
-      </Link>
-    );
-  }
+  const { tokens } = useDashboardTheme();
+  const actions: { label: string; href: string; glyph: string }[] = [
+    { label: "Import existing", href: "/import", glyph: "↓" },
+    { label: "Browse templates", href: "/templates", glyph: "✦" },
+    { label: "Properties", href: "/properties", glyph: "▦" },
+    { label: "Brand DNA", href: "/settings/brand", glyph: "◆" },
+  ];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${bodyCls} text-left disabled:opacity-60 disabled:cursor-not-allowed`}
-      style={accentStyle}
-    >
-      {inner}
-    </button>
+    <Tile>
+      <Eyebrow>Quick actions</Eyebrow>
+      <button
+        type="button"
+        onClick={onNew}
+        disabled={creating}
+        className="mt-3 w-full inline-flex items-center justify-center px-3 h-10 rounded-xl text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60"
+        style={{
+          background: tokens.primary,
+          color: "#ffffff",
+          boxShadow: `0 6px 18px -10px ${tokens.primary}`,
+        }}
+      >
+        {creating ? "Creating…" : "+ New proposal"}
+      </button>
+      <ul className="mt-3 grid grid-cols-2 gap-1.5">
+        {actions.map((a) => (
+          <li key={a.href}>
+            <Link
+              href={a.href}
+              className="flex items-center gap-2 px-2.5 h-9 rounded-lg text-[12px] font-medium transition hover:brightness-105"
+              style={{
+                background: tokens.primarySoft,
+                color: tokens.body,
+              }}
+            >
+              <span
+                className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0"
+                style={{ background: tokens.tileBg, color: tokens.primary }}
+              >
+                {a.glyph}
+              </span>
+              <span className="truncate">{a.label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Tile>
   );
 }
 
-// ─── Templates placeholder tile ────────────────────────────────────────────
-// Real /templates page arrives in Step 6; for now this link lands on a
-// 404 which we accept for the duration of the redesign → templates arc.
+// ─── Skeleton tile (shown while summary loads) ────────────────────────────
 
-function TemplatesTile() {
+function SkeletonTile({ label }: { label: string }) {
+  const { tokens } = useDashboardTheme();
   return (
-    <Link
-      href="/templates"
-      className="group rounded-2xl border border-black/8 bg-white p-5 flex flex-col hover:border-black/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)] transition"
-    >
-      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold text-black/40 mb-3">
-        Templates
+    <Tile>
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-4 space-y-2">
+        <div className="h-3 rounded animate-pulse" style={{ background: tokens.ring }} />
+        <div className="h-3 rounded animate-pulse w-3/4" style={{ background: tokens.ring }} />
+        <div className="h-3 rounded animate-pulse w-2/3" style={{ background: tokens.ring }} />
       </div>
-      <div className="text-[15px] font-semibold text-black/85">Proven shapes</div>
-      <p className="mt-1 text-[12px] text-black/45 leading-relaxed">
-        20 Kenya + Tanzania starting points. Clone one, customise everything — keep the voice yours.
-      </p>
-      <div className="mt-auto pt-4 text-[13px] text-black/50 group-hover:text-[#1b3a2d] transition">
-        Browse →
-      </div>
-    </Link>
+    </Tile>
   );
 }
 
-// ─── Utils ──────────────────────────────────────────────────────────────────
+// ─── Utils ─────────────────────────────────────────────────────────────────
 
 function formatRelative(iso: string): string {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const diffMin = Math.round(diffMs / 60000);
   if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr${diffHr === 1 ? "" : "s"} ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 7) return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.round(diffH / 24);
+  if (diffD < 30) return `${diffD}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+// Type-only re-exports for downstream consumers (legacy imports).
+export type { DashboardTokens };
