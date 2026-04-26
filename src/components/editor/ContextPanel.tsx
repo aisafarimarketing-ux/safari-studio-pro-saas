@@ -8,11 +8,14 @@ import { ProposalSettingsPanel } from "./panels/ProposalSettingsPanel";
 import type { ContextTab } from "@/store/editorStore";
 import type { Day, Property } from "@/lib/types";
 
-const TABS: { id: ContextTab; label: string }[] = [
-  { id: "content", label: "Content" },
-  { id: "style", label: "Style" },
-  { id: "layout", label: "Layout" },
-  { id: "advanced", label: "Theme" },
+const SECTION_TABS: { id: ContextTab; label: string }[] = [
+  { id: "section", label: "Section" },
+  { id: "theme", label: "Theme" },
+];
+
+const PROPOSAL_TABS: { id: ContextTab; label: string }[] = [
+  { id: "trip", label: "Trip" },
+  { id: "theme", label: "Theme" },
 ];
 
 // ── Day quick-editor ──────────────────────────────────────────────────────────
@@ -195,10 +198,11 @@ export function ContextPanel() {
         )}
       </div>
 
-      {/* Tabs — hide when day/property is selected to keep focus */}
+      {/* Tabs — hide when day/property is selected to keep focus.
+          The visible set depends on whether a section is selected. */}
       {!selectedDay && !selectedProperty && (
         <div className="flex border-b border-black/8 shrink-0">
-          {TABS.map((tab) => (
+          {(section ? SECTION_TABS : PROPOSAL_TABS).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setContextTab(tab.id)}
@@ -220,32 +224,17 @@ export function ContextPanel() {
         {selectedDay && <DayPanel day={selectedDay} />}
         {selectedProperty && !selectedDay && <PropertyPanel property={selectedProperty} />}
 
-        {/* Section panels (only when no day/property selected) */}
+        {/* Section / proposal panels */}
         {!selectedDay && !selectedProperty && (
           <>
-            {contextTab === "advanced" && <ThemePanel />}
-            {contextTab === "style" && <SectionPanel />}
-            {contextTab === "layout" && <SectionPanel />}
-            {contextTab === "content" && (
-              section ? (
-                <div className="space-y-4">
-                  <div className="text-xs text-black/40 leading-relaxed">
-                    Click any text on the canvas to edit it inline. Use the{" "}
-                    <strong className="text-black/60">Layout</strong> tab to change the section variant, or{" "}
-                    <strong className="text-black/60">Style</strong> to override colors.
-                  </div>
-                  <div className="border rounded-xl p-3.5 bg-white text-xs space-y-1.5" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
-                    <div className="font-semibold text-black/60">
-                      {TABS[0].label}: {section.type}
-                    </div>
-                    <div className="text-black/40">Variant: {section.layoutVariant}</div>
-                    <div className="text-black/40">Visible: {section.visible ? "Yes" : "Hidden"}</div>
-                  </div>
-                </div>
-              ) : (
-                <ProposalSettingsPanel />
-              )
-            )}
+            {contextTab === "theme" && <ThemePanel />}
+            {contextTab === "section" && section && <SectionPanel />}
+            {contextTab === "trip" && !section && <ProposalSettingsPanel />}
+            {/* Defensive fallbacks — if tab/state get out of sync (eg.
+                user is on "trip" then selects a section before the
+                store auto-flips), render what makes sense. */}
+            {contextTab === "trip" && section && <SectionPanel />}
+            {contextTab === "section" && !section && <ProposalSettingsPanel />}
           </>
         )}
       </div>

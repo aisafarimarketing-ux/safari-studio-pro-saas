@@ -2,6 +2,35 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { uploadImage } from "@/lib/uploadImage";
+import { RegenerateBar } from "./RegenerateBar";
+
+const COMMON_DESTINATIONS = [
+  "Arusha",
+  "Masai Mara",
+  "Amboseli",
+  "Serengeti",
+  "Ngorongoro",
+  "Tarangire",
+  "Lake Manyara",
+  "Lake Nakuru",
+  "Lake Naivasha",
+  "Samburu",
+  "Laikipia",
+  "Ol Pejeta",
+  "Meru",
+  "Mount Kenya",
+  "Nairobi",
+  "Zanzibar",
+  "Lamu",
+  "Diani",
+  "Tsavo East",
+  "Tsavo West",
+  "Ruaha",
+  "Selous / Nyerere",
+  "Bwindi",
+  "Murchison Falls",
+  "Volcanoes (Rwanda)",
+];
 
 export function ProposalSettingsPanel() {
   const { proposal, updateClient, updateOperator, updateTrip, updateDepositConfig, updateTierLabel, toggleTierVisibility, setActiveTier } = useProposalStore();
@@ -49,8 +78,17 @@ export function ProposalSettingsPanel() {
     </div>
   );
 
+  const toggleDestination = (d: string) => {
+    const list = trip.destinations ?? [];
+    const next = list.includes(d) ? list.filter((x) => x !== d) : [...list, d];
+    updateTrip({ destinations: next });
+  };
+
   return (
     <div className="space-y-6">
+      {/* Regenerate buttons — top of the Trip tab */}
+      <RegenerateBar />
+
       {/* Trip — the essentials that used to live in the top chip strip */}
       <div>
         <div className="text-[11px] uppercase tracking-widest text-black/40 mb-3">Trip</div>
@@ -87,6 +125,62 @@ export function ProposalSettingsPanel() {
           </div>
 
           {field("Trip style", trip.tripStyle ?? "", (v) => updateTrip({ tripStyle: v }), "e.g. Luxury family safari")}
+
+          {/* Destinations — chip picker. Drives autopilot's day-by-day
+              generation, so changes here matter for "Add new info". */}
+          <div>
+            <label className="block text-[11px] text-black/40 mb-1.5">Destinations</label>
+            <div className="flex flex-wrap gap-1.5">
+              {COMMON_DESTINATIONS.map((d) => {
+                const on = (trip.destinations ?? []).includes(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDestination(d)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+                      on
+                        ? "bg-[#1b3a2d] text-white border-[#1b3a2d]"
+                        : "bg-white text-black/55 border-black/12 hover:border-black/30"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+            {(trip.destinations ?? []).filter(
+              (d) => !COMMON_DESTINATIONS.includes(d),
+            ).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(trip.destinations ?? [])
+                  .filter((d) => !COMMON_DESTINATIONS.includes(d))
+                  .map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => toggleDestination(d)}
+                      className="text-[11px] px-2.5 py-1 rounded-full bg-[#1b3a2d] text-white border border-[#1b3a2d]"
+                    >
+                      {d} ×
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Operator note — free-form prompt that flavors autopilot
+              (occasion, special requests, deal-breakers). */}
+          <div>
+            <label className="block text-[11px] text-black/40 mb-1">Notes for autopilot</label>
+            <textarea
+              value={trip.operatorNote ?? ""}
+              onChange={(e) => updateTrip({ operatorNote: e.target.value })}
+              placeholder="e.g. honeymoon, vegetarian, prefers tented camps, no early starts…"
+              rows={3}
+              className="w-full border border-black/12 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1b3a2d] resize-none"
+            />
+          </div>
         </div>
       </div>
 
