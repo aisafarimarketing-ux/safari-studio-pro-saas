@@ -18,6 +18,7 @@ import { nanoid } from "@/lib/nanoid";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { TierBanner } from "./TierBanner";
 import { MessagesTile } from "./MessagesTile";
+import { PrioritiesSection } from "./PrioritiesSection";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
@@ -481,6 +482,13 @@ function DashboardBody({
             <ActiveProposalTile proposal={activeProposal} onNew={openNewProposal} creating={creating} />
             <InboxTile requests={requests} />
             <MessagesTile />
+          </motion.div>
+
+          {/* Today's Priorities — intelligence layer, full-width below the
+              flagship row so the operator's first scan answers
+              "who do I follow up with right now?" without scrolling. */}
+          <motion.div variants={item}>
+            <PrioritiesSection />
           </motion.div>
 
           {/* Compact triplet — Funnel + Activity + Quick Actions */}
