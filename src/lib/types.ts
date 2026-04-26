@@ -53,7 +53,20 @@ export interface OperatorProfile {
   country?: string;
   website?: string;
   brandColors: { primary: string; secondary: string };
+  /** Trust signals shown on the closing booking-recap variant — short
+   *  one-line bullets ("Fully refundable until 60 days", "Local expert
+   *  support 24/7"). Configured once on the operator profile and re-used
+   *  across every proposal that picks the booking-recap layout. */
+  trustBadges?: string[];
 }
+
+export const DEFAULT_TRUST_BADGES: string[] = [
+  "Fully refundable up to 60 days before departure",
+  "Local expert support, 24/7 on the road",
+  "Hand-picked camps and lodges, no surprises",
+  "Dedicated consultant from booking to return",
+  "Travel-insurance partners for extra peace of mind",
+];
 
 // ─── Client ──────────────────────────────────────────────────────────────────
 

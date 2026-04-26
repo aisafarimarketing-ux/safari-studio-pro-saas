@@ -2,6 +2,7 @@
 
 import { useProposalStore } from "@/store/proposalStore";
 import { uploadImage } from "@/lib/uploadImage";
+import { DEFAULT_TRUST_BADGES } from "@/lib/types";
 import { RegenerateBar } from "./RegenerateBar";
 
 const COMMON_DESTINATIONS = [
@@ -308,6 +309,20 @@ export function ProposalSettingsPanel() {
           {field("WhatsApp", operator.whatsapp ?? "", (v) => updateOperator({ whatsapp: v }))}
           {field("Website", operator.website ?? "", (v) => updateOperator({ website: v }))}
           {field("Booking URL", operator.bookingUrl ?? "", (v) => updateOperator({ bookingUrl: v }), "https://book.yourcompany.com")}
+
+          {/* Trust badges — single-line bullets shown in the closing
+              booking-recap variant. Configured once on the operator,
+              re-used across every proposal. */}
+          <div>
+            <label className="block text-[11px] text-black/40 mb-1">Trust badges</label>
+            <div className="text-[10.5px] text-black/40 mb-2 leading-relaxed">
+              One short line each. Used by the closing booking-recap layout.
+            </div>
+            <TrustBadgesEditor
+              value={operator.trustBadges ?? DEFAULT_TRUST_BADGES}
+              onChange={(next) => updateOperator({ trustBadges: next })}
+            />
+          </div>
         </div>
       </div>
 
@@ -368,4 +383,55 @@ function formatDateRange(startIso: string, endIso: string): string {
 function formatPax(adults: number, children: number): string {
   if (children > 0) return `${adults} adults · ${children} children`;
   return `${adults} ${adults === 1 ? "adult" : "adults"}`;
+}
+
+// ─── Trust badges editor ──────────────────────────────────────────────────
+
+function TrustBadgesEditor({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const update = (i: number, v: string) => {
+    const next = [...value];
+    next[i] = v;
+    onChange(next);
+  };
+  const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
+  const add = () => onChange([...value, ""]);
+
+  return (
+    <div className="space-y-1.5">
+      {value.map((badge, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <input
+            value={badge}
+            onChange={(e) => update(i, e.target.value)}
+            onBlur={(e) => {
+              if (!e.target.value.trim()) remove(i);
+            }}
+            placeholder="e.g. Fully refundable up to 60 days"
+            className="flex-1 border border-black/12 rounded-lg px-2.5 py-1.5 text-[12px] bg-white focus:outline-none focus:border-[#1b3a2d]"
+          />
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="w-6 h-6 rounded text-black/30 hover:text-red-500 hover:bg-red-50 transition text-[14px] leading-none"
+            title="Remove"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="text-[11px] text-black/45 hover:text-[#1b3a2d] transition pt-0.5"
+      >
+        + Add badge
+      </button>
+    </div>
+  );
 }

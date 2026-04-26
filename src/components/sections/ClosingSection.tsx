@@ -1,20 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
-import type {
-  Section,
-  Proposal,
-  OperatorProfile,
-  ClientDetails,
-  TripDetails,
-  PricingData,
-  TierKey,
-  ThemeTokens,
-  ProposalTheme,
+import {
+  DEFAULT_TRUST_BADGES,
+  type Section,
+  type Proposal,
+  type OperatorProfile,
+  type ClientDetails,
+  type TripDetails,
+  type PricingData,
+  type TierKey,
+  type ThemeTokens,
+  type ProposalTheme,
 } from "@/lib/types";
 
 // Closing — five layout variants (closing-farewell default, plus
@@ -49,10 +51,12 @@ export function ClosingSection({ section }: { section: Section }) {
   // both (closing-farewell, quote-led) get both stacked.
   const variantHasQuote =
     variant === "closing-farewell" ||
+    variant === "booking-recap" ||
     variant === "quote-led" ||
     variant === "cta-card";
   const variantHasSignOff =
     variant === "closing-farewell" ||
+    variant === "booking-recap" ||
     variant === "quote-led" ||
     variant === "letter-style" ||
     variant === "centered-minimal";
@@ -82,6 +86,25 @@ export function ClosingSection({ section }: { section: Section }) {
       )}
     </div>
   ) : null;
+
+  // ── Booking-recap ─────────────────────────────────────────────────────────
+  // Editorial intro on the left, booking card on the right. Reassurance
+  // bullets, destination chips, and 4 day-image tiles tie the trip together
+  // before the moment of conversion. Framer Motion drives the staggered
+  // scroll-reveal and the CTA hover.
+  if (variant === "booking-recap") {
+    return (
+      <BookingRecapVariant
+        section={section}
+        proposal={proposal}
+        tokens={tokens}
+        isEditor={isEditor}
+        onQuote={onQuote}
+        onSignOff={onSignOff}
+        aiButtons={aiButtons}
+      />
+    );
+  }
 
   // ── Closing-farewell (default) ────────────────────────────────────────────
   // Combined closing + footer. Pull-quote + sign-off on top, two-column
@@ -970,5 +993,441 @@ function DownloadPdfButton({
     >
       {busy ? "Preparing PDF…" : "Download Quote"}
     </button>
+  );
+}
+
+// ─── Booking-recap variant ────────────────────────────────────────────────
+//
+// Shadcn-caliber two-column closing — letter-mood intro on the left, hard
+// booking card on the right. Framer Motion drives staggered scroll-reveal
+// and the CTA's micro-interactions. Day hero images become experience
+// tiles. Trust bullets pull from operator.trustBadges (or the default
+// list when nothing's configured).
+
+function BookingRecapVariant({
+  section,
+  proposal,
+  tokens,
+  isEditor,
+  onQuote,
+  onSignOff,
+  aiButtons,
+}: {
+  section: Section;
+  proposal: Proposal;
+  tokens: ThemeTokens;
+  isEditor: boolean;
+  onQuote: (e: React.FocusEvent<HTMLElement>) => void;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+  aiButtons: React.ReactNode;
+}) {
+  const { operator, theme, client, trip, activeTier, pricing, days } = proposal;
+  const overrides = section.styleOverrides as Record<string, string> | undefined;
+  const bg = overrides?.sectionSurface ?? "#0d1714";
+  const isDark = isDarkColor(bg);
+  const color = {
+    heading: isDark ? "rgba(255,255,255,0.96)" : tokens.headingText,
+    body: isDark ? "rgba(255,255,255,0.74)" : tokens.bodyText,
+    muted: isDark ? "rgba(255,255,255,0.45)" : tokens.mutedText,
+    border: isDark ? "rgba(255,255,255,0.10)" : tokens.border,
+    softBorder: isDark ? "rgba(255,255,255,0.06)" : `${tokens.border}80`,
+    surface: isDark ? "rgba(255,255,255,0.04)" : tokens.cardBg,
+    accent: tokens.accent,
+    chipBg: isDark ? "rgba(255,255,255,0.06)" : `${tokens.accent}10`,
+    chipText: isDark ? "rgba(255,255,255,0.82)" : tokens.headingText,
+    cta: isDark ? "#ffffff" : tokens.accent,
+    ctaText: isDark ? "#0d1714" : "#ffffff",
+  };
+
+  const quote = (section.content.quote as string) ?? "";
+  const signOff = (section.content.signOff as string) ?? "";
+
+  const tierKey = activeTier as keyof typeof pricing;
+  const tier =
+    tierKey === "classic" || tierKey === "premier" || tierKey === "signature"
+      ? pricing[tierKey]
+      : null;
+  const pax = parsePax(client.pax);
+  const perPerson = tier?.pricePerPerson ?? "";
+  const currency = tier?.currency ?? "USD";
+  const totalLabel = buildTotalLabel(perPerson, currency, pax);
+  const confirmBookingHref = resolveBookingHref(operator, proposal, totalLabel);
+
+  // Pick up to 4 day hero images for the experience tiles. Falls back to
+  // a count of however many we actually have.
+  const dayTiles = days
+    .filter((d) => !!d.heroImageUrl)
+    .slice(0, 4)
+    .map((d) => ({
+      id: d.id,
+      label: d.destination || d.subtitle || `Day ${d.dayNumber}`,
+      url: d.heroImageUrl as string,
+      objectPosition: d.heroImagePosition || "50% 50%",
+    }));
+
+  const trustBadges =
+    operator.trustBadges && operator.trustBadges.length > 0
+      ? operator.trustBadges
+      : DEFAULT_TRUST_BADGES;
+
+  const stagger = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.06, delayChildren: 0.08 },
+    },
+  } as const;
+  const item = {
+    hidden: { opacity: 0, y: 14 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+    },
+  } as const;
+
+  return (
+    <div className="relative py-24 md:py-28 px-6 md:px-12 lg:px-16" style={{ background: bg }}>
+      {aiButtons}
+
+      <motion.div
+        className="max-w-6xl mx-auto"
+        variants={stagger}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, margin: "-80px" }}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 lg:gap-14">
+          {/* ── Left column ── */}
+          <div className="lg:pr-4">
+            <motion.div variants={item}>
+              <div
+                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-5"
+                style={{ color: color.muted }}
+              >
+                One last thing
+              </div>
+            </motion.div>
+
+            <motion.blockquote
+              variants={item}
+              className="font-semibold leading-[1.18] outline-none"
+              style={{
+                color: color.heading,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.7rem, 3vw, 2.45rem)",
+                letterSpacing: "-0.012em",
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              data-ai-editable="closing"
+              onBlur={onQuote}
+            >
+              {quote}
+            </motion.blockquote>
+
+            {(signOff || isEditor) && (
+              <motion.p
+                variants={item}
+                className="mt-6 max-w-[520px] text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
+                style={{
+                  color: color.body,
+                  fontFamily: `'${theme.bodyFont}', sans-serif`,
+                }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                data-ai-editable="closing"
+                onBlur={onSignOff}
+              >
+                {signOff}
+              </motion.p>
+            )}
+
+            {/* Hairline + trip recap */}
+            <motion.div
+              variants={item}
+              aria-hidden
+              className="mt-10 mb-7"
+              style={{ height: 1, width: 64, background: color.border }}
+            />
+
+            <motion.div variants={item}>
+              <div
+                className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
+                style={{ color: color.muted }}
+              >
+                Itinerary at a glance
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(trip.destinations ?? []).map((d) => (
+                  <span
+                    key={d}
+                    className="text-[11.5px] font-medium px-2.5 py-1 rounded-full"
+                    style={{
+                      background: color.chipBg,
+                      color: color.chipText,
+                      border: `1px solid ${color.softBorder}`,
+                    }}
+                  >
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Experience tiles — day hero images */}
+            {dayTiles.length > 0 && (
+              <motion.div variants={item} className="mt-8">
+                <div
+                  className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
+                  style={{ color: color.muted }}
+                >
+                  Experiences included
+                </div>
+                <motion.div
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
+                  variants={stagger}
+                >
+                  {dayTiles.map((tile) => (
+                    <motion.div
+                      key={tile.id}
+                      variants={item}
+                      whileHover={{ y: -2 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                      className="group relative overflow-hidden rounded-xl aspect-[4/5]"
+                      style={{
+                        background: color.surface,
+                        border: `1px solid ${color.softBorder}`,
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={tile.url}
+                        alt={tile.label}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
+                        style={{ objectPosition: tile.objectPosition }}
+                      />
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          background:
+                            "linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.66) 100%)",
+                        }}
+                      />
+                      <div className="absolute left-2.5 right-2.5 bottom-2 text-[11px] font-semibold text-white/95 leading-tight">
+                        {tile.label}
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* ── Right column — booking card ── */}
+          <motion.div
+            variants={item}
+            className="relative rounded-2xl p-6 md:p-7 backdrop-blur-md"
+            style={{
+              background: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
+              border: `1px solid ${color.softBorder}`,
+              boxShadow: isDark
+                ? "0 30px 60px -25px rgba(0,0,0,0.5)"
+                : "0 24px 60px -28px rgba(0,0,0,0.18)",
+            }}
+          >
+            <div
+              className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
+              style={{ color: color.muted }}
+            >
+              Your safari
+            </div>
+            <h3
+              className="font-semibold leading-[1.1]"
+              style={{
+                color: color.heading,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.35rem, 2.4vw, 1.7rem)",
+                letterSpacing: "-0.005em",
+              }}
+            >
+              {trip.title}
+            </h3>
+            {trip.dates && (
+              <div
+                className="mt-1.5 text-[12.5px]"
+                style={{ color: color.muted }}
+              >
+                {trip.dates}
+                {trip.nights ? ` · ${trip.nights} night${trip.nights === 1 ? "" : "s"}` : ""}
+              </div>
+            )}
+            {client.guestNames && (
+              <div
+                className="mt-0.5 text-[12px]"
+                style={{ color: color.muted }}
+              >
+                For {client.guestNames}
+              </div>
+            )}
+
+            {/* Price */}
+            {totalLabel && (
+              <div
+                className="mt-5 pt-5"
+                style={{ borderTop: `1px solid ${color.softBorder}` }}
+              >
+                <div
+                  className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1"
+                  style={{ color: color.muted }}
+                >
+                  Total
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className="font-semibold tabular-nums leading-none"
+                    style={{
+                      color: color.heading,
+                      fontFamily: `'${theme.displayFont}', serif`,
+                      fontSize: "clamp(2rem, 3.6vw, 2.6rem)",
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    {totalLabel.replace(/\sper\sperson$/i, "")}
+                  </span>
+                </div>
+                <a
+                  href="#pricing"
+                  className="mt-1 inline-block text-[11.5px] transition hover:opacity-75"
+                  style={{
+                    color: color.muted,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 3,
+                  }}
+                >
+                  Detailed price information →
+                </a>
+              </div>
+            )}
+
+            {/* CTAs */}
+            <div className="mt-5 space-y-2">
+              <motion.a
+                href={confirmBookingHref}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                className="h-12 w-full flex items-center justify-center text-[13.5px] font-bold uppercase tracking-[0.12em] rounded-xl transition shadow-md hover:shadow-lg"
+                style={{
+                  background: color.cta,
+                  color: color.ctaText,
+                }}
+              >
+                Continue Booking →
+              </motion.a>
+              <DownloadPdfButton
+                proposalId={proposal.id}
+                background={isDark ? "rgba(255,255,255,0.04)" : "#fafafa"}
+                textColor={color.heading}
+                borderColor={color.softBorder}
+              />
+            </div>
+
+            {/* Trust badges */}
+            <div
+              className="mt-6 pt-5"
+              style={{ borderTop: `1px solid ${color.softBorder}` }}
+            >
+              <ul className="space-y-2.5">
+                {trustBadges.map((badge, i) => (
+                  <motion.li
+                    key={`${i}-${badge.slice(0, 12)}`}
+                    initial={{ opacity: 0, x: 4 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{
+                      duration: 0.45,
+                      delay: 0.1 + i * 0.05,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className="flex items-start gap-2.5 text-[12.5px] leading-snug"
+                    style={{ color: color.body }}
+                  >
+                    <CheckGlyph color={color.accent} />
+                    <span>{badge}</span>
+                  </motion.li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Consultant signature */}
+            <div
+              className="mt-6 pt-5 flex items-center gap-3"
+              style={{ borderTop: `1px solid ${color.softBorder}` }}
+            >
+              {operator.consultantPhoto ? (
+                <div
+                  className="shrink-0 w-9 h-9 rounded-full overflow-hidden"
+                  style={{ background: color.surface }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={operator.consultantPhoto}
+                    alt={operator.consultantName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold"
+                  style={{
+                    background: `${color.accent}1c`,
+                    color: color.accent,
+                  }}
+                >
+                  {operator.consultantName?.charAt(0) ?? "·"}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div
+                  className="text-[12.5px] font-semibold truncate"
+                  style={{ color: color.heading }}
+                >
+                  {operator.consultantName}
+                </div>
+                <div
+                  className="text-[11px] truncate"
+                  style={{ color: color.muted }}
+                >
+                  {operator.consultantRole || operator.companyName}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function CheckGlyph({ color }: { color: string }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden
+      className="shrink-0 mt-0.5"
+    >
+      <circle cx="8" cy="8" r="7.25" stroke={color} strokeOpacity="0.32" strokeWidth="1.2" />
+      <path
+        d="M5 8.4 L7 10.4 L11 6.2"
+        stroke={color}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

@@ -141,7 +141,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Closing",
     icon: "◐",
     description: "Elegant sign-off from the consultant",
-    variants: ["closing-farewell", "quote-led", "letter-style", "centered-minimal", "cta-card"],
+    variants: [
+      "closing-farewell",
+      "booking-recap",
+      "quote-led",
+      "letter-style",
+      "centered-minimal",
+      "cta-card",
+    ],
     defaultVariant: "closing-farewell",
     defaultContent: {
       quote: "Africa changes you.",
