@@ -581,3 +581,13 @@ body {
 .ss-celebrate {
   animation: ss-celebrate-anim 600ms ease-out;
 }
+
+/* Command palette — backdrop fade + panel pop */
+@keyframes ss-cmdk-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ss-cmdk-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}

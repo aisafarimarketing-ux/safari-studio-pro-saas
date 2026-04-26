@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { UserButton } from "@clerk/nextjs";
+import { openCommandPalette } from "@/components/CommandPalette";
 
 // ─── Follow-Up Command Center ─────────────────────────────────────────────
 //
@@ -586,7 +587,7 @@ function CommandTopBar({ greetingName }: { greetingName: string }) {
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <IconBtn label="Search">
+        <IconBtn label="Search (⌘K)" onClick={openCommandPalette}>
           <SearchIcon />
         </IconBtn>
         <IconBtn label="Notifications">
@@ -597,11 +598,19 @@ function CommandTopBar({ greetingName }: { greetingName: string }) {
   );
 }
 
-function IconBtn({ children, label }: { children: React.ReactNode; label: string }) {
+function IconBtn({
+  children, label, onClick,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
       aria-label={label}
+      title={label}
+      onClick={onClick}
       className="w-9 h-9 rounded-full flex items-center justify-center transition"
       style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,38,32,0.18)"; }}
