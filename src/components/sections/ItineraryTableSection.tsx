@@ -23,7 +23,14 @@ export function ItineraryTableSection({ section }: { section: Section }) {
   const variant = section.layoutVariant || "horizontal-rows";
 
   if (variant === "horizontal-rows") {
-    return <HorizontalRowsLayout days={days} tokens={tokens} theme={theme} />;
+    return (
+      <HorizontalRowsLayout
+        days={days}
+        arrivalDateISO={trip.arrivalDate}
+        tokens={tokens}
+        theme={theme}
+      />
+    );
   }
 
   // ── Legacy "default" / "compact" — at-a-glance stats + classic table ──
@@ -111,7 +118,7 @@ export function ItineraryTableSection({ section }: { section: Section }) {
                     {String(day.dayNumber).padStart(2, "0")}
                   </td>
                   <td className="py-5 pr-8 text-[13px]" style={{ color: tokens.mutedText }}>
-                    {day.date ?? "—"}
+                    {resolveDayDateLabel(day, trip.arrivalDate) || "—"}
                   </td>
                   <td className="py-5 pr-8" style={{ color: tokens.headingText }}>
                     <span className="text-[13.5px] font-medium">{day.destination}</span>
@@ -154,14 +161,16 @@ export function ItineraryTableSection({ section }: { section: Section }) {
 
 function HorizontalRowsLayout({
   days,
+  arrivalDateISO,
   tokens,
   theme,
 }: {
   days: Day[];
+  arrivalDateISO: string | undefined;
   tokens: ReturnType<typeof resolveTokens>;
   theme: { displayFont: string; bodyFont: string };
 }) {
-  const groups = groupConsecutive(days);
+  const groups = groupConsecutive(days, arrivalDateISO);
   const headerBg = tokens.headingText;
   const headerText = "rgba(255,255,255,0.78)";
   const stripeBg = blendForStripe(tokens.sectionSurface, tokens.border);
@@ -267,7 +276,7 @@ interface DayGroup {
   nights: number;
 }
 
-function groupConsecutive(days: Day[]): DayGroup[] {
+function groupConsecutive(days: Day[], arrivalDateISO: string | undefined): DayGroup[] {
   if (days.length === 0) return [];
   const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
   const groups: Day[][] = [];
@@ -296,7 +305,9 @@ function groupConsecutive(days: Day[]): DayGroup[] {
       g.length === 1
         ? `Day ${first.dayNumber}`
         : `Days ${first.dayNumber}-${last.dayNumber}`;
-    const dateLabel = formatDateRange(first.date, last.date);
+    const firstDate = resolveDayDateLabel(first, arrivalDateISO);
+    const lastDate = resolveDayDateLabel(last, arrivalDateISO);
+    const dateLabel = formatDateRange(firstDate, lastDate);
     const location = [first.destination, first.country].filter(Boolean).join(", ");
     const activities = composeActivities(g);
     return {
@@ -310,12 +321,47 @@ function groupConsecutive(days: Day[]): DayGroup[] {
   });
 }
 
-function formatDateRange(a?: string, b?: string): string {
+// Resolve a day's date — prefers any explicit `day.date` typed by the
+// operator, otherwise derives from the trip's arrival date plus the day
+// offset. Mirrors the resolver used by the day cards so both blocks
+// agree on what date each day falls on.
+function resolveDayDateLabel(day: Day, arrivalDateISO: string | undefined): string {
+  const explicit = day.date?.trim();
+  if (explicit) {
+    const parsed = parseISODate(explicit);
+    if (parsed) return formatTableDate(parsed);
+    // Operator typed a free-form string like "16 May 2026" — use as-is.
+    return explicit;
+  }
+  if (!arrivalDateISO) return "";
+  const start = parseISODate(arrivalDateISO);
+  if (!start) return "";
+  start.setUTCDate(start.getUTCDate() + Math.max(0, day.dayNumber - 1));
+  return formatTableDate(start);
+}
+
+function parseISODate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatTableDate(d: Date): string {
+  const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  const month = d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  const year = d.toLocaleDateString("en-US", { year: "numeric", timeZone: "UTC" });
+  return `${day} ${month} ${year}`;
+}
+
+// Collapse a date range. When both endpoints share the same trailing
+// tokens (eg. "May 2026") render "16-18 May 2026"; otherwise fall back
+// to "16 May – 02 June 2026". Single-day groups just return the date.
+function formatDateRange(a: string, b: string): string {
   if (!a) return "—";
   if (!b || a === b) return a;
   const aParts = a.trim().split(/\s+/);
   const bParts = b.trim().split(/\s+/);
-  // Find shared trailing tokens (month / year).
   let shared = 0;
   while (
     shared < Math.min(aParts.length, bParts.length) - 1 &&
