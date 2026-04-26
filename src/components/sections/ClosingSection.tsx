@@ -165,7 +165,7 @@ export function ClosingSection({ section }: { section: Section }) {
     };
 
     return (
-      <div className="relative py-28 md:py-32 px-8 md:px-16" style={{ background: bg }}>
+      <div className="relative py-20 md:py-24 px-8 md:px-16" style={{ background: bg }}>
         {aiButtons}
 
         <div className="max-w-4xl mx-auto">
@@ -227,13 +227,18 @@ export function ClosingSection({ section }: { section: Section }) {
           {/* Hairline divider */}
           <div
             aria-hidden
-            className="mx-auto mt-20 mb-16"
+            className="mx-auto mt-14 mb-12"
             style={{ height: 1, width: 80, background: color.border }}
           />
 
-          {/* ── Booking-only footer — contact details now live in the
-              standalone Footer section that renders right after this one. */}
-          <div className="max-w-xl mx-auto">
+          {/* ── Booking card — 2-col horizontal layout so the dark canvas
+              doesn't sit half-empty on wide screens. Identity (cover +
+              trip + total) on the left; action (CTAs + share) on the
+              right. Stacks on mobile. */}
+          <div
+            className="grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-8 md:gap-10 items-start"
+          >
+            {/* Identity column */}
             <div>
               <div
                 className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
@@ -242,12 +247,11 @@ export function ClosingSection({ section }: { section: Section }) {
                 Book your Safari
               </div>
 
-              {/* Cover thumb + title */}
-              <div className="flex items-stretch gap-4 mb-6">
+              <div className="flex items-stretch gap-4">
                 {coverThumbUrl ? (
                   <div
                     className="shrink-0 overflow-hidden"
-                    style={{ width: 64, height: 84, background: color.coverLift, borderRadius: 2 }}
+                    style={{ width: 76, height: 96, background: color.coverLift, borderRadius: 4 }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -260,11 +264,11 @@ export function ClosingSection({ section }: { section: Section }) {
                   <div
                     className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
                     style={{
-                      width: 64,
-                      height: 84,
+                      width: 76,
+                      height: 96,
                       background: color.coverLift,
                       color: color.muted,
-                      borderRadius: 2,
+                      borderRadius: 4,
                     }}
                   >
                     Cover
@@ -272,7 +276,7 @@ export function ClosingSection({ section }: { section: Section }) {
                 )}
                 <div className="min-w-0 flex flex-col justify-center">
                   <div
-                    className="text-[14.5px] font-semibold leading-[1.35]"
+                    className="text-[16px] font-semibold leading-[1.25]"
                     style={{
                       color: color.heading,
                       fontFamily: `'${theme.displayFont}', serif`,
@@ -282,66 +286,69 @@ export function ClosingSection({ section }: { section: Section }) {
                   </div>
                   {client.guestNames && (
                     <div
-                      className="mt-1 text-[12px]"
+                      className="mt-1 text-[12.5px]"
                       style={{ color: color.muted }}
                     >
                       for {client.guestNames}
                     </div>
                   )}
+                  {totalLabel && (
+                    <div
+                      className="mt-2.5 flex items-baseline gap-2 text-[14px]"
+                      style={{ color: color.body }}
+                    >
+                      <span className="font-semibold" style={{ color: color.heading }}>
+                        Total:
+                      </span>
+                      <span style={{ color: color.heading }}>{totalLabel}</span>
+                    </div>
+                  )}
+                  {totalLabel && (
+                    <a
+                      href="#pricing"
+                      className="mt-1 inline-block text-[11.5px] transition hover:opacity-75"
+                      style={{
+                        color: color.muted,
+                        textDecoration: "underline",
+                        textUnderlineOffset: 3,
+                      }}
+                    >
+                      Detailed price information →
+                    </a>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* Total price */}
-              {totalLabel && (
-                <div className="mb-6 text-[13.5px]" style={{ color: color.body }}>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-semibold" style={{ color: color.heading }}>
-                      Total:
-                    </span>
-                    <span style={{ color: color.heading }}>{totalLabel}</span>
-                  </div>
-                  <a
-                    href="#pricing"
-                    className="mt-1 inline-block text-[12px] transition hover:opacity-75"
-                    style={{
-                      color: color.muted,
-                      textDecoration: "underline",
-                      textUnderlineOffset: 3,
-                    }}
-                  >
-                    Detailed price information →
-                  </a>
+            {/* Action column */}
+            <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <a
+                  href={confirmBookingHref}
+                  className="h-12 flex items-center justify-center text-[13.5px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99] sm:order-2"
+                  style={{
+                    background: isDark ? "white" : color.accent,
+                    color: isDark ? "#1d1d1f" : "white",
+                    boxShadow: isDark
+                      ? "0 4px 18px rgba(255,255,255,0.16)"
+                      : "0 4px 18px rgba(0,0,0,0.16)",
+                  }}
+                >
+                  Confirm Booking →
+                </a>
+                <div className="sm:order-1">
+                  <DownloadPdfButton
+                    proposalId={proposal.id}
+                    background={color.button}
+                    textColor={color.heading}
+                    borderColor={color.buttonBorder}
+                  />
                 </div>
-              )}
-
-              {/* Primary CTAs — Confirm Booking is the moment of conversion;
-                  size it for prominence over the Download Quote alternate. */}
-              <a
-                href={confirmBookingHref}
-                className="h-14 mb-3 w-full flex items-center justify-center text-[15px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99]"
-                style={{
-                  background: isDark ? "white" : color.accent,
-                  color: isDark ? "#1d1d1f" : "white",
-                  maxWidth: 420,
-                  boxShadow: isDark
-                    ? "0 4px 18px rgba(255,255,255,0.18)"
-                    : "0 4px 18px rgba(0,0,0,0.18)",
-                }}
-              >
-                Confirm Booking →
-              </a>
-              <div className="mb-3" style={{ maxWidth: 420 }}>
-                <DownloadPdfButton
-                  proposalId={proposal.id}
-                  background={color.button}
-                  textColor={color.heading}
-                  borderColor={color.buttonBorder}
-                />
               </div>
               <button
                 type="button"
                 onClick={requestConfirmInComments}
-                className="text-[12px] transition hover:opacity-75 mb-10"
+                className="text-[12px] transition hover:opacity-75 mt-3"
                 style={{
                   color: color.muted,
                   textDecoration: "underline",
@@ -351,20 +358,21 @@ export function ClosingSection({ section }: { section: Section }) {
                 Or reply with a note in comments →
               </button>
 
-              {/* Share */}
-              <div
-                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-3"
-                style={{ color: color.muted }}
-              >
-                Share with family and friends
-              </div>
-              <div className="flex items-center gap-2">
+              {/* Share — inline on the action column to keep horizontal
+                  density rather than stacking another row underneath. */}
+              <div className="mt-6 flex items-center gap-3">
+                <span
+                  className="text-[10px] uppercase tracking-[0.28em] font-bold"
+                  style={{ color: color.muted }}
+                >
+                  Share
+                </span>
                 <a
                   href={whatsappShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Share on WhatsApp"
-                  className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
                   style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
                 >
                   <WaIcon />
@@ -373,14 +381,13 @@ export function ClosingSection({ section }: { section: Section }) {
                   type="button"
                   onClick={copyLink}
                   aria-label="Copy link"
-                  className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
                   style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
                 >
                   <LinkIcon />
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -803,12 +810,12 @@ function BookOnlyFooter({
 
   return (
     <div
-      className="max-w-xl mx-auto mt-16 md:mt-20 pt-12"
+      className="max-w-4xl mx-auto mt-14 md:mt-16 pt-10 grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-8 md:gap-10 items-start"
       style={{
         borderTop: `1px solid ${color.border}`,
       }}
     >
-      {/* Book your Safari — contact details live in the FooterSection now */}
+      {/* Identity column — eyebrow, cover thumb, title, total */}
       <div>
         <div
           className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4 text-left"
@@ -816,12 +823,11 @@ function BookOnlyFooter({
         >
           Book your Safari
         </div>
-
-        <div className="flex items-stretch gap-4 mb-6 text-left">
+        <div className="flex items-stretch gap-4 text-left">
           {coverThumbUrl ? (
             <div
               className="shrink-0 overflow-hidden"
-              style={{ width: 64, height: 84, background: color.coverLift, borderRadius: 2 }}
+              style={{ width: 72, height: 92, background: color.coverLift, borderRadius: 4 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={coverThumbUrl} alt="Proposal cover" className="w-full h-full object-cover" />
@@ -830,11 +836,11 @@ function BookOnlyFooter({
             <div
               className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
               style={{
-                width: 64,
-                height: 84,
+                width: 72,
+                height: 92,
                 background: color.coverLift,
                 color: color.muted,
-                borderRadius: 2,
+                borderRadius: 4,
               }}
             >
               Cover
@@ -842,7 +848,7 @@ function BookOnlyFooter({
           )}
           <div className="min-w-0 flex flex-col justify-center">
             <div
-              className="text-[14.5px] font-semibold leading-[1.35]"
+              className="text-[15px] font-semibold leading-[1.25]"
               style={{
                 color: color.heading,
                 fontFamily: `'${theme.displayFont}', serif`,
@@ -855,65 +861,74 @@ function BookOnlyFooter({
                 for {client.guestNames}
               </div>
             )}
+            {totalLabel && (
+              <>
+                <div
+                  className="mt-2 flex items-baseline gap-2 text-[13.5px]"
+                  style={{ color: color.body }}
+                >
+                  <span className="font-semibold" style={{ color: color.heading }}>
+                    Total:
+                  </span>
+                  <span style={{ color: color.heading }}>{totalLabel}</span>
+                </div>
+                <a
+                  href="#pricing"
+                  className="mt-0.5 inline-block text-[11.5px] transition hover:opacity-75"
+                  style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
+                >
+                  Detailed price information →
+                </a>
+              </>
+            )}
           </div>
         </div>
+      </div>
 
-        {totalLabel && (
-          <div className="mb-6 text-[13.5px] text-left" style={{ color: color.body }}>
-            <div className="flex items-baseline gap-2">
-              <span className="font-semibold" style={{ color: color.heading }}>Total:</span>
-              <span style={{ color: color.heading }}>{totalLabel}</span>
-            </div>
-            <a
-              href="#pricing"
-              className="mt-1 inline-block text-[12px] transition hover:opacity-75"
-              style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
-            >
-              Detailed price information →
-            </a>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2 mb-3" style={{ maxWidth: 360 }}>
-          <DownloadPdfButton
-            proposalId={proposal.id}
-            background={color.button}
-            textColor={color.heading}
-            borderColor={color.buttonBorder}
-          />
+      {/* Action column — CTAs, comment link, share */}
+      <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <a
             href={confirmBookingHref}
-            className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-90"
+            className="h-11 flex items-center justify-center text-[13px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99] sm:order-2"
             style={{
               background: isDark ? "white" : color.accent,
               color: isDark ? "#1d1d1f" : "white",
             }}
           >
-            Confirm Booking
+            Confirm Booking →
           </a>
+          <div className="sm:order-1">
+            <DownloadPdfButton
+              proposalId={proposal.id}
+              background={color.button}
+              textColor={color.heading}
+              borderColor={color.buttonBorder}
+            />
+          </div>
         </div>
         <button
           type="button"
           onClick={requestConfirmInComments}
-          className="text-[12px] transition hover:opacity-75 mb-10 text-left"
+          className="text-[12px] transition hover:opacity-75 mt-3 text-left"
           style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
         >
           Or reply with a note in comments →
         </button>
 
-        <div
-          className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-3 text-left"
-          style={{ color: color.muted }}
-        >
-          Share with family and friends
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-5 flex items-center gap-3">
+          <span
+            className="text-[10px] uppercase tracking-[0.28em] font-bold"
+            style={{ color: color.muted }}
+          >
+            Share
+          </span>
           <a
             href={whatsappShareHref}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Share on WhatsApp"
-            className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+            className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
             style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
           >
             <WaIcon />
@@ -922,14 +937,13 @@ function BookOnlyFooter({
             type="button"
             onClick={copyLink}
             aria-label="Copy link"
-            className="w-10 h-10 rounded-full flex items-center justify-center transition hover:opacity-80"
+            className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
             style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
           >
             <LinkIcon />
           </button>
         </div>
       </div>
-
     </div>
   );
 }
