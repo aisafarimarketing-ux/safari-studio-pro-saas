@@ -11,3 +11,4 @@ export * from "./contacts";
 export * from "./opportunities";
 export * from "./messages";
 export * from "./workflows";
+export * from "./pipelineSync";

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { nextRequestReferenceNumber } from "@/lib/requestCounter";
 import { recordActivity } from "@/lib/activity";
 import { notifyNewRequest } from "@/lib/notifications";
+import { syncRequestCreated } from "@/lib/ghl/pipelineSync";
 
 // /api/requests — tenant-scoped CRUD for inbound client inquiries.
 //
@@ -208,6 +209,11 @@ export async function POST(req: Request) {
     targetId: request.id,
     detail: { referenceNumber, source: body.source ?? null },
   });
+
+  // Fire-and-forget GHL sync — upserts contact, creates opportunity.
+  // Org without GHL credentials is a no-op; failures land in
+  // IntegrationLog and never break this flow.
+  void syncRequestCreated(request.id);
 
   // Fire-and-forget — don't await email delivery; it runs best-effort.
   void notifyNewRequest({

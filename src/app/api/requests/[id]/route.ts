@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity";
 import { notifyAssignment } from "@/lib/notifications";
+import { syncRequestStatus } from "@/lib/ghl/pipelineSync";
 
 // /api/requests/[id] — detail (GET) + status/assignment update (PATCH) +
 // soft delete (DELETE). Every mutation emits a system note into the
@@ -160,6 +161,9 @@ export async function PATCH(
       targetId: existing.id,
       detail: { from: existing.status, to: updates.status },
     });
+    // Fire-and-forget GHL sync — moves the opportunity to the mapped
+    // pipeline stage. No-op when GHL isn't configured for this org.
+    void syncRequestStatus(existing.id);
   }
   if (Object.prototype.hasOwnProperty.call(updates, "assignedToUserId")) {
     await recordActivity({

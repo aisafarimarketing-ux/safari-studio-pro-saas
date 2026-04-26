@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/activity";
+import { syncRequestStatus } from "@/lib/ghl/pipelineSync";
 
 // POST /api/requests/bulk — apply the same change to many requests at
 // once. Supports three operations; pick one per call.
@@ -131,6 +132,10 @@ export async function POST(req: Request) {
       type: "changeStatus",
       detail: { count: ids.length, to: body.status, bulk: true },
     });
+    // Fire-and-forget GHL sync — one move-stage call per request. The
+    // sync layer self-throttles via the per-request retry policy in
+    // client.ts. Org without GHL credentials is a no-op.
+    for (const id of ids) void syncRequestStatus(id);
     return NextResponse.json({ ok: true, count: ids.length });
   }
 
