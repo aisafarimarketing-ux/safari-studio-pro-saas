@@ -7,7 +7,7 @@ import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { SignaturePad } from "@/components/editor/SignaturePad";
-import type { Section } from "@/lib/types";
+import type { Section, Proposal } from "@/lib/types";
 
 // Personal Note — a branded letter from the consultant. Renders under every
 // cover variant as the default, so the person and company crafting the
@@ -59,6 +59,30 @@ export function PersonalNoteSection({ section }: { section: Section }) {
   };
 
   const isMinimal = section.layoutVariant === "minimal";
+  const isEditorialImage = section.layoutVariant === "editorial-letter-image";
+
+  // Editorial-letter-image — 60/40 split with a warm safari image on
+  // the right. The letter content is the same editable body as
+  // branded-letter but the bottom branded contact strip is omitted —
+  // contact lives in the new contact-cards footer variant instead.
+  if (isEditorialImage) {
+    return (
+      <EditorialLetterImageVariant
+        section={section}
+        proposal={proposal}
+        body={body}
+        signOff={signOff}
+        signOffLead={signOffLead}
+        opener={opener}
+        isEditor={isEditor}
+        signaturePadOpen={signaturePadOpen}
+        setSignaturePadOpen={setSignaturePadOpen}
+        updateSectionContent={updateSectionContent}
+        updateOperator={updateOperator}
+        pickImageAndSet={pickImageAndSet}
+      />
+    );
+  }
 
   return (
     <div
@@ -323,6 +347,238 @@ export function PersonalNoteSection({ section }: { section: Section }) {
           initial={operator.signatureUrl ?? null}
           onSave={(dataUrl) => updateOperator({ signatureUrl: dataUrl })}
           onClose={() => setSignaturePadOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Editorial-letter-image variant ────────────────────────────────────
+//
+// Two-column editorial letter:
+//   LEFT  (60%) — greeting · body · sign-off · script signature · name/role
+//   RIGHT (40%) — warm safari image with rounded corners
+//
+// Pulls the side image from `section.content.sideImageUrl` if set,
+// otherwise falls back to the proposal's cover hero image so the
+// operator gets a sensible default the moment they switch to this
+// variant. Contact details live in the new contact-cards footer
+// variant — this section is purely editorial.
+
+function EditorialLetterImageVariant({
+  section, proposal, body, signOff, signOffLead, opener,
+  isEditor, signaturePadOpen, setSignaturePadOpen,
+  updateSectionContent, updateOperator, pickImageAndSet,
+}: {
+  section: Section;
+  proposal: Proposal;
+  body: string;
+  signOff: string;
+  signOffLead: string;
+  opener: string;
+  isEditor: boolean;
+  signaturePadOpen: boolean;
+  setSignaturePadOpen: (open: boolean) => void;
+  updateSectionContent: (id: string, patch: Record<string, unknown>) => void;
+  updateOperator: (patch: Partial<Proposal["operator"]>) => void;
+  pickImageAndSet: (onPicked: (dataUrl: string) => void) => void;
+}) {
+  const { operator, theme, client, trip } = proposal;
+  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
+
+  // Side image — explicit override → cover hero → null (placeholder).
+  const explicitSideImage = section.content.sideImageUrl as string | undefined;
+  const coverSection = proposal.sections.find((s) => s.type === "cover");
+  const coverHero = coverSection?.content?.heroImageUrl as string | undefined;
+  const sideImageUrl = explicitSideImage || coverHero || null;
+
+  return (
+    <div
+      className="relative"
+      style={{ background: tokens.sectionSurface, color: tokens.bodyText }}
+    >
+      {isEditor && (
+        <div className="absolute top-14 right-4 z-[35]">
+          <AIWriteButton
+            kind="greeting"
+            currentText={body}
+            context={{
+              clientName: client.guestNames,
+              consultantName: operator.consultantName,
+              destinations: trip.destinations,
+              nights: trip.nights,
+              dates: trip.dates,
+              tripStyle: trip.tripStyle,
+            }}
+            onResult={(text) => updateSectionContent(section.id, { body: text })}
+            compact
+          />
+        </div>
+      )}
+
+      <div className="mx-auto px-6 md:px-12 py-12 md:py-16" style={{ maxWidth: 1140 }}>
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-8 lg:gap-12 items-stretch">
+          {/* LEFT — letter */}
+          <div className="min-w-0 flex flex-col justify-center">
+            {/* Greeting */}
+            <div
+              className="outline-none font-semibold"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(20px, 2.6vw, 26px)",
+                lineHeight: 1.2,
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { opener: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {opener}
+            </div>
+
+            {/* Body */}
+            <div
+              className="mt-5 text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              data-ai-editable="greeting"
+              onBlur={(e) =>
+                updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {body}
+            </div>
+
+            {/* Sign-off lead */}
+            <div
+              className="mt-6 text-[14.5px] leading-[1.75] outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { signOffLead: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {signOffLead}
+            </div>
+            <div
+              className="mt-1 text-[14.5px] leading-[1.75] outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateSectionContent(section.id, { signOff: e.currentTarget.textContent ?? "" })
+              }
+            >
+              {signOff}
+            </div>
+
+            {/* Signature */}
+            <div className="mt-5">
+              <div
+                className="relative cursor-pointer"
+                style={{
+                  width: 200,
+                  height: 64,
+                  display: operator.signatureUrl || isEditor ? "flex" : "none",
+                }}
+                onClick={() => { if (isEditor) setSignaturePadOpen(true); }}
+                title={isEditor ? "Click to sign" : undefined}
+              >
+                {operator.signatureUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={operator.signatureUrl}
+                    alt="Signature"
+                    className="max-h-full max-w-full object-contain"
+                    style={{ mixBlendMode: "multiply" }}
+                  />
+                ) : isEditor ? (
+                  <div
+                    className="text-[11px] uppercase tracking-[0.22em] flex items-center justify-center w-full h-full"
+                    style={{
+                      color: tokens.mutedText,
+                      border: `1px dashed ${tokens.border}`,
+                      borderRadius: 4,
+                    }}
+                  >
+                    ✎ Click to sign
+                  </div>
+                ) : null}
+              </div>
+
+              <div
+                className="mt-2 text-[14.5px] font-semibold outline-none"
+                style={{ color: tokens.headingText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  updateOperator({ consultantName: e.currentTarget.textContent?.trim() ?? operator.consultantName })
+                }
+              >
+                {operator.consultantName || "Your name"}
+              </div>
+              {(operator.consultantRole || isEditor) && (
+                <div
+                  className="mt-0.5 text-[12.5px] outline-none"
+                  style={{ color: tokens.mutedText }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    updateOperator({ consultantRole: e.currentTarget.textContent?.trim() ?? operator.consultantRole })
+                  }
+                >
+                  {operator.consultantRole || (isEditor ? "Your role (optional)" : "")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT — side image */}
+          <div className="min-w-0">
+            <div
+              className="relative overflow-hidden cursor-pointer"
+              style={{
+                width: "100%",
+                aspectRatio: "4 / 3",
+                borderRadius: 14,
+                background: tokens.cardBg,
+                border: `1px solid ${tokens.border}`,
+              }}
+              onClick={() => {
+                if (!isEditor) return;
+                pickImageAndSet((u) => updateSectionContent(section.id, { sideImageUrl: u }));
+              }}
+              onContextMenu={(e) => {
+                if (!isEditor) return;
+                e.preventDefault();
+                pickImageAndSet((u) => updateSectionContent(section.id, { sideImageUrl: u }));
+              }}
+              title={isEditor ? "Click / right-click to replace image" : undefined}
+            >
+              {sideImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={sideImageUrl} alt="" className="w-full h-full object-cover" />
+              ) : isEditor ? (
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-[11.5px] uppercase tracking-[0.22em]"
+                  style={{ color: tokens.mutedText }}
+                >
+                  ＋ Add image
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isEditor && signaturePadOpen && (
+        <SignaturePad
+          onClose={() => setSignaturePadOpen(false)}
+          onSave={(dataUrl) => {
+            updateOperator({ signatureUrl: dataUrl });
+            setSignaturePadOpen(false);
+          }}
         />
       )}
     </div>

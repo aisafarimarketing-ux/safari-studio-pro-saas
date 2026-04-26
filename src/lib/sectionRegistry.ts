@@ -50,8 +50,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Personal Note",
     icon: "✍",
     description: "Branded letter from the consultant — greeting body, signature, photo, company logo and contact.",
-    variants: ["branded-letter", "minimal"],
-    defaultVariant: "branded-letter",
+    variants: ["editorial-letter-image", "branded-letter", "minimal"],
+    defaultVariant: "editorial-letter-image",
     defaultContent: {
       body: "Thank you very much for your interest in doing a safari with us.\n\nPlease review the day-by-day itinerary and let me know your thoughts and feedback. I would be delighted to tailor the trip further to accommodate your personal preferences.",
       signOffLead: "Thanks again and I remain at your full disposal!",
@@ -169,8 +169,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Footer",
     icon: "—",
     description: "Consultant contact details and branding",
-    variants: ["default", "minimal"],
-    defaultVariant: "default",
+    variants: ["contact-cards", "default", "minimal"],
+    defaultVariant: "contact-cards",
     defaultContent: {},
   },
   customText: {
