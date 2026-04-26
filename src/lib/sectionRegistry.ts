@@ -81,8 +81,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Itinerary at a Glance",
     icon: "☰",
     description: "Auto-generated table from day data",
-    variants: ["default", "compact"],
-    defaultVariant: "default",
+    variants: ["horizontal-rows", "default", "compact"],
+    defaultVariant: "horizontal-rows",
     defaultContent: {},
     dataSource: "days",
   },
@@ -121,8 +121,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Inclusions & Exclusions",
     icon: "✓",
     description: "What's included and what's not",
-    variants: ["default", "split-columns"],
-    defaultVariant: "default",
+    variants: ["inline-ribbon", "split-columns", "stacked-clean", "two-tone-bands", "default"],
+    defaultVariant: "inline-ribbon",
     defaultContent: {},
     dataSource: "inclusions",
   },
@@ -232,10 +232,10 @@ export const ADDABLE_SECTIONS: SectionType[] = [
   // from addable.
   "practicalInfo",
   "closing",
-  // footer deprecated — the closing-farewell variant renders a branded
-  // footer (company logo, contact details, share, CTAs) so a standalone
-  // footer section is no longer needed. Registry entry stays for any
-  // legacy proposals still carrying one.
+  // Footer carries the consultant contact details on the last page. The
+  // closing block stays focused on the moment of conversion — Confirm
+  // Booking + Download + Share — so contact rows live exclusively here.
+  "footer",
   "customText",
   "quote",
   "gallery",
