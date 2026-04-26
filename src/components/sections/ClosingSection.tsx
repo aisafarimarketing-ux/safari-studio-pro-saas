@@ -1,626 +1,1200 @@
 "use client";
 
 import { useState } from "react";
+import type React from "react";
 import { motion } from "framer-motion";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
-import { resolveTokens } from "@/lib/theme";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import {
-  DEFAULT_TRUST_BADGES,
   type Section,
   type Proposal,
   type OperatorProfile,
-  type ClientDetails,
-  type TripDetails,
-  type PricingData,
-  type TierKey,
-  type ThemeTokens,
-  type ProposalTheme,
 } from "@/lib/types";
 
-// Closing — five layout variants (closing-farewell default, plus
-// quote-led, letter-style, centered-minimal, cta-card). Every variant
-// now ends in the same Book-only footer (Confirm Booking, Download
-// Quote, Share) — the consultant's contact details have moved out to
-// the standalone FooterSection, which renders right after closing.
+// ─── Closing — high-conversion design system ─────────────────────────────
+//
+// One container, one CTA system, seven layouts.
+//
+// Every variant shares the 960px sand card, identical typography, the
+// same primary/secondary CTAs, and the same consultant card. Variants
+// only differ in what they stack ABOVE / AROUND the conversion grid:
+// a pull quote, an editorial letter, experience tiles, or nothing at
+// all. This unifies brand voice across every closing while keeping the
+// merchandising choice the editor exposes.
+//
+// Spec → exact pixel values for the core surfaces (no theme tokens),
+// so the section reads the same regardless of operator theme. Keeps
+// the moment of conversion brand-consistent across every proposal.
+
+// ── Spec tokens ──────────────────────────────────────────────────────────
+const SAND       = "#F7F5F2";
+const SAND_LINE  = "#E5E5E5";
+const FOREST     = "#1F3D2B";
+const FOREST_DK  = "#172E20";
+const HEADING    = "#111111";
+const BODY       = "#444444";
+const MUTED      = "#6B7280";
+const BTN_BORDER = "#D1D5DB";
+const BTN_TEXT   = "#333333";
+
+// ─── Top-level dispatch ─────────────────────────────────────────────────
 
 export function ClosingSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const { operator, theme, client, trip, activeTier, pricing } = proposal;
-  const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
-  const quote = section.content.quote as string;
-  const signOff = section.content.signOff as string;
+
+  const quote = (section.content.quote as string) ?? "";
+  const signOff = (section.content.signOff as string) ?? "";
   const attribution = section.content.attribution as string | undefined;
 
-  const onSignOff = (e: React.FocusEvent<HTMLElement>) =>
-    updateSectionContent(section.id, { signOff: e.currentTarget.textContent ?? signOff });
   const onQuote = (e: React.FocusEvent<HTMLElement>) =>
     updateSectionContent(section.id, { quote: e.currentTarget.textContent ?? quote });
+  const onSignOff = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, { signOff: e.currentTarget.textContent ?? signOff });
   const onAttribution = (e: React.FocusEvent<HTMLElement>) =>
     updateSectionContent(section.id, {
       attribution: e.currentTarget.textContent ?? attribution ?? "",
     });
 
-  // Which AI write buttons make sense depends on what the variant renders.
-  // Quote-only variants (cta-card) get one button; sign-off-only variants
-  // (letter-style, centered-minimal) get the other; variants that show
-  // both (closing-farewell, quote-led) get both stacked.
+  // AI write buttons. Every variant offers a sign-off rewrite (it backs the
+  // description paragraph). Variants that surface a separate pull-quote
+  // also offer the quote rewrite.
   const variantHasQuote =
     variant === "closing-farewell" ||
-    variant === "booking-recap" ||
     variant === "quote-led" ||
     variant === "cta-card";
-  const variantHasSignOff =
-    variant === "closing-farewell" ||
-    variant === "booking-recap" ||
-    variant === "quote-led" ||
-    variant === "letter-style" ||
-    variant === "centered-minimal";
 
   const aiButtons = isEditor ? (
-    <div className="absolute top-14 right-4 z-[35] flex items-center gap-2" data-editor-chrome>
+    <div
+      className="absolute top-14 right-4 z-[35] flex items-center gap-2"
+      data-editor-chrome
+    >
       {variantHasQuote && (
         <AIWriteButton
           kind="closing-quote"
-          currentText={quote ?? ""}
-          context={{ clientName: client.guestNames, destinations: trip.destinations }}
+          currentText={quote}
+          context={{
+            clientName: proposal.client.guestNames,
+            destinations: proposal.trip.destinations,
+          }}
           onResult={(text) => updateSectionContent(section.id, { quote: text })}
           compact
         />
       )}
-      {variantHasSignOff && (
-        <AIWriteButton
-          kind="closing-signoff"
-          currentText={signOff ?? ""}
-          context={{
-            clientName: client.guestNames,
-            consultantName: operator.consultantName,
-          }}
-          onResult={(text) => updateSectionContent(section.id, { signOff: text })}
-          compact
-        />
-      )}
+      <AIWriteButton
+        kind="closing-signoff"
+        currentText={signOff}
+        context={{
+          clientName: proposal.client.guestNames,
+          consultantName: proposal.operator.consultantName,
+        }}
+        onResult={(text) => updateSectionContent(section.id, { signOff: text })}
+        compact
+      />
     </div>
   ) : null;
 
-  // ── Booking-recap ─────────────────────────────────────────────────────────
-  // Editorial intro on the left, booking card on the right. Reassurance
-  // bullets, destination chips, and 4 day-image tiles tie the trip together
-  // before the moment of conversion. Framer Motion drives the staggered
-  // scroll-reveal and the CTA hover.
-  if (variant === "booking-recap") {
-    return (
-      <BookingRecapVariant
-        section={section}
-        proposal={proposal}
-        tokens={tokens}
-        isEditor={isEditor}
-        onQuote={onQuote}
-        onSignOff={onSignOff}
-        aiButtons={aiButtons}
-      />
-    );
-  }
+  const common = { proposal, section, isEditor, aiButtons } as const;
 
-  // ── Closing-farewell (default) ────────────────────────────────────────────
-  // Combined closing + footer. Pull-quote + sign-off on top, two-column
-  // branded footer below (Book your Safari / Contact Us). Defaults to a
-  // dark background; operators can change it via the section chrome's
-  // background picker.
-  if (variant === "closing-farewell") {
-    // Use the section's background override if one is set; otherwise the
-    // editorial-dark palette.
-    const overrides = section.styleOverrides as Record<string, string> | undefined;
-    const bg = overrides?.sectionSurface ?? "#1d1d1f";
-    // Heuristic: if the operator kept the dark default, swap the text
-    // tokens for light-on-dark; otherwise use the theme tokens as-is.
-    const isDark = isDarkColor(bg);
-    const color = {
-      heading: isDark ? "rgba(255,255,255,0.92)" : tokens.headingText,
-      body: isDark ? "rgba(255,255,255,0.78)" : tokens.bodyText,
-      muted: isDark ? "rgba(255,255,255,0.45)" : tokens.mutedText,
-      border: isDark ? "rgba(255,255,255,0.14)" : tokens.border,
-      accent: tokens.accent,
-      button: isDark ? "rgba(255,255,255,0.1)" : "#00000008",
-      buttonBorder: isDark ? "rgba(255,255,255,0.25)" : tokens.border,
-      coverLift: isDark ? "rgba(255,255,255,0.04)" : tokens.cardBg,
-    };
-
-    const coverSection = proposal.sections.find((s) => s.type === "cover");
-    const coverThumbUrl = (coverSection?.content?.heroImageUrl as string | undefined) ?? null;
-
-    const pax = parsePax(client.pax);
-    const tierKey = activeTier as keyof typeof pricing;
-    // Pricing indexer also has a "notes" string field; narrow to the tier objects.
-    const tier =
-      tierKey === "classic" || tierKey === "premier" || tierKey === "signature"
-        ? pricing[tierKey]
-        : null;
-    const perPerson = tier?.pricePerPerson ?? "";
-    const currency = tier?.currency ?? "USD";
-    const totalLabel = buildTotalLabel(perPerson, currency, pax);
-
-    const confirmBookingHref = resolveBookingHref(operator, proposal, totalLabel);
-    const whatsappShareHref = typeof window !== "undefined"
-      ? `https://wa.me/?text=${encodeURIComponent(`${trip.title || "Safari proposal"} — ${window.location.href}`)}`
-      : "#";
-
-    const copyLink = async () => {
-      if (typeof window === "undefined") return;
-      try {
-        await navigator.clipboard.writeText(window.location.href);
-      } catch {
-        // no-op — clipboard might be blocked
-      }
-    };
-
-    const requestConfirmInComments = () => {
-      if (typeof window === "undefined") return;
-      const message = `I'd like to confirm the booking for ${trip.title || "this safari"}. Please send next steps.`;
-      window.dispatchEvent(new CustomEvent("ss:prefillComment", { detail: { message } }));
-    };
-
-    return (
-      <div className="relative py-20 md:py-24 px-8 md:px-16" style={{ background: bg }}>
-        {aiButtons}
-
-        <div className="max-w-4xl mx-auto">
-          {/* ── Pull-quote + sign-off note ──────────────────────────── */}
-          <div className="text-center">
-            <div
-              aria-hidden
-              className="select-none mx-auto"
-              style={{
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "3rem",
-                lineHeight: 0.7,
-                color: color.accent,
-                opacity: isDark ? 0.7 : 0.5,
-              }}
-            >
-              &ldquo;
-            </div>
-            <blockquote
-              className="mt-2 mx-auto max-w-[640px] font-semibold leading-[1.2] outline-none"
-              style={{
-                color: color.heading,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(1.65rem, 2.8vw, 2.25rem)",
-                letterSpacing: "-0.005em",
-              }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              data-ai-editable="closing"
-              onBlur={onQuote}
-            >
-              {quote}
-            </blockquote>
-            {(attribution || isEditor) && (
-              <div
-                className="mt-3 text-[12px] uppercase tracking-[0.22em] outline-none"
-                style={{ color: color.muted }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={onAttribution}
-              >
-                {attribution || (isEditor ? "– Attribution" : "")}
-              </div>
-            )}
-            {(signOff || isEditor) && (
-              <p
-                className="mt-10 mx-auto text-[14.5px] leading-[1.8] whitespace-pre-line outline-none max-w-xl"
-                style={{ color: color.body }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                data-ai-editable="closing"
-                onBlur={onSignOff}
-              >
-                {signOff}
-              </p>
-            )}
-          </div>
-
-          {/* Hairline divider */}
-          <div
-            aria-hidden
-            className="mx-auto mt-14 mb-12"
-            style={{ height: 1, width: 80, background: color.border }}
-          />
-
-          {/* ── Booking card — 2-col horizontal layout so the dark canvas
-              doesn't sit half-empty on wide screens. Identity (cover +
-              trip + total) on the left; action (CTAs + share) on the
-              right. Stacks on mobile. */}
-          <div
-            className="grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-8 md:gap-10 items-start"
-          >
-            {/* Identity column */}
-            <div>
-              <div
-                className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4"
-                style={{ color: color.muted }}
-              >
-                Book your Safari
-              </div>
-
-              <div className="flex items-stretch gap-4">
-                {coverThumbUrl ? (
-                  <div
-                    className="shrink-0 overflow-hidden"
-                    style={{ width: 76, height: 96, background: color.coverLift, borderRadius: 4 }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={coverThumbUrl}
-                      alt="Proposal cover"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
-                    style={{
-                      width: 76,
-                      height: 96,
-                      background: color.coverLift,
-                      color: color.muted,
-                      borderRadius: 4,
-                    }}
-                  >
-                    Cover
-                  </div>
-                )}
-                <div className="min-w-0 flex flex-col justify-center">
-                  <div
-                    className="text-[16px] font-semibold leading-[1.25]"
-                    style={{
-                      color: color.heading,
-                      fontFamily: `'${theme.displayFont}', serif`,
-                    }}
-                  >
-                    {trip.title}
-                  </div>
-                  {client.guestNames && (
-                    <div
-                      className="mt-1 text-[12.5px]"
-                      style={{ color: color.muted }}
-                    >
-                      for {client.guestNames}
-                    </div>
-                  )}
-                  {totalLabel && (
-                    <div
-                      className="mt-2.5 flex items-baseline gap-2 text-[14px]"
-                      style={{ color: color.body }}
-                    >
-                      <span className="font-semibold" style={{ color: color.heading }}>
-                        Total:
-                      </span>
-                      <span style={{ color: color.heading }}>{totalLabel}</span>
-                    </div>
-                  )}
-                  {totalLabel && (
-                    <a
-                      href="#pricing"
-                      className="mt-1 inline-block text-[11.5px] transition hover:opacity-75"
-                      style={{
-                        color: color.muted,
-                        textDecoration: "underline",
-                        textUnderlineOffset: 3,
-                      }}
-                    >
-                      Detailed price information →
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Action column */}
-            <div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <a
-                  href={confirmBookingHref}
-                  className="h-12 flex items-center justify-center text-[13.5px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99] sm:order-2"
-                  style={{
-                    background: isDark ? "white" : color.accent,
-                    color: isDark ? "#1d1d1f" : "white",
-                    boxShadow: isDark
-                      ? "0 4px 18px rgba(255,255,255,0.16)"
-                      : "0 4px 18px rgba(0,0,0,0.16)",
-                  }}
-                >
-                  Confirm Booking →
-                </a>
-                <div className="sm:order-1">
-                  <DownloadPdfButton
-                    proposalId={proposal.id}
-                    background={color.button}
-                    textColor={color.heading}
-                    borderColor={color.buttonBorder}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={requestConfirmInComments}
-                className="text-[12px] transition hover:opacity-75 mt-3"
-                style={{
-                  color: color.muted,
-                  textDecoration: "underline",
-                  textUnderlineOffset: 3,
-                }}
-              >
-                Or reply with a note in comments →
-              </button>
-
-              {/* Share — inline on the action column to keep horizontal
-                  density rather than stacking another row underneath. */}
-              <div className="mt-6 flex items-center gap-3">
-                <span
-                  className="text-[10px] uppercase tracking-[0.28em] font-bold"
-                  style={{ color: color.muted }}
-                >
-                  Share
-                </span>
-                <a
-                  href={whatsappShareHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Share on WhatsApp"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
-                  style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
-                >
-                  <WaIcon />
-                </a>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  aria-label="Copy link"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
-                  style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
-                >
-                  <LinkIcon />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Centered-minimal ──────────────────────────────────────────────────────
-  if (variant === "centered-minimal") {
-    return (
-      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
-        {aiButtons}
-        <div className="ed-narrow text-center" style={{ maxWidth: 480 }}>
-          <div className="w-12 mx-auto mb-8" style={{ height: "2px", background: tokens.accent }} />
-          <p
-            className="text-body-lg leading-loose mb-8 outline-none"
-            style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            data-ai-editable="closing"
-            onBlur={onSignOff}
-          >
-            {signOff}
-          </p>
-          <div className="text-small font-semibold" style={{ color: tokens.headingText }}>
-            {operator.consultantName}
-          </div>
-          <div className="text-label" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
-            {operator.companyName}
-          </div>
-        </div>
-        <BookOnlyFooter
-          proposal={proposal}
-          operator={operator}
-          client={client}
-          trip={trip}
-          pricing={pricing}
-          activeTier={activeTier as TierKey}
-          theme={theme}
-          tokens={tokens}
-          bg={tokens.sectionSurface}
+  switch (variant) {
+    case "closing-farewell":
+      return (
+        <FarewellLayout
+          {...common}
+          quote={quote}
+          attribution={attribution}
+          signOff={signOff}
+          onQuote={onQuote}
+          onSignOff={onSignOff}
+          onAttribution={onAttribution}
         />
-      </div>
-    );
-  }
-
-  // ── CTA-card ──────────────────────────────────────────────────────────────
-  if (variant === "cta-card") {
-    return (
-      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.pageBg }}>
-        {aiButtons}
-        <div className="ed-narrow">
-          <div
-            className="p-12 md:p-16 rounded-2xl text-center"
-            style={{ background: tokens.accent }}
-          >
-            <blockquote
-              className="text-h2 font-medium mb-8 outline-none"
-              style={{ color: "rgba(255,255,255,0.92)", fontFamily: `'${theme.displayFont}', serif` }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              data-ai-editable="closing"
-              onBlur={onQuote}
-            >
-              {quote}
-            </blockquote>
-            <div className="w-10 mx-auto mb-8" style={{ height: "1px", background: "rgba(255,255,255,0.2)" }} />
-            <div className="text-small font-semibold text-white/85">{operator.consultantName}</div>
-            <div className="text-label text-white/50" style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
-              {operator.companyName}
-            </div>
-          </div>
-        </div>
-        <BookOnlyFooter
-          proposal={proposal}
-          operator={operator}
-          client={client}
-          trip={trip}
-          pricing={pricing}
-          activeTier={activeTier as TierKey}
-          theme={theme}
-          tokens={tokens}
-          bg={tokens.pageBg}
+      );
+    case "booking-recap":
+      return <BookingRecapLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
+    case "quote-led":
+      return (
+        <QuoteLedLayout
+          {...common}
+          quote={quote}
+          attribution={attribution}
+          signOff={signOff}
+          onQuote={onQuote}
+          onSignOff={onSignOff}
+          onAttribution={onAttribution}
         />
-      </div>
-    );
+      );
+    case "letter-style":
+      return <LetterLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
+    case "centered-minimal":
+      return <CenteredMinimalLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
+    case "cta-card":
+      return <CtaCardLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
+    case "conversion-card":
+    default:
+      return <ConversionLayout {...common} signOff={signOff} onSignOff={onSignOff} />;
   }
+}
 
-  // ── Letter-style ──────────────────────────────────────────────────────────
-  if (variant === "letter-style") {
-    return (
-      <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
-        {aiButtons}
-        <div className="ed-narrow space-y-8" style={{ maxWidth: 580 }}>
-          <p
-            className="text-body leading-loose whitespace-pre-line outline-none"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            data-ai-editable="closing"
-            onBlur={onSignOff}
-          >
-            {signOff}
-          </p>
-          <div className="pt-6 border-t" style={{ borderColor: tokens.border }}>
-            <div
-              className="text-h3 font-semibold"
-              style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            >
-              {operator.consultantName}
-            </div>
-            <div className="text-small" style={{ color: tokens.mutedText }}>{operator.companyName}</div>
-          </div>
-        </div>
-        <BookOnlyFooter
-          proposal={proposal}
-          operator={operator}
-          client={client}
-          trip={trip}
-          pricing={pricing}
-          activeTier={activeTier as TierKey}
-          theme={theme}
-          tokens={tokens}
-          bg={tokens.sectionSurface}
-        />
-      </div>
-    );
-  }
+// ─── Shared building blocks ─────────────────────────────────────────────
 
-  // ── Quote-led (legacy default) ───────────────────────────────────────────
+function ClosingShell({
+  pageBg,
+  aiButtons,
+  children,
+}: {
+  pageBg: string;
+  aiButtons: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="py-24 relative px-8 md:px-16" style={{ background: tokens.accent }}>
+    <section
+      className="relative px-4 py-10 md:px-6 md:py-14"
+      style={{ background: pageBg }}
+    >
       {aiButtons}
-      <div className="ed-narrow text-center">
+      <div
+        className="mx-auto"
+        style={{
+          maxWidth: 960,
+          background: SAND,
+          borderRadius: 16,
+          border: `1px solid ${SAND_LINE}`,
+        }}
+      >
+        <div className="p-6 md:px-10 md:py-12">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function TwoColGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-8 md:grid-cols-[2fr_3fr]">{children}</div>
+  );
+}
+
+function ConsultantCard({ operator }: { operator: OperatorProfile }) {
+  const c = readConsultant(operator);
+  return (
+    <aside
+      className="self-start"
+      style={{
+        background: "#FFFFFF",
+        borderRadius: 12,
+        padding: 20,
+        border: `1px solid ${SAND_LINE}`,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+      }}
+    >
+      {c.photo ? (
         <div
-          aria-hidden
-          className="select-none leading-none"
+          className="overflow-hidden"
+          style={{ width: 48, height: 48, borderRadius: "50%" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={c.photo} alt={c.name} className="h-full w-full object-cover" />
+        </div>
+      ) : (
+        <div
+          className="flex items-center justify-center font-semibold"
           style={{
-            fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "6.5rem",
-            color: tokens.secondaryAccent,
-            opacity: 0.55,
-            lineHeight: 0.9,
+            width: 48,
+            height: 48,
+            borderRadius: "50%",
+            background: FOREST,
+            color: "#FFFFFF",
+            fontSize: 16,
+            letterSpacing: "0.2px",
+          }}
+          aria-hidden
+        >
+          {c.initial}
+        </div>
+      )}
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 16,
+          fontWeight: 600,
+          color: HEADING,
+          lineHeight: 1.3,
+        }}
+      >
+        {c.name}
+      </div>
+      <div
+        style={{ marginTop: 4, fontSize: 14, color: MUTED, lineHeight: 1.4 }}
+      >
+        {c.role}
+      </div>
+      {c.contact && (
+        <a
+          href={c.contactHref}
+          target={c.contactHref.startsWith("mailto:") ? undefined : "_blank"}
+          rel={c.contactHref.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+          className="block transition hover:opacity-80"
+          style={{
+            marginTop: 12,
+            fontSize: 14,
+            color: FOREST,
+            fontWeight: 500,
+            wordBreak: "break-word",
           }}
         >
-          &ldquo;
-        </div>
+          {c.contact}
+        </a>
+      )}
+    </aside>
+  );
+}
 
-        <blockquote
-          className="text-h1 font-medium -mt-3 outline-none"
-          style={{ color: "rgba(255,255,255,0.92)", fontFamily: `'${theme.displayFont}', serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          data-ai-editable="closing"
-          onBlur={onQuote}
+function ConsultantInline({ operator }: { operator: OperatorProfile }) {
+  const c = readConsultant(operator);
+  return (
+    <div className="flex items-center justify-center" style={{ gap: 14 }}>
+      {c.photo ? (
+        <div
+          className="overflow-hidden shrink-0"
+          style={{ width: 48, height: 48, borderRadius: "50%" }}
         >
-          {quote}
-        </blockquote>
-
-        <div className="mt-12 pt-10 border-t" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
-          <p
-            className="text-small italic mb-6 outline-none"
-            style={{ color: "rgba(255,255,255,0.6)", fontFamily: `'${theme.displayFont}', serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            data-ai-editable="closing"
-            onBlur={onSignOff}
-          >
-            {signOff}
-          </p>
-          <div
-            className="text-h3 font-semibold"
-            style={{ color: "rgba(255,255,255,0.88)", fontFamily: `'${theme.displayFont}', serif` }}
-          >
-            {operator.consultantName}
-          </div>
-          <div className="text-small mt-1 text-white/45">{operator.companyName}</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={c.photo} alt={c.name} className="h-full w-full object-cover" />
         </div>
+      ) : (
+        <div
+          className="flex items-center justify-center font-semibold shrink-0"
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: "50%",
+            background: FOREST,
+            color: "#FFFFFF",
+            fontSize: 16,
+          }}
+          aria-hidden
+        >
+          {c.initial}
+        </div>
+      )}
+      <div className="text-left">
+        <div
+          style={{ fontSize: 14, fontWeight: 600, color: HEADING, lineHeight: 1.3 }}
+        >
+          {c.name}
+        </div>
+        <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.4 }}>{c.role}</div>
+        {c.contact && (
+          <a
+            href={c.contactHref}
+            target={c.contactHref.startsWith("mailto:") ? undefined : "_blank"}
+            rel={c.contactHref.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+            className="transition hover:opacity-80"
+            style={{ fontSize: 12.5, color: FOREST, fontWeight: 500 }}
+          >
+            {c.contact}
+          </a>
+        )}
       </div>
-      <BookOnlyFooter
-        proposal={proposal}
-        operator={operator}
-        client={client}
-        trip={trip}
-        pricing={pricing}
-        activeTier={activeTier as TierKey}
-        theme={theme}
-        tokens={tokens}
-        bg={tokens.accent}
+    </div>
+  );
+}
+
+function readConsultant(operator: OperatorProfile) {
+  const name = operator.consultantName?.trim() || "Your consultant";
+  const initial = name.charAt(0).toUpperCase();
+  const role = operator.consultantRole?.trim() || "Your Safari Expert";
+  const contact = operator.email || operator.whatsapp || operator.phone || "";
+  const isEmail = !!operator.email && contact === operator.email;
+  const isWhatsApp =
+    !isEmail && !!operator.whatsapp && contact === operator.whatsapp;
+  const contactHref = isEmail
+    ? `mailto:${contact}`
+    : isWhatsApp
+      ? `https://wa.me/${contact.replace(/[^0-9]/g, "")}`
+      : `tel:${contact.replace(/\s+/g, "")}`;
+  return {
+    name,
+    initial,
+    role,
+    contact,
+    contactHref,
+    photo: operator.consultantPhoto,
+  };
+}
+
+function PrimaryCta({
+  href,
+  label,
+  invert = false,
+}: {
+  href: string;
+  label: string;
+  invert?: boolean;
+}) {
+  const bg = invert ? "#FFFFFF" : FOREST;
+  const bgHover = invert ? "#F0EDE6" : FOREST_DK;
+  const fg = invert ? FOREST : "#FFFFFF";
+  return (
+    <motion.a
+      href={href}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+      className="group flex w-full items-center justify-center transition-colors"
+      style={{
+        height: 56,
+        padding: "0 24px",
+        borderRadius: 12,
+        background: bg,
+        color: fg,
+        fontSize: 16,
+        fontWeight: 600,
+        letterSpacing: "0.2px",
+        boxShadow: invert
+          ? "0 4px 12px rgba(0,0,0,0.25)"
+          : "0 4px 12px rgba(0,0,0,0.15)",
+        textDecoration: "none",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = bgHover;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = bg;
+      }}
+    >
+      <span>{label}</span>
+      <span
+        aria-hidden
+        className="ml-2 transition-transform group-hover:translate-x-0.5"
+        style={{ fontSize: 18, fontWeight: 500 }}
+      >
+        →
+      </span>
+    </motion.a>
+  );
+}
+
+function SecondaryActions({
+  proposalId,
+  onRequestChanges,
+  invert = false,
+}: {
+  proposalId: string;
+  onRequestChanges: () => void;
+  invert?: boolean;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row" style={{ marginTop: 16, gap: 12 }}>
+      <SecondaryButton invert={invert} onClick={onRequestChanges}>
+        Request Changes
+      </SecondaryButton>
+      <SecondaryDownloadButton proposalId={proposalId} invert={invert} />
+    </div>
+  );
+}
+
+function SecondaryButton({
+  children,
+  onClick,
+  disabled = false,
+  invert = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  invert?: boolean;
+}) {
+  const border = invert ? "rgba(255,255,255,0.28)" : BTN_BORDER;
+  const text = invert ? "rgba(255,255,255,0.92)" : BTN_TEXT;
+  const hoverBg = invert ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.03)";
+  const ringClass = invert
+    ? "focus-visible:ring-white/30"
+    : "focus-visible:ring-[#1F3D2B]/40";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex flex-1 items-center justify-center transition focus:outline-none focus-visible:ring-2 disabled:cursor-wait disabled:opacity-65 ${ringClass}`}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = hoverBg;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+      style={{
+        height: 44,
+        padding: "0 16px",
+        borderRadius: 10,
+        background: "transparent",
+        border: `1px solid ${border}`,
+        color: text,
+        fontSize: 14,
+        fontWeight: 500,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryDownloadButton({
+  proposalId,
+  invert = false,
+}: {
+  proposalId: string;
+  invert?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/public/proposals/${proposalId}/pdf`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = /filename="?([^"]+)"?/.exec(cd);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = match ? match[1] : `proposal-${proposalId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SecondaryButton onClick={onClick} disabled={busy} invert={invert}>
+      {busy ? "Preparing PDF…" : "Download Quote"}
+    </SecondaryButton>
+  );
+}
+
+// ── Conversion stack — headline + description + urgency + CTA + secondaries
+
+function ConversionStack({
+  section,
+  proposal,
+  isEditor,
+  signOff,
+  onSignOff,
+  variantTone = "default",
+  invert = false,
+}: {
+  section: Section;
+  proposal: Proposal;
+  isEditor: boolean;
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+  variantTone?: "default" | "letter";
+  invert?: boolean;
+}) {
+  const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
+  const { trip, days, theme } = proposal;
+
+  const country = deriveCountry(days, trip.destinations);
+  const headline =
+    (section.content.headline as string | undefined) ??
+    (country ? `Your ${country} journey is ready` : "Your safari is ready");
+  const description = signOff?.trim()
+    ? signOff
+    : "Hand-picked camps, drivers who know the ground, and a consultant on call from the moment you board to the moment you fly home.";
+  const urgency =
+    (section.content.urgency as string | undefined) ??
+    "Availability at selected camps is limited and subject to confirmation.";
+  const ctaLabel =
+    (section.content.ctaLabel as string | undefined) ?? "Secure This Safari";
+
+  const { confirmHref } = computeCta(proposal);
+
+  const onHeadline = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, {
+      headline: e.currentTarget.textContent ?? "",
+    });
+  const onUrgency = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, {
+      urgency: e.currentTarget.textContent ?? "",
+    });
+
+  const headColor = invert ? "#FFFFFF" : HEADING;
+  const bodyColor = invert ? "rgba(255,255,255,0.84)" : BODY;
+  const mutedColor = invert ? "rgba(255,255,255,0.62)" : MUTED;
+
+  return (
+    <div className="min-w-0">
+      <h2
+        contentEditable={isEditor}
+        suppressContentEditableWarning
+        onBlur={onHeadline}
+        className="outline-none"
+        style={{
+          margin: 0,
+          fontSize: 28,
+          fontWeight: 600,
+          lineHeight: 1.3,
+          color: headColor,
+          letterSpacing: "-0.01em",
+          fontFamily: `'${theme.displayFont}', serif`,
+        }}
+      >
+        {headline}
+      </h2>
+      <p
+        contentEditable={isEditor}
+        suppressContentEditableWarning
+        onBlur={onSignOff}
+        data-ai-editable="closing"
+        className="outline-none"
+        style={{
+          marginTop: 12,
+          marginBottom: 0,
+          fontSize: 16,
+          lineHeight: 1.6,
+          color: bodyColor,
+          whiteSpace: "pre-line",
+          fontStyle: variantTone === "letter" ? "italic" : "normal",
+        }}
+      >
+        {description}
+      </p>
+      <p
+        contentEditable={isEditor}
+        suppressContentEditableWarning
+        onBlur={onUrgency}
+        className="outline-none"
+        style={{
+          marginTop: 12,
+          marginBottom: 0,
+          fontSize: 14,
+          color: mutedColor,
+          lineHeight: 1.5,
+        }}
+      >
+        {urgency}
+      </p>
+      <div style={{ marginTop: 28 }}>
+        <PrimaryCta href={confirmHref} label={ctaLabel} invert={invert} />
+      </div>
+      <SecondaryActions
+        proposalId={proposal.id}
+        onRequestChanges={() => requestChangesPrefill(trip.title)}
+        invert={invert}
       />
     </div>
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// ─── Variant 1: conversion-card (default) ───────────────────────────────
 
-function isDarkColor(hex: string): boolean {
-  // Accept hex or rgba() / rgb(). Treat unknown formats as light so the
-  // default behaviour is safe.
-  const h = hex.trim();
-  if (h.startsWith("#")) {
-    const clean = h.slice(1);
-    const v =
-      clean.length === 3
-        ? clean.split("").map((c) => parseInt(c + c, 16))
-        : clean.length === 6
-          ? [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16))
-          : null;
-    if (!v) return false;
-    const [r, g, b] = v;
-    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    return lum < 0.5;
-  }
-  const rgbMatch = /rgba?\(([^)]+)\)/.exec(h);
-  if (rgbMatch) {
-    const parts = rgbMatch[1].split(",").map((s) => Number(s.trim()));
-    const [r, g, b] = parts;
-    if ([r, g, b].every((n) => Number.isFinite(n))) {
-      const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-      return lum < 0.5;
-    }
-  }
-  return false;
+function ConversionLayout({
+  proposal,
+  section,
+  isEditor,
+  signOff,
+  onSignOff,
+  aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <ConversionStack
+          section={section}
+          proposal={proposal}
+          isEditor={isEditor}
+          signOff={signOff}
+          onSignOff={onSignOff}
+        />
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 2: closing-farewell ────────────────────────────────────────
+// Editorial pull-quote and attribution above, then the standard grid.
+
+function FarewellLayout({
+  proposal,
+  section,
+  isEditor,
+  quote,
+  signOff,
+  attribution,
+  onQuote,
+  onSignOff,
+  onAttribution,
+  aiButtons,
+}: VariantProps & {
+  quote: string;
+  signOff: string;
+  attribution: string | undefined;
+  onQuote: (e: React.FocusEvent<HTMLElement>) => void;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+  onAttribution: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  const fontFamily = `'${proposal.theme.displayFont}', serif`;
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <div
+        className="mx-auto text-center"
+        style={{ maxWidth: 640, paddingBottom: 32 }}
+      >
+        <div
+          aria-hidden
+          style={{
+            fontFamily,
+            fontSize: 48,
+            lineHeight: 0.7,
+            color: FOREST,
+            opacity: 0.45,
+          }}
+        >
+          &ldquo;
+        </div>
+        <blockquote
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={onQuote}
+          className="outline-none"
+          style={{
+            marginTop: 8,
+            fontFamily,
+            fontSize: "clamp(20px, 3vw, 26px)",
+            fontWeight: 600,
+            lineHeight: 1.3,
+            color: HEADING,
+            letterSpacing: "-0.005em",
+          }}
+        >
+          {quote || "Africa changes you."}
+        </blockquote>
+        {(attribution || isEditor) && (
+          <div
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={onAttribution}
+            className="outline-none"
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: MUTED,
+            }}
+          >
+            {attribution || (isEditor ? "– Attribution" : "")}
+          </div>
+        )}
+      </div>
+      <div
+        aria-hidden
+        style={{
+          height: 1,
+          width: 80,
+          background: SAND_LINE,
+          margin: "0 auto 32px",
+        }}
+      />
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <ConversionStack
+          section={section}
+          proposal={proposal}
+          isEditor={isEditor}
+          signOff={signOff}
+          onSignOff={onSignOff}
+        />
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 3: booking-recap ───────────────────────────────────────────
+// Eyebrow + destination chips + 4 day-image experience tiles, then grid.
+
+function BookingRecapLayout({
+  proposal,
+  section,
+  isEditor,
+  signOff,
+  onSignOff,
+  aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  const { trip, days } = proposal;
+  const tiles = days
+    .filter((d) => !!d.heroImageUrl)
+    .slice(0, 4)
+    .map((d) => ({
+      id: d.id,
+      label: d.destination || `Day ${d.dayNumber}`,
+      url: d.heroImageUrl as string,
+      objectPosition: d.heroImagePosition || "50% 50%",
+    }));
+  const destinations = trip.destinations ?? [];
+
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <div style={{ paddingBottom: 28 }}>
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.3em",
+            textTransform: "uppercase",
+            fontWeight: 600,
+            color: MUTED,
+            marginBottom: 12,
+          }}
+        >
+          Itinerary at a glance
+        </div>
+        {destinations.length > 0 && (
+          <div className="flex flex-wrap" style={{ gap: 8 }}>
+            {destinations.map((d) => (
+              <span
+                key={d}
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  color: HEADING,
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  background: "#FFFFFF",
+                  border: `1px solid ${SAND_LINE}`,
+                }}
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        )}
+        {tiles.length > 0 && (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-4"
+            style={{ gap: 10, marginTop: 20 }}
+          >
+            {tiles.map((t) => (
+              <div
+                key={t.id}
+                className="relative overflow-hidden"
+                style={{
+                  aspectRatio: "4 / 5",
+                  borderRadius: 10,
+                  border: `1px solid ${SAND_LINE}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={t.url}
+                  alt={t.label}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ objectPosition: t.objectPosition }}
+                />
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.65) 100%)",
+                  }}
+                />
+                <div
+                  className="absolute left-2.5 right-2.5 bottom-2 text-white"
+                  style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.3 }}
+                >
+                  {t.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div
+        aria-hidden
+        style={{ height: 1, background: SAND_LINE, margin: "0 0 28px" }}
+      />
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <ConversionStack
+          section={section}
+          proposal={proposal}
+          isEditor={isEditor}
+          signOff={signOff}
+          onSignOff={onSignOff}
+        />
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 4: quote-led ───────────────────────────────────────────────
+// Oversized editorial pull-quote dominates the top, then the grid.
+
+function QuoteLedLayout({
+  proposal,
+  section,
+  isEditor,
+  quote,
+  attribution,
+  signOff,
+  onQuote,
+  onSignOff,
+  onAttribution,
+  aiButtons,
+}: VariantProps & {
+  quote: string;
+  signOff: string;
+  attribution: string | undefined;
+  onQuote: (e: React.FocusEvent<HTMLElement>) => void;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+  onAttribution: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  const fontFamily = `'${proposal.theme.displayFont}', serif`;
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <div
+        className="mx-auto text-center"
+        style={{ maxWidth: 720, paddingBottom: 32 }}
+      >
+        <blockquote
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={onQuote}
+          className="outline-none"
+          style={{
+            margin: 0,
+            fontFamily,
+            fontSize: "clamp(28px, 4.2vw, 40px)",
+            fontWeight: 600,
+            lineHeight: 1.15,
+            letterSpacing: "-0.015em",
+            color: HEADING,
+          }}
+        >
+          {quote || "Africa changes you."}
+        </blockquote>
+        {(attribution || isEditor) && (
+          <div
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={onAttribution}
+            className="outline-none"
+            style={{
+              marginTop: 14,
+              fontSize: 12,
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: MUTED,
+            }}
+          >
+            {attribution || (isEditor ? "– Attribution" : "")}
+          </div>
+        )}
+      </div>
+      <div
+        aria-hidden
+        style={{ height: 1, background: SAND_LINE, margin: "0 0 28px" }}
+      />
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <ConversionStack
+          section={section}
+          proposal={proposal}
+          isEditor={isEditor}
+          signOff={signOff}
+          onSignOff={onSignOff}
+        />
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 5: letter-style ────────────────────────────────────────────
+// Standard 40/60 grid; the description is set in italic serif for letter mood.
+
+function LetterLayout({
+  proposal,
+  section,
+  isEditor,
+  signOff,
+  onSignOff,
+  aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <ConversionStack
+          section={section}
+          proposal={proposal}
+          isEditor={isEditor}
+          signOff={signOff}
+          onSignOff={onSignOff}
+          variantTone="letter"
+        />
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 6: centered-minimal ────────────────────────────────────────
+// Single centered column; consultant collapses into a horizontal mini below.
+
+function CenteredMinimalLayout({
+  proposal,
+  section,
+  isEditor,
+  signOff,
+  onSignOff,
+  aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
+  const { trip, days, theme } = proposal;
+
+  const country = deriveCountry(days, trip.destinations);
+  const headline =
+    (section.content.headline as string | undefined) ??
+    (country ? `Your ${country} journey is ready` : "Your safari is ready");
+  const description = signOff?.trim()
+    ? signOff
+    : "Hand-picked camps, drivers who know the ground, and a consultant on call from the moment you board to the moment you fly home.";
+  const urgency =
+    (section.content.urgency as string | undefined) ??
+    "Availability at selected camps is limited and subject to confirmation.";
+  const ctaLabel =
+    (section.content.ctaLabel as string | undefined) ?? "Secure This Safari";
+
+  const { confirmHref } = computeCta(proposal);
+
+  const onHeadline = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, {
+      headline: e.currentTarget.textContent ?? "",
+    });
+  const onUrgency = (e: React.FocusEvent<HTMLElement>) =>
+    updateSectionContent(section.id, {
+      urgency: e.currentTarget.textContent ?? "",
+    });
+
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <div className="mx-auto text-center" style={{ maxWidth: 540 }}>
+        <h2
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={onHeadline}
+          className="outline-none"
+          style={{
+            margin: 0,
+            fontSize: 28,
+            fontWeight: 600,
+            lineHeight: 1.3,
+            color: HEADING,
+            letterSpacing: "-0.01em",
+            fontFamily: `'${theme.displayFont}', serif`,
+          }}
+        >
+          {headline}
+        </h2>
+        <p
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={onSignOff}
+          data-ai-editable="closing"
+          className="outline-none mx-auto"
+          style={{
+            marginTop: 12,
+            fontSize: 16,
+            lineHeight: 1.6,
+            color: BODY,
+            whiteSpace: "pre-line",
+            maxWidth: 480,
+          }}
+        >
+          {description}
+        </p>
+        <p
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={onUrgency}
+          className="outline-none mx-auto"
+          style={{
+            marginTop: 12,
+            fontSize: 14,
+            color: MUTED,
+            lineHeight: 1.5,
+            maxWidth: 480,
+          }}
+        >
+          {urgency}
+        </p>
+        <div style={{ marginTop: 28, maxWidth: 420, marginInline: "auto" }}>
+          <PrimaryCta href={confirmHref} label={ctaLabel} />
+        </div>
+        <div style={{ maxWidth: 420, marginInline: "auto" }}>
+          <SecondaryActions
+            proposalId={proposal.id}
+            onRequestChanges={() => requestChangesPrefill(trip.title)}
+          />
+        </div>
+      </div>
+      <div
+        aria-hidden
+        style={{
+          height: 1,
+          background: SAND_LINE,
+          margin: "32px auto 0",
+          maxWidth: 540,
+        }}
+      />
+      <div style={{ marginTop: 24 }}>
+        <ConsultantInline operator={proposal.operator} />
+      </div>
+    </ClosingShell>
+  );
+}
+
+// ─── Variant 7: cta-card ────────────────────────────────────────────────
+// 40/60 grid; the right column lives inside a forest-green emphasis card
+// and runs in dark mode (white CTA + faint outline secondaries on dark).
+
+function CtaCardLayout({
+  proposal,
+  section,
+  isEditor,
+  signOff,
+  onSignOff,
+  aiButtons,
+}: VariantProps & {
+  signOff: string;
+  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
+}) {
+  return (
+    <ClosingShell pageBg={pickPageBg(section, proposal)} aiButtons={aiButtons}>
+      <TwoColGrid>
+        <ConsultantCard operator={proposal.operator} />
+        <div
+          style={{
+            background: FOREST,
+            color: "#FFFFFF",
+            borderRadius: 14,
+            padding: 28,
+            boxShadow: "0 18px 48px -16px rgba(0,0,0,0.45)",
+          }}
+        >
+          <ConversionStack
+            section={section}
+            proposal={proposal}
+            isEditor={isEditor}
+            signOff={signOff}
+            onSignOff={onSignOff}
+            invert
+          />
+        </div>
+      </TwoColGrid>
+    </ClosingShell>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+
+type VariantProps = {
+  proposal: Proposal;
+  section: Section;
+  isEditor: boolean;
+  aiButtons: React.ReactNode;
+};
+
+function pickPageBg(section: Section, proposal: Proposal): string {
+  const overrides = section.styleOverrides as Record<string, string> | undefined;
+  return overrides?.pageBg ?? proposal.theme.tokens.pageBg ?? "#ffffff";
+}
+
+function requestChangesPrefill(tripTitle?: string) {
+  if (typeof window === "undefined") return;
+  const message = `I'd like to discuss some changes to the proposal for ${
+    tripTitle || "this safari"
+  }.`;
+  window.dispatchEvent(
+    new CustomEvent("ss:prefillComment", { detail: { message } }),
+  );
+}
+
+function computeCta(proposal: Proposal): { confirmHref: string; totalLabel: string } {
+  const { operator, client, activeTier, pricing } = proposal;
+  const tierKey = activeTier as keyof typeof pricing;
+  const tier =
+    tierKey === "classic" || tierKey === "premier" || tierKey === "signature"
+      ? pricing[tierKey]
+      : null;
+  const pax = parsePax(client.pax);
+  const totalLabel = buildTotalLabel(
+    tier?.pricePerPerson ?? "",
+    tier?.currency ?? "USD",
+    pax,
+  );
+  const confirmHref = resolveBookingHref(operator, proposal, totalLabel);
+  return { confirmHref, totalLabel };
+}
+
+// Country derivation for the headline default. Prefers `days[].country`
+// (set by the AI autopilot per day) and falls back to a small destination
+// → country lookup that covers East Africa. Returns "" when nothing
+// matches; the caller renders a generic headline.
+function deriveCountry(
+  days: Proposal["days"],
+  destinations: string[] | undefined,
+): string {
+  const fromDays = days.find((d) => d.country?.trim())?.country?.trim();
+  if (fromDays) return fromDays;
+
+  const dests = (destinations ?? []).map((d) => d.toLowerCase());
+  if (dests.length === 0) return "";
+
+  const TZ = ["serengeti","ngorongoro","tarangire","manyara","arusha","zanzibar","selous","nyerere","ruaha","mahale","katavi","pemba","mafia"];
+  const KE = ["mara","amboseli","samburu","laikipia","nairobi","lamu","diani","tsavo","ol pejeta","lewa","meru","naivasha","nakuru"];
+  const UG = ["bwindi","queen elizabeth","murchison","kibale","kidepo"];
+  const RW = ["volcanoes","akagera","nyungwe","kigali"];
+
+  const matches = (list: string[]) =>
+    dests.some((d) => list.some((token) => d.includes(token)));
+
+  if (matches(TZ)) return "Tanzania";
+  if (matches(KE)) return "Kenya";
+  if (matches(UG)) return "Uganda";
+  if (matches(RW)) return "Rwanda";
+  return "";
 }
 
 function parsePax(raw: string | undefined): number {
   if (!raw) return 0;
-  // Pull the first integer we find — e.g. "2 adults · 3 children" → 2,
-  // then add subsequent integers. Rough but good enough for the closing
-  // card: "8 Adults" → 8, "2 adults + 3 children (ages 8, 11, 14)" → 5.
   const nums = raw.match(/\d+/g);
   if (!nums) return 0;
-  // Heuristic: sum adults + children but ignore numbers that are likely
-  // ages (> 15 we treat as headcount; ≤ 15 after first number is an age).
   let total = 0;
   let seenHeadcount = false;
   for (const n of nums) {
@@ -631,10 +1205,6 @@ function parsePax(raw: string | undefined): number {
       seenHeadcount = true;
       continue;
     }
-    // Only add if the number is small-ish (children headcount) AND there
-    // are obvious group words. Keep it simple: add up to the second one
-    // then stop — addresses "2 adults · 3 children" without counting
-    // age listings.
     if (total < 20 && num <= 12) {
       total += num;
       break;
@@ -644,7 +1214,11 @@ function parsePax(raw: string | undefined): number {
   return total;
 }
 
-function buildTotalLabel(perPerson: string, currency: string, pax: number): string {
+function buildTotalLabel(
+  perPerson: string,
+  currency: string,
+  pax: number,
+): string {
   const pp = perPerson.replace(/[^\d.,]/g, "");
   const asNumber = Number(pp.replace(/,/g, ""));
   if (!Number.isFinite(asNumber) || asNumber <= 0) return "";
@@ -656,25 +1230,14 @@ function buildTotalLabel(perPerson: string, currency: string, pax: number): stri
 }
 
 function formatNumber(n: number): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
-// Resolve the target for the "Book / Confirm Booking" CTAs. Priority:
-//   1. operator.bookingUrl — dedicated reservation surface on the operator's
-//      own site (a calendar embed, Stripe checkout, branded form, etc.).
-//   2. operator.website — their homepage. Less specific but still on their
-//      turf, not ours.
-//   3. mailto: operator.email — last-resort fallback. The classic "send
-//      us an email" flow, kept so the button never dead-ends.
-//
-// Clients returning via the booking URL / website open in a new tab so
-// they don't lose the proposal context.
 function resolveBookingHref(
-  operator: {
-    bookingUrl?: string;
-    website?: string;
-    email?: string;
-  },
+  operator: { bookingUrl?: string; website?: string; email?: string },
   proposal: { id: string; trip: { title: string }; client: { guestNames: string } },
   totalLabel: string,
 ): string {
@@ -713,735 +1276,4 @@ function normaliseUrl(url: string | undefined): string {
   if (!t) return "#";
   if (/^https?:\/\//i.test(t)) return t;
   return `https://${t}`;
-}
-
-function WaIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 3.4L3 21" />
-      <path d="M9 10a3 3 0 0 0 3 3l1.5-1.5a1 1 0 0 1 1 0l2 1.3a1 1 0 0 1 .3 1.2l-.3.6a3 3 0 0 1-3 2" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M10 14a5 5 0 0 1 0-7l3-3a5 5 0 0 1 7 7l-1.5 1.5" />
-      <path d="M14 10a5 5 0 0 1 0 7l-3 3a5 5 0 0 1-7-7l1.5-1.5" />
-    </svg>
-  );
-}
-
-// ─── Shared Book-only footer ──────────────────────────────────────────────
-//
-// Every closing variant renders this block at the bottom — Book your
-// Safari + Confirm / Download / Share. Contact details now live solely
-// in the standalone FooterSection that renders right after closing, so
-// the closing block stays focused on the moment of conversion.
-
-function BookOnlyFooter({
-  proposal,
-  operator,
-  client,
-  trip,
-  pricing,
-  activeTier,
-  theme,
-  tokens,
-  bg,
-}: {
-  proposal: Proposal;
-  operator: OperatorProfile;
-  client: ClientDetails;
-  trip: TripDetails;
-  pricing: PricingData;
-  activeTier: TierKey;
-  theme: ProposalTheme;
-  tokens: ThemeTokens;
-  bg: string;
-}) {
-  const isDark = isDarkColor(bg);
-  const color = {
-    heading: isDark ? "rgba(255,255,255,0.92)" : tokens.headingText,
-    body: isDark ? "rgba(255,255,255,0.78)" : tokens.bodyText,
-    muted: isDark ? "rgba(255,255,255,0.45)" : tokens.mutedText,
-    border: isDark ? "rgba(255,255,255,0.14)" : tokens.border,
-    accent: tokens.accent,
-    button: isDark ? "rgba(255,255,255,0.1)" : "#00000008",
-    buttonBorder: isDark ? "rgba(255,255,255,0.25)" : tokens.border,
-    coverLift: isDark ? "rgba(255,255,255,0.04)" : tokens.cardBg,
-  };
-
-  const coverSection = proposal.sections.find((s) => s.type === "cover");
-  const coverThumbUrl = (coverSection?.content?.heroImageUrl as string | undefined) ?? null;
-
-  const pax = parsePax(client.pax);
-  const tier =
-    activeTier === "classic" || activeTier === "premier" || activeTier === "signature"
-      ? pricing[activeTier]
-      : null;
-  const perPerson = tier?.pricePerPerson ?? "";
-  const currency = tier?.currency ?? "USD";
-  const totalLabel = buildTotalLabel(perPerson, currency, pax);
-
-  const confirmBookingHref = buildMailtoHref(operator.email, proposal, totalLabel);
-  const whatsappShareHref =
-    typeof window !== "undefined"
-      ? `https://wa.me/?text=${encodeURIComponent(
-          `${trip.title || "Safari proposal"} — ${window.location.href}`,
-        )}`
-      : "#";
-
-  const copyLink = async () => {
-    if (typeof window === "undefined") return;
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-    } catch {
-      // no-op
-    }
-  };
-
-  const requestConfirmInComments = () => {
-    if (typeof window === "undefined") return;
-    const message = `I'd like to confirm the booking for ${trip.title || "this safari"}. Please send next steps.`;
-    window.dispatchEvent(new CustomEvent("ss:prefillComment", { detail: { message } }));
-  };
-
-  return (
-    <div
-      className="max-w-4xl mx-auto mt-14 md:mt-16 pt-10 grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-8 md:gap-10 items-start"
-      style={{
-        borderTop: `1px solid ${color.border}`,
-      }}
-    >
-      {/* Identity column — eyebrow, cover thumb, title, total */}
-      <div>
-        <div
-          className="text-[10.5px] uppercase tracking-[0.3em] font-bold mb-4 text-left"
-          style={{ color: color.muted }}
-        >
-          Book your Safari
-        </div>
-        <div className="flex items-stretch gap-4 text-left">
-          {coverThumbUrl ? (
-            <div
-              className="shrink-0 overflow-hidden"
-              style={{ width: 72, height: 92, background: color.coverLift, borderRadius: 4 }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverThumbUrl} alt="Proposal cover" className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <div
-              className="shrink-0 flex items-center justify-center text-[10px] uppercase tracking-[0.2em]"
-              style={{
-                width: 72,
-                height: 92,
-                background: color.coverLift,
-                color: color.muted,
-                borderRadius: 4,
-              }}
-            >
-              Cover
-            </div>
-          )}
-          <div className="min-w-0 flex flex-col justify-center">
-            <div
-              className="text-[15px] font-semibold leading-[1.25]"
-              style={{
-                color: color.heading,
-                fontFamily: `'${theme.displayFont}', serif`,
-              }}
-            >
-              {trip.title}
-            </div>
-            {client.guestNames && (
-              <div className="mt-1 text-[12px]" style={{ color: color.muted }}>
-                for {client.guestNames}
-              </div>
-            )}
-            {totalLabel && (
-              <>
-                <div
-                  className="mt-2 flex items-baseline gap-2 text-[13.5px]"
-                  style={{ color: color.body }}
-                >
-                  <span className="font-semibold" style={{ color: color.heading }}>
-                    Total:
-                  </span>
-                  <span style={{ color: color.heading }}>{totalLabel}</span>
-                </div>
-                <a
-                  href="#pricing"
-                  className="mt-0.5 inline-block text-[11.5px] transition hover:opacity-75"
-                  style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
-                >
-                  Detailed price information →
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Action column — CTAs, comment link, share */}
-      <div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <a
-            href={confirmBookingHref}
-            className="h-11 flex items-center justify-center text-[13px] font-bold uppercase tracking-[0.12em] rounded-sm transition hover:opacity-90 active:scale-[0.99] sm:order-2"
-            style={{
-              background: isDark ? "white" : color.accent,
-              color: isDark ? "#1d1d1f" : "white",
-            }}
-          >
-            Confirm Booking →
-          </a>
-          <div className="sm:order-1">
-            <DownloadPdfButton
-              proposalId={proposal.id}
-              background={color.button}
-              textColor={color.heading}
-              borderColor={color.buttonBorder}
-            />
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={requestConfirmInComments}
-          className="text-[12px] transition hover:opacity-75 mt-3 text-left"
-          style={{ color: color.muted, textDecoration: "underline", textUnderlineOffset: 3 }}
-        >
-          Or reply with a note in comments →
-        </button>
-
-        <div className="mt-5 flex items-center gap-3">
-          <span
-            className="text-[10px] uppercase tracking-[0.28em] font-bold"
-            style={{ color: color.muted }}
-          >
-            Share
-          </span>
-          <a
-            href={whatsappShareHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Share on WhatsApp"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
-            style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
-          >
-            <WaIcon />
-          </a>
-          <button
-            type="button"
-            onClick={copyLink}
-            aria-label="Copy link"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition hover:opacity-80"
-            style={{ border: `1px solid ${color.buttonBorder}`, color: color.heading }}
-          >
-            <LinkIcon />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Download Quote button ────────────────────────────────────────────────
-// POSTs to the public PDF endpoint (no org auth — guests viewing the share
-// link don't have one) and triggers a real file download. Replaces the old
-// "open the print webview in a new tab" behaviour, which left guests
-// staring at the on-screen rendition and wondering where the download was.
-
-function DownloadPdfButton({
-  proposalId,
-  background,
-  textColor,
-  borderColor,
-}: {
-  proposalId: string;
-  background: string;
-  textColor: string;
-  borderColor: string;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  const onClick = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/public/proposals/${proposalId}/pdf`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `Download failed (${res.status})`);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const cd = res.headers.get("Content-Disposition") || "";
-      const match = /filename="?([^"]+)"?/.exec(cd);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = match ? match[1] : `proposal-${proposalId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Download failed";
-      alert(msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      className="h-10 flex items-center justify-center text-[12.5px] font-semibold rounded-sm transition hover:opacity-85 disabled:opacity-65 disabled:cursor-wait"
-      style={{ background, color: textColor, border: `1px solid ${borderColor}` }}
-    >
-      {busy ? "Preparing PDF…" : "Download Quote"}
-    </button>
-  );
-}
-
-// ─── Booking-recap variant ────────────────────────────────────────────────
-//
-// Shadcn-caliber two-column closing — letter-mood intro on the left, hard
-// booking card on the right. Framer Motion drives staggered scroll-reveal
-// and the CTA's micro-interactions. Day hero images become experience
-// tiles. Trust bullets pull from operator.trustBadges (or the default
-// list when nothing's configured).
-
-function BookingRecapVariant({
-  section,
-  proposal,
-  tokens,
-  isEditor,
-  onQuote,
-  onSignOff,
-  aiButtons,
-}: {
-  section: Section;
-  proposal: Proposal;
-  tokens: ThemeTokens;
-  isEditor: boolean;
-  onQuote: (e: React.FocusEvent<HTMLElement>) => void;
-  onSignOff: (e: React.FocusEvent<HTMLElement>) => void;
-  aiButtons: React.ReactNode;
-}) {
-  const { operator, theme, client, trip, activeTier, pricing, days } = proposal;
-  const overrides = section.styleOverrides as Record<string, string> | undefined;
-  const bg = overrides?.sectionSurface ?? "#0d1714";
-  const isDark = isDarkColor(bg);
-  const color = {
-    heading: isDark ? "rgba(255,255,255,0.96)" : tokens.headingText,
-    body: isDark ? "rgba(255,255,255,0.74)" : tokens.bodyText,
-    muted: isDark ? "rgba(255,255,255,0.45)" : tokens.mutedText,
-    border: isDark ? "rgba(255,255,255,0.10)" : tokens.border,
-    softBorder: isDark ? "rgba(255,255,255,0.06)" : `${tokens.border}80`,
-    surface: isDark ? "rgba(255,255,255,0.04)" : tokens.cardBg,
-    accent: tokens.accent,
-    chipBg: isDark ? "rgba(255,255,255,0.06)" : `${tokens.accent}10`,
-    chipText: isDark ? "rgba(255,255,255,0.82)" : tokens.headingText,
-    cta: isDark ? "#ffffff" : tokens.accent,
-    ctaText: isDark ? "#0d1714" : "#ffffff",
-  };
-
-  const quote = (section.content.quote as string) ?? "";
-  const signOff = (section.content.signOff as string) ?? "";
-
-  const tierKey = activeTier as keyof typeof pricing;
-  const tier =
-    tierKey === "classic" || tierKey === "premier" || tierKey === "signature"
-      ? pricing[tierKey]
-      : null;
-  const pax = parsePax(client.pax);
-  const perPerson = tier?.pricePerPerson ?? "";
-  const currency = tier?.currency ?? "USD";
-  const totalLabel = buildTotalLabel(perPerson, currency, pax);
-  const confirmBookingHref = resolveBookingHref(operator, proposal, totalLabel);
-
-  // Pick up to 4 day hero images for the experience tiles. Falls back to
-  // a count of however many we actually have.
-  const dayTiles = days
-    .filter((d) => !!d.heroImageUrl)
-    .slice(0, 4)
-    .map((d) => ({
-      id: d.id,
-      label: d.destination || d.subtitle || `Day ${d.dayNumber}`,
-      url: d.heroImageUrl as string,
-      objectPosition: d.heroImagePosition || "50% 50%",
-    }));
-
-  const trustBadges =
-    operator.trustBadges && operator.trustBadges.length > 0
-      ? operator.trustBadges
-      : DEFAULT_TRUST_BADGES;
-
-  const stagger = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.06, delayChildren: 0.08 },
-    },
-  } as const;
-  const item = {
-    hidden: { opacity: 0, y: 14 },
-    show: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
-    },
-  } as const;
-
-  return (
-    <div className="relative py-24 md:py-28 px-6 md:px-12 lg:px-16" style={{ background: bg }}>
-      {aiButtons}
-
-      <motion.div
-        className="max-w-6xl mx-auto"
-        variants={stagger}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, margin: "-80px" }}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-10 lg:gap-14">
-          {/* ── Left column ── */}
-          <div className="lg:pr-4">
-            <motion.div variants={item}>
-              <div
-                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-5"
-                style={{ color: color.muted }}
-              >
-                One last thing
-              </div>
-            </motion.div>
-
-            <motion.blockquote
-              variants={item}
-              className="font-semibold leading-[1.18] outline-none"
-              style={{
-                color: color.heading,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(1.7rem, 3vw, 2.45rem)",
-                letterSpacing: "-0.012em",
-              }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              data-ai-editable="closing"
-              onBlur={onQuote}
-            >
-              {quote}
-            </motion.blockquote>
-
-            {(signOff || isEditor) && (
-              <motion.p
-                variants={item}
-                className="mt-6 max-w-[520px] text-[14.5px] leading-[1.75] whitespace-pre-line outline-none"
-                style={{
-                  color: color.body,
-                  fontFamily: `'${theme.bodyFont}', sans-serif`,
-                }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                data-ai-editable="closing"
-                onBlur={onSignOff}
-              >
-                {signOff}
-              </motion.p>
-            )}
-
-            {/* Hairline + trip recap */}
-            <motion.div
-              variants={item}
-              aria-hidden
-              className="mt-10 mb-7"
-              style={{ height: 1, width: 64, background: color.border }}
-            />
-
-            <motion.div variants={item}>
-              <div
-                className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
-                style={{ color: color.muted }}
-              >
-                Itinerary at a glance
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {(trip.destinations ?? []).map((d) => (
-                  <span
-                    key={d}
-                    className="text-[11.5px] font-medium px-2.5 py-1 rounded-full"
-                    style={{
-                      background: color.chipBg,
-                      color: color.chipText,
-                      border: `1px solid ${color.softBorder}`,
-                    }}
-                  >
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Experience tiles — day hero images */}
-            {dayTiles.length > 0 && (
-              <motion.div variants={item} className="mt-8">
-                <div
-                  className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
-                  style={{ color: color.muted }}
-                >
-                  Experiences included
-                </div>
-                <motion.div
-                  className="grid grid-cols-2 sm:grid-cols-4 gap-2.5"
-                  variants={stagger}
-                >
-                  {dayTiles.map((tile) => (
-                    <motion.div
-                      key={tile.id}
-                      variants={item}
-                      whileHover={{ y: -2 }}
-                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                      className="group relative overflow-hidden rounded-xl aspect-[4/5]"
-                      style={{
-                        background: color.surface,
-                        border: `1px solid ${color.softBorder}`,
-                      }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={tile.url}
-                        alt={tile.label}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
-                        style={{ objectPosition: tile.objectPosition }}
-                      />
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{
-                          background:
-                            "linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.66) 100%)",
-                        }}
-                      />
-                      <div className="absolute left-2.5 right-2.5 bottom-2 text-[11px] font-semibold text-white/95 leading-tight">
-                        {tile.label}
-                      </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              </motion.div>
-            )}
-          </div>
-
-          {/* ── Right column — booking card ── */}
-          <motion.div
-            variants={item}
-            className="relative rounded-2xl p-6 md:p-7 backdrop-blur-md"
-            style={{
-              background: isDark ? "rgba(255,255,255,0.04)" : "#ffffff",
-              border: `1px solid ${color.softBorder}`,
-              boxShadow: isDark
-                ? "0 30px 60px -25px rgba(0,0,0,0.5)"
-                : "0 24px 60px -28px rgba(0,0,0,0.18)",
-            }}
-          >
-            <div
-              className="text-[10px] uppercase tracking-[0.3em] font-semibold mb-3"
-              style={{ color: color.muted }}
-            >
-              Your safari
-            </div>
-            <h3
-              className="font-semibold leading-[1.1]"
-              style={{
-                color: color.heading,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(1.35rem, 2.4vw, 1.7rem)",
-                letterSpacing: "-0.005em",
-              }}
-            >
-              {trip.title}
-            </h3>
-            {trip.dates && (
-              <div
-                className="mt-1.5 text-[12.5px]"
-                style={{ color: color.muted }}
-              >
-                {trip.dates}
-                {trip.nights ? ` · ${trip.nights} night${trip.nights === 1 ? "" : "s"}` : ""}
-              </div>
-            )}
-            {client.guestNames && (
-              <div
-                className="mt-0.5 text-[12px]"
-                style={{ color: color.muted }}
-              >
-                For {client.guestNames}
-              </div>
-            )}
-
-            {/* Price */}
-            {totalLabel && (
-              <div
-                className="mt-5 pt-5"
-                style={{ borderTop: `1px solid ${color.softBorder}` }}
-              >
-                <div
-                  className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1"
-                  style={{ color: color.muted }}
-                >
-                  Total
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span
-                    className="font-semibold tabular-nums leading-none"
-                    style={{
-                      color: color.heading,
-                      fontFamily: `'${theme.displayFont}', serif`,
-                      fontSize: "clamp(2rem, 3.6vw, 2.6rem)",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {totalLabel.replace(/\sper\sperson$/i, "")}
-                  </span>
-                </div>
-                <a
-                  href="#pricing"
-                  className="mt-1 inline-block text-[11.5px] transition hover:opacity-75"
-                  style={{
-                    color: color.muted,
-                    textDecoration: "underline",
-                    textUnderlineOffset: 3,
-                  }}
-                >
-                  Detailed price information →
-                </a>
-              </div>
-            )}
-
-            {/* CTAs */}
-            <div className="mt-5 space-y-2">
-              <motion.a
-                href={confirmBookingHref}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                className="h-12 w-full flex items-center justify-center text-[13.5px] font-bold uppercase tracking-[0.12em] rounded-xl transition shadow-md hover:shadow-lg"
-                style={{
-                  background: color.cta,
-                  color: color.ctaText,
-                }}
-              >
-                Continue Booking →
-              </motion.a>
-              <DownloadPdfButton
-                proposalId={proposal.id}
-                background={isDark ? "rgba(255,255,255,0.04)" : "#fafafa"}
-                textColor={color.heading}
-                borderColor={color.softBorder}
-              />
-            </div>
-
-            {/* Trust badges */}
-            <div
-              className="mt-6 pt-5"
-              style={{ borderTop: `1px solid ${color.softBorder}` }}
-            >
-              <ul className="space-y-2.5">
-                {trustBadges.map((badge, i) => (
-                  <motion.li
-                    key={`${i}-${badge.slice(0, 12)}`}
-                    initial={{ opacity: 0, x: 4 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{
-                      duration: 0.45,
-                      delay: 0.1 + i * 0.05,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                    className="flex items-start gap-2.5 text-[12.5px] leading-snug"
-                    style={{ color: color.body }}
-                  >
-                    <CheckGlyph color={color.accent} />
-                    <span>{badge}</span>
-                  </motion.li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Consultant signature */}
-            <div
-              className="mt-6 pt-5 flex items-center gap-3"
-              style={{ borderTop: `1px solid ${color.softBorder}` }}
-            >
-              {operator.consultantPhoto ? (
-                <div
-                  className="shrink-0 w-9 h-9 rounded-full overflow-hidden"
-                  style={{ background: color.surface }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={operator.consultantPhoto}
-                    alt={operator.consultantName}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div
-                  className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold"
-                  style={{
-                    background: `${color.accent}1c`,
-                    color: color.accent,
-                  }}
-                >
-                  {operator.consultantName?.charAt(0) ?? "·"}
-                </div>
-              )}
-              <div className="min-w-0">
-                <div
-                  className="text-[12.5px] font-semibold truncate"
-                  style={{ color: color.heading }}
-                >
-                  {operator.consultantName}
-                </div>
-                <div
-                  className="text-[11px] truncate"
-                  style={{ color: color.muted }}
-                >
-                  {operator.consultantRole || operator.companyName}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function CheckGlyph({ color }: { color: string }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden
-      className="shrink-0 mt-0.5"
-    >
-      <circle cx="8" cy="8" r="7.25" stroke={color} strokeOpacity="0.32" strokeWidth="1.2" />
-      <path
-        d="M5 8.4 L7 10.4 L11 6.2"
-        stroke={color}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }

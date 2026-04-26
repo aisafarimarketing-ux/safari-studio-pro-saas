@@ -142,6 +142,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     icon: "◐",
     description: "Elegant sign-off from the consultant",
     variants: [
+      "conversion-card",
       "closing-farewell",
       "booking-recap",
       "quote-led",
@@ -149,10 +150,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "centered-minimal",
       "cta-card",
     ],
-    defaultVariant: "closing-farewell",
+    defaultVariant: "conversion-card",
     defaultContent: {
       quote: "Africa changes you.",
-      signOff: "With warm regards,",
+      signOff:
+        "Hand-picked camps, drivers who know the ground, and a consultant on call from the moment you board to the moment you fly home.",
+      urgency:
+        "Availability at selected camps is limited and subject to confirmation.",
+      ctaLabel: "Secure This Safari",
     },
   },
   footer: {
