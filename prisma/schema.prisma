@@ -28,11 +28,11 @@ model User {
 
   proposals Proposal[]
 
-  orgMemberships   OrgMembership[]
-  assignedRequests Request[]       @relation("RequestAssignee")
-  authoredNotes    RequestNote[]   @relation("RequestNoteAuthor")
-  presence         Presence?
-  activityEvents   ActivityEvent[]
+  orgMemberships      OrgMembership[]
+  assignedRequests    Request[]       @relation("RequestAssignee")
+  authoredNotes       RequestNote[]   @relation("RequestNoteAuthor")
+  presence            Presence?
+  activityEvents      ActivityEvent[]
   createdReservations Reservation[]
 
   @@index([clerkUserId])
@@ -106,17 +106,32 @@ model Organization {
   // paymentProcessor identifies which rail the subscription runs on.
   // Paystack is the EA primary (card + M-Pesa for Kenya). Stripe
   // arrives later for international card coverage.
-  paymentProcessor       String? // "paystack" | "stripe" | null
-  paystackCustomerCode   String?
+  paymentProcessor         String? // "paystack" | "stripe" | null
+  paystackCustomerCode     String?
   paystackSubscriptionCode String?
-  paystackEmailToken     String? // Required by Paystack for subscription actions
-  currentPeriodEnd       DateTime?
-  lastPaymentAt          DateTime?
+  paystackEmailToken       String? // Required by Paystack for subscription actions
+  currentPeriodEnd         DateTime?
+  lastPaymentAt            DateTime?
   // Set by a user-initiated cancel; the subscription runs until
   // currentPeriodEnd and then does not renew. Paystack still charges
   // until we call their /subscription/disable API (done server-side on
   // cancel), so this flag is belt-and-braces.
-  cancelAtPeriodEnd      Boolean  @default(false)
+  cancelAtPeriodEnd        Boolean   @default(false)
+
+  // ── GoHighLevel integration (per-org credentials) ─────────────────
+  // Each operator connects their own GHL workspace. Service layer reads
+  // these on every call; if `ghlAccessToken` is null the integration is
+  // a no-op and the legacy local-only behaviour is preserved.
+  // TODO: encrypt-at-rest (pgsodium / column-level KMS) before GA.
+  ghlAccessToken String?
+  ghlLocationId  String?
+  ghlPipelineId  String?
+  // Map of internal-status → GHL pipeline-stage ID. Keys:
+  //   "new" | "working" | "proposal_sent" | "booked" | "not_booked"
+  ghlStageIds    Json?
+  // Map of internal-event → GHL workflow ID. Keys:
+  //   "proposal_sent" | "proposal_viewed" | "deposit_paid" | "reservation_followup"
+  ghlWorkflowIds Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -136,6 +151,8 @@ model Organization {
   presences       Presence[]
   activityEvents  ActivityEvent[]
   reservations    Reservation[]
+  messages        Message[]
+  integrationLogs IntegrationLog[]
 
   @@index([clerkOrgId])
 }
@@ -395,7 +412,7 @@ model ProposalViewEvent {
 // email + status dance so nothing slips.
 
 model Reservation {
-  id         String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -410,18 +427,24 @@ model Reservation {
   property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
 
   reservationsEmail String
-  guestName   String
-  startDate   DateTime
-  endDate     DateTime
-  adults      Int @default(2)
-  children    Int @default(0)
-  roomConfig  String? // "1 double + 1 twin" — free text
-  notes       String?
+  guestName         String
+  startDate         DateTime
+  endDate           DateTime
+  adults            Int      @default(2)
+  children          Int      @default(0)
+  roomConfig        String? // "1 double + 1 twin" — free text
+  notes             String?
 
-  status      String   @default("pending") // "pending" | "sent" | "confirmed" | "declined" | "tentative" | "released"
+  status      String    @default("pending") // "pending" | "sent" | "confirmed" | "declined" | "tentative" | "released"
   sentAt      DateTime?
   confirmedAt DateTime?
   heldUntil   DateTime?
+
+  // GoHighLevel sync — populated when a supplier-followup workflow is
+  // triggered or a supplier-side message is sent through GHL. Both
+  // null until the integration runs.
+  ghlMessageId     String?
+  ghlWorkflowRunId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -455,14 +478,14 @@ model ProposalDeposit {
 
   status String @default("pending") // "pending" | "paid" | "failed" | "abandoned"
 
-  processor       String  @default("paystack")
-  paystackReference String @unique
-  paidAt          DateTime?
+  processor         String    @default("paystack")
+  paystackReference String    @unique
+  paidAt            DateTime?
 
   // Digital acceptance — "I agree to terms" checkbox + typed name.
   // Not legally binding e-sig but gives the operator a clear audit
   // record of what the client saw at the moment of payment.
-  termsAcceptedAt DateTime?
+  termsAcceptedAt   DateTime?
   termsAcceptedText String?
 
   createdAt DateTime @default(now())
@@ -691,15 +714,21 @@ model Client {
   tags          String[]
   internalNotes String?
 
+  // GoHighLevel sync — populated when this client is mirrored to the
+  // org's connected GHL workspace. Null until the first sync.
+  ghlContactId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   requests  Request[]
   proposals Proposal[]
+  messages  Message[]
 
   @@unique([organizationId, email])
   @@index([organizationId, lastName])
   @@index([organizationId])
+  @@index([ghlContactId])
 }
 
 // ─── CRM: Lead source (per-org taxonomy) ───────────────────────────────────
@@ -769,12 +798,19 @@ model Request {
   // Free-text note the operator enters when creating the request.
   originalMessage String?
 
+  // GoHighLevel sync — populated when an opportunity is created in the
+  // org's GHL pipeline. ghlStageId mirrors the current stage so we can
+  // detect drift if it's moved manually inside GHL.
+  ghlOpportunityId String?
+  ghlStageId       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   proposals Proposal[]
   notes     RequestNote[]
   tasks     RequestTask[]
+  messages  Message[]
 
   @@unique([organizationId, referenceNumber])
   @@index([organizationId, status])
@@ -901,4 +937,93 @@ model ActivityEvent {
   @@index([organizationId, createdAt])
   @@index([userId, createdAt])
   @@index([organizationId, type, createdAt])
+}
+
+// ─── Messages (inbox + threaded comms) ─────────────────────────────────────
+//
+// Inbound and outbound messages. GHL is currently the only provider, but
+// the schema is provider-agnostic — direct SMTP, Twilio, etc. could
+// follow without a migration. Phase 1 stores the rows; Phase 4 wires
+// the inbox UI.
+//
+// Either clientId or requestId may be null — system-channel messages
+// (e.g. "GHL workflow triggered") have neither. Read state is org-level
+// for now (a null `readAt` = unread for everyone in the workspace);
+// per-user readstate is a future enhancement.
+
+model Message {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  requestId String?
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  direction String // "inbound" | "outbound"
+  channel   String // "email" | "sms" | "whatsapp" | "system"
+  subject   String?
+  body      String
+
+  status String @default("draft") // "draft" | "sent" | "delivered" | "failed" | "received"
+
+  // Provider linkage. Single GHL provider for now; structured to allow
+  // a future multi-provider switch without a migration.
+  provider          String? // "ghl"
+  ghlMessageId      String? @unique
+  ghlConversationId String?
+
+  // Read state for the inbox unread badge. Null = unread; set when an
+  // operator opens the message (or the request thread that contains it).
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, direction, readAt])
+  @@index([clientId, createdAt])
+  @@index([requestId, createdAt])
+  @@index([ghlConversationId])
+}
+
+// ─── Integration log (provider-call audit trail) ──────────────────────────
+//
+// One row per GHL request (and any future provider). Drives the admin's
+// "retry sync" affordance and gives a paper trail when a workflow
+// silently fails. Append-only — never edit. Successful rows are kept
+// for analytics; failed rows surface in the integrations panel.
+
+model IntegrationLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  provider String // "ghl"
+  action   String // "createContact" | "createOpportunity" | "moveOpportunity" | "triggerWorkflow:proposal_sent" | …
+
+  // Optional reference to the local entity that triggered the call —
+  // e.g. entityType="request", entityId=request.id. Lets us surface
+  // "all GHL calls related to this request" in the admin view.
+  entityType String?
+  entityId   String?
+
+  status          String // "success" | "failed" | "pending"
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+
+  // Retry bookkeeping. attemptCount starts at 1; nextRetryAt is set on
+  // a recoverable failure to schedule a retry, null otherwise.
+  attemptCount Int       @default(1)
+  nextRetryAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([entityType, entityId])
+  @@index([provider, status, nextRetryAt])
 }
