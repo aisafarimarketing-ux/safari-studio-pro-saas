@@ -288,7 +288,7 @@ function PrintCss({
 
       /* ── Debug mode (only when ?debugPdf=true) ─────────────────── */
       .pdf-document--debug .pdf-page {
-        outline: 2px dashed rgba(220, 38, 38, 0.5);
+        outline: 2px dashed rgba(27, 58, 45, 0.4);
         outline-offset: -2px;
       }
       .pdf-document--debug .pdf-page::before {
@@ -308,24 +308,56 @@ function PrintCss({
         letter-spacing: 0.08em;
         pointer-events: none;
       }
+      /* Per-page usage readout — appears bottom-right of every page in
+         debug mode. Shows used vs total px so the operator can see how
+         much room each page has left. Shifts to a red OVER-by readout
+         when the page overflows. */
+      .pdf-document--debug .pdf-page::after {
+        content: attr(data-pdf-usage);
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        z-index: 9999;
+        background: rgba(13, 38, 32, 0.85);
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 3px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        letter-spacing: 0;
+        pointer-events: none;
+      }
       .pdf-document--debug .pdf-page--overflow {
         outline-color: #dc2626;
         outline-width: 4px;
       }
       .pdf-document--debug .pdf-page--overflow::after {
-        content: "⚠ OVERFLOW";
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
-        z-index: 9999;
         background: #dc2626;
         color: white;
-        font-size: 11px;
+      }
+      /* The deepest overflowing element gets a thick red outline +
+         a label so the operator can immediately see WHICH child blew
+         the page budget. */
+      .pdf-document--debug .pdf-overflow-source {
+        outline: 3px solid #dc2626 !important;
+        outline-offset: 2px;
+        position: relative;
+      }
+      .pdf-document--debug .pdf-overflow-source::before {
+        content: "OVERFLOW SOURCE";
+        position: absolute;
+        top: -14px;
+        left: 0;
+        background: #dc2626;
+        color: white;
+        font-size: 9px;
         font-weight: 700;
-        padding: 4px 10px;
-        border-radius: 3px;
+        padding: 1px 6px;
+        border-radius: 2px;
         font-family: system-ui, sans-serif;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.08em;
+        z-index: 9998;
         pointer-events: none;
       }
       /* Hide debug chrome in actual print regardless of the URL flag. */
