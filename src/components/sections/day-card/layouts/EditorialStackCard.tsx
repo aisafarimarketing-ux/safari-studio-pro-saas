@@ -66,10 +66,15 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
           )}
         </div>
         <div className="flex-1 min-w-0 flex items-baseline gap-3 flex-wrap">
-          <span
-            className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: tokens.accent }}
-            aria-hidden
+          {/* Type-of-day glyph — small visual rhythm across the page so
+              an arrival day reads differently from a game-drive day at
+              a glance. Inferred from phase label + position: arrival
+              first day → arrival, departure last → plane, otherwise
+              the destination class drives it. */}
+          <DayTypeGlyph
+            phaseLabel={data.phaseLabel}
+            dayNumber={data.dayNumber}
+            color={tokens.accent}
           />
           <span
             className="text-[13px] uppercase tracking-[0.24em] font-bold outline-none"
@@ -122,10 +127,13 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         onPositionChange={onDestinationImagePositionChange}
       />
 
-      {/* Narrative body + AI write/rewrite */}
-      <div className="relative px-10 md:px-14 py-10">
+      {/* Narrative body — flows straight from the hero image, no
+          intermediary "Activities Day N" or "All Day" sub-headers.
+          The day's identity lives in the top strip (day badge +
+          destination + phase). The prose tells the story. */}
+      <div className="relative px-10 md:px-14 pt-8 pb-10 md:pt-10">
         {isEditor && (
-          <div className="absolute top-14 right-8 md:right-10 z-[35]">
+          <div className="absolute top-6 right-8 md:right-10 z-[35]">
             <AIWriteButton
               kind="day-narrative"
               currentText={data.narrative}
@@ -142,27 +150,6 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
             />
           </div>
         )}
-
-        {/* Activity / Activities Day N — pluralizes when optional add-ons exist */}
-        <div className="mb-2">
-          <h3
-            className="text-[20px] font-bold leading-tight"
-            style={{ color: tokens.headingText }}
-          >
-            {(data.optionalActivities?.length ?? 0) > 0 ? "Activities" : "Activity"}{" "}
-            <span style={{ color: tokens.mutedText, fontWeight: 500 }}>
-              Day {data.dayNumber}
-            </span>
-          </h3>
-        </div>
-
-        {/* Time-of-day subhead for the main activity block */}
-        <div
-          className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
-          style={{ color: tokens.headingText }}
-        >
-          All Day
-        </div>
 
         {isEditor ? (
           <div
@@ -607,4 +594,92 @@ function renderInlineBold(text: string) {
     }
     return <span key={i}>{part}</span>;
   });
+}
+
+// ─── Day-type glyph ─────────────────────────────────────────────────────
+//
+// Small visual rhythm cue at the start of the day's top strip. Inferred
+// from phaseLabel + dayNumber:
+//
+//   sun        — arrival / day 1 / "arrival" / "welcome" phases
+//   plane      — departure / "depart" / "fly out" / "transfer to airport"
+//   ferry      — beach / coast / "zanzibar" / "boat transfer"
+//   paw        — default game-drive day
+//
+// Replaces the previous accent-colored bullet dot — same visual weight,
+// more meaning. Never blocks the destination text alignment because the
+// SVG is the same width as the dot was.
+
+function DayTypeGlyph({
+  phaseLabel, dayNumber, color,
+}: {
+  phaseLabel?: string;
+  dayNumber: number;
+  color: string;
+}) {
+  const kind = inferDayType(phaseLabel, dayNumber);
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 16 16",
+    fill: "none" as const,
+    stroke: color,
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    className: "shrink-0",
+  };
+  if (kind === "sun") {
+    return (
+      <svg {...common}>
+        <circle cx="8" cy="8" r="3" />
+        <path d="M8 1.5v2 M8 12.5v2 M1.5 8h2 M12.5 8h2 M3.4 3.4 4.8 4.8 M11.2 11.2 12.6 12.6 M3.4 12.6 4.8 11.2 M11.2 4.8 12.6 3.4" />
+      </svg>
+    );
+  }
+  if (kind === "plane") {
+    return (
+      <svg {...common}>
+        <path d="M2 8.5 L14 6 L9 11 L7.5 9 L4 11.5 L5.5 8 L2 6.5 Z" />
+      </svg>
+    );
+  }
+  if (kind === "ferry") {
+    return (
+      <svg {...common}>
+        <path d="M2 11 L4 8 H12 L14 11 Z" />
+        <path d="M5 8 V5 H8 V8" />
+        <path d="M2 13 H14" />
+      </svg>
+    );
+  }
+  // paw — default game-drive marker
+  return (
+    <svg {...common}>
+      <ellipse cx="8" cy="11" rx="3.2" ry="2.4" />
+      <ellipse cx="4" cy="6.5" rx="1.1" ry="1.5" />
+      <ellipse cx="8" cy="5" rx="1.1" ry="1.6" />
+      <ellipse cx="12" cy="6.5" rx="1.1" ry="1.5" />
+    </svg>
+  );
+}
+
+function inferDayType(
+  phaseLabel: string | undefined,
+  dayNumber: number,
+): "sun" | "plane" | "ferry" | "paw" {
+  const p = (phaseLabel ?? "").toLowerCase();
+  // Departure beats arrival in case both keywords land on the same day
+  // (rare but possible — same-day fly-out itineraries).
+  if (/(depart|fly out|fly home|fly back|transfer to airport|departure)/.test(p)) {
+    return "plane";
+  }
+  if (dayNumber === 1 || /(arriv|welcome|landing|day of arrival)/.test(p)) {
+    return "sun";
+  }
+  if (/(zanzibar|coast|beach|island|boat|ferry|dhow|mafia|pemba|stone town|diani|lamu)/.test(p)) {
+    return "ferry";
+  }
+  return "paw";
 }
