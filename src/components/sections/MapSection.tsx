@@ -345,7 +345,7 @@ export function MapSection({ section }: { section: Section }) {
 
   // ── Typographic timeline (legacy variants) ───────────────────────────
   return (
-    <div className="py-10 md:py-12" style={{ background: tokens.sectionSurface }}>
+    <div className="py-6 md:py-8" style={{ background: tokens.sectionSurface }}>
       <div className="ed-wide">
         <div
           className="text-label ed-label text-center mb-3"

@@ -355,9 +355,12 @@ function AccommodationBlock({
     property.galleryUrls[0] ?? null,
     property.galleryUrls[1] ?? null,
   ];
+  const hasAnyImage = tiles.some((u) => Boolean(u));
+  const meal = humaniseMealPlan(property.mealPlan);
+  const allAmenities = property.amenities.filter(Boolean);
 
   return (
-    <section className="flex flex-col min-h-0">
+    <section className="flex flex-col min-h-0 flex-1">
       <div
         className="text-[10px] uppercase tracking-[0.28em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
@@ -387,7 +390,7 @@ function AccommodationBlock({
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {property.mealPlan && (
+          {meal && (
             <span
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium"
               style={{
@@ -397,10 +400,10 @@ function AccommodationBlock({
               }}
             >
               <span style={{ color: tokens.accent }}>●</span>
-              {property.mealPlan}
+              {meal}
             </span>
           )}
-          {property.amenities.slice(0, 3).map((h) => (
+          {allAmenities.slice(0, 3).map((h) => (
             <span
               key={h}
               className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px]"
@@ -416,49 +419,112 @@ function AccommodationBlock({
         </div>
       </div>
 
-      {property.shortDesc && (
-        <p
-          className="text-[11.5px] leading-[1.55] mb-4"
-          style={{
-            color: tokens.bodyText,
-            display: "-webkit-box",
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {property.shortDesc}
-        </p>
-      )}
-
-      <div
-        className="grid grid-cols-3 gap-1.5 flex-1 min-h-0"
-        style={{ background: tokens.cardBg }}
-      >
-        {tiles.map((url, i) => (
-          <div
-            key={i}
-            className="overflow-hidden"
-            style={{ background: tokens.cardBg, minHeight: 120 }}
-          >
-            {url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={url}
-                alt={i === 0 ? property.name : ""}
-                className="w-full h-full object-cover"
-              />
-            ) : (
+      {/* When the property has no images, give the descriptive copy
+          full breathing room — no clamp — and surface every amenity as
+          a chip block below. The previous layout reserved ~50% of the
+          A4 for an image grid that only rendered placeholder tiles,
+          leaving the bottom half of the continuation page blank. */}
+      {!hasAnyImage ? (
+        <>
+          {property.shortDesc && (
+            <p
+              className="text-[12.5px] leading-[1.7] mb-5 max-w-[68ch]"
+              style={{ color: tokens.bodyText }}
+            >
+              {property.shortDesc}
+            </p>
+          )}
+          {allAmenities.length > 0 && (
+            <div className="mt-1">
               <div
-                className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
+                className="text-[10px] uppercase tracking-[0.26em] font-semibold mb-2"
                 style={{ color: tokens.mutedText }}
               >
-                {i === 0 ? "No photo" : ""}
+                What's at the lodge
               </div>
-            )}
+              <ul className="flex flex-wrap gap-1.5">
+                {allAmenities.slice(0, 16).map((a) => (
+                  <li
+                    key={a}
+                    className="text-[11px] px-2.5 py-1 rounded-full"
+                    style={{
+                      color: tokens.bodyText,
+                      background: tokens.cardBg,
+                      border: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    {a}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {property.shortDesc && (
+            <p
+              className="text-[11.5px] leading-[1.55] mb-4"
+              style={{
+                color: tokens.bodyText,
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {property.shortDesc}
+            </p>
+          )}
+
+          <div
+            className="grid grid-cols-3 gap-1.5 flex-1 min-h-0"
+            style={{ background: tokens.cardBg }}
+          >
+            {tiles.map((url, i) => (
+              <div
+                key={i}
+                className="overflow-hidden"
+                style={{ background: tokens.cardBg, minHeight: 120 }}
+              >
+                {url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={url}
+                    alt={i === 0 ? property.name : ""}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    {i === 0 ? "No photo" : ""}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </section>
   );
+}
+
+// Format database meal-plan strings for display. The Property model
+// stores values like "half_board" / "full_board" / "all_inclusive";
+// rendering them raw with underscores in a guest-facing print page
+// reads as a leaked database value rather than a chip the operator
+// would set. Title-cases the words and replaces underscores.
+function humaniseMealPlan(raw?: string): string {
+  if (!raw) return "";
+  const cleaned = raw.replace(/[_-]+/g, " ").trim();
+  if (!cleaned) return "";
+  // Already prose-cased? Leave it.
+  if (/[A-Z]/.test(cleaned[0]) && cleaned.includes(" ")) return cleaned;
+  return cleaned
+    .toLowerCase()
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }

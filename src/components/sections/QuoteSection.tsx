@@ -13,7 +13,7 @@ export function QuoteSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
   return (
-    <div className="py-10 md:py-12 px-8 md:px-16 text-center" style={{ background: tokens.sectionSurface }}>
+    <div className="py-6 md:py-8 px-8 md:px-16 text-center" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-3xl mx-auto">
         <div className="text-5xl mb-4" style={{ color: tokens.secondaryAccent }}>&ldquo;</div>
         <blockquote

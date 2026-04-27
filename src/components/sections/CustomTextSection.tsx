@@ -17,7 +17,7 @@ export function CustomTextSection({ section }: { section: Section }) {
   const body = section.content.body as string;
 
   return (
-    <div className={`relative py-10 md:py-12 px-8 md:px-16 ${isCentered ? "text-center" : ""}`} style={{ background: tokens.sectionSurface }}>
+    <div className={`relative py-6 md:py-8 px-8 md:px-16 ${isCentered ? "text-center" : ""}`} style={{ background: tokens.sectionSurface }}>
       {isEditor && (
         <div className="absolute top-14 right-4 z-[35]">
           <AIWriteButton
