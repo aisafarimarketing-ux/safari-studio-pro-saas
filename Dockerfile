@@ -11,9 +11,20 @@ ENV NODE_OPTIONS="--max-old-space-size=6144"
 # Install deps first (cached separately from source). postinstall runs
 # `prisma generate` automatically, so the redundant explicit call later
 # is dropped.
+#
+# npm fetch retries: Railway's "Deployment failed during the network
+# process" errors are almost always one of npm's package downloads
+# timing out against the public registry. Default is 2 retries with
+# a 10s minimum wait — bumping to 5 retries with a 20–120s window
+# absorbs a transient blip without failing the whole build.
+# --prefer-offline uses the cache when a package is already there,
+# --no-audit / --no-fund cut noise + a few extra HTTP calls.
 COPY package*.json ./
 COPY prisma ./prisma
-RUN npm ci
+RUN npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm ci --prefer-offline --no-audit --no-fund
 
 # Copy source
 COPY . .
