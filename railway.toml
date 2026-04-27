@@ -2,17 +2,18 @@
 builder = "dockerfile"
 
 [deploy]
-# Bind explicitly so `next start` listens on Railway's injected PORT
-# on every interface. Defense-in-depth — Next does this by default,
-# but the explicit form removes ambiguity if PORT is unset.
-startCommand = "npm run start -- -H 0.0.0.0 -p ${PORT:-3000}"
+# Let the Dockerfile's CMD drive startup. Removing the inline
+# startCommand — earlier attempts to pass -H/-p flags via a string
+# command may not interpolate ${PORT} reliably across Railway's
+# build runners and could be why every deploy got "service
+# unavailable" (next start receiving an unexpanded literal).
+# next start auto-binds to 0.0.0.0:$PORT when PORT is in env,
+# which Railway always injects.
 
 # /api/version is unauthenticated, runs no DB query, doesn't touch
-# Clerk, doesn't render React — just returns JSON. Always 200 if the
-# Node process is alive, which is exactly what we want a healthcheck
-# to mean. Pointing at "/" was forcing Railway through Clerk middleware
-# + the full React landing page, which is heavier and (depending on
-# session state) can return non-200, marking healthy deploys as failed.
+# Clerk, doesn't render React — just returns JSON. Always 200 if
+# the Node process is alive, which is what a healthcheck should
+# mean.
 healthcheckPath = "/api/version"
 healthcheckTimeout = 300
 
