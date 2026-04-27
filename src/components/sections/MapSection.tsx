@@ -82,6 +82,11 @@ export function MapSection({ section }: { section: Section }) {
   }
 
   // ── Route variant — editorial table + map ─────────────────────────────
+  // Note on padding: dropped from py-12/14 to py-4/6 so this section
+  // doesn't create a visible "frame" of sectionSurface above and below
+  // the map content. Combined with using pageBg as the section
+  // background, the map butts up against neighbouring sections like
+  // Cover and PersonalNote do.
   if (variant === "route") {
     const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
     const groupedRows = groupDayRows(days, activeTier as TierKey);
@@ -98,7 +103,7 @@ export function MapSection({ section }: { section: Section }) {
     const MAP_HEIGHT = 600;
 
     return (
-      <div className="py-12 md:py-14" style={{ background: tokens.sectionSurface }}>
+      <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
         <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
           {/* Card-rail (240px) + dominant map. The title + country chip
               live inside the rail header — no separate full-width title
@@ -525,7 +530,7 @@ function InteractiveMap({
   const MAP_HEIGHT = 600;
 
   return (
-    <div className="py-12 md:py-14" style={{ background: tokens.sectionSurface }}>
+    <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
       <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
         {/* Card-rail (240px) + dominant map. Title + country chip live
             inside the rail header so the map can stretch the section's

@@ -42,10 +42,12 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-6 md:py-8" style={{ background: tokens.pageBg }}>
+    <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto px-8 md:px-12">
-        {/* Section header */}
-        <div className="flex items-end justify-between mb-6 gap-6 flex-wrap">
+        {/* Section header — tight against the section top so the
+            previous section (e.g. map) flows directly into this one
+            without a perceived gap. */}
+        <div className="flex items-end justify-between mb-4 gap-6 flex-wrap">
           <div>
             <div
               className="text-label ed-label mb-3"

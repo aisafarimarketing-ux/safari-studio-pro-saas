@@ -123,11 +123,17 @@ export default function ProposalsPage() {
             const draft = (await ai.json()) as AutopilotResult;
             // Honest signal: if the AI returned no days at all, the
             // editor will open with a blank proposal — surface that
-            // instead of silently saving an empty merge.
+            // instead of silently saving an empty merge. Critically,
+            // we now `return` here so the dialog stays open and the
+            // user actually SEES the error. Previously execution fell
+            // through to the redirect and the error was set in a
+            // state nobody could read.
             if (!draft.days || draft.days.length === 0) {
+              console.warn("[autopilot] returned 0 days · response:", draft);
               setError(
-                "AI generated no days for this trip. The editor will open with your blank proposal — try the Regenerate button inside, or fill the days manually.",
+                "Autopilot returned 0 days for this trip. This usually means the AI request timed out or hit a rate limit. Click Generate again — or open the editor with the empty proposal and fill it in manually.",
               );
+              return;
             } else {
               const merged = mergeAutopilotIntoProposal(proposal, draft);
               // Persist the merged result. If this save fails the editor

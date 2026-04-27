@@ -171,7 +171,11 @@ export function DashboardWorkspace() {
           if (ai.ok) {
             const draft = (await ai.json()) as AutopilotResult;
             if (!draft.days || draft.days.length === 0) {
-              console.warn("[autopilot] AI returned 0 days — opening blank editor");
+              console.warn("[autopilot] returned 0 days · response:", draft);
+              setError(
+                "Autopilot returned 0 days for this trip. This usually means the AI request timed out or hit a rate limit. Click Generate again — or open the editor with the empty proposal and fill it in manually.",
+              );
+              return;
             } else {
               const merged = mergeAutopilotIntoProposal(proposal, draft);
               const saveBody = JSON.stringify({ proposal: merged });

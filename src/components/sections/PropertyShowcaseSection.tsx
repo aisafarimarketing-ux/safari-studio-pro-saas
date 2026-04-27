@@ -57,7 +57,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   return (
     <div style={{ background: tokens.sectionSurface }}>
-      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-6 md:pt-8">
+      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-4 md:pt-6">
         <div
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-2"
           style={{ color: tokens.mutedText }}
@@ -135,7 +135,7 @@ function PropertyBlock({
 
   return (
     <div
-      className="py-6 md:py-8"
+      className="py-4 md:py-6"
       data-property-block
       style={{
         background: tokens.sectionSurface,
