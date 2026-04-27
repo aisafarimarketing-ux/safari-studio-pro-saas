@@ -404,6 +404,84 @@ ${JSON.stringify(userPayload, null, 2)}`;
     attribution: stringOr(parsed.quote?.attribution, "").slice(0, 80),
   };
 
+  // ── Property snapshots ──────────────────────────────────────────────
+  // Days[].tiers carry only the camp NAME — the proposal-level
+  // properties[] array is what PropertyShowcaseSection actually
+  // renders. Without populating it, the proposal opened in the
+  // editor with an empty "Your accommodations" section even though
+  // every day showed a camp pick. Fix: collect every unique slot
+  // picked across all tiers, fetch the full Property record + images,
+  // and map into the shape proposal.properties[] expects.
+  const pickedSlotIndices = new Set<number>();
+  for (const d of days) {
+    for (const t of ["classic", "premier", "signature"] as const) {
+      const slot = d.tiers?.[t]?.camp ? library.findIndex((p) => p.name === d.tiers[t].camp) : -1;
+      if (slot >= 0) pickedSlotIndices.add(slot);
+    }
+  }
+  const pickedIds = Array.from(pickedSlotIndices)
+    .map((s) => library[s]?.id)
+    .filter((id): id is string => !!id);
+
+  let propertySnapshots: Array<Record<string, unknown>> = [];
+  if (pickedIds.length > 0) {
+    const fullProps = await prisma.property.findMany({
+      where: { id: { in: pickedIds }, organizationId: ctx.organization.id },
+      include: {
+        location: { select: { name: true, country: true } },
+        images: { orderBy: { order: "asc" }, select: { url: true, isCover: true } },
+        rooms: { orderBy: { order: "asc" } },
+      },
+    });
+    // Order by the pick order so the showcase reads in itinerary
+    // sequence rather than DB-update order.
+    const idOrder = new Map(pickedIds.map((id, i) => [id, i] as const));
+    fullProps.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+    // How many nights per property — sum across days where that
+    // property appears in any tier. Conservative: counts the day for
+    // every tier-match, but typical proposals have only one tier
+    // chosen per day so this matches reality.
+    const nightsByName = new Map<string, number>();
+    for (const d of days) {
+      const name = d.tiers?.[(parsed.pricing && Object.keys(parsed.pricing).find((k) => k !== "notes")) as "classic" | "premier" | "signature" || "premier"]?.camp
+        ?? d.tiers?.classic?.camp ?? d.tiers?.premier?.camp ?? d.tiers?.signature?.camp ?? "";
+      if (!name) continue;
+      nightsByName.set(name, (nightsByName.get(name) ?? 0) + 1);
+    }
+
+    propertySnapshots = fullProps.map((p) => {
+      const cover = p.images.find((i) => i.isCover) ?? p.images[0];
+      return {
+        id: p.id,
+        name: p.name,
+        location:
+          [p.location?.name, p.location?.country].filter(Boolean).join(", ") || "",
+        shortDesc: p.shortSummary ?? "",
+        description: p.whatMakesSpecial ?? "",
+        whyWeChoseThis: p.whyWeChoose ?? "",
+        amenities: p.amenities ?? [],
+        mealPlan: p.mealPlan ?? "",
+        roomType: "",
+        nights: nightsByName.get(p.name) ?? p.suggestedNights ?? 1,
+        leadImageUrl: cover?.url ?? "",
+        galleryUrls: p.images.map((i) => i.url),
+        checkInTime: p.checkInTime ?? undefined,
+        checkOutTime: p.checkOutTime ?? undefined,
+        totalRooms: p.totalRooms ?? undefined,
+        spokenLanguages: p.spokenLanguages ?? [],
+        specialInterests: p.specialInterests ?? [],
+        rooms: p.rooms.map((r) => ({
+          id: r.id,
+          name: r.name,
+          bedConfig: r.bedConfig ?? undefined,
+          description: r.description ?? undefined,
+          imageUrls: r.imageUrls ?? [],
+        })),
+      };
+    });
+  }
+
   return NextResponse.json({
     cover,
     greeting,
@@ -416,6 +494,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     exclusions,
     practicalInfo,
     pricing,
+    properties: propertySnapshots,
   });
 }
 

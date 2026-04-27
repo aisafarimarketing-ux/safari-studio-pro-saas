@@ -57,6 +57,25 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   return (
     <div style={{ background: tokens.sectionSurface }}>
+      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-16 md:pt-20">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-2"
+          style={{ color: tokens.mutedText }}
+        >
+          The lodges
+        </div>
+        <h2
+          className="font-bold leading-[1.05]"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+            fontSize: "clamp(2rem, 3.6vw, 3rem)",
+            letterSpacing: "-0.015em",
+          }}
+        >
+          Your Accommodations
+        </h2>
+      </header>
       {properties.map((property, idx) => (
         <PropertyBlock
           key={property.id}

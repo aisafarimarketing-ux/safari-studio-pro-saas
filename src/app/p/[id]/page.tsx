@@ -101,7 +101,10 @@ export default function ClientProposalPage({
 
       <ShareViewHeader proposal={proposal} />
 
-      <div className="max-w-[900px] mx-auto" style={{ background: theme.tokens.pageBg }}>
+      <div
+        className="max-w-[900px] mx-auto space-y-6 md:space-y-8"
+        style={{ background: theme.tokens.pageBg }}
+      >
         {sorted.map((section: Section) => (
           <SectionRenderer key={section.id} section={section} />
         ))}

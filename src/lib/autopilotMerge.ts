@@ -4,6 +4,7 @@ import type {
   PracticalCard,
   PricingData,
   TierPrice,
+  Property,
 } from "@/lib/types";
 
 // Shape returned by /api/ai/autopilot. Lives here so the client and server
@@ -28,6 +29,11 @@ export type AutopilotResult = {
     signature?: Partial<TierPrice>;
     notes?: string;
   };
+  /** Snapshots of every camp picked across the days, mapped into the
+   *  Property shape proposal.properties[] expects. PropertyShowcase
+   *  reads from this array — without it, the section rendered empty
+   *  even when every day had a camp pick. */
+  properties?: Property[];
 };
 
 // Merge the autopilot result into a freshly-created proposal so every
@@ -56,6 +62,15 @@ export function mergeAutopilotIntoProposal(
     draft.practicalInfo && draft.practicalInfo.length > 0
       ? draft.practicalInfo
       : proposal.practicalInfo;
+
+  // Properties — autopilot snapshots picked camps from the org's library
+  // into the Property shape proposal.properties[] expects. Without this
+  // copy, PropertyShowcaseSection rendered empty even when every day
+  // had a camp pick.
+  next.properties =
+    draft.properties && draft.properties.length > 0
+      ? draft.properties
+      : proposal.properties;
 
   // ── Pricing ───────────────────────────────────────────────────────────
   if (draft.pricing) {
