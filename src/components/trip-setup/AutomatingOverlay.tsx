@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 // Full-screen overlay shown while the Trip Setup autopilot is drafting.
 //
-// Real drafting takes 8-25 seconds depending on AI latency and we don't
-// get progress events back — so the progress bar is *simulated* but in a
-// way that feels honest: it accelerates quickly early, decelerates as it
-// approaches 95%, and holds at 95% until the parent signals completion
-// (by flipping `active` to false). At that point we rush to 100% over
-// ~300ms, hold briefly, then fade out.
+// Real drafting takes 15-45 seconds depending on AI latency and we
+// don't get progress events back — so the progress bar is *simulated*
+// but in a way that feels honest: it accelerates quickly early,
+// decelerates as it approaches 95%, and holds at 95% until the parent
+// signals completion (by flipping `active` to false). At that point
+// we rush to 100% over ~300ms, hold briefly, then fade out.
 //
 // The visible labels advance in lockstep with the progress so the guest
 // sees different phases: "Understanding guests", "Picking camps from
@@ -179,7 +179,7 @@ export function AutomatingOverlay({
           className="mt-10 text-[12px]"
           style={{ color: "rgba(255,255,255,0.4)" }}
         >
-          Usually takes 10–20 seconds. Brand DNA + library camps are
+          Usually takes 15–45 seconds. Brand DNA + library camps are
           informing every paragraph.
         </div>
 

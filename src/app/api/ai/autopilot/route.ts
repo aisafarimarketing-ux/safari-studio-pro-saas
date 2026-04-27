@@ -23,7 +23,15 @@ import type { Day, TierKey } from "@/lib/types";
 // integer slots and must return slot indices, not free-form names. We map
 // indices back to library properties on the server. Out-of-range → dropped.
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+// Default to Haiku 4.5 — 3-4x faster than Sonnet for structured JSON
+// generation at quality that's plenty for an editable draft. Operators
+// refine via the per-section "Rewrite with AI" buttons (which can use
+// Sonnet) for the prose-heavy sections that matter most. The
+// autopilot's job is "fill the deck in seconds, not minutes."
+//
+// Override at deploy time with ANTHROPIC_MODEL=claude-sonnet-4-6 if a
+// specific org needs the higher quality at the latency cost.
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
@@ -300,14 +308,26 @@ ${JSON.stringify(userPayload, null, 2)}`;
 
   let raw = "";
   try {
-    const msg = await anth.messages.create({
-      model: MODEL,
-      max_tokens: 12000,
-      system: [
-        { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
-      ],
-      messages: [{ role: "user", content: userText }],
-    });
+    // 8K output ceiling — typical 7-night proposal renders in 4-6K
+    // tokens; capping at 8K stops Haiku from over-elaborating and
+    // halves worst-case latency vs the previous 12K cap. Combined
+    // with the Haiku model, total wall time on a typical proposal
+    // drops from 60-180s to ~10-30s.
+    //
+    // Per-call timeout of 75s — the SDK default of 10 minutes is way
+    // too long. If we're not done in 75s the user gets a clear "try
+    // again" instead of an indefinite spinner.
+    const msg = await anth.messages.create(
+      {
+        model: MODEL,
+        max_tokens: 8000,
+        system: [
+          { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
+        ],
+        messages: [{ role: "user", content: userText }],
+      },
+      { timeout: 75_000 },
+    );
     raw = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
