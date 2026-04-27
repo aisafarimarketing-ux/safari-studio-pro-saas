@@ -307,6 +307,8 @@ ${JSON.stringify(userPayload, null, 2)}`;
   const anth = new Anthropic({ apiKey });
 
   let raw = "";
+  const startedAt = Date.now();
+  console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
     // 8K output ceiling — typical 7-night proposal renders in 4-6K
     // tokens; capping at 8K stops Haiku from over-elaborating and
@@ -328,12 +330,16 @@ ${JSON.stringify(userPayload, null, 2)}`;
       },
       { timeout: 75_000 },
     );
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${msg.usage?.input_tokens ?? "?"} · out_tokens=${msg.usage?.output_tokens ?? "?"} · stop_reason=${msg.stop_reason ?? "?"}`);
     raw = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n")
       .trim();
   } catch (err) {
+    const elapsedMs = Date.now() - startedAt;
+    console.error(`[AUTOPILOT] anthropic failed after ${elapsedMs}ms · model=${MODEL}`);
     if (err instanceof Anthropic.RateLimitError) {
       return NextResponse.json({ error: "AI is rate-limited; please retry." }, { status: 429 });
     }

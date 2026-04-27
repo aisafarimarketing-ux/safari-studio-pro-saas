@@ -206,14 +206,19 @@ export function DashboardWorkspace() {
             }
           } else {
             const detail = await ai.json().catch(() => ({}));
-            console.warn("[autopilot] non-OK:", ai.status, detail?.error);
+            console.error("[autopilot] AI request failed:", ai.status, detail?.error);
             setError(
-              `AI couldn't draft this proposal: ${detail?.error || `HTTP ${ai.status}`}. The editor will open with your blank proposal — try Regenerate inside.`,
+              `Autopilot couldn't draft this proposal: ${detail?.error || `HTTP ${ai.status}`}. Click Generate again to retry — your inputs are preserved.`,
             );
+            return;
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
-          console.warn("[autopilot] failed; opening blank editor instead:", err);
+          console.error("[autopilot] network failure:", err);
+          setError(
+            `Autopilot request failed: ${err instanceof Error ? err.message : "network error"}. Check your connection and click Generate again.`,
+          );
+          return;
         }
       }
 

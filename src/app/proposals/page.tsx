@@ -172,21 +172,27 @@ export default function ProposalsPage() {
             }
           } else {
             // Surface the server's error reason rather than swallowing.
-            // Operators were seeing "I hit Generate but nothing
-            // appeared" with no clue why — usually a 500 (missing
-            // ANTHROPIC_API_KEY) or a 502 (model output didn't parse).
+            // Critically, return — keep the dialog open with the
+            // error visible. Previously execution fell through to the
+            // redirect and the operator landed on a blank proposal
+            // with the error set in invisible state.
             const body = await ai.json().catch(() => ({}));
             const reason = body?.error || `HTTP ${ai.status}`;
-            setError(`AI couldn't draft this proposal: ${reason}. The editor will open with your blank proposal — try the Regenerate button inside.`);
+            console.error("[autopilot] AI request failed:", ai.status, reason);
+            setError(
+              `Autopilot couldn't draft this proposal: ${reason}. Click Generate again to retry — your inputs are preserved.`,
+            );
+            return;
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") {
             return;
           }
-          console.warn("[autopilot] soft-fail; opening editor anyway:", err);
+          console.error("[autopilot] network failure:", err);
           setError(
-            "AI couldn't reach the server. The editor will open with your blank proposal — check your connection and try Regenerate inside the editor.",
+            `Autopilot request failed: ${err instanceof Error ? err.message : "network error"}. Check your connection and click Generate again.`,
           );
+          return;
         }
       }
 
