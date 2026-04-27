@@ -182,6 +182,14 @@ async function handleAutopilot(req: Request): Promise<Response> {
   const companyName = proposal.operator?.companyName?.trim() || "";
 
   // ── Library snapshot ────────────────────────────────────────────────────
+  // Cap aggressively to keep the prompt under ~10K tokens. Earlier
+  // limit (80 properties × 280-char summary) routinely produced
+  // requests that took 60-180s and hit Railway's edge proxy
+  // connection-reset window. 30 properties × 140-char summary
+  // brings the input down by ~3-4x with negligible quality impact —
+  // the model only picks 1-3 properties per day anyway.
+  const LIBRARY_TAKE = 30;
+  const SUMMARY_MAX_CHARS = 140;
   const properties = await prisma.property.findMany({
     where: { organizationId: ctx.organization.id, archived: false },
     select: {
@@ -190,7 +198,7 @@ async function handleAutopilot(req: Request): Promise<Response> {
       tags: { include: { tag: { select: { name: true } } } },
     },
     orderBy: { updatedAt: "desc" },
-    take: 80,
+    take: LIBRARY_TAKE,
   });
   const library: LibraryProperty[] = properties.map((p, i) => ({
     slot: i,
@@ -199,8 +207,8 @@ async function handleAutopilot(req: Request): Promise<Response> {
     location: p.location?.name ?? "",
     country: p.location?.country ?? null,
     propertyClass: p.propertyClass,
-    shortSummary: (p.shortSummary ?? "").slice(0, 280),
-    tags: p.tags.map((t) => t.tag.name),
+    shortSummary: (p.shortSummary ?? "").slice(0, SUMMARY_MAX_CHARS),
+    tags: p.tags.map((t) => t.tag.name).slice(0, 6),
   }));
 
   // ── Brand DNA ───────────────────────────────────────────────────────────
@@ -334,26 +342,25 @@ ${JSON.stringify(userPayload, null, 2)}`;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
-    // 8K output ceiling — typical 7-night proposal renders in 4-6K
-    // tokens; capping at 8K trims worst-case latency vs the previous
-    // 12K cap.
+    // 5K output ceiling — typical 7-night proposal renders in 3-5K
+    // tokens. Earlier 8K-12K caps made the request take long enough
+    // that Railway's edge proxy reset the connection mid-stream
+    // (net::ERR_CONNECTION_RESET / "Failed to fetch" in the browser).
+    // Capping at 5K + the trimmed library context above gets typical
+    // requests well under 60s, comfortably inside any proxy timeout.
     //
-    // Per-call timeout of 240s (4 min). Sonnet 4-6 generating 4-6K
-    // tokens with this prompt size legitimately takes 60-180s; the
-    // earlier 75s cap was too tight and made the entire request fail.
-    // 240s is generous enough to absorb tail latency while still
-    // bailing on a genuinely stuck call instead of waiting 10 min
-    // (the SDK default).
+    // Per-call timeout 90s — bails fast on truly stuck calls without
+    // wasting either the operator's wait or the proxy's patience.
     const msg = await anth.messages.create(
       {
         model: MODEL,
-        max_tokens: 8000,
+        max_tokens: 5000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
         messages: [{ role: "user", content: userText }],
       },
-      { timeout: 240_000 },
+      { timeout: 90_000 },
     );
     const elapsedMs = Date.now() - startedAt;
     console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${msg.usage?.input_tokens ?? "?"} · out_tokens=${msg.usage?.output_tokens ?? "?"} · stop_reason=${msg.stop_reason ?? "?"}`);
