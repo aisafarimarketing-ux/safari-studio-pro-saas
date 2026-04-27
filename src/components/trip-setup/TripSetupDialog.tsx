@@ -56,6 +56,7 @@ export function TripSetupDialog({
   onCancel,
   onSubmit,
   submitting = false,
+  error,
 }: {
   onClose: () => void;
   // onCancel — optional, distinct from onClose. Fires while submitting
@@ -65,6 +66,12 @@ export function TripSetupDialog({
   onCancel?: () => void;
   onSubmit: (result: TripSetupResult) => void;
   submitting?: boolean;
+  // Surface autopilot/save errors back inside the dialog so the user
+  // actually sees why a Generate attempt didn't redirect to the editor.
+  // Without this the error state lived only on the list page (hidden
+  // behind the open dialog) and operators thought the app was silently
+  // broken.
+  error?: string | null;
 }) {
   // Lazy initial state — Date.now() only runs on mount.
   const [form, setForm] = useState<FormShape>(() => buildDefaultForm());
@@ -349,6 +356,30 @@ export function TripSetupDialog({
             />
           </Field>
         </div>
+
+        {/* Error banner — visible inside the dialog when an autopilot
+            attempt failed. Shown above the footer so the user sees it
+            before deciding to retry or cancel. */}
+        {error && !submitting && (
+          <div
+            className="mx-7 mb-3 rounded-lg border border-[#b34334]/30 bg-[#b34334]/8 px-4 py-3 shrink-0"
+            role="alert"
+          >
+            <div className="flex items-start gap-2.5">
+              <span className="text-[#b34334] text-base leading-none mt-0.5" aria-hidden>
+                ⚠
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] font-semibold text-[#b34334] mb-0.5">
+                  Last attempt didn't complete
+                </div>
+                <div className="text-[12.5px] text-[#7a2f25] break-words leading-relaxed">
+                  {error}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="px-7 py-4 border-t border-black/8 flex items-center justify-between gap-3 shrink-0 flex-wrap">

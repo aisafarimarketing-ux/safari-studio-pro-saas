@@ -88,6 +88,7 @@ export default function ProposalsPage() {
 
   const handleTripSetupSubmit = async ({ proposal, autopilot }: TripSetupResult) => {
     if (creating) return;
+    setError(null); // clear stale error from any previous attempt
     setCreating(true);
     const controller = new AbortController();
     submitAbortRef.current = controller;
@@ -394,6 +395,7 @@ export default function ProposalsPage() {
           onCancel={handleCancelSubmit}
           onSubmit={handleTripSetupSubmit}
           submitting={creating}
+          error={error}
         />
       )}
 
