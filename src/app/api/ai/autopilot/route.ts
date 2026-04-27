@@ -483,12 +483,47 @@ ${JSON.stringify(userPayload, null, 2)}`;
 
   let propertySnapshots: Array<Record<string, unknown>> = [];
   if (pickedIds.length > 0) {
+    // Tight projection — earlier version used `include: { rooms: ... }`
+    // (no select), which fetched every Room field including potentially
+    // large imageUrls arrays. On orgs with several picked properties,
+    // this routinely exceeded Postgres' 8s statement_timeout and
+    // crashed the autopilot route with "cancelling statement due to
+    // statement timeout". Switched to explicit selects + capped
+    // images and rooms at the SQL level so the query always returns
+    // in well under a second regardless of property complexity.
     const fullProps = await prisma.property.findMany({
       where: { id: { in: pickedIds }, organizationId: ctx.organization.id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        shortSummary: true,
+        whatMakesSpecial: true,
+        whyWeChoose: true,
+        amenities: true,
+        mealPlan: true,
+        suggestedNights: true,
+        checkInTime: true,
+        checkOutTime: true,
+        totalRooms: true,
+        spokenLanguages: true,
+        specialInterests: true,
         location: { select: { name: true, country: true } },
-        images: { orderBy: { order: "asc" }, select: { url: true, isCover: true } },
-        rooms: { orderBy: { order: "asc" } },
+        images: {
+          orderBy: { order: "asc" },
+          select: { url: true, isCover: true },
+          take: 8,
+        },
+        rooms: {
+          orderBy: { order: "asc" },
+          select: {
+            id: true,
+            name: true,
+            bedConfig: true,
+            description: true,
+            imageUrls: true,
+          },
+          take: 6,
+        },
       },
     });
     // Order by the pick order so the showcase reads in itinerary
