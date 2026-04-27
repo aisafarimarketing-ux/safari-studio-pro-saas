@@ -13,6 +13,7 @@ import { BrandDNAHint } from "@/components/brand-dna/BrandDNAHint";
 import { CommentsDrawer } from "./CommentsDrawer";
 import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
+import { DeployBadge } from "./DeployBadge";
 import { useEditorStore, type EditorView } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -246,6 +247,8 @@ export function EditorToolbar({
 
       {/* Right: action stack — Save indicator · Comments · ⋯ · Preview · SHARE */}
       <div className="flex items-center gap-2 shrink-0">
+        <DeployBadge />
+
         <AutoSaveIndicator state={autoSaveState} error={autoSaveError} lastSavedAt={lastSavedAt} />
 
         <ProposalViewsWidget proposalId={proposal.id} />
