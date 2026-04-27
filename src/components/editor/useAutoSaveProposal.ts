@@ -115,9 +115,23 @@ export function useAutoSaveProposal(enabled: boolean): {
         const headline = healedOnceRef.current
           ? `Proposal is ${mb}MB after compression — still too big to auto-save.`
           : `Proposal is ${mb}MB — too big to auto-save.`;
-        const action = hasInlineImages
-          ? "Most likely cause: images are stored inline (Supabase Storage isn't configured, so uploads fell back to data URLs). Remove a few of the larger images, or ask an admin to set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY so future uploads land in object storage."
-          : "Remove or replace some uploaded images, then try again.";
+        // Only blame Supabase config when it's *actually* missing.
+        // The public URL is exposed at runtime, so we can reliably
+        // detect whether storage is configured client-side.
+        const supabaseConfigured = Boolean(
+          process.env.NEXT_PUBLIC_SUPABASE_URL?.trim(),
+        );
+        let action: string;
+        if (hasInlineImages && supabaseConfigured) {
+          action =
+            "Some images are still stored inline as base64 — likely uploaded before storage was set up, or an upload fell back. Click \"Compress existing images\" below to re-encode them and offload to Supabase.";
+        } else if (hasInlineImages && !supabaseConfigured) {
+          action =
+            "Images are stored inline (Supabase Storage isn't configured, so uploads fall back to data URLs). Remove a few of the larger images, or ask an admin to set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY so future uploads land in object storage.";
+        } else {
+          action =
+            "No inline images detected — the proposal may simply have a lot of content. Try removing or replacing a few uploaded images, or split the deck into a shorter trip.";
+        }
         setError(`${headline} ${action}`);
         setState("error");
         return;
@@ -152,6 +166,13 @@ export function useAutoSaveProposal(enabled: boolean): {
         if (res.status === 409) { window.location.href = "/select-organization"; return; }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
+          console.error(
+            "[autoSave] save failed:",
+            res.status,
+            err?.error,
+            "· payload bytes:",
+            payload.length,
+          );
           throw new Error(err?.error || `HTTP ${res.status}`);
         }
         // Persist active id so a refresh reloads the same proposal.
