@@ -23,15 +23,16 @@ import type { Day, TierKey } from "@/lib/types";
 // integer slots and must return slot indices, not free-form names. We map
 // indices back to library properties on the server. Out-of-range → dropped.
 
-// Default to Haiku 4.5 — 3-4x faster than Sonnet for structured JSON
-// generation at quality that's plenty for an editable draft. Operators
-// refine via the per-section "Rewrite with AI" buttons (which can use
-// Sonnet) for the prose-heavy sections that matter most. The
-// autopilot's job is "fill the deck in seconds, not minutes."
+// Defaults to claude-sonnet-4-6 — known-working production model
+// for this codebase. An earlier attempt to switch the default to
+// claude-haiku-4-5-20251001 produced "Request timed out" 500s on
+// every call (the Haiku ID either isn't on this account or is too
+// slow for this prompt size, even with 75s headroom). Sonnet is
+// slower than ideal but it actually returns data, which is the
+// thing that matters.
 //
-// Override at deploy time with ANTHROPIC_MODEL=claude-sonnet-4-6 if a
-// specific org needs the higher quality at the latency cost.
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+// Override at deploy time via ANTHROPIC_MODEL env var on Railway.
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
@@ -311,14 +312,15 @@ ${JSON.stringify(userPayload, null, 2)}`;
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
     // 8K output ceiling — typical 7-night proposal renders in 4-6K
-    // tokens; capping at 8K stops Haiku from over-elaborating and
-    // halves worst-case latency vs the previous 12K cap. Combined
-    // with the Haiku model, total wall time on a typical proposal
-    // drops from 60-180s to ~10-30s.
+    // tokens; capping at 8K trims worst-case latency vs the previous
+    // 12K cap.
     //
-    // Per-call timeout of 75s — the SDK default of 10 minutes is way
-    // too long. If we're not done in 75s the user gets a clear "try
-    // again" instead of an indefinite spinner.
+    // Per-call timeout of 240s (4 min). Sonnet 4-6 generating 4-6K
+    // tokens with this prompt size legitimately takes 60-180s; the
+    // earlier 75s cap was too tight and made the entire request fail.
+    // 240s is generous enough to absorb tail latency while still
+    // bailing on a genuinely stuck call instead of waiting 10 min
+    // (the SDK default).
     const msg = await anth.messages.create(
       {
         model: MODEL,
@@ -328,7 +330,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
         ],
         messages: [{ role: "user", content: userText }],
       },
-      { timeout: 75_000 },
+      { timeout: 240_000 },
     );
     const elapsedMs = Date.now() - startedAt;
     console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${msg.usage?.input_tokens ?? "?"} · out_tokens=${msg.usage?.output_tokens ?? "?"} · stop_reason=${msg.stop_reason ?? "?"}`);
