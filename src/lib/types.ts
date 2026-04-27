@@ -128,6 +128,17 @@ export interface Day {
    *  Defaults to centered ("50% 50%") when absent. */
   heroImagePosition?: string;
   transfer?: string;
+  /** How the traveller gets to the NEXT day's location. Drives the map's
+   *  per-leg styling (solid line + car icon for drive, dashed curve +
+   *  plane icon for flight). null / undefined falls back to a haversine
+   *  distance heuristic — kept so existing proposals don't break. The
+   *  last day's value is unused (no next day). */
+  transportToNext?: "drive" | "flight" | null;
+  /** Where to place the destination label relative to the marker on
+   *  the map. "auto" lets Leaflet pick the side with most room.
+   *  Operator-set when two stops are close enough that the auto-layout
+   *  produces overlap. Defaults to "auto". */
+  labelPosition?: "top" | "bottom" | "left" | "right" | "auto";
   highlights?: string[];
   /** Operator-curated add-ons for this day (priced extras the guest can
    *  opt into from the share view). */

@@ -99,6 +99,15 @@ export default function PrintProposalPage({
               }),
         ),
       );
+
+      // Leaflet tile-layer wait. Tile <img> elements share the same
+      // load lifecycle the loop above caught, but tiles trickle in
+      // *after* the map mounts (which can be after this point). We
+      // poll briefly for any .leaflet-tile elements still marked
+      // .leaflet-tile-loading and resolve when none remain or the
+      // budget runs out. Belt-and-braces — without this, occasional
+      // exports captured a half-rendered map with grey gaps.
+      await waitForLeafletTiles(4000);
       try {
         const stats = await compressPrintImages();
         if (stats.processed > 0) {
@@ -343,4 +352,29 @@ function PrintCss({
       }
     `}</style>
   );
+}
+
+// Poll briefly for Leaflet tiles to finish loading. When react-leaflet
+// mounts the <MapContainer />, tile images stream in over the next
+// 100-1500ms depending on connection + cache. We wait until no tile
+// is still in `.leaflet-tile-loading` state (Leaflet flips the class
+// to `.leaflet-tile-loaded` after each tile decodes) or the budget
+// runs out. Resolves silently — the PDF still exports if a tile fails;
+// it just keeps any half-loaded grid from being captured.
+async function waitForLeafletTiles(budgetMs: number): Promise<void> {
+  const start = Date.now();
+  // If no map mounted, skip immediately.
+  if (!document.querySelector(".leaflet-container")) return;
+  return new Promise<void>((resolve) => {
+    const tick = () => {
+      const stillLoading = document.querySelectorAll(".leaflet-tile-loading").length;
+      const elapsed = Date.now() - start;
+      if (stillLoading === 0) return resolve();
+      if (elapsed >= budgetMs) return resolve();
+      window.setTimeout(tick, 120);
+    };
+    // Give Leaflet ~80ms to start enqueuing tile requests before we
+    // start polling — avoids a false-positive zero on first tick.
+    window.setTimeout(tick, 80);
+  });
 }

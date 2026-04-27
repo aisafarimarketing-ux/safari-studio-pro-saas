@@ -23,6 +23,12 @@ export type RouteCoord = {
   label: string;
   lat: number;
   lng: number;
+  /** How the traveller gets to the NEXT stop. Threaded from Day so
+   *  the leg classifier prefers explicit operator intent over the
+   *  haversine fallback. */
+  transportToNext?: "drive" | "flight" | null;
+  /** Per-stop label placement override. "auto" = let Leaflet pick. */
+  labelPosition?: "top" | "bottom" | "left" | "right" | "auto";
 };
 
 type GeocodeState =
@@ -139,7 +145,7 @@ export function RouteMap({
         resolved.set(k, v ?? null);
       }
       const coords: RouteCoord[] = sequence
-        .map(({ day, key }) => {
+        .map(({ day, key }): RouteCoord | null => {
           const c = resolved.get(key);
           if (!c) return null;
           return {
@@ -148,6 +154,8 @@ export function RouteMap({
             label: day.destination,
             lat: c.lat,
             lng: c.lng,
+            transportToNext: day.transportToNext ?? null,
+            labelPosition: day.labelPosition ?? "auto",
           };
         })
         .filter((c): c is RouteCoord => c !== null);
@@ -322,11 +330,33 @@ export function RouteMap({
           />
         ))}
 
+        {/* Midpoint transport icons — small plane / car circle pinned
+            at the geographic midpoint of each leg. Understated so they
+            cue the mode without competing with the day pills. */}
+        {leafletRef.current && legs.map((leg, i) => (
+          <Marker
+            key={`leg-icon-${i}`}
+            position={leg.midpoint}
+            icon={buildLegIcon(leafletRef.current!, leg.kind)}
+            interactive={false}
+            keyboard={false}
+            zIndexOffset={-100}
+          />
+        ))}
+
         {groups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
           const icon = leafletRef.current
             ? buildDayPill(leafletRef.current, g.dayLabel, isSelected)
             : undefined;
+          // Per-stop labelPosition or "auto". Leaflet's Tooltip
+          // direction prop accepts the same set of values minus
+          // "auto"; we map "auto" → undefined to fall back to its
+          // built-in side picker.
+          const direction =
+            g.labelPosition && g.labelPosition !== "auto"
+              ? g.labelPosition
+              : "auto";
           return (
             <Marker
               key={`${g.lat}-${g.lng}-${g.startDay}`}
@@ -334,11 +364,12 @@ export function RouteMap({
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
             >
-              {/* Destination label — clean text below the pill, no
+              {/* Destination label — clean text near the pill, no
                   leader arrow, no pill background. Reads as a typeset
-                  caption under each stop instead of a heavy callout. */}
+                  caption next to each stop. Direction respects the
+                  operator's per-stop labelPosition override. */}
               <Tooltip
-                direction="bottom"
+                direction={direction}
                 offset={[0, 6]}
                 opacity={1}
                 permanent={true}
@@ -425,6 +456,25 @@ export function RouteMap({
         .leaflet-tooltip.ss-stop-label::before {
           display: none;
         }
+
+        /* Midpoint transport icon — small round chip with a plane
+           (flight) or car (drive) glyph. Cream background blends with
+           the Carto Positron basemap so the icon reads as a passive
+           cue rather than a UI button. */
+        .ss-leg-icon {
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          background: rgba(247, 245, 240, 0.95);
+          border: 1px solid rgba(13, 38, 32, 0.10);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .ss-leg-icon-flight { color: #6faed6; }
+        .ss-leg-icon-flight svg { transform: rotate(-30deg); }
+        .ss-leg-icon-drive  { color: #2d2d2d; }
       `}</style>
     </div>
   );
@@ -440,6 +490,11 @@ type CoordGroup = {
   placeName: string;  // "Arusha" — rendered in the permanent tooltip (no day prefix)
   lat: number;
   lng: number;
+  /** Carried from the LAST day in the group — that's the "to next"
+   *  transport for the move that follows this stay. */
+  transportToNext?: "drive" | "flight" | null;
+  /** Placement override carried from the FIRST day in the group. */
+  labelPosition?: "top" | "bottom" | "left" | "right" | "auto";
 };
 
 // Merge consecutive coords with the same lat/lng into a single group so
@@ -455,6 +510,9 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
       last.dayLabel = last.startDay === last.endDay ? `${last.startDay}` : `${last.startDay}-${last.endDay}`;
       last.label = `Day ${last.dayLabel} · ${c.label}`;
       last.placeName = c.label;
+      // The departure transport reflects the LAST day of the group —
+      // which is the day the traveller actually leaves. Override.
+      last.transportToNext = c.transportToNext ?? null;
       continue;
     }
     groups.push({
@@ -465,6 +523,8 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
       placeName: c.label,
       lat: c.lat,
       lng: c.lng,
+      transportToNext: c.transportToNext ?? null,
+      labelPosition: c.labelPosition ?? "auto",
     });
   }
   return groups;
@@ -497,31 +557,71 @@ function buildDayPill(
   });
 }
 
+// Build the small midpoint icon — plane for flight, car for drive.
+// Both render inside a 22px round chip so they read as a deliberate
+// glyph regardless of what tile texture sits beneath. Non-interactive
+// (set on the Marker) so they never steal clicks from the day pills.
+function buildLegIcon(L: typeof import("leaflet"), kind: "drive" | "flight") {
+  const SIZE = 22;
+  const planeSvg =
+    `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden>` +
+    `<path d="M21 12.5a.7.7 0 0 1-.4.6l-7.6 3.4-1.4 4.6a.5.5 0 0 1-.5.4h-.7a.5.5 0 0 1-.5-.5l-.5-3.8-2.9 1.3-1 1.3a.5.5 0 0 1-.6.2l-.5-.2a.5.5 0 0 1-.3-.6l.7-2.6-2.6.7a.5.5 0 0 1-.6-.3l-.2-.5a.5.5 0 0 1 .2-.6l1.3-1 1.3-2.9-3.8-.5a.5.5 0 0 1-.5-.5v-.7a.5.5 0 0 1 .4-.5l4.6-1.4 3.4-7.6a.7.7 0 0 1 1.3 0l3.4 7.6 4.6 1.4a.7.7 0 0 1 .5.6Z"/>` +
+    `</svg>`;
+  const carSvg =
+    `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>` +
+    `<path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11h.5a1.5 1.5 0 0 1 1.5 1.5V17a1 1 0 0 1-1 1h-1.2a2 2 0 0 1-3.6 0H8.8a2 2 0 0 1-3.6 0H4a1 1 0 0 1-1-1v-4.5A1.5 1.5 0 0 1 4.5 11Zm2.1 0h9.8l-1-3.2a.5.5 0 0 0-.5-.3H8.6a.5.5 0 0 0-.5.3Zm0 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm9.8 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>` +
+    `</svg>`;
+  const klass = kind === "flight" ? "ss-leg-icon ss-leg-icon-flight" : "ss-leg-icon ss-leg-icon-drive";
+  const html = `<div class="${klass}">${kind === "flight" ? planeSvg : carSvg}</div>`;
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [SIZE, SIZE],
+    iconAnchor: [SIZE / 2, SIZE / 2],
+  });
+}
+
 // ─── Leg classification + curve helpers ───────────────────────────────
 
 type RouteLeg = {
   kind: "drive" | "flight";
   path: LatLngExpression[];
+  /** Geographic midpoint — where the small transport icon renders. */
+  midpoint: LatLngTuple;
 };
 
-/** Build a list of legs between consecutive groups, classifying each
- *  by haversine distance. Drive legs are straight; flight legs are
- *  curved so two parallel flights between the same regions don't
- *  render as overlapping straight lines. */
+/** Build a list of legs between consecutive groups. Each leg's kind
+ *  comes from the source group's `transportToNext` when set; otherwise
+ *  falls back to the haversine heuristic so existing proposals (which
+ *  don't have the explicit field yet) still render sensibly. Drive
+ *  legs are straight; flight legs are curved so two parallel flights
+ *  between the same regions don't render as overlapping straight lines. */
 function buildLegs(
-  groups: { lat: number; lng: number }[],
+  groups: CoordGroup[],
   flightThresholdKm: number,
 ): RouteLeg[] {
   if (groups.length < 2) return [];
   const legs: RouteLeg[] = [];
   for (let i = 0; i < groups.length - 1; i++) {
-    const a: LatLngTuple = [groups[i].lat, groups[i].lng];
-    const b: LatLngTuple = [groups[i + 1].lat, groups[i + 1].lng];
-    const km = haversineKm(a, b);
-    const isFlight = km > flightThresholdKm;
+    const fromGroup = groups[i];
+    const toGroup = groups[i + 1];
+    const a: LatLngTuple = [fromGroup.lat, fromGroup.lng];
+    const b: LatLngTuple = [toGroup.lat, toGroup.lng];
+    // Explicit operator-set transport wins; haversine is the
+    // safety net for legacy proposals.
+    const explicit = fromGroup.transportToNext;
+    const kind: "drive" | "flight" =
+      explicit === "flight"
+        ? "flight"
+        : explicit === "drive"
+          ? "drive"
+          : haversineKm(a, b) > flightThresholdKm
+            ? "flight"
+            : "drive";
     legs.push({
-      kind: isFlight ? "flight" : "drive",
-      path: isFlight ? buildCurvedPath([a, b], 28) : [a, b],
+      kind,
+      path: kind === "flight" ? buildCurvedPath([a, b], 28) : [a, b],
+      midpoint: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
     });
   }
   return legs;
