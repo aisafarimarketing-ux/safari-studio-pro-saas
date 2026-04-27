@@ -307,14 +307,19 @@ export function RouteMap({
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
             >
+              {/* direction="auto" — Leaflet flips the label to whichever
+                  side has more space. Combined with the lighter pill
+                  styling and re-enabled leader arrow, labels feel
+                  like callouts pointing at pins instead of large
+                  blocks covering the geography. */}
               <Tooltip
-                direction="bottom"
-                offset={[0, 18]}
+                direction="auto"
+                offset={[0, 0]}
                 opacity={1}
                 permanent={true}
                 className="ss-map-label"
               >
-                {g.label}
+                {g.placeName}
               </Tooltip>
             </Marker>
           );
@@ -351,35 +356,59 @@ export function RouteMap({
       </div>
 
       {/* Global style for the permanent tooltips — can't inject via the
-          react-leaflet props, so we do it once at the module scope. */}
+          react-leaflet props, so we do it once at the module scope.
+          Lighter pill style with a re-enabled leader arrow — the label
+          reads as a callout pointing at its pin rather than a heavy
+          block of text covering the geography behind it. */}
       <style jsx global>{`
         .leaflet-tooltip.ss-map-label {
-          background: rgba(30, 28, 25, 0.9);
-          color: white;
-          border: none;
-          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.96);
+          color: rgba(13, 38, 32, 0.85);
+          border: 1px solid rgba(13, 38, 32, 0.10);
+          border-radius: 6px;
           padding: 3px 8px;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 600;
-          letter-spacing: 0.02em;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          letter-spacing: 0.01em;
+          box-shadow: 0 4px 10px -2px rgba(13, 38, 32, 0.18);
           white-space: nowrap;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
         }
+        /* Leader arrow — points back at the pin. Color must match the
+           pill's background; border is omitted so it looks like a
+           seamless extension of the callout. Leaflet auto-flips this
+           to the opposite side based on direction="auto". */
         .leaflet-tooltip.ss-map-label::before {
-          display: none;
+          display: block;
+          border-color: transparent !important;
+        }
+        .leaflet-tooltip-top.ss-map-label::before {
+          border-top-color: rgba(255, 255, 255, 0.96) !important;
+          margin-bottom: -7px;
+        }
+        .leaflet-tooltip-bottom.ss-map-label::before {
+          border-bottom-color: rgba(255, 255, 255, 0.96) !important;
+          margin-top: -7px;
+        }
+        .leaflet-tooltip-left.ss-map-label::before {
+          border-left-color: rgba(255, 255, 255, 0.96) !important;
+        }
+        .leaflet-tooltip-right.ss-map-label::before {
+          border-right-color: rgba(255, 255, 255, 0.96) !important;
         }
         .ss-day-badge {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 34px;
-          height: 34px;
+          width: 30px;
+          height: 30px;
           border-radius: 999px;
           color: white;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 700;
           letter-spacing: 0.02em;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 3px 8px rgba(13, 38, 32, 0.32);
           border: 2px solid white;
           font-family: system-ui, sans-serif;
         }
@@ -393,8 +422,9 @@ export function RouteMap({
 type CoordGroup = {
   startDay: number;
   endDay: number;
-  dayLabel: string;   // "1" or "3-4"
-  label: string;      // "Day 1 · Arusha" — rendered in the permanent tooltip
+  dayLabel: string;   // "1" or "3-4" — rendered inside the day badge pin
+  label: string;      // "Day 1 · Arusha" — kept for any callsite that wants the full string
+  placeName: string;  // "Arusha" — rendered in the permanent tooltip (no day prefix)
   lat: number;
   lng: number;
 };
@@ -411,6 +441,7 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
       last.endDay = c.dayNumber;
       last.dayLabel = last.startDay === last.endDay ? `${last.startDay}` : `${last.startDay}-${last.endDay}`;
       last.label = `Day ${last.dayLabel} · ${c.label}`;
+      last.placeName = c.label;
       continue;
     }
     groups.push({
@@ -418,6 +449,7 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
       endDay: c.dayNumber,
       dayLabel: String(c.dayNumber),
       label: `Day ${c.dayNumber} · ${c.label}`,
+      placeName: c.label,
       lat: c.lat,
       lng: c.lng,
     });
@@ -434,7 +466,10 @@ function buildDayBadge(
   color: string,
   isSelected: boolean = false,
 ) {
-  const size = isSelected ? 44 : 34;
+  // Smaller pin (30px default, 38px when selected) — matches the
+  // lighter callout style and stops the markers from dominating the
+  // map at typical safari-route zoom levels.
+  const size = isSelected ? 38 : 30;
   const extraStyle = isSelected
     ? `transform:scale(1.1);box-shadow:0 0 0 4px ${color}28, 0 6px 18px rgba(0,0,0,0.28);`
     : "";
