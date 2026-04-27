@@ -23,16 +23,17 @@ import type { Day, TierKey } from "@/lib/types";
 // integer slots and must return slot indices, not free-form names. We map
 // indices back to library properties on the server. Out-of-range → dropped.
 
-// Defaults to claude-sonnet-4-6 — known-working production model
-// for this codebase. An earlier attempt to switch the default to
-// claude-haiku-4-5-20251001 produced "Request timed out" 500s on
-// every call (the Haiku ID either isn't on this account or is too
-// slow for this prompt size, even with 75s headroom). Sonnet is
-// slower than ideal but it actually returns data, which is the
-// thing that matters.
+// Defaults to claude-sonnet-4-5-20250929 — Sonnet 4.5, dated
+// 2025-09-29. This is the production-stable Sonnet that the user
+// confirmed is on their Anthropic account. Earlier attempts at
+// claude-haiku-4-5-20251001 (model ID not usable on their account)
+// and claude-sonnet-4-6 (the un-dated alias, slower) caused Generate
+// to either time out or take 4+ minutes. Sonnet 4.5 with date suffix
+// is the right balance: fast enough to be usable, stable, and
+// definitely available.
 //
 // Override at deploy time via ANTHROPIC_MODEL env var on Railway.
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
