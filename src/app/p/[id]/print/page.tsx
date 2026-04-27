@@ -4,18 +4,27 @@ import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
-import { SectionRenderer } from "@/components/editor/SectionRenderer";
+import { PrintProposalDocument } from "@/components/proposal-share/PrintProposalDocument";
 import { compressPrintImages } from "@/lib/compressImagesForPrint";
-import type { Proposal, Section } from "@/lib/types";
+import type { Proposal } from "@/lib/types";
 
-// Chrome-free render of a public proposal — same content as /p/[id] but
-// without the share header, comment panel, or view tracker. The Playwright
-// PDF renderer hits this URL; the in-app "Open print view" fallback opens
-// it with ?autoPrint=1 and we call window.print() once fonts + images are
-// settled.
+// ─── Print proposal page ───────────────────────────────────────────────────
 //
-// A ready flag (window.__SS_READY__) is set after a short settle window so
-// the headless renderer (and auto-print) know when to capture.
+// Chrome-free render of a public proposal — same content as /p/[id] but
+// without the share header, comment panel, or view tracker. Hosted at
+// `/p/[id]/print` and consumed by the Playwright PDF sidecar (which hits
+// the URL with networkidle waits) plus the in-app "Open print view"
+// fallback (`?autoPrint=1`).
+//
+// Strict A4 page system: every section renders inside a fixed-height
+// .pdf-page div with overflow:hidden + break-after:page. The previous
+// "let the browser break wherever" approach produced blank pages,
+// orphaned image strips, and split cards. This page enforces that one
+// section = one page; clipping is preferred to spillover so problem
+// sections are visible and fixable instead of silently breaking.
+//
+// Debug mode: append `?debugPdf=true` on the URL to draw per-page
+// outlines + log any page whose content overflows the A4 frame.
 
 export default function PrintProposalPage({
   params,
@@ -25,6 +34,7 @@ export default function PrintProposalPage({
   const { id } = use(params);
   const searchParams = useSearchParams();
   const autoPrint = searchParams?.get("autoPrint") === "1";
+  const debugPdf = searchParams?.get("debugPdf") === "true";
   const { proposal } = useProposalStore();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,19 +78,16 @@ export default function PrintProposalPage({
   }, [id]);
 
   // Once the proposal has rendered, wait for fonts + images, then flip the
-  // ready flag and optionally trigger print. We deliberately wait a beat
-  // longer than strictly necessary — better a slow PDF than a half-rendered
-  // one.
+  // ready flag and optionally trigger print. Also wait one paint after
+  // image compression so the layout has settled before the PDF capture.
   useEffect(() => {
     if (!loaded) return;
     let cancelled = false;
     const settle = async () => {
       try {
-        // Fonts: wait until the browser has loaded every @font-face used.
         const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
         if (fonts?.ready) await fonts.ready;
       } catch {}
-      // Images: wait for each image on the page to decode.
       const imgs = Array.from(document.querySelectorAll<HTMLImageElement>("img"));
       await Promise.all(
         imgs.map((img) =>
@@ -92,13 +99,6 @@ export default function PrintProposalPage({
               }),
         ),
       );
-
-      // Compress data-URL images before PDF capture. Playwright embeds
-      // images at their source-bytes size, so a 1.5MB data-URL becomes
-      // 1.5MB of PDF payload. Re-encoding at ~0.62 JPEG quality and a
-      // 1400px long-edge typically halves the PDF on image-heavy
-      // proposals. Runs BEFORE the __SS_READY__ flag flips so the
-      // renderer waits for the swap.
       try {
         const stats = await compressPrintImages();
         if (stats.processed > 0) {
@@ -110,17 +110,12 @@ export default function PrintProposalPage({
       } catch (err) {
         console.warn("[print-compress] failed; continuing with originals:", err);
       }
-
-      // One extra paint to let layout settle after images land (and
-      // to reflect any size-change from the compressed swap-ins).
+      // Two requestAnimationFrames so layout settles after the
+      // compressed image swap-ins, then flag ready.
       await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
       if (cancelled) return;
       (window as unknown as { __SS_READY__?: boolean }).__SS_READY__ = true;
-      if (autoPrint) {
-        // Defer a tick so the ready flag is set before the print dialog
-        // mirrors the on-screen DOM.
-        setTimeout(() => window.print(), 60);
-      }
+      if (autoPrint) setTimeout(() => window.print(), 60);
     };
     void settle();
     return () => { cancelled = true; };
@@ -138,137 +133,214 @@ export default function PrintProposalPage({
     return <div className="min-h-screen" />;
   }
 
-  const { theme, operator } = proposal;
-  const sorted = [...proposal.sections]
-    .filter((s: Section) => s.visible)
-    .sort((a: Section, b: Section) => a.order - b.order);
+  const { theme } = proposal;
 
   return (
-    <div className="proposal-canvas ss-print-mode" style={{ background: theme.tokens.pageBg }}>
-      <style>{`
-        /* ── Page setup — A4 with zero default margin so sections can go
-           edge-to-edge when they choose to. Individual section wrappers
-           already control their own padding. */
-        @page {
-          size: A4;
-          margin: 0;
-        }
-
-        html, body {
-          background: ${theme.tokens.pageBg};
-          margin: 0;
-          padding: 0;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-          color-adjust: exact;
-        }
-
-        .proposal-canvas {
-          --font-display: '${theme.displayFont}', Georgia, serif;
-          --font-body: '${theme.bodyFont}', system-ui, sans-serif;
-        }
-
-        /* On screen — centre a single A4-width column so the page *looks*
-           like the printed output before the user hits print. */
-        .ss-print-mode {
-          width: 210mm;
-          margin: 0 auto;
-        }
-
-        /* Every major section starts on a new page. The "section-*"
-           wrappers are rendered by SectionRenderer below; we target
-           top-level children of the proposal column. */
-        .ss-print-mode > div > section,
-        .ss-print-mode > div > div {
-          break-inside: avoid-page;
-        }
-
-        /* Cover is a full page — force a page break after it. */
-        [data-section-type="cover"] {
-          break-after: page;
-          page-break-after: always;
-        }
-
-        /* Keep day cards, property cards, and pricing tiers intact on
-           the same page when possible. */
-        .dm-card,
-        [data-section-type="dayJourney"] .dm-card,
-        [data-section-type="propertyShowcase"] .dm-card,
-        [data-section-type="pricing"] > div {
-          break-inside: avoid-page;
-          page-break-inside: avoid;
-        }
-
-        /* Headings never orphan. */
-        h1, h2, h3 {
-          break-after: avoid-page;
-          page-break-after: avoid;
-        }
-
-        /* Images: crisp edges, no shadows that smear in print. */
-        img {
-          image-rendering: -webkit-optimize-contrast;
-          print-color-adjust: exact;
-          -webkit-print-color-adjust: exact;
-        }
-
-        /* Strip any editor chrome that might leak into the print DOM. */
-        [data-editor-chrome],
-        .editor-toolbar,
-        .editor-sidebar,
-        .context-panel,
-        .left-sidebar,
-        button[title*="Drag"],
-        button[title*="Delete"],
-        button[title*="Duplicate"] {
-          display: none !important;
-        }
-
-        /* Print-specific refinements — fonts render sharper at actual
-           print DPI than at screen DPI, so we step up a touch. */
-        @media print {
-          .ss-print-mode {
-            width: auto;
-            margin: 0;
-          }
-          body {
-            font-size: 10.5pt;
-          }
-          a {
-            color: inherit !important;
-            text-decoration: none !important;
-          }
-        }
-      `}</style>
-
-      <div style={{ background: theme.tokens.pageBg }}>
-        {sorted.map((section: Section) => (
-          <div key={section.id} data-section-type={section.type}>
-            <SectionRenderer section={section} />
-          </div>
-        ))}
-      </div>
-
-      {operator.companyName && (
-        <footer
-          className="border-t py-6 px-6 text-center"
-          style={{ background: theme.tokens.pageBg, borderColor: theme.tokens.border }}
-        >
-          <div className="text-xs tracking-wide" style={{ color: theme.tokens.mutedText }}>
-            Proposal by{" "}
-            <span style={{ color: theme.tokens.bodyText, fontWeight: 500 }}>
-              {operator.companyName}
-            </span>
-            {operator.email && (
-              <>
-                {" "}&middot;{" "}
-                <span style={{ color: theme.tokens.accent }}>{operator.email}</span>
-              </>
-            )}
-            {operator.phone && <> &middot; {operator.phone}</>}
-          </div>
-        </footer>
-      )}
+    <div className="ss-print-mode" style={{ background: theme.tokens.pageBg }}>
+      <PrintCss pageBg={theme.tokens.pageBg} displayFont={theme.displayFont} bodyFont={theme.bodyFont} />
+      <PrintProposalDocument debug={debugPdf} />
     </div>
+  );
+}
+
+// ─── Print CSS ────────────────────────────────────────────────────────────
+//
+// Inline <style> rather than a static stylesheet so the page-bg colour
+// follows the proposal's theme. The strict @page + .pdf-page rules
+// enforce the slide-deck pagination; the `[data-editor-chrome]` selectors
+// nuke any editor affordances that might have leaked into the print DOM.
+
+function PrintCss({
+  pageBg, displayFont, bodyFont,
+}: {
+  pageBg: string;
+  displayFont: string;
+  bodyFont: string;
+}) {
+  return (
+    <style>{`
+      /* ── Page setup ─────────────────────────────────────────────── */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      html, body {
+        background: ${pageBg};
+        margin: 0;
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        color-adjust: exact;
+      }
+
+      * { box-sizing: border-box; }
+
+      .ss-print-mode {
+        --font-display: '${displayFont}', Georgia, serif;
+        --font-body: '${bodyFont}', system-ui, sans-serif;
+      }
+
+      /* ── Document column ─────────────────────────────────────────
+         On screen, centre an A4-width column so the operator previews
+         the printed output before exporting. In actual print, the
+         @page rule takes over and this column becomes the page itself. */
+      .pdf-document {
+        width: 210mm;
+        margin: 0 auto;
+        background: ${pageBg};
+      }
+
+      /* ── Strict A4 page ──────────────────────────────────────────
+         Fixed dimensions, clipped overflow, hard page breaks. Every
+         major section renders inside one of these. */
+      .pdf-page {
+        position: relative;
+        width: 210mm;
+        height: 297mm;
+        overflow: hidden;
+        break-after: page;
+        page-break-after: always;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        background: ${pageBg};
+      }
+      .pdf-page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      .pdf-page > * {
+        max-width: 100%;
+      }
+
+      /* ── Avoid breaking key blocks across pages ────────────────── */
+      .avoid-break,
+      .dm-card,
+      .day-card,
+      .property-card,
+      .payment-card,
+      .map-card,
+      .gallery,
+      .activity-table,
+      .accommodation-block,
+      [data-section-type="cover"] > *,
+      [data-section-type="map"] > *,
+      [data-section-type="pricing"] > div,
+      [data-section-type="propertyShowcase"] .dm-card {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+      }
+
+      /* Headings never orphan. */
+      h1, h2, h3 {
+        break-after: avoid-page;
+        page-break-after: avoid;
+      }
+
+      /* Images: crisp edges; never break across pages. */
+      img {
+        image-rendering: -webkit-optimize-contrast;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* ── Strip editor + interactive chrome ─────────────────────── */
+      [data-editor-chrome],
+      .editor-toolbar,
+      .editor-sidebar,
+      .context-panel,
+      .left-sidebar,
+      .leaflet-control-zoom,
+      .leaflet-control-attribution + *,
+      button[title*="Drag"],
+      button[title*="Delete"],
+      button[title*="Duplicate"] {
+        display: none !important;
+      }
+      /* Keep map attribution — Carto / OSM ToS require it visible. */
+      .leaflet-control-attribution {
+        display: block !important;
+        font-size: 7px !important;
+        opacity: 0.5;
+      }
+
+      /* ── Print refinements ────────────────────────────────────── */
+      @media print {
+        .ss-print-mode { width: auto; margin: 0; }
+        body { font-size: 10.5pt; }
+        a { color: inherit !important; text-decoration: none !important; }
+        /* The on-screen document container loses its visible width
+           in actual print — the page IS the canvas. */
+        .pdf-document { width: auto; }
+        .pdf-page { box-shadow: none !important; }
+      }
+
+      /* ── Debug mode (only when ?debugPdf=true) ─────────────────── */
+      .pdf-document--debug .pdf-page {
+        outline: 2px dashed rgba(220, 38, 38, 0.5);
+        outline-offset: -2px;
+      }
+      .pdf-document--debug .pdf-page::before {
+        content: attr(data-pdf-label);
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 9999;
+        background: #1b3a2d;
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 3px;
+        font-family: system-ui, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        pointer-events: none;
+      }
+      .pdf-document--debug .pdf-page--overflow {
+        outline-color: #dc2626;
+        outline-width: 4px;
+      }
+      .pdf-document--debug .pdf-page--overflow::after {
+        content: "⚠ OVERFLOW";
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        z-index: 9999;
+        background: #dc2626;
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 3px;
+        font-family: system-ui, sans-serif;
+        letter-spacing: 0.06em;
+        pointer-events: none;
+      }
+      /* Hide debug chrome in actual print regardless of the URL flag. */
+      @media print {
+        .pdf-document--debug .pdf-page { outline: none; }
+        .pdf-document--debug .pdf-page::before,
+        .pdf-document--debug .pdf-page--overflow::after { display: none; }
+      }
+
+      /* ── Screen-only: visually separate pages so the operator can
+         scroll through them in the browser preview. Print drops this. */
+      @media screen {
+        body {
+          background: #1a1a1a;
+        }
+        .pdf-document {
+          padding: 24px 0;
+        }
+        .pdf-page {
+          margin: 0 auto 24px;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        }
+        .pdf-page:last-child { margin-bottom: 0; }
+      }
+    `}</style>
   );
 }
