@@ -86,41 +86,54 @@ export function MapSection({ section }: { section: Section }) {
     const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
     const groupedRows = groupDayRows(days, activeTier as TierKey);
 
-    return (
-      <div className="py-20" style={{ background: tokens.sectionSurface }}>
-        <div className="max-w-6xl mx-auto px-8 md:px-12">
-          {/* Section header — label + title + country line */}
-          <div className="mb-10">
-            <div
-              className="text-[10px] uppercase tracking-[0.3em] mb-3"
-              style={{ color: tokens.mutedText }}
-            >
-              Map
-            </div>
-            <h2
-              className="font-bold leading-tight outline-none"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(1.8rem, 3.4vw, 2.4rem)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
-            </h2>
-          </div>
+    // Resolve a property by camp name so each rail card can show its
+    // lead image. Same case-insensitive match the interactive variant
+    // uses — keeps matching behaviour consistent across map variants.
+    const findProperty = (campName: string) => {
+      if (!campName) return null;
+      const lc = campName.trim().toLowerCase();
+      return proposal.properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
+    };
 
-          {/* Two-column spread — table left, map right */}
-          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-10 md:gap-14">
-            {/* Left — country header + grouped day table */}
-            <div className="min-w-0">
-              <div className="mb-6">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-[18px] leading-none" aria-hidden>
-                    {countryFlag}
-                  </span>
+    const MAP_HEIGHT = 600;
+
+    return (
+      <div className="py-12 md:py-14" style={{ background: tokens.sectionSurface }}>
+        <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
+          {/* Card-rail (240px) + dominant map. The title + country chip
+              live inside the rail header — no separate full-width title
+              row, so the map can stretch the full container height
+              without competing for vertical space. */}
+          <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
+            {/* ── Left rail ───────────────────────────────────────── */}
+            <aside className="min-w-0 flex flex-col">
+              {/* Rail header — Map eyebrow + small title + country chip */}
+              <div className="mb-3">
+                <div
+                  className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-1"
+                  style={{ color: tokens.mutedText }}
+                >
+                  Map
+                </div>
+                <h2
+                  className="font-bold leading-[1.15] outline-none"
+                  style={{
+                    color: tokens.headingText,
+                    fontFamily: `'${theme.displayFont}', serif`,
+                    fontSize: "clamp(16px, 1.6vw, 19px)",
+                    letterSpacing: "-0.005em",
+                  }}
+                >
+                  {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
+                </h2>
+                <div className="mt-2 flex items-center gap-1.5">
+                  {countryFlag && (
+                    <span className="text-[14px] leading-none" aria-hidden>
+                      {countryFlag}
+                    </span>
+                  )}
                   <span
-                    className="text-[14.5px] font-semibold outline-none"
+                    className="text-[12px] font-semibold outline-none"
                     style={{ color: tokens.headingText }}
                     contentEditable={isEditor}
                     suppressContentEditableWarning
@@ -131,98 +144,169 @@ export function MapSection({ section }: { section: Section }) {
                     {countryName}
                   </span>
                 </div>
+              </div>
+
+              {/* Start point */}
+              <div
+                className="pb-2.5 mb-2.5"
+                style={{ borderBottom: `1px solid ${tokens.border}` }}
+              >
                 <div
-                  className="mt-2 text-[13px] outline-none"
-                  style={{ color: tokens.bodyText }}
+                  className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
+                  style={{ color: tokens.mutedText }}
+                >
+                  Start
+                </div>
+                <div
+                  className="text-[12.5px] outline-none"
+                  style={{ color: tokens.headingText }}
                   contentEditable={isEditor}
                   suppressContentEditableWarning
                   onBlur={(e) =>
                     updateSectionContent(section.id, { startPoint: e.currentTarget.textContent ?? "" })
                   }
                 >
-                  <span className="font-semibold" style={{ color: tokens.headingText }}>Start Point:</span>{" "}
                   {startPoint}
                 </div>
               </div>
 
-              {/* Grouped day table — hairline-only, spacious */}
-              <div>
-                <div
-                  className="grid grid-cols-[88px_1fr] gap-x-4 pb-3"
-                  style={{ borderBottom: `1px solid ${tokens.border}` }}
-                >
-                  <div className="text-[9.5px] uppercase tracking-[0.28em] font-semibold" style={{ color: tokens.mutedText }}>
-                    Days
-                  </div>
-                  <div className="text-[9.5px] uppercase tracking-[0.28em] font-semibold" style={{ color: tokens.mutedText }}>
-                    Main Destination
-                  </div>
-                </div>
-
-                {groupedRows.length > 0 ? (
-                  groupedRows.map((row, i) => (
-                    <div
-                      key={i}
-                      className="grid grid-cols-[88px_1fr] gap-x-4 py-4"
-                      style={{
-                        borderBottom:
-                          i === groupedRows.length - 1 ? "none" : `1px solid ${tokens.border}`,
-                      }}
-                    >
-                      <div className="text-[13px] tabular-nums pt-0.5" style={{ color: tokens.mutedText }}>
-                        {row.dayLabel}
-                      </div>
-                      <div className="min-w-0">
-                        <div
-                          className="text-[15px] font-semibold leading-tight"
-                          style={{
-                            color: tokens.headingText,
-                            fontFamily: `'${theme.displayFont}', serif`,
-                          }}
-                        >
-                          {row.destination}
-                        </div>
-                        {row.accommodation && (
+              {/* Day cards — thumbnail + label + place + property name */}
+              {groupedRows.length > 0 ? (
+                <ul className="space-y-1.5 flex-1">
+                  {groupedRows.map((row, i) => {
+                    const prop = findProperty(row.accommodation);
+                    const thumb = prop?.leadImageUrl ?? null;
+                    return (
+                      <li
+                        key={i}
+                        className="flex items-center gap-2.5 p-2 rounded-md transition"
+                        style={{
+                          background: tokens.cardBg,
+                          border: `1px solid ${tokens.border}`,
+                        }}
+                      >
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={thumb}
+                            alt=""
+                            className="shrink-0 object-cover"
+                            style={{ width: 40, height: 40, borderRadius: 4 }}
+                          />
+                        ) : (
                           <div
-                            className="text-[12.5px] mt-1"
-                            style={{ color: tokens.mutedText }}
+                            className="shrink-0 flex items-center justify-center font-bold tabular-nums"
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 4,
+                              background: `${tokens.accent}1c`,
+                              color: tokens.accent,
+                              fontSize: 12,
+                            }}
                           >
-                            {row.accommodation}
+                            {row.startDay}
                           </div>
                         )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="py-10 text-center text-[13px]" style={{ color: tokens.mutedText }}>
-                    {isEditor ? "Add days to populate the route." : "Route coming soon."}
-                  </div>
-                )}
-              </div>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className="text-[9.5px] uppercase tracking-[0.18em] font-semibold"
+                            style={{ color: tokens.mutedText }}
+                          >
+                            {row.dayLabel}
+                          </div>
+                          <div
+                            className="text-[12.5px] font-semibold leading-tight truncate"
+                            style={{
+                              color: tokens.headingText,
+                              fontFamily: `'${theme.displayFont}', serif`,
+                            }}
+                          >
+                            {row.destination}
+                          </div>
+                          {row.accommodation && (
+                            <div
+                              className="text-[11px] truncate"
+                              style={{ color: tokens.mutedText }}
+                            >
+                              {row.accommodation}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="flex-1 py-6 text-center text-[12px]" style={{ color: tokens.mutedText }}>
+                  {isEditor ? "Add days to populate the route." : "Route coming soon."}
+                </div>
+              )}
 
+              {/* End point */}
               <div
-                className="mt-5 text-[13px] outline-none"
-                style={{ color: tokens.bodyText }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateSectionContent(section.id, { endPoint: e.currentTarget.textContent ?? "" })
-                }
+                className="pt-2.5 mt-2.5"
+                style={{ borderTop: `1px solid ${tokens.border}` }}
               >
-                <span className="font-semibold" style={{ color: tokens.headingText }}>End Point:</span>{" "}
-                {endPoint}
+                <div
+                  className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
+                  style={{ color: tokens.mutedText }}
+                >
+                  End
+                </div>
+                <div
+                  className="text-[12.5px] outline-none"
+                  style={{ color: tokens.headingText }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    updateSectionContent(section.id, { endPoint: e.currentTarget.textContent ?? "" })
+                  }
+                >
+                  {endPoint}
+                </div>
               </div>
-            </div>
 
-            {/* Right — interactive map */}
+              {/* Tiny attribution + optional caption tucked at the
+                  bottom of the rail so the map column stays clean.
+                  Caption stays editable; map-data attribution is fixed. */}
+              {(caption || isEditor) && (
+                <div
+                  className="mt-3 pt-3 text-[11px] italic outline-none"
+                  style={{
+                    color: tokens.mutedText,
+                    fontFamily: `'${theme.displayFont}', serif`,
+                    borderTop: `1px solid ${tokens.border}`,
+                  }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    updateSectionContent(section.id, { caption: e.currentTarget.textContent ?? "" })
+                  }
+                >
+                  {caption || (isEditor ? "Add a caption…" : "")}
+                </div>
+              )}
+              <div
+                className="mt-2 text-[9px] tracking-wide"
+                style={{
+                  color: tokens.mutedText,
+                  fontFamily: `'${theme.bodyFont}', sans-serif`,
+                  opacity: 0.5,
+                }}
+              >
+                Map data © OpenStreetMap contributors
+              </div>
+            </aside>
+
+            {/* ── Map — dominant column ─────────────────────────── */}
             <div className="min-w-0">
               {days.length > 0 ? (
                 <div
                   className="overflow-hidden"
                   style={{
-                    borderRadius: 6,
+                    borderRadius: 10,
                     border: `1px solid ${tokens.border}`,
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                   }}
                 >
                   <RouteMap
@@ -234,42 +318,23 @@ export function MapSection({ section }: { section: Section }) {
                         updateSectionContent(section.id, { coords });
                       }
                     }}
-                    height={420}
+                    height={MAP_HEIGHT}
                   />
                 </div>
               ) : (
                 <div
                   className="flex items-center justify-center text-[13px]"
                   style={{
-                    height: 420,
+                    height: MAP_HEIGHT,
                     background: tokens.cardBg,
                     color: tokens.mutedText,
-                    borderRadius: 6,
+                    borderRadius: 10,
                     border: `1px solid ${tokens.border}`,
                   }}
                 >
                   {isEditor ? "Add days with destinations to draw the route." : "Route coming soon."}
                 </div>
               )}
-
-              {(caption || isEditor) && (
-                <p
-                  className="text-[12px] italic text-center mt-4 outline-none"
-                  style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) => updateSectionContent(section.id, { caption: e.currentTarget.textContent ?? "" })}
-                >
-                  {caption || (isEditor ? "Add a caption…" : "")}
-                </p>
-              )}
-
-              <div
-                className="mt-2 text-[10px] tracking-wide text-center"
-                style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif`, opacity: 0.55 }}
-              >
-                Map data © OpenStreetMap contributors
-              </div>
             </div>
           </div>
         </div>
