@@ -45,30 +45,43 @@ export async function GET() {
     return NextResponse.json({ error: "Account suspended", code: "ORG_SUSPENDED" }, { status: 402 });
   }
 
-  const rows = await prisma.proposal.findMany({
-    where: { organizationId: ctx.organization.id },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      updatedAt: true,
-      createdAt: true,
-      contentJson: true,
-    },
-  });
+  // Listing endpoint MUST stay slim — selecting `contentJson` here was
+  // pulling the entire proposal payload (days, properties, sections,
+  // and any inline base64 images) for every row in the operator's org
+  // just to extract the client's name. On orgs with image-heavy
+  // proposals, that single query was 10s-100s of MB and made the
+  // /proposals page hang for minutes.
+  //
+  // Switched to $queryRaw with Postgres' JSON path operator (#>>) so
+  // we extract just the client.guestNames string at the database
+  // level. The transfer is now bounded — id + title + status + a
+  // short string per row, no matter how heavy the proposal content.
+  const rows = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      updatedAt: Date;
+      createdAt: Date;
+      clientName: string | null;
+    }>
+  >`
+    SELECT
+      "id", "title", "status", "updatedAt", "createdAt",
+      NULLIF(TRIM("contentJson"#>>'{client,guestNames}'), '') AS "clientName"
+    FROM "Proposal"
+    WHERE "organizationId" = ${ctx.organization.id}
+    ORDER BY "updatedAt" DESC
+  `;
 
-  const proposals = rows.map((r) => {
-    const json = r.contentJson as { client?: { guestNames?: string } } | null;
-    return {
-      id: r.id,
-      title: r.title,
-      status: r.status,
-      updatedAt: r.updatedAt,
-      createdAt: r.createdAt,
-      clientName: json?.client?.guestNames?.trim() || null,
-    };
-  });
+  const proposals = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    updatedAt: r.updatedAt,
+    createdAt: r.createdAt,
+    clientName: r.clientName,
+  }));
   return NextResponse.json({ proposals });
 }
 
