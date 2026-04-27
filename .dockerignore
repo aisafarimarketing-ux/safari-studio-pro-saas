@@ -1,0 +1,44 @@
+# ─── .dockerignore — keep Docker build context lean & deterministic ──────
+#
+# Without this, every COPY step's cache key includes the entire repo
+# (node_modules, .git, the pdf-service subdir, screenshots, etc).
+# A change in any of those invalidates Buildkit cache layers
+# unrelated to the main-app build, and on Railway it has shown up as
+# "failed to compute cache key: ... not found" errors that are really
+# just stale-cache symptoms.
+#
+# Anything not listed here is included. Keep this list tight — adding
+# too much can break the build (the Next.js app needs prisma/, public/,
+# src/, etc.).
+
+node_modules
+.next
+.git
+.github
+.vscode
+.cursor
+.idea
+.DS_Store
+
+# Local env + secrets — never bake into the image.
+.env
+.env.*
+!.env.example
+
+# pdf-service is a separate Railway service with its own Dockerfile.
+# Excluding it from the main app's build context keeps cache keys
+# stable (a tweak to pdf-service/index.js shouldn't invalidate a
+# Next.js layer).
+pdf-service
+
+# Local artefacts that don't belong in the image
+coverage
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tooling output the build doesn't need
+storybook-static
+playwright-report
+test-results

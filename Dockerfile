@@ -1,3 +1,10 @@
+# Cache-busting marker — bumping this string forces Railway's
+# Buildkit to recompute every layer below, which clears the
+# transient "failed to compute cache key" / "/prisma: not found"
+# errors that appear when a partially-cached build context drifts
+# out of sync. Bump again if the same symptom returns.
+# build-cache-rev: 2026-04-27-pdf-service-split
+
 FROM node:22.12-slim
 
 WORKDIR /app
