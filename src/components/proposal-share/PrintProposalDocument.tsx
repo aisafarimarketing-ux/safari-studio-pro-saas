@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
-import { DayCard } from "@/components/sections/day-card/DayCard";
 import { PdfPage } from "./PdfPage";
 import { PrintPropertyPage } from "./PrintPropertyPage";
 import { PrintPracticalInfoPage, CARDS_PER_PAGE } from "./PrintPracticalInfoPage";
+import {
+  PrintDayPageMain,
+  PrintDayPageTail,
+  dayHasTailContent,
+  resolveDayProperty,
+} from "./PrintDayPage";
 import { resolveTokens } from "@/lib/theme";
-import type { Section, SectionType } from "@/lib/types";
+import { resolveDayCard } from "@/components/sections/day-card/resolve";
+import type { Section, SectionType, TierKey } from "@/lib/types";
 
 // ─── PrintProposalDocument — orchestrator for the printed deck ───────────
 //
@@ -50,6 +56,7 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
         totalPx: number;
         overflowPx: number;
         offender: string | null;
+        continuation: boolean;
       }> = [];
 
       pages.forEach((page) => {
@@ -87,8 +94,17 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
           totalPx: Math.round(totalPx),
           overflowPx: Math.round(overflowPx),
           offender,
+          continuation: page.dataset.continuation === "true",
         });
       });
+
+      const continuations = report.filter((r) => r.continuation);
+      if (continuations.length > 0) {
+        console.info(
+          `[pdf] ${continuations.length} continuation page${continuations.length === 1 ? "" : "s"} created (auto-split):`,
+          continuations.map((c) => c.label),
+        );
+      }
 
       const overflows = report.filter((r) => r.overflowPx > 0);
       if (overflows.length > 0) {
@@ -169,12 +185,13 @@ function PropertyPages({ section }: { section: Section }) {
     );
   }
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
+  const total = properties.length;
   return (
     <>
-      {properties.map((property) => (
+      {properties.map((property, idx) => (
         <PdfPage
           key={property.id}
-          label={`Property — ${property.name}`}
+          label={`Property ${idx + 1} of ${total} · ${property.name}`}
           bleed
         >
           <div data-section-type="propertyShowcase" data-property-id={property.id}>
@@ -182,6 +199,7 @@ function PropertyPages({ section }: { section: Section }) {
               property={property}
               theme={proposal.theme}
               tokens={tokens}
+              indexLabel={`Property ${idx + 1} of ${total}`}
             />
           </div>
         </PdfPage>
@@ -235,7 +253,8 @@ function PracticalInfoPages() {
 }
 
 function DayJourneyPages({ section }: { section: Section }) {
-  const days = useProposalStore((s) => s.proposal.days);
+  const proposal = useProposalStore((s) => s.proposal);
+  const days = proposal.days;
   if (days.length === 0) {
     return (
       <PdfPage label="Day-by-day (empty)" bleed={false}>
@@ -245,24 +264,83 @@ function DayJourneyPages({ section }: { section: Section }) {
       </PdfPage>
     );
   }
-  // One page per day. DayCard already renders the editorial stack the
-  // on-screen view uses, so the PDF layout matches the share view —
-  // just framed inside an A4 container instead of flowing on a webpage.
+  // Each day renders into a print-specific main page (story half) and
+  // — when the day actually has activities or accommodation — a
+  // dedicated continuation page. This pre-empts the overflow problem:
+  // we do not let a day try to fit hero + narrative + activities +
+  // accommodation gallery in a single A4 frame. Instead we split
+  // intentionally and label both halves so a guest reading the PDF
+  // immediately sees "Day 3 · Continued" rather than a clipped page.
+  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
+  const activeTier = proposal.activeTier as TierKey;
   return (
     <>
-      {days.map((day, i) => (
-        <PdfPage
-          key={day.id}
-          label={`Day ${day.dayNumber}${day.destination ? " · " + day.destination : ""}`}
-          bleed
-        >
-          <div data-section-type="dayJourney" data-day-number={day.dayNumber}>
-            <DayCard day={day} index={i} totalDays={days.length} section={section} />
-          </div>
-        </PdfPage>
-      ))}
+      {days.map((day) => {
+        // Resolve the day's stay so the tail page can render the
+        // accommodation block; also drives the has-tail decision.
+        const property = resolveDayProperty(day, proposal.properties, activeTier);
+        const hasTail = dayHasTailContent(day, property);
+        // Reuse the day-card data resolver just for date formatting —
+        // it owns the UTC-safe arrival-date math so we stay consistent
+        // with the on-screen view.
+        const dayData = resolveDayCard(day, proposal, activeTier, "editorial-stack");
+        return (
+          <Fragmented key={day.id}>
+            <PdfPage
+              label={`Day ${day.dayNumber}${day.destination ? " · " + day.destination : ""}`}
+              bleed
+            >
+              <div
+                data-section-type="dayJourney"
+                data-day-number={day.dayNumber}
+                data-day-page="main"
+                data-has-continuation={hasTail ? "yes" : "no"}
+              >
+                <PrintDayPageMain
+                  day={day}
+                  dayDate={dayData.dayDate}
+                  theme={proposal.theme}
+                  tokens={tokens}
+                  totalDays={days.length}
+                />
+              </div>
+            </PdfPage>
+            {hasTail && (
+              <PdfPage
+                label={`Day ${day.dayNumber} · Continued${day.destination ? " · " + day.destination : ""}`}
+                bleed
+                continuation
+              >
+                <div
+                  data-section-type="dayJourney"
+                  data-day-number={day.dayNumber}
+                  data-day-page="tail"
+                  data-continuation="true"
+                >
+                  <PrintDayPageTail
+                    day={day}
+                    property={property}
+                    theme={proposal.theme}
+                    tokens={tokens}
+                    totalDays={days.length}
+                  />
+                </div>
+              </PdfPage>
+            )}
+          </Fragmented>
+        );
+      })}
     </>
   );
+}
+
+// Tiny key-stable fragment wrapper. React's Fragment doesn't accept a
+// data-attribute; using a plain Fragment with a key is enough for the
+// outer .map(). Wrapping in a function gives us a single source of
+// truth for the day-pair structure if we later need to attach extra
+// metadata (e.g. break-before hints).
+function Fragmented({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
 function labelFor(section: Section): string {

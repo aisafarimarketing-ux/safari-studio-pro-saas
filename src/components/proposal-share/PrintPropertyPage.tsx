@@ -15,11 +15,14 @@ import type { Property as ProposalProperty, ThemeTokens, ProposalTheme } from "@
 // section.
 
 export function PrintPropertyPage({
-  property, theme, tokens,
+  property, theme, tokens, indexLabel,
 }: {
   property: ProposalProperty;
   theme: ProposalTheme;
   tokens: ThemeTokens;
+  /** "Property 1 of 4" — rendered as the eyebrow above the property
+   *  name so each printed lodge page reads as part of the same series. */
+  indexLabel?: string;
 }) {
   const meal = property.mealPlan?.trim();
   const room = property.roomType?.trim();
@@ -72,13 +75,23 @@ export function PrintPropertyPage({
 
       {/* Body — flex-1 fills remaining ~52%. */}
       <div className="flex-1 min-h-0 px-12 py-8 flex flex-col">
-        {/* Header — name + location + short summary */}
-        <header className="mb-5">
+        {/* Header — editorial rhythm matching every other print page:
+            thin hairline, eyebrow, title, optional summary. The eyebrow
+            carries "Property N of M · Location" so the deck reads as a
+            series rather than a stack of standalone pages. */}
+        <header className="mb-5 shrink-0">
+          <div
+            aria-hidden
+            className="mb-3"
+            style={{ height: 1, background: tokens.border }}
+          />
           <div
             className="text-[10px] uppercase tracking-[0.28em] font-semibold mb-1.5"
             style={{ color: tokens.mutedText }}
           >
-            {property.location || "Property"}
+            {indexLabel
+              ? `${indexLabel}${property.location ? "  ·  " + property.location : ""}`
+              : property.location || "Property"}
           </div>
           <h2
             className="font-bold leading-[1.05]"

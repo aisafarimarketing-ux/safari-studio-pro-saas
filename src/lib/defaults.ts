@@ -475,6 +475,31 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
     changed = true;
   }
 
+  // ── 1a. Ensure dayJourney + propertyShowcase exist ──────────────────────
+  // Old proposals (pre-default-overhaul) and ones edited heavily by the
+  // operator can end up missing the day-by-day or property showcase. Both
+  // are core sections — without them the share/print view rendered as
+  // half a deck with no story and no lodges. Auto-insert at sensible
+  // anchor points so every loaded proposal has the full spine.
+  const hasDayJourney = sections.some((s) => s.type === "dayJourney");
+  if (!hasDayJourney) {
+    const mapIdx = sections.findIndex((s) => s.type === "map");
+    const insertAt = mapIdx >= 0 ? mapIdx + 1 : sections.length;
+    sections.splice(insertAt, 0, makeSection("dayJourney", insertAt, "editorial-stack"));
+    changed = true;
+  }
+  const hasPropertyShowcase = sections.some((s) => s.type === "propertyShowcase");
+  if (!hasPropertyShowcase) {
+    const dayIdx = sections.findIndex((s) => s.type === "dayJourney");
+    const insertAt = dayIdx >= 0 ? dayIdx + 1 : sections.length;
+    sections.splice(
+      insertAt,
+      0,
+      makeSection("propertyShowcase", insertAt, "editorial-carousel"),
+    );
+    changed = true;
+  }
+
   // ── 2. Normalise legacy dayJourney + propertyShowcase variants ──────────
   const normalised = sections.map((s) => {
     if (s.type === "dayJourney") {

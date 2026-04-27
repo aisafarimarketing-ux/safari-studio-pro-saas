@@ -332,6 +332,16 @@ function PrintCss({
         outline-color: #dc2626;
         outline-width: 4px;
       }
+      /* Continuation page marker — small chip in the top-left so the
+         operator can see at a glance which day pages were split into
+         a tail. Read alongside the main label chip in the top-right. */
+      .pdf-document--debug .pdf-page[data-continuation="true"]::before {
+        content: attr(data-pdf-label);
+      }
+      .pdf-document--debug .pdf-page[data-continuation="true"] {
+        outline-color: rgba(201, 168, 76, 0.85); /* gold */
+        outline-style: solid;
+      }
       .pdf-document--debug .pdf-page--overflow::after {
         background: #dc2626;
         color: white;

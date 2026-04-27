@@ -29,6 +29,11 @@ export function PrintPracticalInfoPage({
     >
       <header className="mb-6 shrink-0">
         <div
+          aria-hidden
+          className="mb-3"
+          style={{ height: 1, background: tokens.border }}
+        />
+        <div
           className="text-[10px] uppercase tracking-[0.28em] font-semibold mb-2"
           style={{ color: tokens.mutedText }}
         >

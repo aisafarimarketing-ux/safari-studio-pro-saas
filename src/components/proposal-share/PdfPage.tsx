@@ -29,6 +29,10 @@ export type PdfPageProps = {
   background?: string;
   /** Extra className for one-off page tweaks. */
   className?: string;
+  /** Marks this page as a continuation of a prior section (e.g. the
+   *  tail half of a day card). Debug mode highlights it in gold so
+   *  the operator can see at a glance which days were auto-split. */
+  continuation?: boolean;
 };
 
 export function PdfPage({
@@ -37,11 +41,13 @@ export function PdfPage({
   bleed = false,
   background,
   className = "",
+  continuation = false,
 }: PdfPageProps) {
   return (
     <section
       className={`pdf-page ${bleed ? "pdf-page--bleed" : "pdf-page--padded"} ${className}`}
       data-pdf-label={label ?? ""}
+      data-continuation={continuation ? "true" : undefined}
       style={background ? { background } : undefined}
     >
       {children}
