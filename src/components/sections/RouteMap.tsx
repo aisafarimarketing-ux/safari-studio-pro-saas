@@ -41,6 +41,7 @@ export function RouteMap({
   tokens,
   height = 420,
   selectedDayId,
+  presentationMode = false,
 }: {
   days: Day[];
   cachedCoords?: RouteCoord[];
@@ -50,6 +51,9 @@ export function RouteMap({
   /** When set, that day's pin gets a selected ring and the map flies
    *  to it. Used by the "interactive" MapSection variant. */
   selectedDayId?: string | null;
+  /** Hide zoom controls + lock pan / zoom for guest views and PDF
+   *  export. Editor still gets full interactivity. */
+  presentationMode?: boolean;
 }) {
   const [state, setState] = useState<GeocodeState>({ status: "idle" });
   // Import leaflet once on the client so we can build custom div icons.
@@ -243,12 +247,15 @@ export function RouteMap({
     [Math.max(...lats), Math.max(...lngs)],
   ];
 
-  // Gentle curved polyline between consecutive group centres. Keeps the
-  // route feeling like a journey instead of a straight-line diagram.
-  const routeLine: LatLngExpression[] = buildCurvedPath(
-    groups.map((g) => [g.lat, g.lng] as LatLngTuple),
-    28,
-  );
+  // Build a list of legs between consecutive groups, classifying each
+  // as drive (solid) or flight (dashed curved) by haversine distance.
+  // East-African long-haul transfers (Mara → Zanzibar, ~700 km) read
+  // as flights; intra-circuit hops (Tarangire → Serengeti, ~120 km)
+  // read as drives. The threshold is heuristic and operator-tunable
+  // in a future commit — defaulting to 250 km hits the right answer
+  // for the typical safari itinerary.
+  const FLIGHT_THRESHOLD_KM = 250;
+  const legs = buildLegs(groups, FLIGHT_THRESHOLD_KM);
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
@@ -257,20 +264,16 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        // Modest padding so markers have breathing room without being lost
-        // in a sea of unrelated terrain. maxZoom of 9 lets compact routes
-        // (single park / one country) zoom in tight enough that the
-        // surrounding parks, lakes, and towns are *named* — that's the
-        // visible-ground test the operator's customer asked for.
-        // Loose bounds — lets the route spread out and exposes more
-        // geography around the pins. padding raised from 40→60px so
-        // markers don't kiss the edges; maxZoom lowered from 9→7 so
-        // tight clusters (e.g. a single-park route) don't auto-zoom
-        // in past the country-level context that makes the route
-        // legible. East-African routes typically span 1-3 countries
-        // and read best at zoom 5-7.
         boundsOptions={{ padding: [60, 60], maxZoom: 7 }}
         minZoom={3}
+        // Editorial defaults — hide the +/− zoom widget always; let
+        // operators pan/zoom via scroll/drag in editor mode and lock
+        // both in presentation mode (PDF export, share view).
+        zoomControl={false}
+        dragging={!presentationMode}
+        doubleClickZoom={!presentationMode}
+        touchZoom={!presentationMode}
+        keyboard={!presentationMode}
         style={{ width: "100%", height: "100%" }}
         ref={(instance) => {
           mapRef.current = instance as unknown as import("leaflet").Map | null;
@@ -283,29 +286,46 @@ export function RouteMap({
         />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          // Carto Positron — clean light basemap, minimal labels,
+          // muted greys/blues. Replaces Carto Voyager which carried
+          // road shields + saturated park fills that fought the route
+          // for attention.
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
 
-        {groups.length > 1 && (
+        {/* Route legs — one Polyline per leg, styled per type:
+            drive = solid charcoal, flight = dashed soft blue + curved.
+            Rendered before markers so pins sit on top of lines. */}
+        {legs.map((leg, i) => (
           <Polyline
-            positions={routeLine}
-            pathOptions={{
-              color: tokens.accent,
-              weight: 2.4,
-              opacity: 0.85,
-              dashArray: "4 6",
-              lineCap: "round",
-              lineJoin: "round",
-            }}
+            key={`leg-${i}`}
+            positions={leg.path}
+            pathOptions={leg.kind === "flight"
+              ? {
+                  color: "#6faed6",
+                  weight: 1.8,
+                  opacity: 0.85,
+                  dashArray: "5 7",
+                  lineCap: "round",
+                  lineJoin: "round",
+                }
+              : {
+                  color: "#2d2d2d",
+                  weight: 1.6,
+                  opacity: 0.78,
+                  lineCap: "round",
+                  lineJoin: "round",
+                }
+            }
           />
-        )}
+        ))}
 
         {groups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
           const icon = leafletRef.current
-            ? buildDayBadge(leafletRef.current, g.dayLabel, tokens.accent, isSelected)
+            ? buildDayPill(leafletRef.current, g.dayLabel, isSelected)
             : undefined;
           return (
             <Marker
@@ -314,17 +334,15 @@ export function RouteMap({
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
             >
-              {/* direction="auto" — Leaflet flips the label to whichever
-                  side has more space. Combined with the lighter pill
-                  styling and re-enabled leader arrow, labels feel
-                  like callouts pointing at pins instead of large
-                  blocks covering the geography. */}
+              {/* Destination label — clean text below the pill, no
+                  leader arrow, no pill background. Reads as a typeset
+                  caption under each stop instead of a heavy callout. */}
               <Tooltip
-                direction="auto"
-                offset={[0, 0]}
+                direction="bottom"
+                offset={[0, 6]}
                 opacity={1}
                 permanent={true}
-                className="ss-map-label"
+                className="ss-stop-label"
               >
                 {g.placeName}
               </Tooltip>
@@ -333,91 +351,79 @@ export function RouteMap({
         })}
       </MapContainer>
 
-      {/* Legend chip — sits on the map, subtle */}
-      <div
-        className="absolute bottom-3 left-3 z-[500] flex items-center gap-3 px-3 py-1.5 rounded-md text-[10.5px] uppercase tracking-[0.18em]"
-        style={{
-          background: "rgba(255,255,255,0.92)",
-          color: tokens.bodyText,
-          border: `1px solid ${tokens.border}`,
-          backdropFilter: "blur(4px)",
-        }}
-      >
-        <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="inline-block"
-            style={{ width: 10, height: 10, borderRadius: 999, background: tokens.accent }}
-          />
-          Stopover
-        </span>
-        <span style={{ opacity: 0.5 }}>·</span>
-        <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className="inline-block"
-            style={{ width: 16, height: 2, background: tokens.accent, opacity: 0.6 }}
-          />
-          Route
-        </span>
-      </div>
-
       {/* Global style for the permanent tooltips — can't inject via the
           react-leaflet props, so we do it once at the module scope.
-          Lighter pill style with a re-enabled leader arrow — the label
-          reads as a callout pointing at its pin rather than a heavy
-          block of text covering the geography behind it. */}
+          Editorial map style: dark charcoal day pill with a small stem
+          pointing at the geo location, plus a clean green destination
+          caption below. No leader arrows, no opaque cards, no
+          competing UI chrome. */}
       <style jsx global>{`
-        .leaflet-tooltip.ss-map-label {
-          background: rgba(255, 255, 255, 0.96);
-          color: rgba(13, 38, 32, 0.85);
-          border: 1px solid rgba(13, 38, 32, 0.10);
-          border-radius: 6px;
-          padding: 3px 8px;
-          font-size: 10.5px;
-          font-weight: 600;
-          letter-spacing: 0.01em;
-          box-shadow: 0 4px 10px -2px rgba(13, 38, 32, 0.18);
-          white-space: nowrap;
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-        }
-        /* Leader arrow — points back at the pin. Color must match the
-           pill's background; border is omitted so it looks like a
-           seamless extension of the callout. Leaflet auto-flips this
-           to the opposite side based on direction="auto". */
-        .leaflet-tooltip.ss-map-label::before {
-          display: block;
-          border-color: transparent !important;
-        }
-        .leaflet-tooltip-top.ss-map-label::before {
-          border-top-color: rgba(255, 255, 255, 0.96) !important;
-          margin-bottom: -7px;
-        }
-        .leaflet-tooltip-bottom.ss-map-label::before {
-          border-bottom-color: rgba(255, 255, 255, 0.96) !important;
-          margin-top: -7px;
-        }
-        .leaflet-tooltip-left.ss-map-label::before {
-          border-left-color: rgba(255, 255, 255, 0.96) !important;
-        }
-        .leaflet-tooltip-right.ss-map-label::before {
-          border-right-color: rgba(255, 255, 255, 0.96) !important;
-        }
-        .ss-day-badge {
-          display: flex;
+        /* Day pill — rounded charcoal, white text, tiny stem
+           below pointing at the marker's lat/lng anchor.
+           Anchored center-bottom of the icon so the stem sits ON
+           the geo point. */
+        .ss-day-pill {
+          display: inline-flex;
           align-items: center;
-          justify-content: center;
-          width: 30px;
-          height: 30px;
-          border-radius: 999px;
-          color: white;
+          padding: 3.5px 10px;
+          background: #3f3933;
+          color: #ffffff;
           font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.02em;
-          box-shadow: 0 3px 8px rgba(13, 38, 32, 0.32);
-          border: 2px solid white;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          line-height: 1;
+          border-radius: 999px;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+          white-space: nowrap;
           font-family: system-ui, sans-serif;
+          position: relative;
+          transform: translateY(-2px);
+        }
+        .ss-day-pill::after {
+          content: "";
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 5px solid #3f3933;
+          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+        }
+        .ss-day-pill.is-selected {
+          background: #1b3a2d;
+          box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.18), 0 4px 10px rgba(0, 0, 0, 0.28);
+        }
+        .ss-day-pill.is-selected::after {
+          border-top-color: #1b3a2d;
+        }
+
+        /* Destination label — typeset caption under the stem.
+           No background, no border, no leader arrow. Just the place
+           name in dark green so it reads as part of the map's
+           editorial layer instead of a UI chip. Subtle text shadow
+           keeps the label readable when it lands on a road or coast. */
+        .leaflet-tooltip.ss-stop-label {
+          background: transparent;
+          color: #243c24;
+          border: none;
+          border-radius: 0;
+          padding: 0;
+          font-size: 11.5px;
+          font-weight: 700;
+          letter-spacing: 0.005em;
+          box-shadow: none;
+          white-space: nowrap;
+          font-family: system-ui, sans-serif;
+          text-shadow:
+            0 0 3px rgba(247, 245, 240, 0.95),
+            0 0 6px rgba(247, 245, 240, 0.85),
+            0 1px 2px rgba(247, 245, 240, 0.85);
+        }
+        .leaflet-tooltip.ss-stop-label::before {
+          display: none;
         }
       `}</style>
     </div>
@@ -464,28 +470,74 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
   return groups;
 }
 
-// Build a custom DivIcon for a pin that shows the day number (or range)
-// as a tinted circular badge. Selected pins get a double-ring + scale-up
-// so the eye tracks where the current lodge sits.
-function buildDayBadge(
+// Build a custom DivIcon for a stop — dark charcoal "Day X" pill with
+// a small stem pointing at the geographic anchor. Anchored bottom-
+// center so the stem touches the lat/lng. Sized roughly to the pill
+// content; iconSize doesn't have to be pixel-exact since these
+// markers aren't click-targets.
+function buildDayPill(
   L: typeof import("leaflet"),
   dayLabel: string,
-  color: string,
   isSelected: boolean = false,
 ) {
-  // Smaller pin (30px default, 38px when selected) — matches the
-  // lighter callout style and stops the markers from dominating the
-  // map at typical safari-route zoom levels.
-  const size = isSelected ? 38 : 30;
-  const extraStyle = isSelected
-    ? `transform:scale(1.1);box-shadow:0 0 0 4px ${color}28, 0 6px 18px rgba(0,0,0,0.28);`
-    : "";
+  const text = `Day ${dayLabel}`;
+  // Approximation — wider for longer labels (e.g. "Day 99-99").
+  // Generous on the upper bound so text never clips inside the icon
+  // bounding box.
+  const estWidth = Math.max(54, text.length * 6.4 + 22);
+  const pillHeight = 22;
+  const stemHeight = 6;
+  const totalHeight = pillHeight + stemHeight;
+  const className = isSelected ? "ss-day-pill is-selected" : "ss-day-pill";
   return L.divIcon({
     className: "",
-    html: `<div class="ss-day-badge" style="background:${color};${extraStyle}">${escape(dayLabel)}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    html: `<div class="${className}">${escape(text)}</div>`,
+    iconSize: [estWidth, totalHeight],
+    iconAnchor: [estWidth / 2, totalHeight], // bottom-center → stem tip sits on lat/lng
   });
+}
+
+// ─── Leg classification + curve helpers ───────────────────────────────
+
+type RouteLeg = {
+  kind: "drive" | "flight";
+  path: LatLngExpression[];
+};
+
+/** Build a list of legs between consecutive groups, classifying each
+ *  by haversine distance. Drive legs are straight; flight legs are
+ *  curved so two parallel flights between the same regions don't
+ *  render as overlapping straight lines. */
+function buildLegs(
+  groups: { lat: number; lng: number }[],
+  flightThresholdKm: number,
+): RouteLeg[] {
+  if (groups.length < 2) return [];
+  const legs: RouteLeg[] = [];
+  for (let i = 0; i < groups.length - 1; i++) {
+    const a: LatLngTuple = [groups[i].lat, groups[i].lng];
+    const b: LatLngTuple = [groups[i + 1].lat, groups[i + 1].lng];
+    const km = haversineKm(a, b);
+    const isFlight = km > flightThresholdKm;
+    legs.push({
+      kind: isFlight ? "flight" : "drive",
+      path: isFlight ? buildCurvedPath([a, b], 28) : [a, b],
+    });
+  }
+  return legs;
+}
+
+function haversineKm(a: LatLngTuple, b: LatLngTuple): number {
+  const R = 6371; // km
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 // Sub-component — mounted inside MapContainer so it has access to the

@@ -319,6 +319,7 @@ export function MapSection({ section }: { section: Section }) {
                       }
                     }}
                     height={MAP_HEIGHT}
+                    presentationMode={!isEditor}
                   />
                 </div>
               ) : (
@@ -733,6 +734,7 @@ function InteractiveMap({
                   onCoordsResolved={onCoordsResolved}
                   height={MAP_HEIGHT}
                   selectedDayId={selectedDayId}
+                  presentationMode={!isEditor}
                 />
               </div>
             ) : (
