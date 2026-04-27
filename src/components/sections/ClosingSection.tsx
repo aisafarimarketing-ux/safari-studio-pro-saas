@@ -1206,7 +1206,7 @@ function DecisionCardLayout({
 
   return (
     <section
-      className="relative px-3 py-10 md:px-6 md:py-16"
+      className="relative px-3 py-8 md:px-6 md:py-10"
       style={{ background: pageBg }}
     >
       {aiButtons}

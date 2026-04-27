@@ -48,7 +48,7 @@ export function GallerySection({ section }: { section: Section }) {
       [3, 1],
     ];
     return (
-      <div className="py-20 md:py-24" style={{ background: tokens.sectionSurface }}>
+      <div className="py-10 md:py-12" style={{ background: tokens.sectionSurface }}>
         <div className="ed-wide">
           <div
             className="text-[10px] uppercase tracking-[0.32em] mb-8"

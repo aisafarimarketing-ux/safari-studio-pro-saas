@@ -53,7 +53,7 @@ export function ItineraryTableSection({ section }: { section: Section }) {
 
   return (
     <div
-      className={`${compact ? "py-12" : "py-20"} px-8 md:px-20`}
+      className={`${compact ? "py-8" : "py-10 md:py-12"} px-8 md:px-20`}
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto">
@@ -176,7 +176,7 @@ function HorizontalRowsLayout({
   const stripeBg = blendForStripe(tokens.sectionSurface, tokens.border);
 
   return (
-    <div className="py-20 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+    <div className="py-10 md:py-12 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-6xl mx-auto">
         <div
           className="text-[10px] uppercase tracking-[0.3em] mb-8"

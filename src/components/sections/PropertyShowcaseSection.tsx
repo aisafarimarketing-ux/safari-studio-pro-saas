@@ -45,7 +45,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   if (properties.length === 0) {
     return (
-      <div className="py-24" style={{ background: tokens.sectionSurface }}>
+      <div className="py-12" style={{ background: tokens.sectionSurface }}>
         <div className="ed-wide text-center text-small" style={{ color: tokens.mutedText }}>
           {isEditor
             ? "No properties added yet. Pick properties from the library in Day-by-Day cards."
@@ -57,7 +57,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   return (
     <div style={{ background: tokens.sectionSurface }}>
-      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-16 md:pt-20">
+      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-10 md:pt-12">
         <div
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-2"
           style={{ color: tokens.mutedText }}
@@ -135,7 +135,7 @@ function PropertyBlock({
 
   return (
     <div
-      className="py-20"
+      className="py-10 md:py-12"
       data-property-block
       style={{
         background: tokens.sectionSurface,

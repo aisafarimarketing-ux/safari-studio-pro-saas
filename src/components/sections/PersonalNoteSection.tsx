@@ -108,7 +108,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
         </div>
       )}
 
-      <div className={`mx-auto px-10 md:px-14 py-14 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
+      <div className={`mx-auto px-10 md:px-14 py-10 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
         {/* Greeting body */}
         <div
           className="text-[15px] font-semibold mb-3 outline-none"
@@ -416,7 +416,7 @@ function EditorialLetterImageVariant({
         </div>
       )}
 
-      <div className="mx-auto px-6 md:px-12 py-12 md:py-16" style={{ maxWidth: 1140 }}>
+      <div className="mx-auto px-6 md:px-12 py-10 md:py-12" style={{ maxWidth: 1140 }}>
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-8 lg:gap-12 items-stretch">
           {/* LEFT — letter */}
           <div className="min-w-0 flex flex-col justify-center">

@@ -73,8 +73,8 @@ export function ProposalCanvas() {
               {/* Inserter before first section */}
               <AddSectionInserter afterOrder={-1} />
 
-              {sorted.map((section, idx) => (
-                <div key={section.id} className={idx > 0 ? "mt-6 md:mt-8" : ""}>
+              {sorted.map((section) => (
+                <div key={section.id}>
                   <SectionChrome section={section}>
                     <SectionRenderer section={section} />
                   </SectionChrome>
@@ -87,12 +87,8 @@ export function ProposalCanvas() {
           // Preview / print: no chrome, no inserters
           sorted
             .filter((s) => s.visible)
-            .map((section, idx) => (
-              <div
-                key={section.id}
-                id={`section-${section.id}`}
-                className={idx > 0 ? "mt-6 md:mt-8" : ""}
-              >
+            .map((section) => (
+              <div key={section.id} id={`section-${section.id}`}>
                 <SectionRenderer section={section} />
               </div>
             ))

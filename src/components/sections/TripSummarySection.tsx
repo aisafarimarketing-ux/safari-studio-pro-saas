@@ -29,7 +29,7 @@ export function TripSummarySection({ section }: { section: Section }) {
   ];
 
   return (
-    <div className="py-24" style={{ background: tokens.pageBg }}>
+    <div className="py-10 md:py-12" style={{ background: tokens.pageBg }}>
       <div className="ed-wide">
         <div
           className="text-label ed-label text-center mb-12"

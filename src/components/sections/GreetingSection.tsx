@@ -42,7 +42,7 @@ export function GreetingSection({ section }: { section: Section }) {
   // ── Two-column-consultant ──────────────────────────────────────────────────
   if (variant === "two-column-consultant") {
     return (
-      <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+      <div className="py-12 relative" style={{ background: tokens.sectionSurface }}>
         {aiButton}
         <div className="ed-wide grid md:grid-cols-[200px_1fr] gap-16 items-start">
           {/* Consultant sidebar */}
@@ -85,7 +85,7 @@ export function GreetingSection({ section }: { section: Section }) {
   // ── Centered-minimal ───────────────────────────────────────────────────────
   if (variant === "centered-minimal") {
     return (
-      <div className="py-24 text-center relative" style={{ background: tokens.sectionSurface }}>
+      <div className="py-12 text-center relative" style={{ background: tokens.sectionSurface }}>
         {aiButton}
         <div className="ed-narrow">
           <div
@@ -121,7 +121,7 @@ export function GreetingSection({ section }: { section: Section }) {
       <div className="flex relative" style={{ background: tokens.sectionSurface }}>
         {aiButton}
         <div className="hidden md:block w-2 shrink-0" style={{ background: tokens.accent }} />
-        <div className="flex-1 py-24">
+        <div className="flex-1 py-12">
           <div className="ed-narrow !mx-0 md:!mx-[clamp(2rem,8vw,6rem)] !max-w-[620px]">
             <div
               className="text-label ed-label mb-12"
@@ -157,7 +157,7 @@ export function GreetingSection({ section }: { section: Section }) {
 
   // ── Editorial-letter (default) ─────────────────────────────────────────────
   return (
-    <div className="py-24 relative" style={{ background: tokens.sectionSurface }}>
+    <div className="py-12 relative" style={{ background: tokens.sectionSurface }}>
       {aiButton}
       <div className="ed-narrow">
         <div

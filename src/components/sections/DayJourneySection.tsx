@@ -42,10 +42,10 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-24 md:py-28" style={{ background: tokens.pageBg }}>
+    <div className="py-10 md:py-12" style={{ background: tokens.pageBg }}>
       <div className="max-w-5xl mx-auto px-8 md:px-12">
         {/* Section header */}
-        <div className="flex items-end justify-between mb-16 gap-6 flex-wrap">
+        <div className="flex items-end justify-between mb-10 gap-6 flex-wrap">
           <div>
             <div
               className="text-label ed-label mb-3"
@@ -70,7 +70,7 @@ export function DayJourneySection({ section }: { section: Section }) {
             items={days.map((d) => d.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-20 md:space-y-24">
+            <div className="space-y-10 md:space-y-12">
               {days.map((day, i) => (
                 <DayCard
                   key={day.id}
