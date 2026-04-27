@@ -1,0 +1,17 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# pdf-service is an Express server (index.js) — its only HTTP routes
+# are `/` (status JSON), `/diag`, and `/pdf`. The repo-root railway.toml
+# now points at /api/version (the Next.js app's endpoint) which does
+# not exist on this service. Without this dedicated config, Railway
+# was applying the root config to both services and failing every
+# pdf-service deploy on healthcheck even though Express was up and
+# listening on PORT.
+healthcheckPath = "/"
+healthcheckTimeout = 300
+
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
