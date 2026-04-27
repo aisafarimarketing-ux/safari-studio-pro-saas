@@ -2,8 +2,19 @@
 builder = "dockerfile"
 
 [deploy]
-startCommand = "npm run start"
-healthcheckPath = "/"
-healthcheckTimeout = 100
+# Bind explicitly so `next start` listens on Railway's injected PORT
+# on every interface. Defense-in-depth — Next does this by default,
+# but the explicit form removes ambiguity if PORT is unset.
+startCommand = "npm run start -- -H 0.0.0.0 -p ${PORT:-3000}"
+
+# /api/version is unauthenticated, runs no DB query, doesn't touch
+# Clerk, doesn't render React — just returns JSON. Always 200 if the
+# Node process is alive, which is exactly what we want a healthcheck
+# to mean. Pointing at "/" was forcing Railway through Clerk middleware
+# + the full React landing page, which is heavier and (depending on
+# session state) can return non-200, marking healthy deploys as failed.
+healthcheckPath = "/api/version"
+healthcheckTimeout = 300
+
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
