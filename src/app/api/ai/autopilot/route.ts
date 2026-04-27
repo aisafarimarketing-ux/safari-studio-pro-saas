@@ -450,8 +450,25 @@ ${JSON.stringify(userPayload, null, 2)}`;
       nightsByName.set(name, (nightsByName.get(name) ?? 0) + 1);
     }
 
+    // URL-shape filter: keep https/http URLs, drop data: URLs. Old
+    // properties uploaded before Supabase Storage was configured may
+    // still carry inline base64 images — including those inline blows
+    // the proposal payload past Next's body-size limit and the merged
+    // save fails silently, leaving the editor opening on a blank first
+    // save. The Property record itself still has the data URL for the
+    // editor's per-property views; only the snapshot embedded in the
+    // proposal is trimmed.
+    const isSafeUrl = (u: string | null | undefined): u is string =>
+      !!u && (u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/"));
+    const MAX_GALLERY_PER_PROPERTY = 6;
+    const MAX_IMAGES_PER_ROOM = 4;
+
     propertySnapshots = fullProps.map((p) => {
-      const cover = p.images.find((i) => i.isCover) ?? p.images[0];
+      const safeImages = p.images.filter((i) => isSafeUrl(i.url));
+      const cover = safeImages.find((i) => i.isCover) ?? safeImages[0];
+      const galleryUrls = safeImages
+        .map((i) => i.url)
+        .slice(0, MAX_GALLERY_PER_PROPERTY);
       return {
         id: p.id,
         name: p.name,
@@ -465,7 +482,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
         roomType: "",
         nights: nightsByName.get(p.name) ?? p.suggestedNights ?? 1,
         leadImageUrl: cover?.url ?? "",
-        galleryUrls: p.images.map((i) => i.url),
+        galleryUrls,
         checkInTime: p.checkInTime ?? undefined,
         checkOutTime: p.checkOutTime ?? undefined,
         totalRooms: p.totalRooms ?? undefined,
@@ -476,7 +493,9 @@ ${JSON.stringify(userPayload, null, 2)}`;
           name: r.name,
           bedConfig: r.bedConfig ?? undefined,
           description: r.description ?? undefined,
-          imageUrls: r.imageUrls ?? [],
+          imageUrls: (r.imageUrls ?? [])
+            .filter(isSafeUrl)
+            .slice(0, MAX_IMAGES_PER_ROOM),
         })),
       };
     });

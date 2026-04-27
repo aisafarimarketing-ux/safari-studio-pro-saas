@@ -130,12 +130,39 @@ export default function ProposalsPage() {
               );
             } else {
               const merged = mergeAutopilotIntoProposal(proposal, draft);
-              await fetch("/api/proposals", {
+              // Persist the merged result. If this save fails the editor
+              // would open with the blank first-save and the operator
+              // would see "nothing populated" with no clue why — usually
+              // because the merged JSON exceeded a body limit. Surface
+              // status + reason and stop the redirect so they can react.
+              const saveBody = JSON.stringify({ proposal: merged });
+              const save = await fetch("/api/proposals", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ proposal: merged }),
+                body: saveBody,
                 signal: controller.signal,
               });
+              if (!save.ok) {
+                const detail = await save.json().catch(() => ({}));
+                const reason = detail?.error || `HTTP ${save.status}`;
+                console.error(
+                  "[autopilot] merge save failed:",
+                  save.status,
+                  reason,
+                  "· payload bytes:",
+                  saveBody.length,
+                );
+                setError(
+                  `AI drafted the proposal but couldn't save it (${reason}). ${
+                    saveBody.length > 3_000_000
+                      ? "The payload is unusually large — you may have inline base64 images on properties; re-uploading them through Supabase Storage will fix this."
+                      : "Open the editor and use the Regenerate button to retry."
+                  }`,
+                );
+                // Don't redirect — keep operator on the dialog so they
+                // can read the error. Their inputs survive.
+                return;
+              }
             }
           } else {
             // Surface the server's error reason rather than swallowing.

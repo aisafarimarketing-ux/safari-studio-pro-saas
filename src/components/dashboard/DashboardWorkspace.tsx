@@ -170,15 +170,42 @@ export function DashboardWorkspace() {
           });
           if (ai.ok) {
             const draft = (await ai.json()) as AutopilotResult;
-            const merged = mergeAutopilotIntoProposal(proposal, draft);
-            await fetch("/api/proposals", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ proposal: merged }),
-              signal: controller.signal,
-            });
+            if (!draft.days || draft.days.length === 0) {
+              console.warn("[autopilot] AI returned 0 days — opening blank editor");
+            } else {
+              const merged = mergeAutopilotIntoProposal(proposal, draft);
+              const saveBody = JSON.stringify({ proposal: merged });
+              const save = await fetch("/api/proposals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: saveBody,
+                signal: controller.signal,
+              });
+              if (!save.ok) {
+                const detail = await save.json().catch(() => ({}));
+                console.error(
+                  "[autopilot] merge save failed:",
+                  save.status,
+                  detail?.error,
+                  "· payload bytes:",
+                  saveBody.length,
+                );
+                setError(
+                  `AI drafted the proposal but couldn't save it (${detail?.error || `HTTP ${save.status}`}). ${
+                    saveBody.length > 3_000_000
+                      ? "The payload is unusually large — likely inline base64 images on properties. Re-uploading them through Supabase Storage will fix this."
+                      : "Open the editor and use Regenerate to retry."
+                  }`,
+                );
+                return;
+              }
+            }
           } else {
-            console.warn("[autopilot] non-OK:", ai.status);
+            const detail = await ai.json().catch(() => ({}));
+            console.warn("[autopilot] non-OK:", ai.status, detail?.error);
+            setError(
+              `AI couldn't draft this proposal: ${detail?.error || `HTTP ${ai.status}`}. The editor will open with your blank proposal — try Regenerate inside.`,
+            );
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
