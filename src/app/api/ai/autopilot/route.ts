@@ -115,7 +115,29 @@ type AutopilotResponse = {
   };
 };
 
+// Top-level wrapper: catches ANY error from the handler so the
+// client always gets a JSON body with a descriptive `error` field.
+// Without this, an unhandled exception (Prisma schema mismatch,
+// brandDNA throw, type assertion fail) would bubble to Next's
+// default 500 page — which is HTML, not JSON, and the client's
+// catch block can't extract a useful message. The user just sees
+// "HTTP 500" with no clue what went wrong.
 export async function POST(req: Request) {
+  try {
+    return await handleAutopilot(req);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[AUTOPILOT] UNHANDLED EXCEPTION:", message);
+    if (stack) console.error("[AUTOPILOT] stack:", stack);
+    return NextResponse.json(
+      { error: `Autopilot crashed: ${message}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleAutopilot(req: Request): Promise<Response> {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!ctx.organization) {
