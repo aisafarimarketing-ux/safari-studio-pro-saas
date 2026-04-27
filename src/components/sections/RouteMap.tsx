@@ -262,7 +262,14 @@ export function RouteMap({
         // (single park / one country) zoom in tight enough that the
         // surrounding parks, lakes, and towns are *named* — that's the
         // visible-ground test the operator's customer asked for.
-        boundsOptions={{ padding: [40, 40], maxZoom: 9 }}
+        // Loose bounds — lets the route spread out and exposes more
+        // geography around the pins. padding raised from 40→60px so
+        // markers don't kiss the edges; maxZoom lowered from 9→7 so
+        // tight clusters (e.g. a single-park route) don't auto-zoom
+        // in past the country-level context that makes the route
+        // legible. East-African routes typically span 1-3 countries
+        // and read best at zoom 5-7.
+        boundsOptions={{ padding: [60, 60], maxZoom: 7 }}
         minZoom={3}
         style={{ width: "100%", height: "100%" }}
         ref={(instance) => {

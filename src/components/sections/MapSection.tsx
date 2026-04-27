@@ -521,137 +521,209 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
+  const MAP_HEIGHT = 600;
+
   return (
-    <div className="py-20" style={{ background: tokens.sectionSurface }}>
-      <div className="max-w-6xl mx-auto px-8 md:px-12">
-        {/* Header */}
-        <div className="mb-8">
-          <div
-            className="text-[10px] uppercase tracking-[0.3em] mb-3"
-            style={{ color: tokens.mutedText }}
-          >
-            Map
-          </div>
-          <h2
-            className="font-bold leading-tight"
-            style={{
-              color: tokens.headingText,
-              fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(1.8rem, 3.4vw, 2.4rem)",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
-          </h2>
-          <div className="mt-3 flex items-center gap-2.5">
-            {countryFlag && (
-              <span className="text-[16px] leading-none" aria-hidden>
-                {countryFlag}
-              </span>
-            )}
-            <span
-              className="text-[13.5px] font-semibold outline-none"
-              style={{ color: tokens.headingText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
-            >
-              {countryName}
-            </span>
-          </div>
-        </div>
-
-        {/* Lodge sidebar + map */}
-        <div className="grid md:grid-cols-[280px_1fr] gap-6 items-stretch">
+    <div className="py-12 md:py-14" style={{ background: tokens.sectionSurface }}>
+      <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
+        {/* Card-rail (240px) + dominant map. Title + country chip live
+            inside the rail header so the map can stretch the section's
+            full vertical room. Same proportions as the route variant. */}
+        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
           {/* Sidebar */}
-          <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
-            <div
-              className="text-[13px] px-3 py-2 outline-none"
-              style={{ color: tokens.bodyText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => onStartPointChange(e.currentTarget.textContent ?? "")}
-            >
-              <span className="font-semibold" style={{ color: tokens.headingText }}>Start:</span>{" "}
-              {startPoint}
+          <div
+            className="flex flex-col pr-1 overflow-y-auto"
+            style={{ maxHeight: MAP_HEIGHT }}
+          >
+            {/* Rail header */}
+            <div className="mb-3">
+              <div
+                className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-1"
+                style={{ color: tokens.mutedText }}
+              >
+                Map
+              </div>
+              <h2
+                className="font-bold leading-[1.15]"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontSize: "clamp(16px, 1.6vw, 19px)",
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
+              </h2>
+              <div className="mt-2 flex items-center gap-1.5">
+                {countryFlag && (
+                  <span className="text-[14px] leading-none" aria-hidden>
+                    {countryFlag}
+                  </span>
+                )}
+                <span
+                  className="text-[12px] font-semibold outline-none"
+                  style={{ color: tokens.headingText }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
+                >
+                  {countryName}
+                </span>
+              </div>
             </div>
 
-            {groupedRows.map((row, idx) => {
-              const rowDayId = findDayIdForRow(row.startDay);
-              const isSelected = rowDayId && rowDayId === selectedDayId;
-              const prop = findPropertyFor(row.accommodation);
-              const thumb = prop?.leadImageUrl ?? null;
-
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setSelectedDayId(rowDayId ?? null)}
-                  className="w-full text-left flex items-start gap-3 p-2.5 rounded-md transition"
-                  style={{
-                    background: isSelected ? `${tokens.accent}18` : tokens.cardBg,
-                    border: `1px solid ${isSelected ? tokens.accent : tokens.border}`,
-                    boxShadow: isSelected ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
-                  }}
-                >
-                  <div
-                    className="shrink-0 overflow-hidden"
-                    style={{ width: 58, height: 44, borderRadius: 4, background: tokens.sectionSurface }}
-                  >
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={thumb} alt={row.accommodation} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-[0.18em]" style={{ color: tokens.mutedText }}>
-                        {row.destination.slice(0, 3)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className="text-[10.5px] uppercase tracking-[0.22em] font-semibold"
-                      style={{ color: tokens.accent }}
-                    >
-                      {row.dayLabel}
-                    </div>
-                    <div
-                      className="text-[13px] font-semibold leading-tight truncate mt-0.5"
-                      style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-                    >
-                      {row.accommodation || row.destination}
-                    </div>
-                    <div
-                      className="text-[11px] truncate mt-0.5"
-                      style={{ color: tokens.mutedText }}
-                    >
-                      {row.destination}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-
+            {/* Start point */}
             <div
-              className="text-[13px] px-3 py-2 outline-none"
-              style={{ color: tokens.bodyText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => onEndPointChange(e.currentTarget.textContent ?? "")}
+              className="pb-2.5 mb-2.5"
+              style={{ borderBottom: `1px solid ${tokens.border}` }}
             >
-              <span className="font-semibold" style={{ color: tokens.headingText }}>End:</span>{" "}
-              {endPoint}
+              <div
+                className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
+                style={{ color: tokens.mutedText }}
+              >
+                Start
+              </div>
+              <div
+                className="text-[12.5px] outline-none"
+                style={{ color: tokens.headingText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onStartPointChange(e.currentTarget.textContent ?? "")}
+              >
+                {startPoint}
+              </div>
+            </div>
+
+            {/* Day cards — clickable, fly the map to the selected pin.
+                Wrapped in a flex-1 container so the rail's End block
+                can flex to the bottom of the column. */}
+            <div className="space-y-1.5 flex-1">
+              {groupedRows.map((row, idx) => {
+                const rowDayId = findDayIdForRow(row.startDay);
+                const isSelected = rowDayId && rowDayId === selectedDayId;
+                const prop = findPropertyFor(row.accommodation);
+                const thumb = prop?.leadImageUrl ?? null;
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedDayId(rowDayId ?? null)}
+                    className="w-full text-left flex items-center gap-2.5 p-2 rounded-md transition"
+                    style={{
+                      background: isSelected ? `${tokens.accent}18` : tokens.cardBg,
+                      border: `1px solid ${isSelected ? tokens.accent : tokens.border}`,
+                      boxShadow: isSelected ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                    }}
+                  >
+                    <div
+                      className="shrink-0 overflow-hidden"
+                      style={{ width: 40, height: 40, borderRadius: 4, background: tokens.sectionSurface }}
+                    >
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumb} alt={row.accommodation} className="w-full h-full object-cover" />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center font-bold tabular-nums"
+                          style={{
+                            background: `${tokens.accent}1c`,
+                            color: tokens.accent,
+                            fontSize: 12,
+                          }}
+                        >
+                          {row.startDay}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className="text-[9.5px] uppercase tracking-[0.18em] font-semibold"
+                        style={{ color: tokens.mutedText }}
+                      >
+                        {row.dayLabel}
+                      </div>
+                      <div
+                        className="text-[12.5px] font-semibold leading-tight truncate"
+                        style={{
+                          color: tokens.headingText,
+                          fontFamily: `'${theme.displayFont}', serif`,
+                        }}
+                      >
+                        {row.destination}
+                      </div>
+                      {row.accommodation && (
+                        <div
+                          className="text-[11px] truncate"
+                          style={{ color: tokens.mutedText }}
+                        >
+                          {row.accommodation}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* End point */}
+            <div
+              className="pt-2.5 mt-2.5"
+              style={{ borderTop: `1px solid ${tokens.border}` }}
+            >
+              <div
+                className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
+                style={{ color: tokens.mutedText }}
+              >
+                End
+              </div>
+              <div
+                className="text-[12.5px] outline-none"
+                style={{ color: tokens.headingText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onEndPointChange(e.currentTarget.textContent ?? "")}
+              >
+                {endPoint}
+              </div>
+            </div>
+
+            {/* Caption + attribution at the bottom of the rail */}
+            {(caption || isEditor) && (
+              <div
+                className="mt-3 pt-3 text-[11px] italic outline-none"
+                style={{
+                  color: tokens.mutedText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  borderTop: `1px solid ${tokens.border}`,
+                }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onCaptionChange(e.currentTarget.textContent ?? "")}
+              >
+                {caption || (isEditor ? "Add a caption…" : "")}
+              </div>
+            )}
+            <div
+              className="mt-2 text-[9px] tracking-wide"
+              style={{
+                color: tokens.mutedText,
+                fontFamily: `'${theme.bodyFont}', sans-serif`,
+                opacity: 0.5,
+              }}
+            >
+              Map data © OpenStreetMap contributors
             </div>
           </div>
 
-          {/* Map */}
+          {/* ── Map — dominant column ─────────────────────────── */}
           <div className="min-w-0">
             {days.length > 0 ? (
               <div
                 className="overflow-hidden"
                 style={{
-                  borderRadius: 6,
+                  borderRadius: 10,
                   border: `1px solid ${tokens.border}`,
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                 }}
               >
                 <RouteMap
@@ -659,7 +731,7 @@ function InteractiveMap({
                   tokens={tokens}
                   cachedCoords={cachedCoords}
                   onCoordsResolved={onCoordsResolved}
-                  height={520}
+                  height={MAP_HEIGHT}
                   selectedDayId={selectedDayId}
                 />
               </div>
@@ -667,10 +739,10 @@ function InteractiveMap({
               <div
                 className="flex items-center justify-center text-[13px]"
                 style={{
-                  height: 520,
+                  height: MAP_HEIGHT,
                   background: tokens.cardBg,
                   color: tokens.mutedText,
-                  borderRadius: 6,
+                  borderRadius: 10,
                   border: `1px solid ${tokens.border}`,
                 }}
               >
@@ -678,24 +750,6 @@ function InteractiveMap({
               </div>
             )}
 
-            {(caption || isEditor) && (
-              <p
-                className="text-[12px] italic text-center mt-4 outline-none"
-                style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => onCaptionChange(e.currentTarget.textContent ?? "")}
-              >
-                {caption || (isEditor ? "Add a caption…" : "")}
-              </p>
-            )}
-
-            <div
-              className="mt-2 text-[10px] tracking-wide text-center"
-              style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif`, opacity: 0.55 }}
-            >
-              Map data © OpenStreetMap contributors
-            </div>
           </div>
         </div>
       </div>
