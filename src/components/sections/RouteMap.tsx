@@ -255,15 +255,12 @@ export function RouteMap({
     [Math.max(...lats), Math.max(...lngs)],
   ];
 
-  // Build a list of legs between consecutive groups, classifying each
-  // as drive (solid) or flight (dashed curved) by haversine distance.
-  // East-African long-haul transfers (Mara → Zanzibar, ~700 km) read
-  // as flights; intra-circuit hops (Tarangire → Serengeti, ~120 km)
-  // read as drives. The threshold is heuristic and operator-tunable
-  // in a future commit — defaulting to 250 km hits the right answer
-  // for the typical safari itinerary.
-  const FLIGHT_THRESHOLD_KM = 250;
-  const legs = buildLegs(groups, FLIGHT_THRESHOLD_KM);
+  // Single sequential route: Stop 1 → Stop 2 → Stop 3 → ... rendered as
+  // ONE polyline through every group. Previous "two kinds of leg with
+  // dashed flights and curved arcs" treatment turned the map into a
+  // navigation widget. The editorial brief is a clean route diagram:
+  // one consistent line, no transport icons, no dashes, no curves.
+  const routePath: LatLngTuple[] = groups.map((g) => [g.lat, g.lng]);
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
@@ -272,7 +269,12 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        boundsOptions={{ padding: [60, 60], maxZoom: 7 }}
+        // Tight framing: 30px padding all sides + no maxZoom cap so the
+        // route fills as much of the viewport as possible. Previous
+        // 60px padding + maxZoom: 7 left huge unused geography around
+        // the itinerary, making it look like a "tool" rather than a
+        // diagram of THIS trip.
+        boundsOptions={{ padding: [30, 30] }}
         minZoom={3}
         // Editorial defaults — hide the +/− zoom widget always; let
         // operators pan/zoom via scroll/drag in editor mode and lock
@@ -295,54 +297,29 @@ export function RouteMap({
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           // Carto Positron — clean light basemap, minimal labels,
-          // muted greys/blues. Replaces Carto Voyager which carried
-          // road shields + saturated park fills that fought the route
-          // for attention.
+          // muted greys/blues. The right minimal aesthetic for a
+          // route diagram.
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
 
-        {/* Route legs — one Polyline per leg, styled per type:
-            drive = solid charcoal, flight = dashed soft blue + curved.
-            Rendered before markers so pins sit on top of lines. */}
-        {legs.map((leg, i) => (
+        {/* Single sequential route — one solid charcoal polyline
+            traced through every stop in order. No dashes, no curves,
+            no transport classification. Renders BEFORE markers so
+            the day pills sit on top. */}
+        {routePath.length >= 2 && (
           <Polyline
-            key={`leg-${i}`}
-            positions={leg.path}
-            pathOptions={leg.kind === "flight"
-              ? {
-                  color: "#6faed6",
-                  weight: 1.8,
-                  opacity: 0.85,
-                  dashArray: "5 7",
-                  lineCap: "round",
-                  lineJoin: "round",
-                }
-              : {
-                  color: "#2d2d2d",
-                  weight: 1.6,
-                  opacity: 0.78,
-                  lineCap: "round",
-                  lineJoin: "round",
-                }
-            }
+            positions={routePath as LatLngExpression[]}
+            pathOptions={{
+              color: "#243c24",
+              weight: 2.5,
+              opacity: 0.92,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
           />
-        ))}
-
-        {/* Midpoint transport icons — small plane / car circle pinned
-            at the geographic midpoint of each leg. Understated so they
-            cue the mode without competing with the day pills. */}
-        {leafletRef.current && legs.map((leg, i) => (
-          <Marker
-            key={`leg-icon-${i}`}
-            position={leg.midpoint}
-            icon={buildLegIcon(leafletRef.current!, leg.kind)}
-            interactive={false}
-            keyboard={false}
-            zIndexOffset={-100}
-          />
-        ))}
+        )}
 
         {groups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
@@ -389,22 +366,21 @@ export function RouteMap({
           caption below. No leader arrows, no opaque cards, no
           competing UI chrome. */}
       <style jsx global>{`
-        /* Day pill — rounded charcoal, white text, tiny stem
-           below pointing at the marker's lat/lng anchor.
-           Anchored center-bottom of the icon so the stem sits ON
-           the geo point. */
+        /* Day pill — slightly bigger for visibility on the editorial
+           route diagram. Charcoal background, white text, tiny stem
+           pointing at the geo anchor. */
         .ss-day-pill {
           display: inline-flex;
           align-items: center;
-          padding: 3.5px 10px;
-          background: #3f3933;
+          padding: 5px 13px;
+          background: #243c24;
           color: #ffffff;
-          font-size: 11px;
+          font-size: 12.5px;
           font-weight: 600;
           letter-spacing: 0.04em;
           line-height: 1;
           border-radius: 999px;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
           white-space: nowrap;
           font-family: system-ui, sans-serif;
           position: relative;
@@ -418,14 +394,14 @@ export function RouteMap({
           transform: translateX(-50%);
           width: 0;
           height: 0;
-          border-left: 4px solid transparent;
-          border-right: 4px solid transparent;
-          border-top: 5px solid #3f3933;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 6px solid #243c24;
           filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
         }
         .ss-day-pill.is-selected {
           background: #1b3a2d;
-          box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.18), 0 4px 10px rgba(0, 0, 0, 0.28);
+          box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.20), 0 4px 12px rgba(0, 0, 0, 0.30);
         }
         .ss-day-pill.is-selected::after {
           border-top-color: #1b3a2d;
@@ -457,24 +433,6 @@ export function RouteMap({
           display: none;
         }
 
-        /* Midpoint transport icon — small round chip with a plane
-           (flight) or car (drive) glyph. Cream background blends with
-           the Carto Positron basemap so the icon reads as a passive
-           cue rather than a UI button. */
-        .ss-leg-icon {
-          width: 22px;
-          height: 22px;
-          border-radius: 999px;
-          background: rgba(247, 245, 240, 0.95);
-          border: 1px solid rgba(13, 38, 32, 0.10);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .ss-leg-icon-flight { color: #6faed6; }
-        .ss-leg-icon-flight svg { transform: rotate(-30deg); }
-        .ss-leg-icon-drive  { color: #2d2d2d; }
       `}</style>
     </div>
   );
@@ -557,89 +515,6 @@ function buildDayPill(
   });
 }
 
-// Build the small midpoint icon — plane for flight, car for drive.
-// Both render inside a 22px round chip so they read as a deliberate
-// glyph regardless of what tile texture sits beneath. Non-interactive
-// (set on the Marker) so they never steal clicks from the day pills.
-function buildLegIcon(L: typeof import("leaflet"), kind: "drive" | "flight") {
-  const SIZE = 22;
-  const planeSvg =
-    `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden>` +
-    `<path d="M21 12.5a.7.7 0 0 1-.4.6l-7.6 3.4-1.4 4.6a.5.5 0 0 1-.5.4h-.7a.5.5 0 0 1-.5-.5l-.5-3.8-2.9 1.3-1 1.3a.5.5 0 0 1-.6.2l-.5-.2a.5.5 0 0 1-.3-.6l.7-2.6-2.6.7a.5.5 0 0 1-.6-.3l-.2-.5a.5.5 0 0 1 .2-.6l1.3-1 1.3-2.9-3.8-.5a.5.5 0 0 1-.5-.5v-.7a.5.5 0 0 1 .4-.5l4.6-1.4 3.4-7.6a.7.7 0 0 1 1.3 0l3.4 7.6 4.6 1.4a.7.7 0 0 1 .5.6Z"/>` +
-    `</svg>`;
-  const carSvg =
-    `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>` +
-    `<path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11h.5a1.5 1.5 0 0 1 1.5 1.5V17a1 1 0 0 1-1 1h-1.2a2 2 0 0 1-3.6 0H8.8a2 2 0 0 1-3.6 0H4a1 1 0 0 1-1-1v-4.5A1.5 1.5 0 0 1 4.5 11Zm2.1 0h9.8l-1-3.2a.5.5 0 0 0-.5-.3H8.6a.5.5 0 0 0-.5.3Zm0 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm9.8 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>` +
-    `</svg>`;
-  const klass = kind === "flight" ? "ss-leg-icon ss-leg-icon-flight" : "ss-leg-icon ss-leg-icon-drive";
-  const html = `<div class="${klass}">${kind === "flight" ? planeSvg : carSvg}</div>`;
-  return L.divIcon({
-    className: "",
-    html,
-    iconSize: [SIZE, SIZE],
-    iconAnchor: [SIZE / 2, SIZE / 2],
-  });
-}
-
-// ─── Leg classification + curve helpers ───────────────────────────────
-
-type RouteLeg = {
-  kind: "drive" | "flight";
-  path: LatLngExpression[];
-  /** Geographic midpoint — where the small transport icon renders. */
-  midpoint: LatLngTuple;
-};
-
-/** Build a list of legs between consecutive groups. Each leg's kind
- *  comes from the source group's `transportToNext` when set; otherwise
- *  falls back to the haversine heuristic so existing proposals (which
- *  don't have the explicit field yet) still render sensibly. Drive
- *  legs are straight; flight legs are curved so two parallel flights
- *  between the same regions don't render as overlapping straight lines. */
-function buildLegs(
-  groups: CoordGroup[],
-  flightThresholdKm: number,
-): RouteLeg[] {
-  if (groups.length < 2) return [];
-  const legs: RouteLeg[] = [];
-  for (let i = 0; i < groups.length - 1; i++) {
-    const fromGroup = groups[i];
-    const toGroup = groups[i + 1];
-    const a: LatLngTuple = [fromGroup.lat, fromGroup.lng];
-    const b: LatLngTuple = [toGroup.lat, toGroup.lng];
-    // Explicit operator-set transport wins; haversine is the
-    // safety net for legacy proposals.
-    const explicit = fromGroup.transportToNext;
-    const kind: "drive" | "flight" =
-      explicit === "flight"
-        ? "flight"
-        : explicit === "drive"
-          ? "drive"
-          : haversineKm(a, b) > flightThresholdKm
-            ? "flight"
-            : "drive";
-    legs.push({
-      kind,
-      path: kind === "flight" ? buildCurvedPath([a, b], 28) : [a, b],
-      midpoint: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
-    });
-  }
-  return legs;
-}
-
-function haversineKm(a: LatLngTuple, b: LatLngTuple): number {
-  const R = 6371; // km
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b[0] - a[0]);
-  const dLon = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-
 // Sub-component — mounted inside MapContainer so it has access to the
 // parent's map ref. Whenever selectedGroupIndex changes to a valid value,
 // flies the map to that group's coordinates.
@@ -662,38 +537,6 @@ function FlyToSelected({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroupIndex]);
   return null;
-}
-
-// Expand a sequence of waypoints into a denser point list that traces a
-// gentle curve through each consecutive pair. Uses a quadratic Bézier with
-// a perpendicular-offset control point so the arc always bows in a
-// consistent direction along the journey.
-function buildCurvedPath(points: LatLngTuple[], segments: number): LatLngExpression[] {
-  if (points.length < 2) return points;
-  const out: LatLngTuple[] = [points[0]];
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i];
-    const p2 = points[i + 1];
-    const mx = (p0[0] + p2[0]) / 2;
-    const my = (p0[1] + p2[1]) / 2;
-    const dx = p2[0] - p0[0];
-    const dy = p2[1] - p0[1];
-    const len = Math.hypot(dx, dy) || 1;
-    // Perpendicular unit vector, then offset by ~12% of segment length
-    // so the bow is visible but not cartoonish.
-    const nx = -dy / len;
-    const ny = dx / len;
-    const bow = len * 0.12;
-    const cx = mx + nx * bow;
-    const cy = my + ny * bow;
-    for (let s = 1; s <= segments; s++) {
-      const t = s / segments;
-      const x = (1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * cx + t * t * p2[0];
-      const y = (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * cy + t * t * p2[1];
-      out.push([x, y]);
-    }
-  }
-  return out;
 }
 
 function escape(s: string): string {

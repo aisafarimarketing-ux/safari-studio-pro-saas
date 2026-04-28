@@ -307,13 +307,7 @@ export function MapSection({ section }: { section: Section }) {
             {/* ── Map — dominant column ─────────────────────────── */}
             <div className="min-w-0">
               {days.length > 0 ? (
-                <div
-                  className="overflow-hidden"
-                  style={{
-                    borderRadius: 10,
-                    border: `1px solid ${tokens.border}`,
-                  }}
-                >
+                <div className="overflow-hidden">
                   <RouteMap
                     days={days}
                     tokens={tokens}
@@ -334,8 +328,6 @@ export function MapSection({ section }: { section: Section }) {
                     height: MAP_HEIGHT,
                     background: tokens.cardBg,
                     color: tokens.mutedText,
-                    borderRadius: 10,
-                    border: `1px solid ${tokens.border}`,
                   }}
                 >
                   {isEditor ? "Add days with destinations to draw the route." : "Route coming soon."}
