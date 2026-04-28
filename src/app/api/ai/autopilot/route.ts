@@ -701,21 +701,31 @@ ${JSON.stringify(userPayload, null, 2)}`;
       nightsByName.set(name, (nightsByName.get(name) ?? 0) + 1);
     }
 
-    // URL-shape filter: keep https/http URLs, drop data: URLs. Old
-    // properties uploaded before Supabase Storage was configured may
-    // still carry inline base64 images — including those inline blows
-    // the proposal payload past Next's body-size limit and the merged
-    // save fails silently, leaving the editor opening on a blank first
-    // save. The Property record itself still has the data URL for the
-    // editor's per-property views; only the snapshot embedded in the
-    // proposal is trimmed.
-    const isSafeUrl = (u: string | null | undefined): u is string =>
-      !!u && (u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/"));
+    // URL filter — admit everything truthy (http/https/data/relative)
+    // because operators with legacy properties have only data: URL
+    // images, and an aggressive filter left those properties with NO
+    // leadImageUrl on autopilot generation (no photos on day cards or
+    // accommodation section). The merge save retry handles transient
+    // 401s; the autosave size guard handles oversized payloads with
+    // a recompression flow. Better to ship photos AND deal with size
+    // downstream than ship a proposal with no photos.
+    //
+    // Data: URLs over 250KB are still skipped — at that size the
+    // photo is almost certainly uncompressed and indistinguishable
+    // from a moderate compression downstream; skipping prevents the
+    // body from exploding past the 9.5MB autosave cap.
+    const MAX_DATA_URL_LEN = 250 * 1024 * 4 / 3; // ~333K chars = ~250KB binary
+    const isUseableUrl = (u: string | null | undefined): u is string => {
+      if (!u) return false;
+      if (u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/")) return true;
+      if (u.startsWith("data:") && u.length < MAX_DATA_URL_LEN) return true;
+      return false;
+    };
     const MAX_GALLERY_PER_PROPERTY = 6;
     const MAX_IMAGES_PER_ROOM = 4;
 
     propertySnapshots = fullProps.map((p) => {
-      const safeImages = p.images.filter((i) => isSafeUrl(i.url));
+      const safeImages = p.images.filter((i) => isUseableUrl(i.url));
       const cover = safeImages.find((i) => i.isCover) ?? safeImages[0];
       const galleryUrls = safeImages
         .map((i) => i.url)
@@ -745,7 +755,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
           bedConfig: r.bedConfig ?? undefined,
           description: r.description ?? undefined,
           imageUrls: (r.imageUrls ?? [])
-            .filter(isSafeUrl)
+            .filter(isUseableUrl)
             .slice(0, MAX_IMAGES_PER_ROOM),
         })),
       };
