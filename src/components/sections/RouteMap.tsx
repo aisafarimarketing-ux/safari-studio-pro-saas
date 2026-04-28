@@ -794,18 +794,36 @@ function computeViewport(groups: CoordGroup[]): Viewport {
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Pull each side toward outliers — but barely. EXPAND_FRACTION 0.25
-  // means: extend bounds 25% of the gap toward each outlier so the
-  // outlier sits NEAR the visible edge; the core route then fills
-  // 70-80% of the central viewport. Naive fitBounds(allCoords) would
-  // be EXPAND_FRACTION = 1.0 and shrinks the core to a corner.
+  // Outlier inclusion: extend bounds PAST each outlier so the
+  // outlier sits comfortably inside the viewport with breathing
+  // room for its pill + label. PADDING_RATIO is the fraction of
+  // the core-to-outlier gap added as margin BEYOND the outlier on
+  // its side. At 0.15: outlier is well inside the frame, 15% of
+  // the gap as breathing room.
+  //
+  // Earlier (0.25) was the inverse — extended only 25% of the gap
+  // TOWARD the outlier, so the outlier landed OUTSIDE bounds
+  // (off-screen). User's "Zanzibar pill hidden" report exactly
+  // matches that bug.
   if (outliers.length > 0) {
-    const EXPAND_FRACTION = 0.25;
+    const PADDING_RATIO = 0.15;
     for (const o of outliers) {
-      if (o.lat < south) south = south - (south - o.lat) * EXPAND_FRACTION;
-      if (o.lat > north) north = north + (o.lat - north) * EXPAND_FRACTION;
-      if (o.lng < west) west = west - (west - o.lng) * EXPAND_FRACTION;
-      if (o.lng > east) east = east + (o.lng - east) * EXPAND_FRACTION;
+      if (o.lat < south) {
+        const gap = south - o.lat;
+        south = o.lat - PADDING_RATIO * gap;
+      }
+      if (o.lat > north) {
+        const gap = o.lat - north;
+        north = o.lat + PADDING_RATIO * gap;
+      }
+      if (o.lng < west) {
+        const gap = west - o.lng;
+        west = o.lng - PADDING_RATIO * gap;
+      }
+      if (o.lng > east) {
+        const gap = o.lng - east;
+        east = o.lng + PADDING_RATIO * gap;
+      }
     }
   }
 
