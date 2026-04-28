@@ -1206,15 +1206,15 @@ function DecisionCardLayout({
 
   return (
     <section
-      className="relative px-3 py-8 md:px-6 md:py-10"
+      className="relative py-2 md:py-3"
       style={{ background: pageBg }}
     >
       {aiButtons}
 
       <div
-        className="relative mx-auto rounded-3xl overflow-hidden"
+        className="relative overflow-hidden"
         style={{
-          maxWidth: 1140,
+          maxWidth: "100%",
           background: `linear-gradient(180deg, ${DC_DARK}, ${DC_DARKER})`,
           boxShadow: "0 32px 80px -24px rgba(0,0,0,0.42)",
         }}

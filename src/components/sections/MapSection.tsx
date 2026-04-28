@@ -530,7 +530,7 @@ function InteractiveMap({
   const MAP_HEIGHT = 600;
 
   return (
-    <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
+    <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>
       <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
         {/* Card-rail (240px) + dominant map. Title + country chip live
             inside the rail header so the map can stretch the section's

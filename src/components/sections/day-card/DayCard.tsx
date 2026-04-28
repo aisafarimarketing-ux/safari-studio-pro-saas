@@ -202,7 +202,10 @@ export function DayCard({
         background: tokens.sectionSurface,
       }}
       onClick={() => isEditor && selectDay(day.id)}
-      className="dm-card relative rounded-3xl overflow-hidden transition-colors duration-150 scroll-mt-32"
+      // No rounded corners + no inset margin — DayCard now sits
+      // edge-to-edge inside the proposal's 900px canvas, magazine-style.
+      // overflow-hidden stays so hero images crop cleanly.
+      className="dm-card relative overflow-hidden transition-colors duration-150 scroll-mt-32"
     >
       {isEditor && (
         <DayCardChrome

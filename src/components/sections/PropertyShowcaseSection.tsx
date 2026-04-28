@@ -56,10 +56,14 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   }
 
   return (
-    <div style={{ background: tokens.sectionSurface }}>
-      <header className="max-w-6xl mx-auto px-8 md:px-12 pt-4 md:pt-6">
+    <div style={{ background: tokens.pageBg }}>
+      {/* Header padded; property blocks below render edge-to-edge so
+          they butt up flush against the last day card and against
+          the next section. Same "continuous magazine" treatment as
+          DayJourney. */}
+      <header className="px-8 md:px-12 pt-3 md:pt-4 pb-2">
         <div
-          className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-2"
+          className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1.5"
           style={{ color: tokens.mutedText }}
         >
           The lodges
@@ -69,7 +73,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
           style={{
             color: tokens.headingText,
             fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "clamp(2rem, 3.6vw, 3rem)",
+            fontSize: "clamp(1.6rem, 2.8vw, 2.2rem)",
             letterSpacing: "-0.015em",
           }}
         >

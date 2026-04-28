@@ -42,12 +42,14 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
-      <div className="max-w-5xl mx-auto px-8 md:px-12">
-        {/* Section header — tight against the section top so the
-            previous section (e.g. map) flows directly into this one
-            without a perceived gap. */}
-        <div className="flex items-end justify-between mb-4 gap-6 flex-wrap">
+    <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>
+      {/* Header is constrained with horizontal padding so the eyebrow
+          + title don't kiss the canvas edge. Day cards below are
+          rendered edge-to-edge (no max-w, no px) so they fill the
+          full 900px proposal canvas — matches the Cover ↔ PersonalNote
+          "continuous magazine" treatment. */}
+      <div className="px-8 md:px-12">
+        <div className="flex items-end justify-between mb-3 gap-6 flex-wrap">
           <div>
             <div
               className="text-label ed-label mb-3"
@@ -66,45 +68,52 @@ export function DayJourneySection({ section }: { section: Section }) {
             {days.length} {days.length === 1 ? "day" : "days"}
           </div>
         </div>
+      </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={days.map((d) => d.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-6 md:space-y-8">
-              {days.map((day, i) => (
-                <DayCard
-                  key={day.id}
-                  day={day}
-                  index={i}
-                  totalDays={days.length}
-                  section={section}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+      {/* Day cards — rendered OUTSIDE the header's px container so each
+          card spans the full 900px canvas edge-to-edge. Magazine-feel:
+          one card flows into the next, no inset framing. */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={days.map((d) => d.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-2 md:space-y-3">
+            {days.map((day, i) => (
+              <DayCard
+                key={day.id}
+                day={day}
+                index={i}
+                totalDays={days.length}
+                section={section}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
-        {days.length === 0 && (
+      {days.length === 0 && (
+        <div className="px-8 md:px-12">
           <div
             className="text-center py-16 rounded-2xl border-2 border-dashed text-small"
             style={{ borderColor: tokens.border, color: tokens.mutedText }}
           >
             No days yet. {isEditor ? "Add one to start the story." : ""}
           </div>
-        )}
+        </div>
+      )}
 
-        {isEditor && (
+      {isEditor && (
+        <div className="px-8 md:px-12">
           <button
             onClick={addDay}
-            className="mt-12 w-full py-4 rounded-2xl border-2 border-dashed text-small font-semibold transition hover:opacity-80"
+            className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed text-small font-semibold transition hover:opacity-80"
             style={{ borderColor: tokens.accent, color: tokens.accent }}
           >
             + Add day
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
