@@ -233,7 +233,16 @@ async function handleAutopilot(req: Request): Promise<Response> {
     brandDNASection +
     `
 
-You are drafting a COMPLETE, personalised safari proposal. Fill every section listed below. Output JSON only — no preamble, no markdown fences, no commentary.
+You are drafting a COMPLETE, personalised safari proposal. Fill every section listed below.
+
+CRITICAL OUTPUT RULES — non-negotiable:
+- Your entire response MUST be a single JSON object.
+- The very first character is "{" and the very last character is "}".
+- No greeting, no "Here's…", no "Sure thing,…", no "I've drafted…".
+- No closing remarks after the JSON.
+- No markdown code fences anywhere (no triple backticks before or after).
+- No commentary inline. No comments inside the JSON either.
+- All strings must be properly escaped JSON (use \\" inside strings, \\n for newlines).
 
 You MUST pick camps only from the property library provided. Refer to each pick by its integer "slot" number, never by name. If the library is empty for a tier, set that tier to {"slot": -1} — do not invent.
 
@@ -391,9 +400,17 @@ ${JSON.stringify(userPayload, null, 2)}`;
 
   let parsed: AutopilotResponse;
   try {
-    parsed = JSON.parse(stripFences(raw));
-  } catch {
-    console.error("[AUTOPILOT] Could not parse model output:", raw.slice(0, 400));
+    parsed = JSON.parse(extractJson(raw));
+  } catch (err) {
+    // Log substantially more so we can see WHAT the model actually
+    // returned. 400 chars of raw was usually not enough to diagnose
+    // whether the issue is a preamble, a trailing comment, or a real
+    // JSON syntax error. 1200 chars covers all of those.
+    console.error(
+      "[AUTOPILOT] JSON parse failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    console.error("[AUTOPILOT] raw model output (first 1200 chars):", raw.slice(0, 1200));
     return NextResponse.json({ error: "AI returned malformed output. Try again." }, { status: 502 });
   }
 
@@ -652,9 +669,52 @@ function stringArray(v: unknown, max: number): string[] {
     .slice(0, max);
 }
 
-function stripFences(text: string): string {
-  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(text.trim());
-  return fence ? fence[1].trim() : text.trim();
+// Extract the JSON object from a model's raw response, robust to:
+//   - clean JSON: {...}
+//   - fenced JSON: ```json\n{...}\n```
+//   - JSON with preamble: "Here's the proposal:\n{...}"
+//   - JSON with trailing comment: "{...}\n\nHope this helps!"
+//   - Both fences AND surrounding text
+//
+// Haiku in particular sometimes adds a sentence before the JSON even
+// when the system prompt says "JSON only". Rather than fight every
+// possible model preface, we walk the response and slice from the
+// FIRST `{` to its matching `}` using a brace-counter that respects
+// strings + escapes.
+function extractJson(text: string): string {
+  const trimmed = text.trim();
+  // Strip code fences first if present.
+  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(trimmed);
+  const inner = fence ? fence[1].trim() : trimmed;
+
+  const firstBrace = inner.indexOf("{");
+  if (firstBrace === -1) return inner; // no JSON found — let parser fail with original
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = firstBrace; i < inner.length; i++) {
+    const ch = inner[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return inner.slice(firstBrace, i + 1);
+    }
+  }
+
+  // Unmatched braces — return the rest from the first { and let
+  // JSON.parse produce a useful error message.
+  return inner.slice(firstBrace);
 }
 
 const ALLOWED_TIME_OF_DAY = new Set(["Morning", "Afternoon", "Evening", "All Day"]);
