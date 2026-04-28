@@ -39,33 +39,37 @@ export type ResolvedProperty = {
 };
 
 // True when a day carries enough content to warrant a second printed
-// page. The bar is intentionally HIGHER than "has any activity at all"
-// because the previous threshold produced a lot of half-empty tail
-// pages. Now we only split when:
+// page. Bar set HIGH so most days render as one full A4 page.
 //
-//  - day has 3+ optional activities (those don't fit comfortably in
-//    a chips strip on the main page), OR
-//  - day has a property AND the property has gallery imagery (so the
-//    tail page can carry a real 3-up gallery), OR
-//  - day's narrative is long enough that fitting it + activities +
-//    accommodation on one page would clip
+// Real-world data (live debug overlay): days with continuations were
+// running 32% on main + 60% on tail — i.e. the split was making both
+// pages worse, not better. New rule: only split when the day genuinely
+// can't fit on one page.
 //
-// Days that don't meet any of these get a single, full main page —
-// activities (if 1-2) render as compact chips at the bottom of the
-// main page, and the property summary chips render in the
-// accommodation header strip.
+// Triggers (any one):
+//   - 5+ optional activities (a chip strip caps at ~4)
+//   - narrative > 1500 chars (an 8-line clamp can hold ~1200; beyond
+//     that we'd start losing meaningful prose)
+//   - property has 4+ gallery images we want to show full-size
+//
+// Everything else stays single-page. The main page already absorbs
+// the accommodation summary + a 3-tile gallery strip + activity chips,
+// so a typical day fills 75-90% of A4 with no tail.
 export function dayHasTailContent(
   day: Day,
   property: ResolvedProperty | null,
 ): boolean {
   const activities = day.optionalActivities ?? [];
   const narrativeLen = (day.description ?? "").trim().length;
-  const propertyHasGallery = !!property && property.galleryUrls.filter(Boolean).length > 0;
+  const galleryCount = property
+    ? property.galleryUrls.filter(Boolean).length + (property.leadImageUrl ? 1 : 0)
+    : 0;
 
-  const manyActivities = activities.length >= 3;
-  const longNarrative = narrativeLen > 600;
+  const manyActivities = activities.length >= 5;
+  const longNarrative = narrativeLen > 1500;
+  const richGallery = galleryCount >= 4;
 
-  return manyActivities || propertyHasGallery || longNarrative;
+  return manyActivities || longNarrative || richGallery;
 }
 
 export function resolveDayProperty(
@@ -204,17 +208,23 @@ export function PrintDayPageMain({
           </p>
         )}
 
-        {/* Accommodation summary + activity chips — only on single-page
-            days. When this day has a tail page, those go on the tail
-            (with full property gallery + activity table). */}
-        {!hasTail && (property || activities.length > 0) && (
+        {/* Accommodation summary + property gallery strip + activity
+            chips — packs the bottom of single-page days so the page
+            actually fills A4. When this day HAS a tail page, only the
+            accommodation header chips live here; the full gallery +
+            full activity table go on the tail. */}
+        {!hasTail && property && (
           <div className="mt-auto space-y-4">
-            {property && (
-              <MainPageAccommodation property={property} theme={theme} tokens={tokens} />
-            )}
+            <MainPageAccommodation property={property} theme={theme} tokens={tokens} />
+            <MainPageGallery property={property} tokens={tokens} />
             {activities.length > 0 && (
               <MainPageActivityChips activities={activities} tokens={tokens} />
             )}
+          </div>
+        )}
+        {!hasTail && !property && activities.length > 0 && (
+          <div className="mt-auto">
+            <MainPageActivityChips activities={activities} tokens={tokens} />
           </div>
         )}
       </div>
@@ -291,6 +301,60 @@ function MainPageAccommodation({
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 3-tile gallery strip for single-page days. Lead image + first two
+// gallery URLs. Same fallback as the tail-page version: empty tiles
+// render a soft gradient + accent rule, never "No photo" text.
+function MainPageGallery({
+  property, tokens,
+}: {
+  property: ResolvedProperty;
+  tokens: ThemeTokens;
+}) {
+  const tiles = [
+    property.leadImageUrl,
+    property.galleryUrls[0] ?? null,
+    property.galleryUrls[1] ?? null,
+  ];
+  const hasAny = tiles.some(Boolean);
+  if (!hasAny) return null;
+  return (
+    <div
+      className="grid grid-cols-3 gap-1.5"
+      style={{ height: 130, background: tokens.cardBg }}
+    >
+      {tiles.map((url, i) => (
+        <div
+          key={i}
+          className="overflow-hidden h-full"
+          style={{ background: tokens.cardBg }}
+        >
+          {url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={url}
+              alt={i === 0 ? property.name : ""}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
+              }}
+              aria-hidden
+            >
+              <div
+                className="h-px"
+                style={{ width: 16, background: tokens.accent, opacity: 0.55 }}
+              />
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

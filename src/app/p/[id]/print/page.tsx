@@ -222,6 +222,34 @@ function PrintCss({
         max-width: 100%;
       }
 
+      /* ── Print-only section fills ──
+         The on-screen sections were designed for a flowing webpage —
+         they size to their content. In a fixed A4 frame that leaves
+         huge bottom strips of pageBg for Cover, PersonalNote, and
+         ItineraryTable when the user's content happens to be short.
+         Force these sections to fill the entire PdfPage so the PDF
+         doesn't end up with 30-50% of every page empty. */
+      .pdf-page > [data-section-type="cover"],
+      .pdf-page > [data-section-type="personalNote"],
+      .pdf-page > [data-section-type="itineraryTable"],
+      .pdf-page > [data-section-type="map"],
+      .pdf-page > [data-section-type="closing"],
+      .pdf-page > [data-section-type="pricing"] {
+        min-height: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .pdf-page > [data-section-type="cover"] > *,
+      .pdf-page > [data-section-type="personalNote"] > *,
+      .pdf-page > [data-section-type="itineraryTable"] > *,
+      .pdf-page > [data-section-type="map"] > *,
+      .pdf-page > [data-section-type="closing"] > *,
+      .pdf-page > [data-section-type="pricing"] > * {
+        flex: 1 1 auto;
+        min-height: 100%;
+      }
+
       /* ── Avoid breaking key blocks across pages ────────────────── */
       .avoid-break,
       .dm-card,

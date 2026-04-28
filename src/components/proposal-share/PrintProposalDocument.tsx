@@ -12,6 +12,7 @@ import {
   dayHasTailContent,
   resolveDayProperty,
 } from "./PrintDayPage";
+import { PrintFooterPage } from "./PrintFooterPage";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
 import type { Section, SectionType, TierKey } from "@/lib/types";
@@ -179,6 +180,14 @@ function renderSection(section: Section, proposalId: string) {
     return <PracticalInfoPages key={section.id} />;
   }
 
+  // footer — on-screen FooterSection is intentionally a thin contact
+  // strip (single row). On A4 that strip leaves 87% of the page empty.
+  // Route through PrintFooterPage which renders a full editorial
+  // closing card filling the page.
+  if (section.type === "footer") {
+    return <FooterPage key={section.id} />;
+  }
+
   // Every other section — single page, clipped to A4.
   return (
     <PdfPage
@@ -188,6 +197,17 @@ function renderSection(section: Section, proposalId: string) {
     >
       <div data-section-type={section.type} data-proposal-id={proposalId}>
         <SectionRenderer section={section} />
+      </div>
+    </PdfPage>
+  );
+}
+
+function FooterPage() {
+  const proposal = useProposalStore((s) => s.proposal);
+  return (
+    <PdfPage label="Contact" bleed>
+      <div data-section-type="footer">
+        <PrintFooterPage proposal={proposal} />
       </div>
     </PdfPage>
   );
