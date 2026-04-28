@@ -355,20 +355,20 @@ ${JSON.stringify(userPayload, null, 2)}`;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
-    // 4K output ceiling — typical 7-night proposal lands in 3-4K
-    // tokens. Cutting from 5K shaves ~15-20% off the streaming time
-    // on Sonnet without truncating any section. Pricing notes /
-    // closing signoff are the first to clip if a proposal runs
-    // unusually long; both are easy to regenerate per-section.
+    // 8K output ceiling. 4K was too tight for Haiku — it's more
+    // verbose than Sonnet for the same prompt and was hitting the
+    // cap mid-JSON, producing truncated output the parser couldn't
+    // recover from. 8K gives both models comfortable headroom; the
+    // streaming-time penalty is small because typical proposals
+    // still complete in 3-5K tokens.
     //
-    // 90s timeout — bails fast on stuck calls. With Haiku 4.5
-    // (claude-haiku-4-5-20251015) typical wall time is 15-30s; with
-    // Sonnet it's 60-100s legitimately. Switch via ANTHROPIC_MODEL
-    // env var on Railway.
+    // 90s timeout — bails fast on stuck calls. Haiku typical wall
+    // time 15-30s; Sonnet 60-120s legitimately. Switch via
+    // ANTHROPIC_MODEL env var on Railway.
     const msg = await anth.messages.create(
       {
         model: MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
@@ -399,19 +399,32 @@ ${JSON.stringify(userPayload, null, 2)}`;
   }
 
   let parsed: AutopilotResponse;
+  const extracted = extractJson(raw);
   try {
-    parsed = JSON.parse(extractJson(raw));
-  } catch (err) {
-    // Log substantially more so we can see WHAT the model actually
-    // returned. 400 chars of raw was usually not enough to diagnose
-    // whether the issue is a preamble, a trailing comment, or a real
-    // JSON syntax error. 1200 chars covers all of those.
-    console.error(
-      "[AUTOPILOT] JSON parse failed:",
-      err instanceof Error ? err.message : String(err),
-    );
-    console.error("[AUTOPILOT] raw model output (first 1200 chars):", raw.slice(0, 1200));
-    return NextResponse.json({ error: "AI returned malformed output. Try again." }, { status: 502 });
+    parsed = JSON.parse(extracted);
+  } catch (err1) {
+    // First pass failed — try to repair common model quirks before
+    // giving up. Haiku in particular sometimes produces:
+    //   - trailing commas: { "a": 1, "b": 2, }
+    //   - smart quotes: { "a": "value" } where " is actually U+201C
+    //   - JS comments: // this is a note inside the JSON
+    const repaired = repairJson(extracted);
+    try {
+      parsed = JSON.parse(repaired);
+      console.warn("[AUTOPILOT] JSON parsed after repair pass.");
+    } catch (err2) {
+      console.error(
+        "[AUTOPILOT] JSON parse failed (raw):",
+        err1 instanceof Error ? err1.message : String(err1),
+      );
+      console.error(
+        "[AUTOPILOT] JSON parse failed (after repair):",
+        err2 instanceof Error ? err2.message : String(err2),
+      );
+      console.error("[AUTOPILOT] extracted JSON (first 1500 chars):", extracted.slice(0, 1500));
+      console.error("[AUTOPILOT] extracted JSON (last 500 chars):", extracted.slice(-500));
+      return NextResponse.json({ error: "AI returned malformed output. Try again." }, { status: 502 });
+    }
   }
 
   // ── Map Claude's draft → concrete shapes the proposal store consumes ────
@@ -715,6 +728,31 @@ function extractJson(text: string): string {
   // Unmatched braces — return the rest from the first { and let
   // JSON.parse produce a useful error message.
   return inner.slice(firstBrace);
+}
+
+// Best-effort repair for the most common JSON-output quirks we see
+// from Haiku (and occasionally Sonnet on long generations):
+//
+//   - trailing commas before `}` or `]`
+//   - smart-quote characters (curly “ ” ‘ ’) instead of straight ASCII
+//   - // line comments inside the JSON body
+//   - /* block comments */ inside the JSON body
+//
+// Conservative: each pass is a regex replace operating on the
+// extracted JSON string. If the model produced genuinely broken
+// content (truncation, unescaped quote inside a string), this won't
+// fix it — we still log + 502 in that case.
+function repairJson(s: string): string {
+  return s
+    // Curly quotes → straight
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    // // line comments
+    .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1")
+    // /* block comments */
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    // Trailing comma before `}` or `]`
+    .replace(/,(\s*[}\]])/g, "$1");
 }
 
 const ALLOWED_TIME_OF_DAY = new Set(["Morning", "Afternoon", "Evening", "All Day"]);
