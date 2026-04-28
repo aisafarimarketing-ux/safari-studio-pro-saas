@@ -180,12 +180,22 @@ export function DashboardWorkspace() {
             } else {
               const merged = mergeAutopilotIntoProposal(proposal, draft);
               const saveBody = JSON.stringify({ proposal: merged });
-              const save = await fetch("/api/proposals", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: saveBody,
-                signal: controller.signal,
-              });
+              const postSave = () =>
+                fetch("/api/proposals", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: saveBody,
+                  signal: controller.signal,
+                });
+              // Retry once on 401 — Clerk token can rotate during the
+              // long autopilot call. See proposals/page.tsx for full
+              // commentary on the same pattern.
+              let save = await postSave();
+              if (save.status === 401) {
+                console.warn("[autopilot] merge save 401 — retrying after 1.5s for Clerk token refresh");
+                await new Promise((r) => setTimeout(r, 1500));
+                save = await postSave();
+              }
               if (!save.ok) {
                 const detail = await save.json().catch(() => ({}));
                 console.error(

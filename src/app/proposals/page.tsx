@@ -137,18 +137,28 @@ export default function ProposalsPage() {
               return;
             } else {
               const merged = mergeAutopilotIntoProposal(proposal, draft);
-              // Persist the merged result. If this save fails the editor
-              // would open with the blank first-save and the operator
-              // would see "nothing populated" with no clue why — usually
-              // because the merged JSON exceeded a body limit. Surface
-              // status + reason and stop the redirect so they can react.
+              // Persist the merged result. The autopilot call can run
+              // 30-90s — long enough that Clerk's session token may
+              // rotate during it, leaving the follow-up POST with a
+              // stale cookie and a 401. Retry once after 1.5s so the
+              // refreshed token attaches (same pattern useAutoSaveProposal
+              // uses). Without this, the operator sees "AI drafted but
+              // couldn't save (Not authenticated)" right after a
+              // successful generation — confusing.
               const saveBody = JSON.stringify({ proposal: merged });
-              const save = await fetch("/api/proposals", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: saveBody,
-                signal: controller.signal,
-              });
+              const postSave = () =>
+                fetch("/api/proposals", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: saveBody,
+                  signal: controller.signal,
+                });
+              let save = await postSave();
+              if (save.status === 401) {
+                console.warn("[autopilot] merge save 401 — retrying after 1.5s for Clerk token refresh");
+                await new Promise((r) => setTimeout(r, 1500));
+                save = await postSave();
+              }
               if (!save.ok) {
                 const detail = await save.json().catch(() => ({}));
                 const reason = detail?.error || `HTTP ${save.status}`;
