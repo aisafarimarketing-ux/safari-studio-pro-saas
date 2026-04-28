@@ -1,24 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Safari Studio mark">
-  <!-- Compact mark for tight UI spaces (editor toolbar, sidebar collapse,
-       email signatures). Diamond + journey-line motif: deep teal field,
-       copper geometric form, faceted to nod at the low-poly hummingbird
-       reference without trying to recreate it literally. -->
-  <rect width="64" height="64" rx="8" fill="#1f3a3a" />
+  <!-- Brand mark for tight UI spaces (toolbar, email signatures,
+       social-share fallback). Same "S" monogram + hairline diamond
+       motif as the favicon, sized for clarity at ~32-64px. -->
+  <rect width="64" height="64" rx="10" fill="#1f3a3a" />
 
-  <!-- Outer diamond -->
   <path
-    d="M32 10 L54 32 L32 54 L10 32 Z"
+    d="M32 12 L52 32 L32 52 L12 32 Z"
     fill="none"
     stroke="#c89668"
-    stroke-width="1.5"
-    stroke-linejoin="miter"
+    stroke-width="1"
+    opacity="0.5"
   />
 
-  <!-- Faceted inner shapes — three triangles forming a stylised "S" path -->
-  <path d="M32 18 L46 32 L32 32 Z" fill="#c89668" opacity="0.95" />
-  <path d="M32 32 L18 32 L32 46 Z" fill="#c89668" opacity="0.7" />
-  <path d="M32 32 L46 32 L32 46 Z" fill="#f5e8d8" opacity="0.18" />
-
-  <!-- Small dot at the diamond's centre — anchors the geometry -->
-  <circle cx="32" cy="32" r="1.5" fill="#f5e8d8" />
+  <text
+    x="32"
+    y="44"
+    text-anchor="middle"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="40"
+    font-weight="600"
+    fill="#c89668"
+  >S</text>
 </svg>

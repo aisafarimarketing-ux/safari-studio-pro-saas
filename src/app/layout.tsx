@@ -19,14 +19,12 @@ export const metadata: Metadata = {
   // bar). Matches the deep teal in the brand palette.
   themeColor: "#1f3a3a",
   // Next.js auto-discovers /app/icon.svg and /app/apple-icon.svg.
-  // The explicit `icons` block here is belt-and-braces for crawlers
-  // that don't follow Next 13+ file conventions, plus declares the
-  // .ico fallback for very old browsers.
+  // The explicit `icons` block is belt-and-braces for crawlers
+  // that don't follow Next 13+ file conventions. SVG-only — modern
+  // browsers all support it, and dropping the .ico fallback prevents
+  // the default Next.js icon from sneaking back in.
   icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
   },
   openGraph: {
