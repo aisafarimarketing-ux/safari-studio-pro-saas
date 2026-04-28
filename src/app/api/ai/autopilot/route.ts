@@ -701,26 +701,18 @@ ${JSON.stringify(userPayload, null, 2)}`;
       nightsByName.set(name, (nightsByName.get(name) ?? 0) + 1);
     }
 
-    // URL filter — admit everything truthy (http/https/data/relative)
-    // because operators with legacy properties have only data: URL
-    // images, and an aggressive filter left those properties with NO
-    // leadImageUrl on autopilot generation (no photos on day cards or
-    // accommodation section). The merge save retry handles transient
-    // 401s; the autosave size guard handles oversized payloads with
-    // a recompression flow. Better to ship photos AND deal with size
-    // downstream than ship a proposal with no photos.
+    // URL filter — admit ANY non-empty URL (http/https/data/relative,
+    // any size). Earlier 250KB cap on data URLs left some legacy
+    // properties with no photos at all. Slice limits below
+    // (6 gallery, 4 per room) plus the autosave size guard
+    // (recompresses oversize payloads) bound total bytes without
+    // dropping individual images.
     //
-    // Data: URLs over 250KB are still skipped — at that size the
-    // photo is almost certainly uncompressed and indistinguishable
-    // from a moderate compression downstream; skipping prevents the
-    // body from exploding past the 9.5MB autosave cap.
-    const MAX_DATA_URL_LEN = 250 * 1024 * 4 / 3; // ~333K chars = ~250KB binary
-    const isUseableUrl = (u: string | null | undefined): u is string => {
-      if (!u) return false;
-      if (u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/")) return true;
-      if (u.startsWith("data:") && u.length < MAX_DATA_URL_LEN) return true;
-      return false;
-    };
+    // Net: every property with at least one image now renders that
+    // image on day cards + accommodation. Operators with VERY large
+    // legacy data URLs may hit the autosave size cap which prompts
+    // its existing recompression flow.
+    const isUseableUrl = (u: string | null | undefined): u is string => !!u;
     const MAX_GALLERY_PER_PROPERTY = 6;
     const MAX_IMAGES_PER_ROOM = 4;
 
