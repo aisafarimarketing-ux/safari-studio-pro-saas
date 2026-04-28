@@ -60,8 +60,8 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
       {/* Header padded; property blocks below render edge-to-edge so
           they butt up flush against the last day card and against
           the next section. Same "continuous magazine" treatment as
-          DayJourney. */}
-      <header className="px-8 md:px-12 pt-3 md:pt-4 pb-2">
+          DayJourney — no outer py, just header padding. */}
+      <header className="px-8 md:px-12 pt-2 pb-1">
         <div
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1.5"
           style={{ color: tokens.mutedText }}

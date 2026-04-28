@@ -202,7 +202,7 @@ function InlineRibbon({
 }: LayoutProps) {
   return (
     <div
-      className="py-4 md:py-6 px-8 md:px-20"
+      className="py-2 md:py-3 px-8 md:px-20"
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-6xl mx-auto space-y-10">
@@ -304,7 +304,7 @@ function StackedClean({
 }: LayoutProps) {
   return (
     <div
-      className="py-4 md:py-6 px-8 md:px-20"
+      className="py-2 md:py-3 px-8 md:px-20"
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-x-14 gap-y-10">
@@ -505,7 +505,7 @@ function SplitColumns({
 }: LayoutProps) {
   return (
     <div
-      className="py-4 md:py-6 px-8 md:px-20"
+      className="py-2 md:py-3 px-8 md:px-20"
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-12 md:gap-16">
@@ -611,7 +611,7 @@ function Default({
 }: LayoutProps) {
   return (
     <div
-      className="py-4 md:py-6 px-8 md:px-20"
+      className="py-2 md:py-3 px-8 md:px-20"
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto">

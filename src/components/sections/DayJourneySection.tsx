@@ -42,17 +42,15 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>
-      {/* Header is constrained with horizontal padding so the eyebrow
-          + title don't kiss the canvas edge. Day cards below are
-          rendered edge-to-edge (no max-w, no px) so they fill the
-          full 900px proposal canvas — matches the Cover ↔ PersonalNote
-          "continuous magazine" treatment. */}
-      <div className="px-8 md:px-12">
-        <div className="flex items-end justify-between mb-3 gap-6 flex-wrap">
+    <div style={{ background: tokens.pageBg }}>
+      {/* Header padded horizontally only — no top/bottom padding so the
+          previous section flows directly into this one. Day cards
+          below render edge-to-edge for the magazine-flow feel. */}
+      <div className="px-8 md:px-12 pt-3 pb-2">
+        <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
             <div
-              className="text-label ed-label mb-3"
+              className="text-label ed-label mb-1"
               style={{ color: tokens.mutedText }}
             >
               Day-by-day
@@ -104,11 +102,15 @@ export function DayJourneySection({ section }: { section: Section }) {
       )}
 
       {isEditor && (
-        <div className="px-8 md:px-12">
+        <div className="px-8 md:px-12 mt-2 mb-1 text-right">
+          {/* Small inline add — was a full-width 80px dashed button
+              that compounded the gap to the next section. Inline
+              link reads as editor chrome, doesn't push sections
+              apart. */}
           <button
             onClick={addDay}
-            className="mt-6 w-full py-4 rounded-2xl border-2 border-dashed text-small font-semibold transition hover:opacity-80"
-            style={{ borderColor: tokens.accent, color: tokens.accent }}
+            className="text-[11.5px] font-semibold uppercase tracking-[0.18em] transition hover:opacity-75"
+            style={{ color: tokens.accent }}
           >
             + Add day
           </button>

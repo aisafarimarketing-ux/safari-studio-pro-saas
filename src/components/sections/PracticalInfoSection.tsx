@@ -57,7 +57,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   // ── Icon-list — compact list with icons ──────────────────────────────────────
   if (variant === "icon-list") {
     return (
-      <div className="py-4 md:py-6 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+      <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
         <div className="max-w-3xl mx-auto">
           <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
             Good to know
@@ -98,7 +98,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   // ── Accordion-style — bold title blocks ────────────────────────────────────
   if (variant === "accordion-style") {
     return (
-      <div className="py-4 md:py-6 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+      <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
         <div className="max-w-4xl mx-auto">
           <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
             Good to know
@@ -140,7 +140,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   const isGrid = variant === "card-grid";
 
   return (
-    <div className="py-4 md:py-6 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+    <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
         <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
           Good to know

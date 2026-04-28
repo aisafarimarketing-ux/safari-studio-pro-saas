@@ -64,7 +64,7 @@ export function PricingSection({ section }: { section: Section }) {
 
   return (
     <div
-      className="py-4 md:py-6 px-8 md:px-16"
+      className="py-2 md:py-3 px-8 md:px-16"
       style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto space-y-10 md:space-y-12">
