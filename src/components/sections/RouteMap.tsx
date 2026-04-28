@@ -338,41 +338,39 @@ export function RouteMap({
       )
     : -1;
 
-  // Bounds from group centres — tighter than per-day bounds.
-  const lats = groups.map((g) => g.lat);
-  const lngs = groups.map((g) => g.lng);
-  const center: LatLngExpression = [
-    (Math.min(...lats) + Math.max(...lats)) / 2,
-    (Math.min(...lngs) + Math.max(...lngs)) / 2,
-  ];
-  const bounds: [LatLngTuple, LatLngTuple] = [
-    [Math.min(...lats), Math.min(...lngs)],
-    [Math.max(...lats), Math.max(...lngs)],
-  ];
+  // ── Smart viewport ──
+  //
+  // Naive `fitBounds(allCoords)` over-zooms-out when an itinerary has
+  // a far-flung outlier (e.g. Zanzibar 700km from a Tanzanian
+  // mainland circuit). The mainland safari clusters into a tiny
+  // corner of the map and the rest is empty ocean / unused land.
+  //
+  // Algorithm: detect the "core" stops — anything within
+  // CORE_THRESHOLD_KM of the route centroid. Compute bounds from
+  // the core only. Then expand the bounds toward each outlier by a
+  // fraction of the gap so the outlier just lands inside the view
+  // with minimal extra emptiness. This frames the core as the
+  // dominant subject while still showing distant stops.
+  const viewport = computeViewport(groups);
 
-  // Single sequential route: Stop 1 → Stop 2 → Stop 3 → ... rendered as
-  // ONE polyline through every group. Previous "two kinds of leg with
-  // dashed flights and curved arcs" treatment turned the map into a
-  // navigation widget. The editorial brief is a clean route diagram:
-  // one consistent line, no transport icons, no dashes, no curves.
-  const routePath: LatLngTuple[] = groups.map((g) => [g.lat, g.lng]);
+  // Split adjacent legs into "circuit" (solid) and "transfer" (dashed
+  // curve). Long-haul legs above TRANSFER_THRESHOLD_KM render as a
+  // gentle Bézier curve so they read as a flight rather than an
+  // implausibly straight 700km drive over ocean.
+  const TRANSFER_THRESHOLD_KM = 250;
+  const legPaths = buildLegPaths(groups, TRANSFER_THRESHOLD_KM);
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
       <MapContainer
-        center={center}
+        center={viewport.center}
         zoom={6}
         scrollWheelZoom={false}
-        bounds={bounds}
-        // Camera: tight frame of the route only.
-        //   - 12% padding (paddingTopLeft / paddingBottomRight expressed
-        //     as ratios of the container size) so the route always
-        //     occupies ~80-85% of the visible map.
-        //   - inertia disabled — operator pan/scroll feels controlled,
-        //     not "skids around".
-        //   - minZoom 4 stops fitBounds from ever zooming out to the
-        //     full-continent view if all stops happen to coincide.
-        boundsOptions={{ padding: [40, 40] }}
+        bounds={viewport.bounds}
+        // Padding: aggressive on the side(s) AWAY from outliers,
+        // generous on the side(s) toward them — keeps core route
+        // dominant while still framing the outlier inside the view.
+        boundsOptions={{ padding: [25, 25] }}
         minZoom={4}
         inertia={false}
         // Editorial defaults — hide the +/− zoom widget always; let
@@ -393,6 +391,7 @@ export function RouteMap({
           selectedGroupIndex={selectedGroupIndex}
           groups={groups}
         />
+        <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           // Carto Positron NO LABELS — quietest possible basemap.
@@ -404,39 +403,48 @@ export function RouteMap({
           maxZoom={19}
         />
 
-        {/* Single sequential route — one solid charcoal polyline
-            traced through every stop in order. No dashes, no curves,
-            no transport classification. Renders BEFORE markers so
-            the day pills sit on top. */}
-        {routePath.length >= 2 && (
+        {/* Per-leg rendering. Short circuit hops render as one continuous
+            solid charcoal polyline (built up leg-by-leg so adjacent
+            short legs share a single visual path). Long transfers
+            (>250km) render as a soft dashed curve so they read as
+            "flight to a distant region" rather than an implausibly
+            straight road over ocean. */}
+        {legPaths.map((leg, i) => (
           <Polyline
-            positions={routePath as LatLngExpression[]}
-            pathOptions={{
-              color: "#243c24",
-              weight: 2.5,
-              opacity: 0.92,
-              lineCap: "round",
-              lineJoin: "round",
-            }}
+            key={`leg-${i}`}
+            positions={leg.path}
+            pathOptions={leg.kind === "transfer"
+              ? {
+                  color: "#243c24",
+                  weight: 1.8,
+                  opacity: 0.62,
+                  dashArray: "4 6",
+                  lineCap: "round",
+                  lineJoin: "round",
+                }
+              : {
+                  color: "#243c24",
+                  weight: 2.5,
+                  opacity: 0.92,
+                  lineCap: "round",
+                  lineJoin: "round",
+                }
+            }
           />
-        )}
+        ))}
 
-        {/* Directional arrows — one mid-leg per segment. Points along
-            the line in travel direction so the reader instantly sees
-            "this trip flows from Stop 1 to Stop N". Subtle (charcoal
-            on white circle, small) so they cue direction without
-            competing with the day pills. */}
-        {leafletRef.current && groups.slice(0, -1).map((from, i) => {
-          const to = groups[i + 1];
-          if (!from || !to) return null;
-          const midLat = (from.lat + to.lat) / 2;
-          const midLng = (from.lng + to.lng) / 2;
-          // Bearing in screen-space radians — Leaflet draws lat/lng
-          // on a Mercator projection where +lat is up and +lng is
-          // right, so for a small region the planar angle is a fine
-          // approximation of the visual angle on screen.
+        {/* Directional arrows — one per leg, at the midpoint, rotated
+            in the direction of travel. Subtle (charcoal triangle on
+            cream chip) so they cue flow without competing with pills.
+            Skipped on very short legs (<25km) to avoid clutter when
+            two stops sit close together. */}
+        {leafletRef.current && legPaths.map((leg, i) => {
+          if (leg.skipArrow) return null;
+          const [a, b] = leg.endpoints;
+          const midLat = (a[0] + b[0]) / 2;
+          const midLng = (a[1] + b[1]) / 2;
           const angleDeg =
-            (Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180) / Math.PI;
+            (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
           return (
             <Marker
               key={`arrow-${i}`}
@@ -660,6 +668,200 @@ function buildDayPill(
   });
 }
 
+// ─── Smart viewport helpers ──────────────────────────────────────────────
+
+type Viewport = {
+  center: LatLngExpression;
+  bounds: [LatLngTuple, LatLngTuple];
+};
+
+/**
+ * Pick a camera frame that keeps the *core* route dominant even when one
+ * stop sits far from the rest (Zanzibar from a Tanzanian mainland circuit
+ * is the canonical case — naive fitBounds would shrink Arusha + Tarangire
+ * + Serengeti into a tiny corner).
+ *
+ * Algorithm:
+ *   1. Centroid of all stops.
+ *   2. Median distance from centroid (robust against single far points).
+ *   3. Stops ≤ 2.5× median are CORE; the rest are OUTLIERS.
+ *   4. If no outliers, fit the full set tightly.
+ *   5. With outliers: start with core bounds, then expand each side
+ *      toward outliers by ONLY ENOUGH to include them with a small
+ *      margin. Net: core route fills 65-80% of the frame, outliers
+ *      land near the visible edge with a curved/dashed line drawing
+ *      the eye out to them.
+ */
+function computeViewport(groups: CoordGroup[]): Viewport {
+  if (groups.length === 0) {
+    return {
+      center: [0, 0] as LatLngExpression,
+      bounds: [[0, 0], [0, 0]],
+    };
+  }
+  if (groups.length === 1) {
+    const g = groups[0];
+    // Single-point trip — frame ~1° around the point so the basemap
+    // shows context without snapping to street level.
+    return {
+      center: [g.lat, g.lng] as LatLngExpression,
+      bounds: [
+        [g.lat - 0.5, g.lng - 0.5],
+        [g.lat + 0.5, g.lng + 0.5],
+      ],
+    };
+  }
+
+  // Centroid + per-stop distances.
+  const centroidLat = groups.reduce((s, g) => s + g.lat, 0) / groups.length;
+  const centroidLng = groups.reduce((s, g) => s + g.lng, 0) / groups.length;
+  const distances = groups.map((g) =>
+    haversineKm([g.lat, g.lng], [centroidLat, centroidLng]),
+  );
+  const sortedDistances = [...distances].sort((a, b) => a - b);
+  const median = sortedDistances[Math.floor(sortedDistances.length / 2)];
+
+  // Outlier rule: > 2.5× median AND > 200km from centroid. The 200km
+  // floor stops the algorithm from declaring outliers on a tightly
+  // clustered itinerary where one stop is just a bit further.
+  const OUTLIER_FACTOR = 2.5;
+  const OUTLIER_MIN_KM = 200;
+  const cutoff = Math.max(median * OUTLIER_FACTOR, OUTLIER_MIN_KM);
+  const core = groups.filter((_, i) => distances[i] <= cutoff);
+  const outliers = groups.filter((_, i) => distances[i] > cutoff);
+
+  // Fall-through: no outliers, just fit the full set.
+  const all = core.length > 0 ? core : groups;
+  const lats = all.map((g) => g.lat);
+  const lngs = all.map((g) => g.lng);
+  let south = Math.min(...lats);
+  let north = Math.max(...lats);
+  let west = Math.min(...lngs);
+  let east = Math.max(...lngs);
+
+  // Pull each side toward outliers — but ONLY by a fraction, so the
+  // core stays dominant. EXPAND_FRACTION 0.55 means: include the
+  // outlier comfortably inside the frame, but don't recenter on it.
+  // Result: outlier sits ~70% out from centre, core fills the
+  // central 65-80% of the visible map.
+  if (outliers.length > 0) {
+    const EXPAND_FRACTION = 0.55;
+    for (const o of outliers) {
+      if (o.lat < south) south = south - (south - o.lat) * EXPAND_FRACTION;
+      if (o.lat > north) north = north + (o.lat - north) * EXPAND_FRACTION;
+      if (o.lng < west) west = west - (west - o.lng) * EXPAND_FRACTION;
+      if (o.lng > east) east = east + (o.lng - east) * EXPAND_FRACTION;
+    }
+  }
+
+  // Floor — don't return a degenerate bounds. If two stops happen to
+  // sit on the same point, give the camera ~1° of context.
+  const MIN_SPAN = 0.4;
+  if (north - south < MIN_SPAN) {
+    const pad = (MIN_SPAN - (north - south)) / 2;
+    south -= pad;
+    north += pad;
+  }
+  if (east - west < MIN_SPAN) {
+    const pad = (MIN_SPAN - (east - west)) / 2;
+    west -= pad;
+    east += pad;
+  }
+
+  return {
+    center: [(south + north) / 2, (west + east) / 2] as LatLngExpression,
+    bounds: [
+      [south, west],
+      [north, east],
+    ],
+  };
+}
+
+// ─── Leg path builder ────────────────────────────────────────────────────
+
+type LegPath = {
+  kind: "circuit" | "transfer";
+  path: LatLngExpression[];
+  /** Endpoints used for arrow placement / bearing. Always [from, to]
+   *  even for curved transfer legs. */
+  endpoints: [LatLngTuple, LatLngTuple];
+  /** Skip the directional-arrow chip on legs shorter than ~25km
+   *  (e.g. two stops in the same region) to avoid clutter. */
+  skipArrow: boolean;
+};
+
+/**
+ * For each adjacent pair of groups, classify by haversine distance:
+ *   - ≤ transferThresholdKm → "circuit" (solid straight line)
+ *   - > transferThresholdKm → "transfer" (dashed curved arc)
+ *
+ * Curve uses a quadratic Bézier with a perpendicular-offset control
+ * point so the arc bows consistently. Curved transfers visually
+ * differentiate long-haul flights / road moves from the dense
+ * mainland circuit.
+ */
+function buildLegPaths(
+  groups: CoordGroup[],
+  transferThresholdKm: number,
+): LegPath[] {
+  if (groups.length < 2) return [];
+  const out: LegPath[] = [];
+  for (let i = 0; i < groups.length - 1; i++) {
+    const a: LatLngTuple = [groups[i].lat, groups[i].lng];
+    const b: LatLngTuple = [groups[i + 1].lat, groups[i + 1].lng];
+    const distKm = haversineKm(a, b);
+    const kind: "circuit" | "transfer" =
+      distKm > transferThresholdKm ? "transfer" : "circuit";
+    out.push({
+      kind,
+      path: kind === "transfer" ? buildBezierArc(a, b, 24, 0.14) : [a, b],
+      endpoints: [a, b],
+      skipArrow: distKm < 25,
+    });
+  }
+  return out;
+}
+
+function buildBezierArc(
+  a: LatLngTuple,
+  b: LatLngTuple,
+  segments: number,
+  bowFraction: number,
+): LatLngExpression[] {
+  // Perpendicular-offset control point — bow scales with segment
+  // length so a Mara → Zanzibar leg curves visibly without becoming
+  // cartoonish on a short Tarangire → Serengeti hop.
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const bow = len * bowFraction;
+  const cx = (a[0] + b[0]) / 2 + nx * bow;
+  const cy = (a[1] + b[1]) / 2 + ny * bow;
+  const pts: LatLngTuple[] = [a];
+  for (let s = 1; s <= segments; s++) {
+    const t = s / segments;
+    const x = (1 - t) * (1 - t) * a[0] + 2 * (1 - t) * t * cx + t * t * b[0];
+    const y = (1 - t) * (1 - t) * a[1] + 2 * (1 - t) * t * cy + t * t * b[1];
+    pts.push([x, y]);
+  }
+  return pts;
+}
+
+function haversineKm(a: LatLngTuple, b: LatLngTuple): number {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 // Build a small directional-arrow icon — equilateral triangle in a
 // soft cream chip, rotated to follow the leg's bearing. Triangle
 // points in the direction of travel.
@@ -677,6 +879,49 @@ function buildArrowIcon(L: typeof import("leaflet"), angleDeg: number) {
     iconSize: [SIZE, SIZE],
     iconAnchor: [SIZE / 2, SIZE / 2],
   });
+}
+
+// Re-fit bounds whenever the container's pixel size changes.
+// Critical because the route variant has a 240px rail to the LEFT of
+// the map column — fitBounds runs on first mount with the map's
+// initial pixel width, but that width changes as Leaflet finishes
+// measuring + the page lays out. Without this observer the camera
+// stays at the initial (wrong) zoom and the route ends up clipped
+// or floats to one side.
+function RefitOnResize({
+  map, viewport,
+}: {
+  map: { current: import("leaflet").Map | null };
+  viewport: Viewport;
+}) {
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const refit = () => {
+      try {
+        m.invalidateSize();
+        m.fitBounds(viewport.bounds, { padding: [25, 25], animate: false });
+      } catch {
+        // Map disposed during refit — safe to ignore.
+      }
+    };
+    // Initial invalidate after first paint — covers the case where the
+    // container width settled AFTER the MapContainer's initial mount.
+    const t = window.setTimeout(refit, 80);
+    // Resize observer for any subsequent layout changes (sidebar
+    // toggling, window resize, font load shift).
+    const container = m.getContainer();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(refit);
+      ro.observe(container);
+    }
+    return () => {
+      window.clearTimeout(t);
+      if (ro) ro.disconnect();
+    };
+  }, [map, viewport]);
+  return null;
 }
 
 // Sub-component — mounted inside MapContainer so it has access to the
