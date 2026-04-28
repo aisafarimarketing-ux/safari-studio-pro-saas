@@ -115,6 +115,152 @@ type AutopilotResponse = {
   };
 };
 
+// ─── submit_proposal tool ────────────────────────────────────────────────
+//
+// Tool-use forces the model to return data matching this schema —
+// Anthropic's API guarantees `tool_use.input` is valid JSON of this
+// shape, so we never have to parse free-text. Eliminates the entire
+// "AI returned malformed output" failure mode that plagued Haiku in
+// free-text mode.
+//
+// Schema mirrors AutopilotResponse. All fields optional — the route's
+// downstream normalisers handle missing values gracefully.
+
+const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
+  name: "submit_proposal",
+  description:
+    "Submit the personalised safari proposal data. Call this exactly once with all the proposal sections filled in.",
+  input_schema: {
+    type: "object",
+    properties: {
+      cover: {
+        type: "object",
+        properties: { tagline: { type: "string" } },
+      },
+      greeting: {
+        type: "object",
+        properties: { body: { type: "string" } },
+      },
+      closing: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          signOff: { type: "string" },
+        },
+      },
+      map: {
+        type: "object",
+        properties: { caption: { type: "string" } },
+      },
+      quote: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          attribution: { type: "string" },
+        },
+      },
+      days: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            destination: { type: "string" },
+            country: { type: "string" },
+            subtitle: { type: "string" },
+            description: { type: "string" },
+            board: { type: "string" },
+            highlights: { type: "array", items: { type: "string" } },
+            optionalActivities: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  location: { type: "string" },
+                  timeOfDay: { type: "string" },
+                  description: { type: "string" },
+                },
+              },
+            },
+            tiers: {
+              type: "object",
+              properties: {
+                classic: {
+                  type: "object",
+                  properties: {
+                    slot: { type: "number" },
+                    note: { type: "string" },
+                  },
+                },
+                premier: {
+                  type: "object",
+                  properties: {
+                    slot: { type: "number" },
+                    note: { type: "string" },
+                  },
+                },
+                signature: {
+                  type: "object",
+                  properties: {
+                    slot: { type: "number" },
+                    note: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      inclusions: { type: "array", items: { type: "string" } },
+      exclusions: { type: "array", items: { type: "string" } },
+      practicalInfo: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            body: { type: "string" },
+            icon: { type: "string" },
+          },
+        },
+      },
+      pricing: {
+        type: "object",
+        properties: {
+          classic: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              pricePerPerson: { type: "string" },
+              currency: { type: "string" },
+              highlighted: { type: "boolean" },
+            },
+          },
+          premier: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              pricePerPerson: { type: "string" },
+              currency: { type: "string" },
+              highlighted: { type: "boolean" },
+            },
+          },
+          signature: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              pricePerPerson: { type: "string" },
+              currency: { type: "string" },
+              highlighted: { type: "boolean" },
+            },
+          },
+          notes: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
 // Top-level wrapper: catches ANY error from the handler so the
 // client always gets a JSON body with a descriptive `error` field.
 // Without this, an unhandled exception (Prisma schema mismatch,
@@ -344,27 +490,24 @@ PRACTICAL INFO:
     library,
   };
 
-  const userText = `Generate the complete personalised proposal draft for these guests. Use every detail. Return ONLY the JSON object described in the system prompt.
+  const userText = `Generate the complete personalised proposal draft for these guests. Use every detail. You MUST return the result by calling the submit_proposal tool — do not write the JSON in a free-text response.
 
 Input:
 ${JSON.stringify(userPayload, null, 2)}`;
 
   const anth = new Anthropic({ apiKey });
 
-  let raw = "";
+  // ── Tool-use API ──
+  // Switched from free-text JSON to a forced tool call. Anthropic
+  // guarantees that `tool_use.input` matches the input_schema below,
+  // so we never have to JSON.parse model text again — eliminating
+  // the entire "AI returned malformed output" failure mode.
+  // submit_proposal_tool defined at module scope; see proposalToolSchema().
+
+  let parsed: AutopilotResponse;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
-    // 8K output ceiling. 4K was too tight for Haiku — it's more
-    // verbose than Sonnet for the same prompt and was hitting the
-    // cap mid-JSON, producing truncated output the parser couldn't
-    // recover from. 8K gives both models comfortable headroom; the
-    // streaming-time penalty is small because typical proposals
-    // still complete in 3-5K tokens.
-    //
-    // 90s timeout — bails fast on stuck calls. Haiku typical wall
-    // time 15-30s; Sonnet 60-120s legitimately. Switch via
-    // ANTHROPIC_MODEL env var on Railway.
     const msg = await anth.messages.create(
       {
         model: MODEL,
@@ -373,16 +516,25 @@ ${JSON.stringify(userPayload, null, 2)}`;
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
         messages: [{ role: "user", content: userText }],
+        tools: [SUBMIT_PROPOSAL_TOOL],
+        tool_choice: { type: "tool", name: "submit_proposal" },
       },
       { timeout: 90_000 },
     );
     const elapsedMs = Date.now() - startedAt;
     console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${msg.usage?.input_tokens ?? "?"} · out_tokens=${msg.usage?.output_tokens ?? "?"} · stop_reason=${msg.stop_reason ?? "?"}`);
-    raw = msg.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
+
+    const toolUse = msg.content.find(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_proposal",
+    );
+    if (!toolUse) {
+      console.error("[AUTOPILOT] no tool_use block in response. content kinds:", msg.content.map((b) => b.type));
+      return NextResponse.json(
+        { error: "AI didn't return structured output. Try again." },
+        { status: 502 },
+      );
+    }
+    parsed = toolUse.input as AutopilotResponse;
   } catch (err) {
     const elapsedMs = Date.now() - startedAt;
     console.error(`[AUTOPILOT] anthropic failed after ${elapsedMs}ms · model=${MODEL}`);
@@ -396,35 +548,6 @@ ${JSON.stringify(userPayload, null, 2)}`;
     const message = err instanceof Error ? err.message : String(err);
     console.error("[AUTOPILOT] Unexpected error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
-  }
-
-  let parsed: AutopilotResponse;
-  const extracted = extractJson(raw);
-  try {
-    parsed = JSON.parse(extracted);
-  } catch (err1) {
-    // First pass failed — try to repair common model quirks before
-    // giving up. Haiku in particular sometimes produces:
-    //   - trailing commas: { "a": 1, "b": 2, }
-    //   - smart quotes: { "a": "value" } where " is actually U+201C
-    //   - JS comments: // this is a note inside the JSON
-    const repaired = repairJson(extracted);
-    try {
-      parsed = JSON.parse(repaired);
-      console.warn("[AUTOPILOT] JSON parsed after repair pass.");
-    } catch (err2) {
-      console.error(
-        "[AUTOPILOT] JSON parse failed (raw):",
-        err1 instanceof Error ? err1.message : String(err1),
-      );
-      console.error(
-        "[AUTOPILOT] JSON parse failed (after repair):",
-        err2 instanceof Error ? err2.message : String(err2),
-      );
-      console.error("[AUTOPILOT] extracted JSON (first 1500 chars):", extracted.slice(0, 1500));
-      console.error("[AUTOPILOT] extracted JSON (last 500 chars):", extracted.slice(-500));
-      return NextResponse.json({ error: "AI returned malformed output. Try again." }, { status: 502 });
-    }
   }
 
   // ── Map Claude's draft → concrete shapes the proposal store consumes ────
@@ -680,79 +803,6 @@ function stringArray(v: unknown, max: number): string[] {
     .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
     .map((s) => s.trim().slice(0, 200))
     .slice(0, max);
-}
-
-// Extract the JSON object from a model's raw response, robust to:
-//   - clean JSON: {...}
-//   - fenced JSON: ```json\n{...}\n```
-//   - JSON with preamble: "Here's the proposal:\n{...}"
-//   - JSON with trailing comment: "{...}\n\nHope this helps!"
-//   - Both fences AND surrounding text
-//
-// Haiku in particular sometimes adds a sentence before the JSON even
-// when the system prompt says "JSON only". Rather than fight every
-// possible model preface, we walk the response and slice from the
-// FIRST `{` to its matching `}` using a brace-counter that respects
-// strings + escapes.
-function extractJson(text: string): string {
-  const trimmed = text.trim();
-  // Strip code fences first if present.
-  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(trimmed);
-  const inner = fence ? fence[1].trim() : trimmed;
-
-  const firstBrace = inner.indexOf("{");
-  if (firstBrace === -1) return inner; // no JSON found — let parser fail with original
-
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = firstBrace; i < inner.length; i++) {
-    const ch = inner[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (inString) {
-      if (ch === "\\") escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) return inner.slice(firstBrace, i + 1);
-    }
-  }
-
-  // Unmatched braces — return the rest from the first { and let
-  // JSON.parse produce a useful error message.
-  return inner.slice(firstBrace);
-}
-
-// Best-effort repair for the most common JSON-output quirks we see
-// from Haiku (and occasionally Sonnet on long generations):
-//
-//   - trailing commas before `}` or `]`
-//   - smart-quote characters (curly “ ” ‘ ’) instead of straight ASCII
-//   - // line comments inside the JSON body
-//   - /* block comments */ inside the JSON body
-//
-// Conservative: each pass is a regex replace operating on the
-// extracted JSON string. If the model produced genuinely broken
-// content (truncation, unescaped quote inside a string), this won't
-// fix it — we still log + 502 in that case.
-function repairJson(s: string): string {
-  return s
-    // Curly quotes → straight
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    // // line comments
-    .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1")
-    // /* block comments */
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    // Trailing comma before `}` or `]`
-    .replace(/,(\s*[}\]])/g, "$1");
 }
 
 const ALLOWED_TIME_OF_DAY = new Set(["Morning", "Afternoon", "Evening", "All Day"]);
