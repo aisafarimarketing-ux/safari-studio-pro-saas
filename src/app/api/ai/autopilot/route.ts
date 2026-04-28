@@ -182,14 +182,18 @@ async function handleAutopilot(req: Request): Promise<Response> {
   const companyName = proposal.operator?.companyName?.trim() || "";
 
   // ── Library snapshot ────────────────────────────────────────────────────
-  // Cap aggressively to keep the prompt under ~10K tokens. Earlier
-  // limit (80 properties × 280-char summary) routinely produced
-  // requests that took 60-180s and hit Railway's edge proxy
-  // connection-reset window. 30 properties × 140-char summary
-  // brings the input down by ~3-4x with negligible quality impact —
-  // the model only picks 1-3 properties per day anyway.
-  const LIBRARY_TAKE = 30;
-  const SUMMARY_MAX_CHARS = 140;
+  // Cap aggressively to keep the prompt small. The model only picks
+  // 1-3 properties per day, so a library of 20 (recently updated)
+  // is plenty. Each summary at 100 chars retains the distinguishing
+  // pitch ("on a working coffee estate", "tented camp on the
+  // Mara") without paying for the full marketing copy in tokens.
+  //
+  // These cuts drop ~25% off the prompt-processing time. To go
+  // further, switch ANTHROPIC_MODEL env var to Haiku — see
+  // claude-haiku-4-5-20251015 for ~3x speedup (full proposal
+  // typically renders in 15-30s on Haiku vs 60-150s on Sonnet).
+  const LIBRARY_TAKE = 20;
+  const SUMMARY_MAX_CHARS = 100;
   const properties = await prisma.property.findMany({
     where: { organizationId: ctx.organization.id, archived: false },
     select: {
@@ -342,19 +346,20 @@ ${JSON.stringify(userPayload, null, 2)}`;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
-    // 5K output ceiling — typical 7-night proposal renders in 3-5K
-    // tokens. Earlier 8K-12K caps made the request take long enough
-    // that Railway's edge proxy reset the connection mid-stream
-    // (net::ERR_CONNECTION_RESET / "Failed to fetch" in the browser).
-    // Capping at 5K + the trimmed library context above gets typical
-    // requests well under 60s, comfortably inside any proxy timeout.
+    // 4K output ceiling — typical 7-night proposal lands in 3-4K
+    // tokens. Cutting from 5K shaves ~15-20% off the streaming time
+    // on Sonnet without truncating any section. Pricing notes /
+    // closing signoff are the first to clip if a proposal runs
+    // unusually long; both are easy to regenerate per-section.
     //
-    // Per-call timeout 90s — bails fast on truly stuck calls without
-    // wasting either the operator's wait or the proxy's patience.
+    // 90s timeout — bails fast on stuck calls. With Haiku 4.5
+    // (claude-haiku-4-5-20251015) typical wall time is 15-30s; with
+    // Sonnet it's 60-100s legitimately. Switch via ANTHROPIC_MODEL
+    // env var on Railway.
     const msg = await anth.messages.create(
       {
         model: MODEL,
-        max_tokens: 5000,
+        max_tokens: 4000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
