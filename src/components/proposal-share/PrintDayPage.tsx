@@ -38,16 +38,34 @@ export type ResolvedProperty = {
   galleryUrls: string[];
 };
 
-// True when a day carries content that warrants a second printed page.
-// Signal: optional activities OR a resolved property with enough material
-// to be more than a single chip line.
+// True when a day carries enough content to warrant a second printed
+// page. The bar is intentionally HIGHER than "has any activity at all"
+// because the previous threshold produced a lot of half-empty tail
+// pages. Now we only split when:
+//
+//  - day has 3+ optional activities (those don't fit comfortably in
+//    a chips strip on the main page), OR
+//  - day has a property AND the property has gallery imagery (so the
+//    tail page can carry a real 3-up gallery), OR
+//  - day's narrative is long enough that fitting it + activities +
+//    accommodation on one page would clip
+//
+// Days that don't meet any of these get a single, full main page —
+// activities (if 1-2) render as compact chips at the bottom of the
+// main page, and the property summary chips render in the
+// accommodation header strip.
 export function dayHasTailContent(
   day: Day,
   property: ResolvedProperty | null,
 ): boolean {
-  const hasActivities = (day.optionalActivities ?? []).length > 0;
-  const hasProperty = !!property;
-  return hasActivities || hasProperty;
+  const activities = day.optionalActivities ?? [];
+  const narrativeLen = (day.description ?? "").trim().length;
+  const propertyHasGallery = !!property && property.galleryUrls.filter(Boolean).length > 0;
+
+  const manyActivities = activities.length >= 3;
+  const longNarrative = narrativeLen > 600;
+
+  return manyActivities || propertyHasGallery || longNarrative;
 }
 
 export function resolveDayProperty(
@@ -82,22 +100,28 @@ export function resolveDayProperty(
   };
 }
 
-// ─── Page 1 — story ────────────────────────────────────────────────────────
+// ─── Page 1 — story (and accommodation summary when no tail) ──────────────
 
 export function PrintDayPageMain({
-  day, dayDate, theme, tokens, totalDays,
+  day, dayDate, theme, tokens, totalDays, property, hasTail,
 }: {
   day: Day;
   dayDate: string | null;
   theme: ProposalTheme;
   tokens: ThemeTokens;
   totalDays: number;
+  /** Resolved property for THIS day. Surfaced inline on the main page
+   *  when there's no continuation page so the day still feels complete. */
+  property: ResolvedProperty | null;
+  /** When false, the main page is the only page for this day, so we
+   *  pack accommodation summary + few activities into the bottom. */
+  hasTail: boolean;
 }) {
   const destination = day.destination?.trim() || "New Destination";
   const phase = day.subtitle?.trim() || "";
   const narrative = day.description?.trim() || "";
-  const board = day.board?.trim() || "";
   const heroUrl = day.heroImageUrl?.trim() || null;
+  const activities = day.optionalActivities ?? [];
 
   return (
     <div
@@ -113,12 +137,13 @@ export function PrintDayPageMain({
         padded
       />
 
-      {/* Hero — large editorial image. Aspect-ratio capped via flex-grow
-          on the main column so a tall image never crowds the narrative. */}
+      {/* Hero — when this day has a tail page (rich content), the hero
+          is generous (44%). Single-page days get a slightly shorter hero
+          (38%) so the bottom can carry accommodation + activities. */}
       <div
         className="relative w-full shrink-0 overflow-hidden"
         style={{
-          height: "44%",
+          height: hasTail ? "44%" : "38%",
           background: tokens.cardBg,
           borderTop: `1px solid ${tokens.border}`,
           borderBottom: `1px solid ${tokens.border}`,
@@ -133,36 +158,173 @@ export function PrintDayPageMain({
             style={{ objectPosition: day.heroImagePosition || "center" }}
           />
         ) : (
+          /* Branded fallback — same editorial style as the property
+             page placeholder. Never "No image" text. */
           <div
-            className="w-full h-full flex items-center justify-center text-[12px] uppercase tracking-[0.24em]"
-            style={{ color: tokens.mutedText }}
+            className="w-full h-full flex flex-col items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
+            }}
           >
-            No image
+            <div
+              className="text-[10px] uppercase tracking-[0.32em] font-semibold mb-3"
+              style={{ color: tokens.mutedText }}
+            >
+              Day {day.dayNumber}
+            </div>
+            <div
+              className="font-bold text-center leading-[1.05]"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(28px, 4vw, 44px)",
+                opacity: 0.75,
+                letterSpacing: "-0.015em",
+              }}
+            >
+              {destination}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Narrative — flex-1 fills remaining vertical room. Body
-          line-clamps at a height the page can fit so a runaway essay
-          never blows the page; the tail page picks up activities + stay. */}
-      <div className="flex-1 min-h-0 px-12 pt-8 pb-10 flex flex-col">
+      <div className="flex-1 min-h-0 px-12 pt-7 pb-9 flex flex-col gap-5">
+        {/* Narrative — clamped so a runaway essay never blows the page.
+            When there's a tail page, give the narrative full room. When
+            single-page, clamp tighter so accommodation + activities fit. */}
         {narrative ? (
-          <NarrativeBody narrative={narrative} tokens={tokens} />
+          <NarrativeBody
+            narrative={narrative}
+            tokens={tokens}
+            clamp={hasTail ? undefined : 8}
+          />
         ) : (
           <p className="text-[13px] italic" style={{ color: tokens.mutedText }}>
             (No narrative for this day.)
           </p>
         )}
 
-        {board && (
-          <div
-            className="mt-auto pt-5 text-[10.5px] uppercase tracking-[0.28em] font-semibold"
-            style={{ color: tokens.mutedText, borderTop: `1px solid ${tokens.border}` }}
-          >
-            {board}
+        {/* Accommodation summary + activity chips — only on single-page
+            days. When this day has a tail page, those go on the tail
+            (with full property gallery + activity table). */}
+        {!hasTail && (property || activities.length > 0) && (
+          <div className="mt-auto space-y-4">
+            {property && (
+              <MainPageAccommodation property={property} theme={theme} tokens={tokens} />
+            )}
+            {activities.length > 0 && (
+              <MainPageActivityChips activities={activities} tokens={tokens} />
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Compact accommodation row for single-page days — name + location +
+// meal/amenity chips on one line, no big gallery (gallery + description
+// are reserved for the tail page when one exists).
+function MainPageAccommodation({
+  property, theme, tokens,
+}: {
+  property: ResolvedProperty;
+  theme: ProposalTheme;
+  tokens: ThemeTokens;
+}) {
+  const meal = humaniseMealPlan(property.mealPlan);
+  return (
+    <div
+      className="flex items-baseline justify-between gap-3 flex-wrap pt-3"
+      style={{ borderTop: `1px solid ${tokens.border}` }}
+    >
+      <div className="min-w-0">
+        <div
+          className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-0.5"
+          style={{ color: tokens.mutedText }}
+        >
+          Accommodation
+        </div>
+        <h3
+          className="text-[15px] font-bold leading-[1.15]"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+          }}
+        >
+          {property.name}
+        </h3>
+        {property.location && (
+          <div
+            className="text-[11px] italic"
+            style={{ color: tokens.mutedText }}
+          >
+            {property.location}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+        {meal && (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+            style={{
+              color: tokens.bodyText,
+              background: `${tokens.accent}12`,
+              border: `1px solid ${tokens.accent}26`,
+            }}
+          >
+            <span style={{ color: tokens.accent }}>●</span>
+            {meal}
+          </span>
+        )}
+        {property.amenities.slice(0, 3).map((a) => (
+          <span
+            key={a}
+            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px]"
+            style={{
+              color: tokens.bodyText,
+              background: tokens.cardBg,
+              border: `1px solid ${tokens.border}`,
+            }}
+          >
+            {a}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MainPageActivityChips({
+  activities, tokens,
+}: {
+  activities: OptionalActivity[];
+  tokens: ThemeTokens;
+}) {
+  return (
+    <div>
+      <div
+        className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-2"
+        style={{ color: tokens.mutedText }}
+      >
+        Optional · {activities.length} {activities.length === 1 ? "add-on" : "add-ons"}
+      </div>
+      <ul className="flex flex-wrap gap-1.5">
+        {activities.slice(0, 4).map((a) => (
+          <li
+            key={a.id}
+            className="text-[11px] px-2.5 py-1 rounded-full"
+            style={{
+              color: tokens.bodyText,
+              background: tokens.cardBg,
+              border: `1px solid ${tokens.border}`,
+            }}
+          >
+            {a.title}
+            {a.timeOfDay ? ` · ${a.timeOfDay}` : ""}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -220,10 +382,14 @@ export function PrintDayPageTail({
 // ─── Sub-pieces ──────────────────────────────────────────────────────────
 
 function NarrativeBody({
-  narrative, tokens,
+  narrative, tokens, clamp,
 }: {
   narrative: string;
   tokens: ThemeTokens;
+  /** When set, applies a CSS line-clamp at the WHOLE block level so
+   *  long narratives on single-page days don't push accommodation +
+   *  activity chips off the page. */
+  clamp?: number;
 }) {
   const paragraphs = narrative
     .split(/\n{2,}|\n/)
@@ -231,8 +397,16 @@ function NarrativeBody({
     .filter(Boolean);
   if (paragraphs.length === 0) return null;
   const [lead, ...rest] = paragraphs;
+  const clampStyle = clamp
+    ? {
+        display: "-webkit-box" as const,
+        WebkitLineClamp: clamp,
+        WebkitBoxOrient: "vertical" as const,
+        overflow: "hidden" as const,
+      }
+    : {};
   return (
-    <div className="space-y-3.5 max-w-[68ch]">
+    <div className="space-y-3.5 max-w-[68ch]" style={clampStyle}>
       <div
         className="flex gap-3 text-[13px] leading-[1.7]"
         style={{ color: tokens.bodyText }}
@@ -440,7 +614,7 @@ function AccommodationBlock({
                 className="text-[10px] uppercase tracking-[0.26em] font-semibold mb-2"
                 style={{ color: tokens.mutedText }}
               >
-                What's at the lodge
+                What&apos;s at the lodge
               </div>
               <ul className="flex flex-wrap gap-1.5">
                 {allAmenities.slice(0, 16).map((a) => (
@@ -495,11 +669,20 @@ function AccommodationBlock({
                     className="w-full h-full object-cover"
                   />
                 ) : (
+                  /* Empty tile — render a soft gradient with a tiny
+                     editorial mark instead of "No photo" text, so the
+                     printed page reads as designed rather than missing. */
                   <div
-                    className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
-                    style={{ color: tokens.mutedText }}
+                    className="w-full h-full flex items-center justify-center"
+                    style={{
+                      background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
+                    }}
+                    aria-hidden
                   >
-                    {i === 0 ? "No photo" : ""}
+                    <div
+                      className="h-px"
+                      style={{ width: 18, background: tokens.accent, opacity: 0.55 }}
+                    />
                   </div>
                 )}
               </div>

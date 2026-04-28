@@ -332,6 +332,19 @@ function PrintCss({
         outline-color: #dc2626;
         outline-width: 4px;
       }
+      /* Underfilled (<65% used) — distinct yellow so it doesn't get
+         confused with the gold continuation marker. Pure diagnostic;
+         we want to encourage adding intentional filler content
+         (image strip, route summary, quote, etc.) on these pages. */
+      .pdf-document--debug .pdf-page--underfill {
+        outline-color: #eab308;
+        outline-style: dashed;
+        outline-width: 4px;
+      }
+      .pdf-document--debug .pdf-page--underfill::after {
+        background: #eab308;
+        color: #1a1a1a;
+      }
       /* Continuation page marker — small chip in the top-left so the
          operator can see at a glance which day pages were split into
          a tail. Read alongside the main label chip in the top-right. */

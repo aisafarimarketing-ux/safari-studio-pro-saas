@@ -40,9 +40,13 @@ export function PrintPropertyPage({
       className="w-full h-full flex flex-col"
       style={{ background: tokens.pageBg, color: tokens.bodyText }}
     >
-      {/* Hero — top 48% of the page. Full-bleed cover. */}
+      {/* Hero — top 48% of the page. Full-bleed cover.
+          Never show "NO IMAGE" text in a guest-facing PDF — when the
+          property has no photo we fall back to a branded editorial
+          panel (location text + soft pattern) so the page still feels
+          intentional rather than broken. */}
       <div
-        className="relative shrink-0 w-full"
+        className="relative shrink-0 w-full overflow-hidden"
         style={{
           height: "48%",
           background: tokens.cardBg,
@@ -56,12 +60,11 @@ export function PrintPropertyPage({
             className="w-full h-full object-cover"
           />
         ) : (
-          <div
-            className="w-full h-full flex items-center justify-center text-[12px] uppercase tracking-[0.24em]"
-            style={{ color: tokens.mutedText }}
-          >
-            No image
-          </div>
+          <BrandedPlaceholder
+            label={property.location || property.name}
+            theme={theme}
+            tokens={tokens}
+          />
         )}
         {property.tier && (
           <div
@@ -175,6 +178,55 @@ export function PrintPropertyPage({
           </aside>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Branded placeholder ──────────────────────────────────────────────
+//
+// Replaces the previous "NO IMAGE" text. Shown when a property has no
+// hero image — a soft gold-ish gradient with the location label set
+// large in the display serif. Reads as an editorial design choice
+// instead of a missing-asset error.
+
+function BrandedPlaceholder({
+  label, theme, tokens,
+}: {
+  label: string;
+  theme: ProposalTheme;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <div
+      className="w-full h-full flex flex-col items-center justify-center px-12"
+      style={{
+        background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
+        color: tokens.mutedText,
+      }}
+    >
+      <div
+        className="text-[10px] uppercase tracking-[0.32em] font-semibold mb-3"
+        style={{ color: tokens.mutedText }}
+      >
+        On location
+      </div>
+      <div
+        className="font-bold text-center leading-[1.05]"
+        style={{
+          color: tokens.headingText,
+          fontFamily: `'${theme.displayFont}', serif`,
+          fontSize: "clamp(28px, 4vw, 44px)",
+          letterSpacing: "-0.015em",
+          opacity: 0.78,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        aria-hidden
+        className="mt-4 h-px"
+        style={{ width: 80, background: tokens.accent, opacity: 0.5 }}
+      />
     </div>
   );
 }

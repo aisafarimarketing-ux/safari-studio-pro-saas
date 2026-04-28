@@ -55,9 +55,16 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
         usedPx: number;
         totalPx: number;
         overflowPx: number;
+        underfillPct: number;
         offender: string | null;
         continuation: boolean;
+        status: "OK" | "OVERFLOW" | "UNDERFILLED";
       }> = [];
+
+      // Pages that use less than this fraction of A4 height get
+      // flagged as UNDERFILLED — feels accidentally empty rather than
+      // an intentional luxury whitespace.
+      const UNDERFILL_THRESHOLD = 0.65;
 
       pages.forEach((page) => {
         const child = page.firstElementChild as HTMLElement | null;
@@ -71,30 +78,42 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
           el.classList.remove("pdf-overflow-source");
         });
 
-        // Stamp the per-page used/total label.
+        // Underfill — only meaningful when there's no overflow.
+        const fillRatio = totalPx > 0 ? usedPx / totalPx : 0;
+        const isUnderfilled = overflowPx <= 4 && fillRatio < UNDERFILL_THRESHOLD;
+        page.classList.remove("pdf-page--underfill");
+
+        // Stamp the per-page used/total label. OVERFLOW > UNDERFILLED > OK.
         page.style.setProperty("--pdf-used", `${Math.round(usedPx)}`);
         page.style.setProperty("--pdf-total", `${Math.round(totalPx)}`);
-        page.dataset.pdfUsage = overflowPx > 4
-          ? `OVER by ${Math.round(overflowPx)}px (${Math.round(usedPx)} / ${Math.round(totalPx)})`
-          : `${Math.round(usedPx)} / ${Math.round(totalPx)}px`;
+        if (overflowPx > 4) {
+          page.dataset.pdfUsage = `OVER by ${Math.round(overflowPx)}px (${Math.round(usedPx)} / ${Math.round(totalPx)})`;
+        } else if (isUnderfilled) {
+          page.dataset.pdfUsage = `UNDERFILLED ${Math.round(fillRatio * 100)}% (${Math.round(usedPx)} / ${Math.round(totalPx)})`;
+        } else {
+          page.dataset.pdfUsage = `${Math.round(usedPx)} / ${Math.round(totalPx)}px`;
+        }
 
         let offender: string | null = null;
         if (overflowPx > 4) {
           page.classList.add("pdf-page--overflow");
-          // Find the deepest descendant whose bottom (relative to the
-          // page's content top) exceeds the page's bottom. The first
-          // descendant that fails is the highest-impact element to
-          // flag — text + lists below it would cascade.
           offender = highlightOverflowSource(page);
+        } else if (isUnderfilled) {
+          page.classList.add("pdf-page--underfill");
         }
+
+        const status: "OK" | "OVERFLOW" | "UNDERFILLED" =
+          overflowPx > 4 ? "OVERFLOW" : isUnderfilled ? "UNDERFILLED" : "OK";
 
         report.push({
           label: page.dataset.pdfLabel || "(unlabelled)",
           usedPx: Math.round(usedPx),
           totalPx: Math.round(totalPx),
           overflowPx: Math.round(overflowPx),
+          underfillPct: Math.round(fillRatio * 100),
           offender,
           continuation: page.dataset.continuation === "true",
+          status,
         });
       });
 
@@ -106,24 +125,26 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
         );
       }
 
-      const overflows = report.filter((r) => r.overflowPx > 0);
+      const overflows = report.filter((r) => r.status === "OVERFLOW");
+      const underfilled = report.filter((r) => r.status === "UNDERFILLED");
+
+      // Single console.table covering every page so it's easy to spot
+      // OVERFLOW (red, content clipped) vs UNDERFILLED (designed
+      // intentionally? maybe accidentally empty) vs OK at a glance.
+      console.info(`[pdf] ${report.length} pages — ${overflows.length} overflow, ${underfilled.length} underfilled`);
+      console.table(report);
+
       if (overflows.length > 0) {
         console.warn(
-          `[pdf] ${overflows.length} of ${report.length} pages overflow A4 — they will clip in the PDF:`,
+          `[pdf] ${overflows.length} OVERFLOW page${overflows.length === 1 ? "" : "s"} will clip:`,
+          overflows.map((r) => r.label),
         );
-        console.table(overflows);
-      } else {
-        console.info(`[pdf] all ${report.length} pages fit cleanly`);
-        // Also log how much room each page has left so the operator
-        // can see where they could add content vs trim.
-        const tightest = [...report]
-          .sort((a, b) => (a.totalPx - a.usedPx) - (b.totalPx - b.usedPx))
-          .slice(0, 5)
-          .map((r) => ({
-            label: r.label,
-            remainingPx: r.totalPx - r.usedPx,
-          }));
-        console.info("[pdf] tightest pages (least remaining vertical space):", tightest);
+      }
+      if (underfilled.length > 0) {
+        console.warn(
+          `[pdf] ${underfilled.length} UNDERFILLED page${underfilled.length === 1 ? "" : "s"} (<65% used) — consider intentional fillers:`,
+          underfilled.map((r) => `${r.label} (${r.underfillPct}%)`),
+        );
       }
     }, 250);
     return () => window.clearTimeout(id);
@@ -302,6 +323,8 @@ function DayJourneyPages({ section }: { section: Section }) {
                   theme={proposal.theme}
                   tokens={tokens}
                   totalDays={days.length}
+                  property={property}
+                  hasTail={hasTail}
                 />
               </div>
             </PdfPage>
