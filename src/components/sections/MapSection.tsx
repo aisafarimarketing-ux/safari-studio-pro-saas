@@ -100,10 +100,10 @@ export function MapSection({ section }: { section: Section }) {
       return proposal.properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
     };
 
-    const MAP_HEIGHT = 600;
+    const MAP_HEIGHT = 720;
 
     return (
-      <div className="py-4 md:py-6" style={{ background: tokens.pageBg }}>
+      <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>
         <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
           {/* Card-rail (240px) + dominant map. The title + country chip
               live inside the rail header — no separate full-width title
@@ -519,7 +519,7 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  const MAP_HEIGHT = 600;
+  const MAP_HEIGHT = 720;
 
   return (
     <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>

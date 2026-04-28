@@ -15,6 +15,83 @@ const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ss
 const Tooltip = dynamic(() => import("react-leaflet").then((m) => m.Tooltip), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
 
+// ─── Known safari coords ──────────────────────────────────────────────────
+//
+// Hard-coded coordinates for the most common East African safari stops.
+// We hit these BEFORE the Nominatim round-trip so:
+//   - Arusha resolves in Tanzania (not Kenya / not "Arusha, USA")
+//   - National parks resolve to their gate / centre, not a random town
+//     of the same name
+//   - The map renders instantly with no API call for the typical trip
+//
+// Match is case-insensitive on the destination name. Country in the
+// proposal is ignored for these (the canonical coord is the source of
+// truth). Anything not in this table still falls through to the API
+// resolver for unfamiliar places.
+
+const KNOWN_SAFARI_COORDS: Array<{
+  match: RegExp;
+  lat: number;
+  lng: number;
+  label?: string;
+}> = [
+  // ── Tanzania ──
+  { match: /^arusha\b/i,                      lat: -3.3869, lng: 36.6829 },
+  { match: /^moshi\b/i,                       lat: -3.3494, lng: 37.3408 },
+  { match: /^kilimanjaro\b/i,                 lat: -3.0674, lng: 37.3556 },
+  { match: /^tarangire\b/i,                   lat: -3.8333, lng: 36.0000 },
+  { match: /^lake manyara\b|^manyara\b/i,     lat: -3.5833, lng: 35.8333 },
+  { match: /^ngorongoro\b/i,                  lat: -3.2000, lng: 35.5000 },
+  { match: /^serengeti\b/i,                   lat: -2.3333, lng: 34.8333 },
+  { match: /^ruaha\b/i,                       lat: -7.4500, lng: 34.6500 },
+  { match: /^selous\b|^nyerere\b/i,           lat: -8.5000, lng: 37.5000 },
+  { match: /^mahale\b/i,                      lat: -6.1167, lng: 29.8500 },
+  { match: /^katavi\b/i,                      lat: -6.7833, lng: 31.1500 },
+  { match: /^zanzibar\b|^stone town\b/i,      lat: -6.1659, lng: 39.2026 },
+  { match: /^pemba\b/i,                       lat: -5.0500, lng: 39.7833 },
+  { match: /^mafia\b/i,                       lat: -7.9000, lng: 39.7500 },
+  { match: /^dar es salaam\b|^dar\b/i,        lat: -6.7924, lng: 39.2083 },
+  // ── Kenya ──
+  { match: /^nairobi\b/i,                     lat: -1.2864, lng: 36.8172 },
+  { match: /^masai mara\b|^maasai mara\b|^the mara\b/i,
+                                              lat: -1.5000, lng: 35.1500 },
+  { match: /^amboseli\b/i,                    lat: -2.6500, lng: 37.2667 },
+  { match: /^tsavo east\b/i,                  lat: -2.7500, lng: 38.7500 },
+  { match: /^tsavo west\b/i,                  lat: -3.0000, lng: 38.0000 },
+  { match: /^samburu\b/i,                     lat:  0.5500, lng: 37.5333 },
+  { match: /^laikipia\b/i,                    lat:  0.4000, lng: 36.9000 },
+  { match: /^lake nakuru\b|^nakuru\b/i,       lat: -0.3667, lng: 36.0833 },
+  { match: /^lake naivasha\b|^naivasha\b/i,   lat: -0.7167, lng: 36.4333 },
+  { match: /^ol pejeta\b|^ol pejeta\b/i,      lat:  0.0000, lng: 36.9000 },
+  { match: /^meru\b/i,                        lat:  0.1500, lng: 38.2000 },
+  { match: /^mount kenya\b/i,                 lat: -0.1521, lng: 37.3083 },
+  { match: /^diani\b/i,                       lat: -4.3000, lng: 39.5833 },
+  { match: /^lamu\b/i,                        lat: -2.2717, lng: 40.9020 },
+  { match: /^mombasa\b/i,                     lat: -4.0435, lng: 39.6682 },
+  // ── Rwanda / Uganda ──
+  { match: /^volcanoes\b|^musanze\b/i,        lat: -1.4833, lng: 29.5500 },
+  { match: /^kigali\b/i,                      lat: -1.9441, lng: 30.0619 },
+  { match: /^bwindi\b/i,                      lat: -1.0500, lng: 29.7000 },
+  { match: /^queen elizabeth\b|^kasese\b/i,   lat: -0.2000, lng: 30.0500 },
+  { match: /^murchison falls\b|^murchison\b/i,lat:  2.2700, lng: 31.6900 },
+  { match: /^entebbe\b/i,                     lat:  0.0470, lng: 32.4630 },
+  { match: /^kampala\b/i,                     lat:  0.3476, lng: 32.5825 },
+  // ── Botswana / Zimbabwe / Zambia / South Africa ──
+  { match: /^okavango\b/i,                    lat: -19.5000, lng: 22.7500 },
+  { match: /^victoria falls\b|^vic falls\b/i, lat: -17.9243, lng: 25.8572 },
+  { match: /^cape town\b/i,                   lat: -33.9249, lng: 18.4241 },
+  { match: /^kruger\b/i,                      lat: -23.9884, lng: 31.5547 },
+];
+
+function lookupKnownCoord(destination: string): { lat: number; lng: number } | null {
+  const name = (destination ?? "").trim();
+  if (!name) return null;
+  for (const entry of KNOWN_SAFARI_COORDS) {
+    if (entry.match.test(name)) return { lat: entry.lat, lng: entry.lng };
+  }
+  return null;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type RouteCoord = {
@@ -111,6 +188,24 @@ export function RouteMap({
         if (cancelled) return;
         if (seen.has(key)) continue;
         seen.set(key, "pending");
+
+        // Known-safari-coords first — guarantees Arusha is in
+        // Tanzania and Tarangire / Serengeti / Ngorongoro / Mara
+        // sit on the right park boundaries instead of whatever
+        // Nominatim returns for an ambiguous query. No round-trip
+        // needed for the typical safari trip.
+        const known = lookupKnownCoord(day.destination);
+        if (known) {
+          seen.set(key, {
+            dayId: day.id,
+            dayNumber: day.dayNumber,
+            label: day.destination,
+            lat: known.lat,
+            lng: known.lng,
+          });
+          continue;
+        }
+
         try {
           const res = await fetch(`/api/geocode?q=${encodeURIComponent(key)}`);
           if (!res.ok) {
@@ -269,13 +364,17 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={bounds}
-        // Tight framing: 30px padding all sides + no maxZoom cap so the
-        // route fills as much of the viewport as possible. Previous
-        // 60px padding + maxZoom: 7 left huge unused geography around
-        // the itinerary, making it look like a "tool" rather than a
-        // diagram of THIS trip.
-        boundsOptions={{ padding: [30, 30] }}
-        minZoom={3}
+        // Camera: tight frame of the route only.
+        //   - 12% padding (paddingTopLeft / paddingBottomRight expressed
+        //     as ratios of the container size) so the route always
+        //     occupies ~80-85% of the visible map.
+        //   - inertia disabled — operator pan/scroll feels controlled,
+        //     not "skids around".
+        //   - minZoom 4 stops fitBounds from ever zooming out to the
+        //     full-continent view if all stops happen to coincide.
+        boundsOptions={{ padding: [40, 40] }}
+        minZoom={4}
+        inertia={false}
         // Editorial defaults — hide the +/− zoom widget always; let
         // operators pan/zoom via scroll/drag in editor mode and lock
         // both in presentation mode (PDF export, share view).
@@ -296,10 +395,11 @@ export function RouteMap({
         />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          // Carto Positron — clean light basemap, minimal labels,
-          // muted greys/blues. The right minimal aesthetic for a
-          // route diagram.
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          // Carto Positron NO LABELS — quietest possible basemap.
+          // Landmass + water + soft terrain, but no town / road / park
+          // labels fighting the route. The destination labels we DO
+          // need come from our own permanent Tooltips on each marker.
+          url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
@@ -320,6 +420,34 @@ export function RouteMap({
             }}
           />
         )}
+
+        {/* Directional arrows — one mid-leg per segment. Points along
+            the line in travel direction so the reader instantly sees
+            "this trip flows from Stop 1 to Stop N". Subtle (charcoal
+            on white circle, small) so they cue direction without
+            competing with the day pills. */}
+        {leafletRef.current && groups.slice(0, -1).map((from, i) => {
+          const to = groups[i + 1];
+          if (!from || !to) return null;
+          const midLat = (from.lat + to.lat) / 2;
+          const midLng = (from.lng + to.lng) / 2;
+          // Bearing in screen-space radians — Leaflet draws lat/lng
+          // on a Mercator projection where +lat is up and +lng is
+          // right, so for a small region the planar angle is a fine
+          // approximation of the visual angle on screen.
+          const angleDeg =
+            (Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180) / Math.PI;
+          return (
+            <Marker
+              key={`arrow-${i}`}
+              position={[midLat, midLng]}
+              icon={buildArrowIcon(leafletRef.current!, angleDeg)}
+              interactive={false}
+              keyboard={false}
+              zIndexOffset={-50}
+            />
+          );
+        })}
 
         {groups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
@@ -433,6 +561,23 @@ export function RouteMap({
           display: none;
         }
 
+        /* Directional arrow chip — small cream circle with a charcoal
+           triangle inside. Rotated by the leg's bearing so the tip
+           always points downstream. Pointer-events disabled so it
+           never steals clicks from the day pills underneath. */
+        .ss-arrow-chip {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: rgba(247, 245, 240, 0.95);
+          border: 1px solid rgba(36, 60, 36, 0.18);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+
       `}</style>
     </div>
   );
@@ -512,6 +657,25 @@ function buildDayPill(
     html: `<div class="${className}">${escape(text)}</div>`,
     iconSize: [estWidth, totalHeight],
     iconAnchor: [estWidth / 2, totalHeight], // bottom-center → stem tip sits on lat/lng
+  });
+}
+
+// Build a small directional-arrow icon — equilateral triangle in a
+// soft cream chip, rotated to follow the leg's bearing. Triangle
+// points in the direction of travel.
+function buildArrowIcon(L: typeof import("leaflet"), angleDeg: number) {
+  const SIZE = 18;
+  const html =
+    `<div class="ss-arrow-chip" style="transform: rotate(${angleDeg}deg);">` +
+    `<svg viewBox="0 0 12 12" width="9" height="9" aria-hidden>` +
+    `<path d="M6 1.5 L10.5 10 L6 8 L1.5 10 Z" fill="#243c24"/>` +
+    `</svg>` +
+    `</div>`;
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [SIZE, SIZE],
+    iconAnchor: [SIZE / 2, SIZE / 2],
   });
 }
 
