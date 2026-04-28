@@ -324,14 +324,25 @@ export function RouteMap({
     );
   }
 
-  // Group consecutive days at the same coordinate into a single marker so
-  // a 2-night stay doesn't stack two pins on the same pixel. Label reads
-  // "Day 3-4" when a group spans multiple days.
+  // Two-tier grouping:
+  //
+  //   `groups` — chronological. Consecutive same-coord days collapse
+  //   into one entry ("Day 3-4 · Serengeti"), but a NON-adjacent
+  //   revisit (Day 1 Arusha then Day 7 Arusha) stays as two separate
+  //   entries. Used for the ROUTE LINE so the polyline correctly
+  //   traces A→M→...→A and the journey reads as a loop.
+  //
+  //   `markerGroups` — visual. All entries at the same coord merge
+  //   into one marker with combined day labels ("Day 1 & 7"). Used
+  //   for the MARKERS so two visits to Arusha don't stack pins on
+  //   the same pixel. Without this, return-to-base trips render as
+  //   a single overlapping pile of identical pins.
   const groups = groupCoordsByLocation(coords);
+  const markerGroups = mergeMarkerGroupsByCoord(groups);
 
-  // Which group contains the selected day (if any)?
+  // Which marker group contains the selected day (if any)?
   const selectedGroupIndex = selectedDayId
-    ? groups.findIndex((g) =>
+    ? markerGroups.findIndex((g) =>
         coords.some(
           (c) => c.dayId === selectedDayId && Math.abs(c.lat - g.lat) < 0.0001 && Math.abs(c.lng - g.lng) < 0.0001,
         ),
@@ -351,7 +362,10 @@ export function RouteMap({
   // fraction of the gap so the outlier just lands inside the view
   // with minimal extra emptiness. This frames the core as the
   // dominant subject while still showing distant stops.
-  const viewport = computeViewport(groups);
+  // Viewport calc uses MARKER groups (deduped by coord) so a Day 1 +
+  // Day 7 Arusha doesn't double-count Arusha's coord and skew the
+  // outlier-detection median.
+  const viewport = computeViewport(markerGroups);
 
   // Split adjacent legs into "circuit" (solid) and "transfer" (dashed
   // curve). Long-haul legs above TRANSFER_THRESHOLD_KM render as a
@@ -392,7 +406,7 @@ export function RouteMap({
         <FlyToSelected
           map={mapRef}
           selectedGroupIndex={selectedGroupIndex}
-          groups={groups}
+          groups={markerGroups}
         />
         <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
@@ -460,7 +474,7 @@ export function RouteMap({
           );
         })}
 
-        {groups.map((g, i) => {
+        {markerGroups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
           const icon = leafletRef.current
             ? buildDayPill(leafletRef.current, g.dayLabel, isSelected)
@@ -642,6 +656,44 @@ function groupCoordsByLocation(coords: RouteCoord[]): CoordGroup[] {
     });
   }
   return groups;
+}
+
+// Merge non-adjacent same-coord groups into a single marker group.
+// The chronological `groups` list is preserved separately for the
+// route polyline (which correctly traces A→B→C→A on a return-to-base
+// trip), but the MAP only needs one pin per unique location with all
+// the day labels it represents.
+//
+// Example:
+//   groups = [
+//     { dayLabel: "1", placeName: "Arusha", lat: -3.4, lng: 36.7 },
+//     { dayLabel: "2-4", placeName: "Serengeti", lat: -2.3, lng: 34.8 },
+//     { dayLabel: "5", placeName: "Manyara", lat: -3.6, lng: 35.8 },
+//     { dayLabel: "7", placeName: "Arusha", lat: -3.4, lng: 36.7 },
+//   ]
+// →
+//   markerGroups = [
+//     { dayLabel: "1 & 7", placeName: "Arusha", ... },
+//     { dayLabel: "2-4",  placeName: "Serengeti", ... },
+//     { dayLabel: "5",    placeName: "Manyara", ... },
+//   ]
+function mergeMarkerGroupsByCoord(groups: CoordGroup[]): CoordGroup[] {
+  const byKey = new Map<string, CoordGroup>();
+  const order: string[] = [];
+  const PREC = 4;
+  for (const g of groups) {
+    const key = `${g.lat.toFixed(PREC)},${g.lng.toFixed(PREC)}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      // Combine day labels: "1" + "7" → "1 & 7", "3-4" + "8" → "3-4 & 8"
+      existing.dayLabel = `${existing.dayLabel} & ${g.dayLabel}`;
+      existing.label = `Day ${existing.dayLabel} · ${existing.placeName}`;
+    } else {
+      byKey.set(key, { ...g });
+      order.push(key);
+    }
+  }
+  return order.map((k) => byKey.get(k)!);
 }
 
 // Build a custom DivIcon for a stop — dark charcoal "Day X" pill with

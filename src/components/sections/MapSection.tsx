@@ -5,6 +5,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "./RouteMap";
+import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import type { Section, TierKey, Day } from "@/lib/types";
 
 // Route variant — two-column editorial spread. Itinerary table on the left
@@ -33,23 +34,33 @@ export function MapSection({ section }: { section: Section }) {
   // Prefer days[] as the source of truth — that's what the itinerary table
   // and per-day sections actually render. trip.destinations is just the
   // original setup input and can drift out of sync after AI drafting.
-  const startPoint =
-    (section.content.startPoint as string) ||
-    days[0]?.destination ||
-    trip.destinations[0] ||
-    "Start point";
-  const endPoint =
-    (section.content.endPoint as string) ||
-    days[days.length - 1]?.destination ||
-    trip.destinations[trip.destinations.length - 1] ||
-    "End point";
-
+  // Chronological stops list (kept WITH adjacent dedupe so the rail
+  // doesn't read "Serengeti · Serengeti" for a 3-night stay; non-
+  // adjacent revisits like Day 1 + Day 7 Arusha do appear twice).
   const stopsFromDays = days
     .slice()
     .sort((a, b) => a.dayNumber - b.dayNumber)
     .map((d) => d.destination)
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
   const stops = stopsFromDays.length > 0 ? stopsFromDays : trip.destinations;
+
+  // Apply safari business rules: trips END at a gateway / airport,
+  // never inside a park. If the itinerary appears to end in a park
+  // (Tarangire, Serengeti, Ngorongoro, etc.) we surface that as the
+  // "last safari stop" and label the drop-off as TBC instead of
+  // pretending the park is the trip's terminus.
+  const safari = resolveSafariEndpoints(stops);
+
+  const startPoint =
+    (section.content.startPoint as string) ||
+    safari.start ||
+    "Start point";
+  const endPoint =
+    (section.content.endPoint as string) ||
+    safari.finalDropoff ||
+    (safari.endsInPark
+      ? "Final transfer to be confirmed"
+      : safari.lastSafariStop || "End point");
 
   // ── Interactive variant — lodge carousel sidebar + big map ────────────
   if (variant === "interactive") {
@@ -248,7 +259,10 @@ export function MapSection({ section }: { section: Section }) {
                 </div>
               )}
 
-              {/* End point */}
+              {/* End point — when the itinerary ends in a park, the
+                  rail labels it as "Last safari stop" and shows the
+                  TBC drop-off note instead of pretending the park is
+                  the trip's terminus. */}
               <div
                 className="pt-2.5 mt-2.5"
                 style={{ borderTop: `1px solid ${tokens.border}` }}
@@ -257,7 +271,7 @@ export function MapSection({ section }: { section: Section }) {
                   className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
                   style={{ color: tokens.mutedText }}
                 >
-                  End
+                  {safari.endsInPark ? "Last safari stop" : "End"}
                 </div>
                 <div
                   className="text-[12.5px] outline-none"
@@ -268,8 +282,16 @@ export function MapSection({ section }: { section: Section }) {
                     updateSectionContent(section.id, { endPoint: e.currentTarget.textContent ?? "" })
                   }
                 >
-                  {endPoint}
+                  {safari.endsInPark ? safari.lastSafariStop : endPoint}
                 </div>
+                {safari.endsInPark && (
+                  <div
+                    className="mt-1.5 text-[10.5px] italic"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    Final transfer to be confirmed
+                  </div>
+                )}
               </div>
 
               {/* Tiny attribution + optional caption tucked at the

@@ -1,6 +1,7 @@
 "use client";
 
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
+import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import type { Day, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 import { PrintSectionHeader } from "./PrintSectionHeader";
 
@@ -31,12 +32,19 @@ export function PrintMapPage({
     .map((d) => d.destination)
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
 
-  const start = stops[0] ?? "";
-  const end = stops[stops.length - 1] ?? "";
-  const title =
-    stops.length > 1
-      ? `${start} to ${end}`
-      : start || "Your route";
+  // Apply safari business rules for the title — trips don't END in
+  // parks. If the itinerary appears to end at Tarangire/Serengeti/
+  // etc., show "Arusha → Last safari stop: Serengeti" rather than
+  // "Arusha to Serengeti" (which falsely suggests Serengeti is the
+  // trip's terminus).
+  const safari = resolveSafariEndpoints(stops);
+  const title = (() => {
+    if (stops.length <= 1) return safari.start || "Your route";
+    if (safari.endsInPark) {
+      return `${safari.start} → ${safari.lastSafariStop}`;
+    }
+    return `${safari.start} to ${safari.lastSafariStop}`;
+  })();
 
   // Stats line — country span + nights — packed into the eyebrow so
   // we don't need a second label row stealing height from the map.
@@ -60,7 +68,12 @@ export function PrintMapPage({
       <PrintSectionHeader
         eyebrow={eyebrow}
         title={title}
-        subtitle={caption || undefined}
+        subtitle={
+          caption ||
+          (safari.endsInPark
+            ? "Final transfer details to be confirmed."
+            : undefined)
+        }
         theme={theme}
         tokens={tokens}
         padded
