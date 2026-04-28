@@ -56,11 +56,13 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   }
 
   return (
-    <div style={{ background: tokens.pageBg }}>
-      {/* Header padded; property blocks below render edge-to-edge so
-          they butt up flush against the last day card and against
-          the next section. Same "continuous magazine" treatment as
-          DayJourney — no outer py, just header padding. */}
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* Outer bg = sectionSurface (cream) so it BLENDS with the
+          PropertyBlock cards below. Previously this used pageBg
+          (green) which created a visible green stripe between the
+          "Your Accommodations" header and the first property card.
+          Now header + cards share the same background — single
+          continuous accommodation block. */}
       <header className="px-8 md:px-12 pt-2 pb-1">
         <div
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1.5"

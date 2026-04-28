@@ -42,10 +42,11 @@ export function DayJourneySection({ section }: { section: Section }) {
   };
 
   return (
-    <div style={{ background: tokens.pageBg }}>
-      {/* Header padded horizontally only — no top/bottom padding so the
-          previous section flows directly into this one. Day cards
-          below render edge-to-edge for the magazine-flow feel. */}
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* Outer bg = sectionSurface (cream) so the section flows
+          continuously into Map (cream) above and Property Showcase
+          (cream) below — no visible green page-bg strips between
+          sections. Day cards inside use their own bg as before. */}
       <div className="px-8 md:px-12 pt-3 pb-2">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>

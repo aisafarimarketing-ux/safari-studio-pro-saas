@@ -176,7 +176,7 @@ function HorizontalRowsLayout({
   const stripeBg = blendForStripe(tokens.sectionSurface, tokens.border);
 
   return (
-    <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.pageBg }}>
+    <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-6xl mx-auto">
         <div
           className="text-[10px] uppercase tracking-[0.3em] mb-8"
