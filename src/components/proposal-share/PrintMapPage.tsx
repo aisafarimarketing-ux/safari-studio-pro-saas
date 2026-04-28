@@ -1,0 +1,120 @@
+"use client";
+
+import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
+import type { Day, Section, ThemeTokens, ProposalTheme } from "@/lib/types";
+import { PrintSectionHeader } from "./PrintSectionHeader";
+
+// ─── Print: full-A4 route map page ──────────────────────────────────────
+//
+// The on-screen MapSection renders a 240px sidebar rail (clickable day
+// cards) next to the map. In print that rail eats half the page width;
+// the day cards then duplicate info that's already in the day-by-day
+// pages right after. Net: map gets 45% of A4 area.
+//
+// PrintMapPage drops the rail entirely. Map fills the full A4 width
+// at the page's tallest possible height (after the editorial header).
+// Map area: ~85% of A4, route fills it edge-to-edge.
+
+export function PrintMapPage({
+  section, days, theme, tokens,
+}: {
+  section: Section;
+  days: Day[];
+  theme: ProposalTheme;
+  tokens: ThemeTokens;
+}) {
+  const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
+  const caption = (section.content.caption as string | undefined) ?? "";
+  const stops = days
+    .slice()
+    .sort((a, b) => a.dayNumber - b.dayNumber)
+    .map((d) => d.destination)
+    .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
+
+  const start = stops[0] ?? "";
+  const end = stops[stops.length - 1] ?? "";
+  const title =
+    stops.length > 1
+      ? `${start} to ${end}`
+      : start || "Your route";
+
+  // Stats line — country span + nights — packed into the eyebrow so
+  // we don't need a second label row stealing height from the map.
+  const country =
+    days.find((d) => d.country?.trim())?.country?.trim() || "";
+  const nights = days.length;
+  const eyebrow = [
+    "Route map",
+    country || null,
+    `${stops.length} stops`,
+    `${nights} ${nights === 1 ? "night" : "nights"}`,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+
+  return (
+    <div
+      className="w-full h-full flex flex-col"
+      style={{ background: tokens.pageBg, color: tokens.bodyText }}
+    >
+      <PrintSectionHeader
+        eyebrow={eyebrow}
+        title={title}
+        subtitle={caption || undefined}
+        theme={theme}
+        tokens={tokens}
+        padded
+        compact
+      />
+
+      {/* Map area — flex-1 so it claims every remaining pixel of the
+          A4 page. Min-height guard keeps it tall even when header is
+          short. RouteMap is told to render at this exact height via
+          the height prop — Leaflet sizes its tile canvas accordingly. */}
+      <div
+        className="relative flex-1 min-h-0 w-full overflow-hidden"
+        style={{
+          borderTop: `1px solid ${tokens.border}`,
+          borderBottom: `1px solid ${tokens.border}`,
+        }}
+      >
+        {days.length > 0 ? (
+          <div className="absolute inset-0">
+            <RouteMap
+              days={days}
+              tokens={tokens}
+              cachedCoords={cachedCoords}
+              height={950}
+              presentationMode={true}
+            />
+          </div>
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center text-[12px] uppercase tracking-[0.24em]"
+            style={{ color: tokens.mutedText }}
+          >
+            Route coming soon
+          </div>
+        )}
+      </div>
+
+      {/* Bottom strip — small route summary line so the page closes
+          with intent. Keeps the visual weight on the map. */}
+      <div className="px-12 py-3 flex items-center justify-between">
+        <div
+          className="text-[10px] uppercase tracking-[0.28em] font-semibold"
+          style={{ color: tokens.mutedText }}
+        >
+          {stops.slice(0, 4).join("  ›  ")}
+          {stops.length > 4 ? `  ›  +${stops.length - 4}` : ""}
+        </div>
+        <div
+          className="text-[9px] tracking-wide"
+          style={{ color: tokens.mutedText, opacity: 0.55 }}
+        >
+          Map data © OpenStreetMap contributors · CARTO
+        </div>
+      </div>
+    </div>
+  );
+}

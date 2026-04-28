@@ -13,6 +13,7 @@ import {
   resolveDayProperty,
 } from "./PrintDayPage";
 import { PrintFooterPage } from "./PrintFooterPage";
+import { PrintMapPage } from "./PrintMapPage";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
 import type { Section, SectionType, TierKey } from "@/lib/types";
@@ -188,6 +189,14 @@ function renderSection(section: Section, proposalId: string) {
     return <FooterPage key={section.id} />;
   }
 
+  // map — on-screen MapSection has a 240px rail beside the map. In
+  // print that rail steals half the page width and duplicates the
+  // day-by-day info that lives on the very next pages. PrintMapPage
+  // drops the rail and lets the route map fill the full A4 width.
+  if (section.type === "map") {
+    return <MapPage key={section.id} section={section} />;
+  }
+
   // Every other section — single page, clipped to A4.
   return (
     <PdfPage
@@ -208,6 +217,23 @@ function FooterPage() {
     <PdfPage label="Contact" bleed>
       <div data-section-type="footer">
         <PrintFooterPage proposal={proposal} />
+      </div>
+    </PdfPage>
+  );
+}
+
+function MapPage({ section }: { section: Section }) {
+  const proposal = useProposalStore((s) => s.proposal);
+  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
+  return (
+    <PdfPage label="Map" bleed>
+      <div data-section-type="map">
+        <PrintMapPage
+          section={section}
+          days={proposal.days}
+          theme={proposal.theme}
+          tokens={tokens}
+        />
       </div>
     </PdfPage>
   );

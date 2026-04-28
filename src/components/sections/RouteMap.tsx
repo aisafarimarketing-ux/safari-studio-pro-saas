@@ -367,11 +367,14 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={viewport.bounds}
-        // Padding: aggressive on the side(s) AWAY from outliers,
-        // generous on the side(s) toward them — keeps core route
-        // dominant while still framing the outlier inside the view.
-        boundsOptions={{ padding: [25, 25] }}
-        minZoom={4}
+        // Padding 20px (tight) — combined with computeViewport's
+        // outlier-bias, keeps the core route filling 70-80% of the
+        // visible map. maxZoom 9 prevents over-zoom on a tight
+        // single-region itinerary (would otherwise show city streets,
+        // looking like Google Maps not a route diagram).
+        boundsOptions={{ padding: [20, 20], maxZoom: 9 }}
+        minZoom={5}
+        maxZoom={12}
         inertia={false}
         // Editorial defaults — hide the +/− zoom widget always; let
         // operators pan/zoom via scroll/drag in editor mode and lock
@@ -739,13 +742,13 @@ function computeViewport(groups: CoordGroup[]): Viewport {
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Pull each side toward outliers — but ONLY by a fraction, so the
-  // core stays dominant. EXPAND_FRACTION 0.55 means: include the
-  // outlier comfortably inside the frame, but don't recenter on it.
-  // Result: outlier sits ~70% out from centre, core fills the
-  // central 65-80% of the visible map.
+  // Pull each side toward outliers — but barely. EXPAND_FRACTION 0.25
+  // means: extend bounds 25% of the gap toward each outlier so the
+  // outlier sits NEAR the visible edge; the core route then fills
+  // 70-80% of the central viewport. Naive fitBounds(allCoords) would
+  // be EXPAND_FRACTION = 1.0 and shrinks the core to a corner.
   if (outliers.length > 0) {
-    const EXPAND_FRACTION = 0.55;
+    const EXPAND_FRACTION = 0.25;
     for (const o of outliers) {
       if (o.lat < south) south = south - (south - o.lat) * EXPAND_FRACTION;
       if (o.lat > north) north = north + (o.lat - north) * EXPAND_FRACTION;
@@ -900,7 +903,11 @@ function RefitOnResize({
     const refit = () => {
       try {
         m.invalidateSize();
-        m.fitBounds(viewport.bounds, { padding: [25, 25], animate: false });
+        m.fitBounds(viewport.bounds, {
+          padding: [20, 20],
+          maxZoom: 9,
+          animate: false,
+        });
       } catch {
         // Map disposed during refit — safe to ignore.
       }
