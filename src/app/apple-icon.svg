@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Safari Studio">
+  <!-- iOS home-screen icon — same motif at higher resolution.
+       Bigger rounded corners + slightly more breathing room match
+       Apple's icon-design conventions. -->
+  <rect width="180" height="180" rx="32" fill="#1f3a3a" />
+  <path
+    d="M90 36 L144 90 L90 144 L36 90 Z"
+    fill="none"
+    stroke="#c89668"
+    stroke-width="3"
+    stroke-linejoin="miter"
+  />
+  <path d="M90 56 L124 90 L90 90 Z" fill="#c89668" opacity="0.95" />
+  <path d="M90 90 L56 90 L90 124 Z" fill="#c89668" opacity="0.7" />
+  <path d="M90 90 L124 90 L90 124 Z" fill="#f5e8d8" opacity="0.18" />
+  <circle cx="90" cy="90" r="3" fill="#f5e8d8" />
+</svg>

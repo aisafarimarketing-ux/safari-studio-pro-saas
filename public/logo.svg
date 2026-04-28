@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img" aria-label="Safari Studio">
+  <!-- Editorial wordmark — tracked-out small caps in deep teal,
+       with a small copper geometric mark separating the two words.
+       Pulls from the user's hummingbird reference palette. -->
+  <text
+    x="0"
+    y="48"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="32"
+    font-weight="500"
+    letter-spacing="6.4"
+    fill="#1f3a3a"
+  >SAFARI</text>
+
+  <!-- Diamond accent — geometric nod to the low-poly hummingbird reference -->
+  <g transform="translate(195, 38)" fill="#c89668" aria-hidden="true">
+    <path d="M0 0 L7 7 L0 14 L-7 7 Z" />
+    <path d="M0 4 L4 7 L0 10 L-4 7 Z" fill="#1f3a3a" opacity="0.85" />
+  </g>
+
+  <text
+    x="215"
+    y="48"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="32"
+    font-weight="500"
+    letter-spacing="6.4"
+    fill="#1f3a3a"
+  >STUDIO</text>
+</svg>

@@ -15,6 +15,35 @@ export const metadata: Metadata = {
   title: "Safari Studio — Proposal Builder for East African Tour Operators",
   description:
     "Build stunning, multi-tier safari proposals in minutes. Designed exclusively for East African tour operators.",
+  // Theme colour for browser chrome (Safari address bar, mobile status
+  // bar). Matches the deep teal in the brand palette.
+  themeColor: "#1f3a3a",
+  // Next.js auto-discovers /app/icon.svg and /app/apple-icon.svg.
+  // The explicit `icons` block here is belt-and-braces for crawlers
+  // that don't follow Next 13+ file conventions, plus declares the
+  // .ico fallback for very old browsers.
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
+  },
+  openGraph: {
+    title: "Safari Studio — Proposal Builder for East African Tour Operators",
+    description:
+      "Build stunning, multi-tier safari proposals in minutes. Designed exclusively for East African tour operators.",
+    siteName: "Safari Studio",
+    images: ["/logo.svg"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Safari Studio",
+    description:
+      "Build stunning, multi-tier safari proposals in minutes.",
+    images: ["/logo.svg"],
+  },
 };
 
 export default function RootLayout({

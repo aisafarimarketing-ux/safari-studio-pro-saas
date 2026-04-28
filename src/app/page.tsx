@@ -47,14 +47,21 @@ function Nav() {
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
+          {/* Brand mark (geometric diamond) + wordmark. The mark
+              renders white-on-transparent here so it sits cleanly on
+              the dark forest landing-page header — using a CSS filter
+              rather than a separate dark-mode SVG. */}
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-base"
-            style={{ background: "rgba(201,168,76,0.18)", color: GOLD }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: "rgba(201,168,76,0.18)" }}
           >
-            S
+            <span style={{ color: GOLD }} className="font-bold text-base">S</span>
           </div>
-          <span className="text-white font-semibold text-[15px] tracking-tight">
-            Safari Studio
+          <span
+            className="text-white font-semibold text-[15px]"
+            style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", letterSpacing: "0.18em" }}
+          >
+            SAFARI STUDIO
           </span>
         </Link>
 
