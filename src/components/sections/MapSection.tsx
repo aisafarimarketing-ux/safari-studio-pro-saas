@@ -5,8 +5,15 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "./RouteMap";
-import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
+import { resolveSafariEndpoints, isCoastCity } from "@/lib/safariRoutingRules";
 import { countryOf } from "@/lib/destinationOrdering";
+
+// Does the trip include any offshore / coast destinations? Drives
+// whether the main map renders an inset overview alongside the
+// inland-only main view. Zanzibar, Mombasa, Diani, Lamu, etc.
+function hasOffshoreStops(days: Day[]): boolean {
+  return days.some((d) => isCoastCity(d.destination ?? ""));
+}
 import type { Section, TierKey, Day } from "@/lib/types";
 
 // Route variant — two-column editorial spread. Itinerary table on the left
@@ -366,14 +373,13 @@ export function MapSection({ section }: { section: Section }) {
             </aside>
 
             {/* ── Map — stretches to MATCH the rail's natural height
-                via the grid's items-stretch. No imposed min-height,
-                so the map and rail are visually equal — short trips
-                get a smaller map, long trips get a taller map.
-                The MAP_HEIGHT constant is retained only as a fallback
-                for the empty-trip placeholder below. */}
-            <div className="min-w-0 flex flex-col">
+                via the grid's items-stretch. The main map zooms tight
+                on inland-only stops; if the trip has offshore
+                destinations (Zanzibar, Mombasa, etc.) a small inset
+                in the bottom-right shows them in geographic context. */}
+            <div className="min-w-0 flex flex-col relative">
               {days.length > 0 ? (
-                <div className="overflow-hidden flex-1 min-h-0">
+                <div className="overflow-hidden flex-1 min-h-0 relative">
                   <RouteMap
                     days={days}
                     tokens={tokens}
@@ -385,7 +391,38 @@ export function MapSection({ section }: { section: Section }) {
                     }}
                     height="100%"
                     presentationMode={!isEditor}
+                    viewportMode="inland-only"
                   />
+                  {/* Inset overview — only renders when the trip has
+                      offshore stops. Sits in the bottom-right corner
+                      of the main map area, small (180px square) so it
+                      reads as supplementary, not competing. Shows
+                      every stop (including Zanzibar) at REAL coords
+                      so clients see the geographic relationship of
+                      the offshore extension to the safari mainland. */}
+                  {hasOffshoreStops(days) && (
+                    <div
+                      className="absolute bottom-4 right-4 overflow-hidden shadow-md"
+                      style={{
+                        width: 200,
+                        height: 200,
+                        borderRadius: 8,
+                        border: `2px solid ${tokens.cardBg}`,
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                        zIndex: 600,
+                      }}
+                    >
+                      <RouteMap
+                        days={days}
+                        tokens={tokens}
+                        cachedCoords={cachedCoords}
+                        height="100%"
+                        presentationMode
+                        viewportMode="all"
+                        inset
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div

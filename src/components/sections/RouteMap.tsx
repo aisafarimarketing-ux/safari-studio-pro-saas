@@ -167,6 +167,8 @@ export function RouteMap({
   height = 420,
   selectedDayId,
   presentationMode = false,
+  viewportMode = "all",
+  inset = false,
 }: {
   days: Day[];
   cachedCoords?: RouteCoord[];
@@ -182,6 +184,18 @@ export function RouteMap({
   /** Hide zoom controls + lock pan / zoom for guest views and PDF
    *  export. Editor still gets full interactivity. */
   presentationMode?: boolean;
+  /** Which stops drive the viewport bounds.
+   *  - "all"          (default): include every destination, including
+   *                              offshore / coast stops.
+   *  - "inland-only":  exclude coast destinations from bounds, so the
+   *                    main map zooms tight on the safari circuit.
+   *                    Coast pins still RENDER (off-map at real coords)
+   *                    so a paired inset map can show them in context. */
+  viewportMode?: "all" | "inland-only";
+  /** Inset rendering — smaller chrome, no zoom controls, no day-pill
+   *  labels (just dots). Use for the corner overview map showing
+   *  offshore stops at real coords. */
+  inset?: boolean;
 }) {
   const [state, setState] = useState<GeocodeState>({ status: "idle" });
   // Import leaflet once on the client so we can build custom div icons.
@@ -385,16 +399,16 @@ export function RouteMap({
   const rawGroups = groupCoordsByLocation(coords);
   const rawMarkerGroups = mergeMarkerGroupsByCoord(rawGroups);
 
-  // Schematic-positioning pass — coast destinations (Zanzibar,
-  // Mombasa, Diani, etc.) get pulled toward the inland centroid so
-  // they read on the map without forcing a fully-zoomed-out
-  // Tanzania-+-Indian-Ocean view that crushes the safari circuit
-  // into a corner. Real direction is preserved, only the distance
-  // shrinks. The day-pill still shows "Day 5 · Zanzibar" so clients
-  // know the actual stop; the placement is editorial, not geographic.
-  // Inland stops are unchanged.
-  const groups = compressCoastPositions(rawGroups);
-  const markerGroups = compressCoastPositions(rawMarkerGroups);
+  // Schematic compression of coast destinations was removed when the
+  // basemap switched to ESRI Topographic — under a real cartographic
+  // basemap, a compressed Zanzibar pin landed visibly over inland
+  // mainland Tanzania, which read as a geographic lie. Coast pins
+  // now render at their TRUE coords. Cramming is handled instead by
+  // the inset-map pattern in MapSection (main map zooms tight on
+  // inland stops; small inset shows the wider region with offshore
+  // stops at real positions).
+  const groups = rawGroups;
+  const markerGroups = rawMarkerGroups;
 
   // For each marker, compute which side of its anchor the pill should
   // float on so close pairs (Tarangire ↔ Lake Manyara, ~33km) don't
@@ -433,7 +447,17 @@ export function RouteMap({
   // Viewport calc uses MARKER groups (deduped by coord) so a Day 1 +
   // Day 7 Arusha doesn't double-count Arusha's coord and skew the
   // outlier-detection median.
-  const viewport = computeViewport(markerGroups);
+  // Inland-only mode filters coast stops out of the bounds calculation
+  // so the safari circuit stays tight in the main map. Coast markers
+  // still render at real coords; they just sit outside the visible
+  // bounds and a paired inset map shows them in geographic context.
+  const viewportGroups =
+    viewportMode === "inland-only"
+      ? markerGroups.filter((g) => !isCoastCity(g.placeName))
+      : markerGroups;
+  const viewportSource =
+    viewportGroups.length >= 1 ? viewportGroups : markerGroups;
+  const viewport = computeViewport(viewportSource);
 
   // Split adjacent legs into "circuit" (solid) and "transfer" (dashed
   // curve). Long-haul legs above TRANSFER_THRESHOLD_KM render as a
@@ -460,7 +484,7 @@ export function RouteMap({
         // maxZoom 9 prevents over-zoom on a tight single-region
         // itinerary (would otherwise show city streets, looking like
         // Google Maps not a route diagram).
-        boundsOptions={{ padding: [36, 36], maxZoom: 9 }}
+        boundsOptions={{ padding: [60, 60], maxZoom: 9 }}
         minZoom={5}
         maxZoom={12}
         inertia={false}
@@ -545,8 +569,10 @@ export function RouteMap({
             in the direction of travel. Subtle (charcoal triangle on
             cream chip) so they cue flow without competing with pills.
             Skipped on very short legs (<25km) to avoid clutter when
-            two stops sit close together. */}
-        {leafletRef.current && legPaths.map((leg, i) => {
+            two stops sit close together. Also skipped on the inset
+            overview map — it's a small at-a-glance view, no need for
+            directional cues at that scale. */}
+        {!inset && leafletRef.current && legPaths.map((leg, i) => {
           if (leg.skipArrow) return null;
           const [a, b] = leg.endpoints;
           const midLat = (a[0] + b[0]) / 2;
@@ -568,8 +594,15 @@ export function RouteMap({
         {markerGroups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
           const pillDir = pillDirections[i];
+          // Inset mode renders simple dots only — no labels, no
+          // chrome — because the main map carries the day-pill
+          // labels. The inset's job is to show geographic relationships
+          // (where Zanzibar sits relative to the safari circuit), not
+          // re-state the day numbers.
           const icon = leafletRef.current
-            ? buildDayPill(leafletRef.current, g.dayLabel, isSelected, pillDir)
+            ? inset
+              ? buildDotIcon(leafletRef.current)
+              : buildDayPill(leafletRef.current, g.dayLabel, isSelected, pillDir)
             : undefined;
           // Tooltip direction follows the pill — when the pill floats
           // above the anchor (default), the place-name caption sits
@@ -587,19 +620,19 @@ export function RouteMap({
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
             >
-              {/* Destination label — clean text near the pill, no
-                  leader arrow, no pill background. Reads as a typeset
-                  caption next to each stop. Direction respects the
-                  operator's per-stop labelPosition override. */}
-              <Tooltip
-                direction={tooltipDir}
-                offset={[0, 6]}
-                opacity={1}
-                permanent={true}
-                className="ss-stop-label"
-              >
-                {g.placeName}
-              </Tooltip>
+              {/* Destination label — only on the main map. The inset
+                  is a dots-only overview, no labels. */}
+              {!inset && (
+                <Tooltip
+                  direction={tooltipDir}
+                  offset={[0, 6]}
+                  opacity={1}
+                  permanent={true}
+                  className="ss-stop-label"
+                >
+                  {g.placeName}
+                </Tooltip>
+              )}
             </Marker>
           );
         })}
@@ -618,70 +651,29 @@ export function RouteMap({
         .ss-day-pill {
           display: inline-flex;
           align-items: center;
-          padding: 5px 13px;
+          padding: 3px 9px;
           background: #243c24;
           color: #ffffff;
-          font-size: 12.5px;
+          font-size: 10.5px;
           font-weight: 600;
-          letter-spacing: 0.04em;
+          letter-spacing: 0.05em;
           line-height: 1;
           border-radius: 999px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
           white-space: nowrap;
           font-family: system-ui, sans-serif;
           position: relative;
-          transform: translateY(-2px);
         }
-        .ss-day-pill::after {
-          content: "";
-          position: absolute;
-          width: 0;
-          height: 0;
-          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
-        }
-        /* Stem direction variants — the stem tip always sits on the
-           lat/lng anchor, so the four directions just rotate the same
-           tiny triangle around the pill. */
-        .ss-day-pill-up::after {
-          top: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-top: 6px solid #243c24;
-        }
-        .ss-day-pill-down::after {
-          bottom: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-bottom: 6px solid #243c24;
-        }
-        .ss-day-pill-right::after {
-          right: 100%;
-          top: 50%;
-          transform: translateY(-50%);
-          border-top: 5px solid transparent;
-          border-bottom: 5px solid transparent;
-          border-right: 6px solid #243c24;
-        }
-        .ss-day-pill-left::after {
-          left: 100%;
-          top: 50%;
-          transform: translateY(-50%);
-          border-top: 5px solid transparent;
-          border-bottom: 5px solid transparent;
-          border-left: 6px solid #243c24;
-        }
+        /* Stem dropped — pin design tightened per operator brief.
+           Reference safari atlases use small pills with a tiny anchor
+           dot below the place name, not a triangular stem competing
+           with the pill. The lat/lng anchor sits at the bottom-centre
+           of the pill (set via iconAnchor in buildDayPill), so the
+           pill itself "points" at the location without ornament. */
         .ss-day-pill.is-selected {
           background: #1b3a2d;
           box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.20), 0 4px 12px rgba(0, 0, 0, 0.30);
         }
-        .ss-day-pill-up.is-selected::after { border-top-color: #1b3a2d; }
-        .ss-day-pill-down.is-selected::after { border-bottom-color: #1b3a2d; }
-        .ss-day-pill-right.is-selected::after { border-right-color: #1b3a2d; }
-        .ss-day-pill-left.is-selected::after { border-left-color: #1b3a2d; }
 
         /* Destination label — typeset caption under the stem.
            No background, no border, no leader arrow. Just the place
@@ -879,6 +871,21 @@ function oppositeDirection(d: PillDirection): "top" | "bottom" | "left" | "right
 // the safari-circuit zoom).
 type PillDirection = "up" | "down" | "left" | "right";
 
+// Tiny filled circle for the inset overview map. No label, no stem,
+// no chrome — just a charcoal dot at the lat/lng so the inset reads as
+// "here are the trip's stops, geographically." The main map carries
+// the labels.
+function buildDotIcon(L: typeof import("leaflet")) {
+  const SIZE = 8;
+  const html = `<div style="width:${SIZE}px;height:${SIZE}px;border-radius:50%;background:#243c24;box-shadow:0 0 0 2px rgba(255,255,255,0.85);"></div>`;
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [SIZE, SIZE],
+    iconAnchor: [SIZE / 2, SIZE / 2],
+  });
+}
+
 // Build a custom DivIcon for a stop — dark charcoal "Day X" pill with
 // a small stem pointing at the geographic anchor. Direction controls
 // which side of the anchor the pill floats on; anchor placement and
@@ -891,12 +898,12 @@ function buildDayPill(
   direction: PillDirection = "up",
 ) {
   const text = `Day ${dayLabel}`;
-  // Approximation — wider for longer labels (e.g. "Day 99-99").
-  // Generous on the upper bound so text never clips inside the icon
-  // bounding box.
-  const pillWidth = Math.max(54, text.length * 6.4 + 22);
-  const pillHeight = 22;
-  const stem = 6;
+  // Sized for the smaller pill (10.5px font, 3px/9px padding). Width
+  // approximation gives ~6.0px per char + 18px paddings.
+  const pillWidth = Math.max(40, text.length * 6.0 + 18);
+  const pillHeight = 18;
+  // Stem dropped — pill anchors directly at its base on the lat/lng.
+  const stem = 0;
   const sel = isSelected ? " is-selected" : "";
   const className = `ss-day-pill ss-day-pill-${direction}${sel}`;
   const html = `<div class="${className}">${escape(text)}</div>`;
@@ -1099,34 +1106,12 @@ function buildLegPaths(
 // lines per operator brief. Restore from git history if a future
 // design needs curved transfers again.
 
-// Pull coast destinations toward the inland centroid so they sit at
-// a "schematic" position closer to the safari circuit instead of at
-// their real (700+km offshore) coordinates. Direction is preserved —
-// Zanzibar still appears south-east of Serengeti, just much closer.
-// The day pill keeps the actual destination name so the client knows
-// where they're going; only the dot's position is editorialised.
-//
-// Inland stops are returned unchanged. If the trip is entirely
-// coastal (no inland reference point), every group is unchanged too.
-function compressCoastPositions<T extends { lat: number; lng: number; placeName: string }>(
-  groups: T[],
-): T[] {
-  const inland = groups.filter((g) => !isCoastCity(g.placeName));
-  if (inland.length === 0) return groups;
-  const cLat = inland.reduce((s, g) => s + g.lat, 0) / inland.length;
-  const cLng = inland.reduce((s, g) => s + g.lng, 0) / inland.length;
-  // 0.4 = coast appears at 40 % of its real distance from the inland
-  // centroid. Tuned so a Tanzanian safari + Zanzibar trip shows the
-  // safari circuit zoomed in tight while Zanzibar still lands in the
-  // lower-right area of the map (south-east direction preserved).
-  const COMPRESSION = 0.4;
-  return groups.map((g) => {
-    if (!isCoastCity(g.placeName)) return g;
-    const newLat = cLat + (g.lat - cLat) * COMPRESSION;
-    const newLng = cLng + (g.lng - cLng) * COMPRESSION;
-    return { ...g, lat: newLat, lng: newLng };
-  });
-}
+// compressCoastPositions removed — it was a schematic lie that worked
+// under a flat / labelless basemap but broke under a real cartographic
+// basemap (compressed Zanzibar pin landed visibly over inland
+// Tanzania). The inset-map pattern in MapSection handles cramming now:
+// main map zooms tight on inland-only viewport; small corner inset
+// shows the wider region with offshore stops at REAL positions.
 
 function haversineKm(a: LatLngTuple, b: LatLngTuple): number {
   const R = 6371;
@@ -1180,8 +1165,8 @@ function RefitOnResize({
       try {
         m.invalidateSize();
         m.fitBounds(viewport.bounds, {
-          padding: [36, 36],
-          maxZoom: 10,
+          padding: [60, 60],
+          maxZoom: 9,
           animate: false,
         });
       } catch {
