@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
 import { isCoastCity } from "@/lib/safariRoutingRules";
-import { parksInTrip } from "@/lib/safariParkBoundaries";
 
 // ─── Map design rules — DO NOT RELAX WITHOUT OPERATOR SIGN-OFF ───────────
 //
@@ -55,7 +54,8 @@ const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer)
 const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ssr: false });
 const Tooltip = dynamic(() => import("react-leaflet").then((m) => m.Tooltip), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
-const Polygon = dynamic(() => import("react-leaflet").then((m) => m.Polygon), { ssr: false });
+// Polygon import removed — park boundaries no longer drawn as overlay
+// polygons. ESRI Topographic basemap shows parks naturally.
 
 // ─── Known safari coords ──────────────────────────────────────────────────
 //
@@ -442,12 +442,8 @@ export function RouteMap({
   const TRANSFER_THRESHOLD_KM = 250;
   const legPaths = buildLegPaths(groups, TRANSFER_THRESHOLD_KM);
 
-  // Park polygons for the trip — Serengeti, Tarangire, Lake Manyara,
-  // etc. Drawn at actual relative size under the route lines so
-  // clients see "Serengeti is huge, Lake Manyara is small" instead
-  // of identical pin dots. Only parks matched against the trip's
-  // destinations are rendered (parksInTrip filters internally).
-  const parkBoundaries = parksInTrip(rawMarkerGroups.map((g) => g.placeName));
+  // parkBoundaries removed alongside the polygon overlays. The ESRI
+  // Topographic basemap renders park outlines naturally.
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
@@ -488,38 +484,23 @@ export function RouteMap({
         />
         <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          // Carto Positron NO LABELS — quietest possible basemap.
-          // Landmass + water + soft terrain, but no town / road / park
-          // labels fighting the route. The destination labels we DO
-          // need come from our own permanent Tooltips on each marker.
-          url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
-          subdomains={["a", "b", "c", "d"]}
+          attribution='Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          // ESRI World Topographic — shows parks/protected areas as
+          // natural green-tinted regions and rivers/lakes as proper
+          // blue features. Operators reported the previous Carto
+          // Positron basemap looked too generic-roadmap for safaris,
+          // and hand-drawn polygon overlays we tried felt boxed.
+          // This basemap shows Serengeti / Tarangire / Lake Manyara
+          // at their real shapes/sizes naturally — no overlays
+          // needed.
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
           maxZoom={19}
         />
-
-        {/* Park polygons — translucent green regions showing the
-            actual relative size of every park in the trip. Renders
-            UNDER the route lines and markers so the day chrome
-            stays readable on top. Only parks whose names match a
-            destination in the trip get drawn (parksInTrip filters
-            against destinations) — Serengeti shows up huge next
-            to a tiny Lake Manyara, geographically honest. */}
-        {parkBoundaries.map((park) => (
-          <Polygon
-            key={park.name}
-            positions={park.coords}
-            pathOptions={{
-              color: "#2f5d3a",
-              weight: 1,
-              opacity: 0.55,
-              fillColor: "#3f7d4f",
-              fillOpacity: 0.18,
-              lineCap: "round",
-              lineJoin: "round",
-            }}
-          />
-        ))}
+        {/* Park polygon overlays removed — operators wanted the parks
+            to look natural, "as on a real map", not boxed. The
+            Topographic basemap above carries park boundaries
+            already. parksInTrip / safariParkBoundaries.ts retained
+            for any future overlay use. */}
 
         {/* Per-leg rendering. Short circuit hops render as one continuous
             solid charcoal polyline (built up leg-by-leg so adjacent
@@ -530,20 +511,29 @@ export function RouteMap({
         {legPaths.map((leg, i) => (
           <Polyline
             key={`leg-${i}`}
+            // Roads (circuit, short distance) → DOTTED line.
+            // Flights (transfer, long distance) → STRAIGHT solid line.
+            // Operator brief: roads are dotted, flights are straight.
             positions={leg.path}
             pathOptions={leg.kind === "transfer"
               ? {
+                  // Flight — straight solid line (the path is straight
+                  // because buildLegPaths emits [a, b] for transfers
+                  // when no avoid-curve is needed; we pass null so the
+                  // Bezier curve is bypassed for this style choice).
                   color: "#243c24",
-                  weight: 1.8,
-                  opacity: 0.62,
-                  dashArray: "4 6",
+                  weight: 2,
+                  opacity: 0.85,
                   lineCap: "round",
                   lineJoin: "round",
                 }
               : {
+                  // Road — dotted line. Tight dot pattern reads as
+                  // "drive route" without competing with the basemap.
                   color: "#243c24",
-                  weight: 2.5,
-                  opacity: 0.92,
+                  weight: 2.2,
+                  opacity: 0.78,
+                  dashArray: "1 5",
                   lineCap: "round",
                   lineJoin: "round",
                 }
@@ -1080,16 +1070,9 @@ function buildLegPaths(
   transferThresholdKm: number,
 ): LegPath[] {
   if (groups.length < 2) return [];
-  // Inland centroid — used as the "avoid point" for transfer-leg curves.
-  // A flight from Serengeti to Zanzibar would otherwise bow toward the
-  // mainland and slice through the safari circuit; bowing AWAY from
-  // the inland centroid pushes the arc out over open territory.
-  const inland = groups.filter((g) => !isCoastCity(g.placeName));
-  const refGroups = inland.length > 0 ? inland : groups;
-  const avoidLat = refGroups.reduce((s, g) => s + g.lat, 0) / refGroups.length;
-  const avoidLng = refGroups.reduce((s, g) => s + g.lng, 0) / refGroups.length;
-  const avoid: LatLngTuple = [avoidLat, avoidLng];
-
+  // No avoid-curve calculation any more — every leg renders as a
+  // straight 2-point line. Roads vs flights differ in stroke style,
+  // not in path geometry.
   const out: LegPath[] = [];
   for (let i = 0; i < groups.length - 1; i++) {
     const a: LatLngTuple = [groups[i].lat, groups[i].lng];
@@ -1097,9 +1080,14 @@ function buildLegPaths(
     const distKm = haversineKm(a, b);
     const kind: "circuit" | "transfer" =
       distKm > transferThresholdKm ? "transfer" : "circuit";
+    // Both road and flight paths render as straight 2-point lines.
+    // The visual distinction lives in pathOptions at the render
+    // site (roads dotted, flights solid). The Bezier curve we used
+    // to draw on long flights is gone — operators wanted flights
+    // shown as straight lines, like a real atlas.
     out.push({
       kind,
-      path: kind === "transfer" ? buildBezierArc(a, b, 24, 0.18, avoid) : [a, b],
+      path: [a, b],
       endpoints: [a, b],
       skipArrow: distKm < 25,
     });
@@ -1107,50 +1095,9 @@ function buildLegPaths(
   return out;
 }
 
-function buildBezierArc(
-  a: LatLngTuple,
-  b: LatLngTuple,
-  segments: number,
-  bowFraction: number,
-  avoidPoint?: LatLngTuple,
-): LatLngExpression[] {
-  // Perpendicular-offset control point — bow scales with segment
-  // length so a Mara → Zanzibar leg curves visibly without becoming
-  // cartoonish on a short Tarangire → Serengeti hop. When an avoid
-  // point is supplied (the inland centroid for transfer flights to
-  // coast destinations), the bow direction flips if needed so the
-  // arc bends AWAY from that point — the flight to Zanzibar curves
-  // out over the Indian Ocean instead of slicing through the safari
-  // circuit on the mainland.
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const len = Math.hypot(dx, dy) || 1;
-  let nx = -dy / len;
-  let ny = dx / len;
-  if (avoidPoint) {
-    const mx = (a[0] + b[0]) / 2;
-    const my = (a[1] + b[1]) / 2;
-    const dirToAvoidX = avoidPoint[0] - mx;
-    const dirToAvoidY = avoidPoint[1] - my;
-    // If the perpendicular vector points toward the avoid point,
-    // flip it so the bow goes the other way.
-    if (nx * dirToAvoidX + ny * dirToAvoidY > 0) {
-      nx = -nx;
-      ny = -ny;
-    }
-  }
-  const bow = len * bowFraction;
-  const cx = (a[0] + b[0]) / 2 + nx * bow;
-  const cy = (a[1] + b[1]) / 2 + ny * bow;
-  const pts: LatLngTuple[] = [a];
-  for (let s = 1; s <= segments; s++) {
-    const t = s / segments;
-    const x = (1 - t) * (1 - t) * a[0] + 2 * (1 - t) * t * cx + t * t * b[0];
-    const y = (1 - t) * (1 - t) * a[1] + 2 * (1 - t) * t * cy + t * t * b[1];
-    pts.push([x, y]);
-  }
-  return pts;
-}
+// buildBezierArc removed — flights now render as straight 2-point
+// lines per operator brief. Restore from git history if a future
+// design needs curved transfers again.
 
 // Pull coast destinations toward the inland centroid so they sit at
 // a "schematic" position closer to the safari circuit instead of at

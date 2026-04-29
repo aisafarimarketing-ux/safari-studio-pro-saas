@@ -6,6 +6,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "./RouteMap";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
+import { countryOf } from "@/lib/destinationOrdering";
 import type { Section, TierKey, Day } from "@/lib/types";
 
 // Route variant — two-column editorial spread. Itinerary table on the left
@@ -31,14 +32,17 @@ export function MapSection({ section }: { section: Section }) {
     "";
   // All unique countries the trip touches, in first-occurrence order.
   // Used to render multiple flags on the rail header for cross-border
-  // trips (Tanzania + Kenya, etc.). Falls back to [primaryCountry] for
-  // single-country trips. The operator can still override countryName
-  // textually; the flags follow the underlying day data.
+  // trips (Tanzania + Kenya, etc.). For each day we prefer
+  // `d.country` if it's set on the autopilot output, falling back to
+  // `countryOf(d.destination)` for legacy data where country wasn't
+  // populated. Either way every day contributes its country to the
+  // unique set. Single-country trips show 1 flag; multi-country
+  // trips show 2.
   const tripCountries = (() => {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const d of days) {
-      const c = d.country?.trim();
+      const c = d.country?.trim() || countryOf(d.destination ?? "") || "";
       if (c && !seen.has(c)) {
         seen.add(c);
         out.push(c);
@@ -135,11 +139,10 @@ export function MapSection({ section }: { section: Section }) {
       return proposal.properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
     };
 
-    // Bumped from 720 → 880 so multi-region trips (safari + Zanzibar
-    // / Mombasa coast) get more vertical pixels — the wider geographic
-    // bounds need more screen real estate to keep the route circuit
-    // readable instead of cramming everything into a tight strip.
-    const MAP_HEIGHT = 880;
+    // MAP_HEIGHT removed — the map now stretches to match the rail's
+    // natural height via the grid's items-stretch. Short trips get a
+    // smaller map, long trips get a taller one. No imposed minimum
+    // beyond what the rail's content provides.
 
     return (
       <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
@@ -362,13 +365,13 @@ export function MapSection({ section }: { section: Section }) {
               </div>
             </aside>
 
-            {/* ── Map — dominant column. Stretches to match the rail's
-                natural height via the grid's items-stretch. The
-                MAP_HEIGHT constant becomes a *minimum* here so trips
-                with very few days still render a sensibly-sized map.
-                Pixel-height fallback retained for the "no days yet"
-                placeholder so the section reserves space. */}
-            <div className="min-w-0 flex flex-col" style={{ minHeight: MAP_HEIGHT }}>
+            {/* ── Map — stretches to MATCH the rail's natural height
+                via the grid's items-stretch. No imposed min-height,
+                so the map and rail are visually equal — short trips
+                get a smaller map, long trips get a taller map.
+                The MAP_HEIGHT constant is retained only as a fallback
+                for the empty-trip placeholder below. */}
+            <div className="min-w-0 flex flex-col">
               {days.length > 0 ? (
                 <div className="overflow-hidden flex-1 min-h-0">
                   <RouteMap
