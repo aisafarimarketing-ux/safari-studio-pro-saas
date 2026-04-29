@@ -492,6 +492,10 @@ export function RouteMap({
         // operators pan/zoom via scroll/drag in editor mode and lock
         // both in presentation mode (PDF export, share view).
         zoomControl={false}
+        // Inset overview maps don't show attribution — main map
+        // carries the legal attribution for both. Keeps the inset's
+        // chrome to zero so it reads as a quiet supplementary view.
+        attributionControl={!inset}
         dragging={!presentationMode}
         doubleClickZoom={!presentationMode}
         touchZoom={!presentationMode}
@@ -508,16 +512,15 @@ export function RouteMap({
         />
         <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
-          attribution='Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          // ESRI World Topographic — shows parks/protected areas as
-          // natural green-tinted regions and rivers/lakes as proper
-          // blue features. Operators reported the previous Carto
-          // Positron basemap looked too generic-roadmap for safaris,
-          // and hand-drawn polygon overlays we tried felt boxed.
-          // This basemap shows Serengeti / Tarangire / Lake Manyara
-          // at their real shapes/sizes naturally — no overlays
-          // needed.
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          // Carto Voyager NO LABELS — soft cartographic basemap
+          // showing parks/terrain in natural green-tinted regions
+          // and water in proper blues, with ZERO text labels baked
+          // into the tiles. Operators want only the itinerary stops
+          // labelled (via our own pill + tooltip), not every town
+          // and park name on the basemap.
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
+          subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
         {/* Park polygon overlays removed — operators wanted the parks
