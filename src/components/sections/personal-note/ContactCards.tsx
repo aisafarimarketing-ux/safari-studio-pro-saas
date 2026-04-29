@@ -36,20 +36,24 @@ import { createPortal } from "react-dom";
 //
 // ─── Visibility rules — DO NOT REGRESS ───────────────────────────────────
 //
-//   1. The CARDS ROW renders whenever any value is set, in BOTH editor
-//      and preview/share. Never gate the entire row on `isEditor`.
+//   1. ALL THREE CARDS render together as a unit. In editor mode the
+//      row is always present so operators see the full layout. In
+//      preview/share the row renders if ANY of phone/email/whatsapp is
+//      set; individual empty cards show an em-dash rather than
+//      vanishing. Operators reported "icons missing in preview" when
+//      we hid empty cards one by one — the gap looked broken even
+//      though it was by design.
 //   2. The PRINT FALLBACK row uses explicit @media print rules in
-//      globals.css (.ss-contact-print-only / .ss-contact-cards-screen)
+//      globals.css (.ss-contact-print-only / .ss-contact-screen-only)
 //      rather than Tailwind's `print:` modifiers, so the screen/print
 //      switch can't be broken by a Tailwind config change or build
 //      environment quirk.
 //   3. AUTO-CONTRAST GUARD on the icon chip: when iconColor and iconBg
 //      brightness are too close (operator picks white-on-white), fall
-//      back to the default brand teal so the glyph never renders
-//      invisibly in preview.
+//      back to a high-contrast pair anchored off the iconBg luminance
+//      so the glyph never renders invisibly in preview.
 //   4. The EDITOR INPUTS strip is the ONLY element gated by isEditor.
-//      Cards + print fallback are always conditional on data, never on
-//      editor mode.
+//      The cards row, print fallback, and Style picker pill are not.
 //
 // See memory/map_and_routing_rules.md → "Personal Note contact rules".
 // ──────────────────────────────────────────────────────────────────────────
@@ -138,7 +142,15 @@ export function ContactCards({
     whatsapp ? `WhatsApp ${whatsapp}` : "",
   ].filter(Boolean);
 
-  const visibleCards = cards.filter((c) => isEditor || c.value);
+  // Card visibility — fundamental rule: if the operator has typed ANY
+  // contact value, render all three icons + cards. Empty cards in
+  // preview show an em-dash placeholder rather than vanishing, because
+  // operators consistently reported "icons missing in preview" when
+  // we hid empty cards individually — the gap between cards looked
+  // like a render failure even though it was by design. In editor we
+  // always render all three so operators see the full row.
+  const anyValueSet = !!(phone || email || whatsapp);
+  const visibleCards = isEditor || anyValueSet ? cards : [];
 
   return (
     <div className="relative group w-full">
@@ -325,7 +337,7 @@ function Card({
           }`}
           style={{ color: valueColor }}
         >
-          {value || (isEditor ? "Not set" : "")}
+          {value || (isEditor ? "Not set" : "—")}
         </div>
       </div>
     </>
