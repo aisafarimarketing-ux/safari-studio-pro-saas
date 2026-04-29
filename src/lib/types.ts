@@ -143,6 +143,16 @@ export interface Day {
   /** Operator-curated add-ons for this day (priced extras the guest can
    *  opt into from the share view). */
   optionalActivities?: OptionalActivity[];
+  /** Editorial pull-quote — the "moment of the day". Surfaces the one
+   *  signature experience as a typographic hook above the narrative
+   *  (e.g. "Lions hunting at dawn — reserved seats at the Sunrise
+   *  Hide"). Optional; layouts hide the slot when blank. */
+  momentOfDay?: string;
+  /** Drive-time chip rendered ABOVE this day's card (so day 2's value
+   *  describes how the traveller got from day 1 → day 2). Free-form
+   *  short text like "→ 2.5 hr scenic drive · Manyara to Tarangire".
+   *  Day 1 ignores this (no preceding day). */
+  driveTimeBefore?: string;
   tiers: {
     classic: Accommodation;
     premier: Accommodation;

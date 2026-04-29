@@ -14,6 +14,7 @@ import { DayCardChrome } from "./DayCardChrome";
 import { resolveDayCard } from "./resolve";
 import { pickAutoLayoutForDay } from "./rotation";
 import { EditorialStackCard } from "./layouts/EditorialStackCard";
+import { FlipCard } from "./layouts/FlipCard";
 import type { DayCardLayoutProps, DayCardLayoutVariant } from "./types";
 import type { OptionalActivity } from "@/lib/types";
 
@@ -90,6 +91,8 @@ export function DayCard({
     updateDay(day.id, { description: next });
   const onBoardChange = (next: string) =>
     updateDay(day.id, { board: next || day.board });
+  const onMomentOfDayChange = (next: string) =>
+    updateDay(day.id, { momentOfDay: next });
 
   // ── Destination image upload ──────────────────────────────────────────
   const onDestinationImageUpload = async (file: File) => {
@@ -175,6 +178,7 @@ export function DayCard({
     onPhaseLabelChange,
     onNarrativeChange,
     onBoardChange,
+    onMomentOfDayChange,
     onDestinationImageUpload,
     onDestinationImagePickerOpen: () => setImagePickerOpen(true),
     onDestinationImagePositionChange: (next: string) =>
@@ -238,14 +242,26 @@ export function DayCard({
   );
 }
 
-type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto">;
+type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto" | "trip-flip">;
 
-function renderLayout(_variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
-  // Single editorial-stack layout — variant is now a formality for the
-  // section registry, not a branching point.
-  return <EditorialStackCard {...props} />;
+function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
+  switch (variant) {
+    case "right-flip":
+      return <FlipCard {...props} flip="right" />;
+    case "left-flip":
+      return <FlipCard {...props} flip="left" />;
+    case "editorial-stack":
+    default:
+      return <EditorialStackCard {...props} />;
+  }
 }
 
+// Resolve the section-level variant into a concrete per-card variant.
+// trip-flip alternates by day index — odd days (1, 3, 5) render as
+// right-flip, even days (2, 4, 6) as left-flip. Each day card itself
+// always uses ONE consistent flip direction; the alternation lives at
+// the day-to-day rhythm level so a 7-day proposal reads like a real
+// magazine spread.
 function pickConcreteLayout(
   day: Day,
   index: number,
@@ -257,7 +273,18 @@ function pickConcreteLayout(
   if (sectionVariant === "auto" || !sectionVariant) {
     return pickAutoLayoutForDay(day, index, totalDays, proposal, activeTier);
   }
-  // Everything resolves to the one layout — no branching needed, so
-  // legacy variant names from prior generations quietly map through.
+  if (sectionVariant === "trip-flip") {
+    // dayNumber is 1-indexed in the data; index is 0-indexed array
+    // position. Use index for stable alternation regardless of any
+    // dayNumber gaps.
+    return index % 2 === 0 ? "right-flip" : "left-flip";
+  }
+  if (sectionVariant === "right-flip" || sectionVariant === "left-flip") {
+    return sectionVariant;
+  }
+  if (sectionVariant === "editorial-stack") {
+    return "editorial-stack";
+  }
+  // Legacy variant names from prior generations quietly map through.
   return "editorial-stack";
 }

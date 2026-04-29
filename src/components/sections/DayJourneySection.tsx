@@ -16,6 +16,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { DayCard } from "./day-card/DayCard";
+import { DriveTimeChip } from "./day-card/DriveTimeChip";
 import type { Section } from "@/lib/types";
 
 // Section wrapper for the Day-by-Day Journey. Every day renders through
@@ -23,7 +24,7 @@ import type { Section } from "@/lib/types";
 // variant switching. Dragging a card reorders the days.
 
 export function DayJourneySection({ section }: { section: Section }) {
-  const { proposal, moveDay, addDay } = useProposalStore();
+  const { proposal, moveDay, addDay, updateDay } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { days, theme } = proposal;
@@ -79,13 +80,27 @@ export function DayJourneySection({ section }: { section: Section }) {
         >
           <div className="space-y-2 md:space-y-3">
             {days.map((day, i) => (
-              <DayCard
-                key={day.id}
-                day={day}
-                index={i}
-                totalDays={days.length}
-                section={section}
-              />
+              <div key={day.id}>
+                {/* Drive-time chip — appears ABOVE every day except
+                    Day 1 (no preceding day to transfer from). Editor
+                    mode shows the slot even when blank so operators
+                    see where to fill in the transfer note. Preview
+                    hides it entirely when empty. */}
+                {i > 0 && (
+                  <DriveTimeChip
+                    value={day.driveTimeBefore?.trim() ?? ""}
+                    isEditor={isEditor}
+                    tokens={tokens}
+                    onChange={(next) => updateDay(day.id, { driveTimeBefore: next })}
+                  />
+                )}
+                <DayCard
+                  day={day}
+                  index={i}
+                  totalDays={days.length}
+                  section={section}
+                />
+              </div>
             ))}
           </div>
         </SortableContext>

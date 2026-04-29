@@ -18,11 +18,21 @@ import type {
   OptionalActivity,
 } from "@/lib/types";
 
-// Day cards render one editorial-stack layout: top header strip, big
-// hero photo, narrative, optional activities, and a trim accommodation
-// block. "auto" exists for the section-level variant picker but resolves
-// to the same layout.
-export type DayCardLayoutVariant = "auto" | "editorial-stack";
+// Day card layouts:
+//   - editorial-stack — single-column magazine (default, vertical flow)
+//   - right-flip      — image on the right, narrative on the left
+//   - left-flip       — image on the left, narrative on the right
+//   - trip-flip       — alternates per day (odd → right, even → left).
+//                       Selected at the section level; the resolver picks
+//                       right-flip or left-flip per card based on day
+//                       index, so each individual card is still consistent.
+//   - auto            — legacy alias resolving to editorial-stack.
+export type DayCardLayoutVariant =
+  | "auto"
+  | "editorial-stack"
+  | "right-flip"
+  | "left-flip"
+  | "trip-flip";
 
 export type ResolvedProperty = {
   id: string;
@@ -58,6 +68,10 @@ export type DayCardData = {
    *  drags the image to recompose the crop. */
   destinationImagePosition: string | null;
 
+  // Editorial pull-quote — surfaces the one signature experience of the
+  // day as a typographic moment above the narrative. Optional.
+  momentOfDay: string;
+
   // Property
   property: ResolvedProperty | null;
 
@@ -82,6 +96,8 @@ export type DayCardLayoutProps = {
   onPhaseLabelChange: (next: string) => void;
   onNarrativeChange: (next: string) => void;
   onBoardChange: (next: string) => void;
+  /** Edit the editorial pull-quote that surfaces above the narrative. */
+  onMomentOfDayChange: (next: string) => void;
 
   // Image actions — destination hero
   onDestinationImageUpload: (file: File) => void;
@@ -104,7 +120,13 @@ export type DayCardLayoutProps = {
 
 export function getDayCardVariant(raw: string | undefined): DayCardLayoutVariant {
   const v = (raw ?? "auto") as DayCardLayoutVariant;
-  const allowed: DayCardLayoutVariant[] = ["auto", "editorial-stack"];
+  const allowed: DayCardLayoutVariant[] = [
+    "auto",
+    "editorial-stack",
+    "right-flip",
+    "left-flip",
+    "trip-flip",
+  ];
   return allowed.includes(v) ? v : "auto";
 }
 

@@ -93,9 +93,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "dayJourney",
     label: "Day-by-Day Journey",
     icon: "✦",
-    description: "Editorial stack — one layout per day, full width",
-    variants: ["editorial-stack"],
-    defaultVariant: "editorial-stack",
+    description: "Magazine flow — single column or alternating spreads",
+    // editorial-stack: classic single column (existing).
+    // right-flip / left-flip: image on right or left, consistent across
+    // every day. trip-flip: alternates per day for magazine rhythm
+    // (odd → right, even → left). All four variants share the same
+    // content (location narrative + property narrative + photos).
+    variants: ["editorial-stack", "right-flip", "left-flip", "trip-flip"],
+    defaultVariant: "trip-flip",
     defaultContent: {},
     dataSource: "days",
   },
