@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
+import { isCoastCity } from "@/lib/safariRoutingRules";
 
 // Leaflet needs the DOM, so dynamic-import with ssr: false. The map tiles
 // come from Carto (Voyager style) — no API key, more colourful than raw
@@ -337,8 +338,19 @@ export function RouteMap({
   //   for the MARKERS so two visits to Arusha don't stack pins on
   //   the same pixel. Without this, return-to-base trips render as
   //   a single overlapping pile of identical pins.
-  const groups = groupCoordsByLocation(coords);
-  const markerGroups = mergeMarkerGroupsByCoord(groups);
+  const rawGroups = groupCoordsByLocation(coords);
+  const rawMarkerGroups = mergeMarkerGroupsByCoord(rawGroups);
+
+  // Schematic-positioning pass — coast destinations (Zanzibar,
+  // Mombasa, Diani, etc.) get pulled toward the inland centroid so
+  // they read on the map without forcing a fully-zoomed-out
+  // Tanzania-+-Indian-Ocean view that crushes the safari circuit
+  // into a corner. Real direction is preserved, only the distance
+  // shrinks. The day-pill still shows "Day 5 · Zanzibar" so clients
+  // know the actual stop; the placement is editorial, not geographic.
+  // Inland stops are unchanged.
+  const groups = compressCoastPositions(rawGroups);
+  const markerGroups = compressCoastPositions(rawMarkerGroups);
 
   // For each marker, compute which side of its anchor the pill should
   // float on so close pairs (Tarangire ↔ Lake Manyara, ~33km) don't
@@ -348,9 +360,13 @@ export function RouteMap({
   // is unlikely to occur on a single safari circuit.
   const pillDirections = assignPillDirections(markerGroups);
 
-  // Which marker group contains the selected day (if any)?
+  // Which marker group contains the selected day (if any)? Matches by
+  // REAL lat/lng (rawMarkerGroups) since `coords` carries the
+  // operator's actual coordinates — the compressed `markerGroups`
+  // wouldn't line up for coast destinations. Returned index is still
+  // valid for the parallel compressed array.
   const selectedGroupIndex = selectedDayId
-    ? markerGroups.findIndex((g) =>
+    ? rawMarkerGroups.findIndex((g) =>
         coords.some(
           (c) => c.dayId === selectedDayId && Math.abs(c.lat - g.lat) < 0.0001 && Math.abs(c.lng - g.lng) < 0.0001,
         ),
@@ -990,6 +1006,16 @@ function buildLegPaths(
   transferThresholdKm: number,
 ): LegPath[] {
   if (groups.length < 2) return [];
+  // Inland centroid — used as the "avoid point" for transfer-leg curves.
+  // A flight from Serengeti to Zanzibar would otherwise bow toward the
+  // mainland and slice through the safari circuit; bowing AWAY from
+  // the inland centroid pushes the arc out over open territory.
+  const inland = groups.filter((g) => !isCoastCity(g.placeName));
+  const refGroups = inland.length > 0 ? inland : groups;
+  const avoidLat = refGroups.reduce((s, g) => s + g.lat, 0) / refGroups.length;
+  const avoidLng = refGroups.reduce((s, g) => s + g.lng, 0) / refGroups.length;
+  const avoid: LatLngTuple = [avoidLat, avoidLng];
+
   const out: LegPath[] = [];
   for (let i = 0; i < groups.length - 1; i++) {
     const a: LatLngTuple = [groups[i].lat, groups[i].lng];
@@ -999,7 +1025,7 @@ function buildLegPaths(
       distKm > transferThresholdKm ? "transfer" : "circuit";
     out.push({
       kind,
-      path: kind === "transfer" ? buildBezierArc(a, b, 24, 0.14) : [a, b],
+      path: kind === "transfer" ? buildBezierArc(a, b, 24, 0.18, avoid) : [a, b],
       endpoints: [a, b],
       skipArrow: distKm < 25,
     });
@@ -1012,15 +1038,33 @@ function buildBezierArc(
   b: LatLngTuple,
   segments: number,
   bowFraction: number,
+  avoidPoint?: LatLngTuple,
 ): LatLngExpression[] {
   // Perpendicular-offset control point — bow scales with segment
   // length so a Mara → Zanzibar leg curves visibly without becoming
-  // cartoonish on a short Tarangire → Serengeti hop.
+  // cartoonish on a short Tarangire → Serengeti hop. When an avoid
+  // point is supplied (the inland centroid for transfer flights to
+  // coast destinations), the bow direction flips if needed so the
+  // arc bends AWAY from that point — the flight to Zanzibar curves
+  // out over the Indian Ocean instead of slicing through the safari
+  // circuit on the mainland.
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len;
-  const ny = dx / len;
+  let nx = -dy / len;
+  let ny = dx / len;
+  if (avoidPoint) {
+    const mx = (a[0] + b[0]) / 2;
+    const my = (a[1] + b[1]) / 2;
+    const dirToAvoidX = avoidPoint[0] - mx;
+    const dirToAvoidY = avoidPoint[1] - my;
+    // If the perpendicular vector points toward the avoid point,
+    // flip it so the bow goes the other way.
+    if (nx * dirToAvoidX + ny * dirToAvoidY > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+  }
   const bow = len * bowFraction;
   const cx = (a[0] + b[0]) / 2 + nx * bow;
   const cy = (a[1] + b[1]) / 2 + ny * bow;
@@ -1032,6 +1076,35 @@ function buildBezierArc(
     pts.push([x, y]);
   }
   return pts;
+}
+
+// Pull coast destinations toward the inland centroid so they sit at
+// a "schematic" position closer to the safari circuit instead of at
+// their real (700+km offshore) coordinates. Direction is preserved —
+// Zanzibar still appears south-east of Serengeti, just much closer.
+// The day pill keeps the actual destination name so the client knows
+// where they're going; only the dot's position is editorialised.
+//
+// Inland stops are returned unchanged. If the trip is entirely
+// coastal (no inland reference point), every group is unchanged too.
+function compressCoastPositions<T extends { lat: number; lng: number; placeName: string }>(
+  groups: T[],
+): T[] {
+  const inland = groups.filter((g) => !isCoastCity(g.placeName));
+  if (inland.length === 0) return groups;
+  const cLat = inland.reduce((s, g) => s + g.lat, 0) / inland.length;
+  const cLng = inland.reduce((s, g) => s + g.lng, 0) / inland.length;
+  // 0.4 = coast appears at 40 % of its real distance from the inland
+  // centroid. Tuned so a Tanzanian safari + Zanzibar trip shows the
+  // safari circuit zoomed in tight while Zanzibar still lands in the
+  // lower-right area of the map (south-east direction preserved).
+  const COMPRESSION = 0.4;
+  return groups.map((g) => {
+    if (!isCoastCity(g.placeName)) return g;
+    const newLat = cLat + (g.lat - cLat) * COMPRESSION;
+    const newLng = cLng + (g.lng - cLng) * COMPRESSION;
+    return { ...g, lat: newLat, lng: newLng };
+  });
 }
 
 function haversineKm(a: LatLngTuple, b: LatLngTuple): number {
@@ -1087,7 +1160,7 @@ function RefitOnResize({
         m.invalidateSize();
         m.fitBounds(viewport.bounds, {
           padding: [36, 36],
-          maxZoom: 9,
+          maxZoom: 10,
           animate: false,
         });
       } catch {
