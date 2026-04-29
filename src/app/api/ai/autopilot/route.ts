@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
 import { nanoid } from "@/lib/nanoid";
-import { orderDestinations } from "@/lib/destinationOrdering";
+import { orderDestinations, countryOf } from "@/lib/destinationOrdering";
 import type { Day, TierKey } from "@/lib/types";
 
 // AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
@@ -551,44 +551,72 @@ ${JSON.stringify(userPayload, null, 2)}`;
   }
 
   // ── Map Claude's draft → concrete shapes the proposal store consumes ────
+  // Take the first `nights` items the AI gave us and trust those. Don't
+  // pad with empty {} slots — that used to fabricate phantom days that
+  // hit broken fallbacks (cycling through input destinations, hardcoded
+  // "Kenya" country) and produced rows like "Day 7: Lake Manyara, Kenya"
+  // for a trip ending in Zanzibar. If the AI under-delivered, log it
+  // and let the operator add days manually rather than ship junk.
   const draftDays = Array.isArray(parsed.days) ? parsed.days.slice(0, nights) : [];
-  while (draftDays.length < nights) draftDays.push({});
+  if (draftDays.length < nights) {
+    console.warn(
+      `[autopilot] AI returned ${draftDays.length} days for a ${nights}-night trip; ` +
+      `not padding with empty days (would produce invalid country/destination data).`,
+    );
+  }
 
-  const days: Day[] = draftDays.map((d, idx) => ({
-    id: nanoid(),
-    dayNumber: idx + 1,
-    destination: stringOr(d.destination, destinations[idx % Math.max(destinations.length, 1)] || "New Destination"),
-    country: stringOr(d.country, "Kenya"),
-    subtitle: stringOr(d.subtitle, "") || undefined,
-    description: stringOr(d.description, ""),
-    board: stringOr(d.board, "Full board"),
-    highlights: Array.isArray(d.highlights)
-      ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5)
-      : undefined,
-    optionalActivities: pickOptionalActivities(d.optionalActivities),
-    tiers: {
-      classic: pickTier(d.tiers?.classic, library),
-      premier: pickTier(d.tiers?.premier, library),
-      signature: pickTier(d.tiers?.signature, library),
-    },
-  }));
+  // Pick the destination for a given day-index. Mid-trip days fall back
+  // to a cycle through the input destinations; the LAST day specifically
+  // falls back to the operator's intended endpoint (destinations[-1]),
+  // not the modulo cycle, so a 7th day in a 5-destination trip ending in
+  // Zanzibar doesn't snap back to "Lake Manyara".
+  const totalDays = draftDays.length;
+  const fallbackDestinationFor = (idx: number): string => {
+    if (destinations.length === 0) return "New Destination";
+    const isLast = idx === totalDays - 1;
+    if (isLast) return destinations[destinations.length - 1];
+    return destinations[idx % destinations.length];
+  };
 
-  // Clamp Day 1 and the last day to the operator's input destination list.
-  // The prompt already asks for this, but a belt-and-braces normalisation
-  // stops the model from inventing "Day 7: Tarangire" when the trip shape
-  // is Arusha → Tarangire → Serengeti → Ngorongoro → Zanzibar. If the
-  // model's pick isn't in the input list, snap: Day 1 → first destination,
-  // last day → last destination.
+  const days: Day[] = draftDays.map((d, idx) => {
+    const destination = stringOr(d.destination, fallbackDestinationFor(idx));
+    // Country: use what the AI returned, else look up the destination's
+    // country from the East-African ordering table, else fall back to
+    // empty string. The hardcoded "Kenya" default is gone — it stamped
+    // Tanzanian destinations as Kenyan whenever the AI omitted country.
+    const country = stringOr(d.country, "") || countryOf(destination) || "";
+    return {
+      id: nanoid(),
+      dayNumber: idx + 1,
+      destination,
+      country,
+      subtitle: stringOr(d.subtitle, "") || undefined,
+      description: stringOr(d.description, ""),
+      board: stringOr(d.board, "Full board"),
+      highlights: Array.isArray(d.highlights)
+        ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5)
+        : undefined,
+      optionalActivities: pickOptionalActivities(d.optionalActivities),
+      tiers: {
+        classic: pickTier(d.tiers?.classic, library),
+        premier: pickTier(d.tiers?.premier, library),
+        signature: pickTier(d.tiers?.signature, library),
+      },
+    };
+  });
+
+  // Clamp Day 1 to the first input destination, and the last day to the
+  // last input destination. The previous version only fired when the
+  // AI's pick wasn't in the allowed-set — so if Day 7 came back as
+  // "Lake Manyara" (which is in the list), the snap missed it even
+  // though the trip was supposed to end in Zanzibar. Now we always
+  // override the endpoints to the operator's intent.
   if (destinations.length > 0 && days.length > 0) {
-    const norm = (s: string) => s.trim().toLowerCase();
-    const allowed = new Set(destinations.map(norm));
-    if (!allowed.has(norm(days[0].destination))) {
-      days[0].destination = destinations[0];
-    }
+    days[0].destination = destinations[0];
+    days[0].country = countryOf(destinations[0]) || days[0].country;
     const last = days[days.length - 1];
-    if (!allowed.has(norm(last.destination))) {
-      last.destination = destinations[destinations.length - 1];
-    }
+    last.destination = destinations[destinations.length - 1];
+    last.country = countryOf(destinations[destinations.length - 1]) || last.country;
   }
 
   const inclusions = stringArray(parsed.inclusions, 12);

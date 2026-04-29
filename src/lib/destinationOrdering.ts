@@ -31,10 +31,15 @@ type Entry = {
 
 const TABLE: Record<string, Entry> = {
   // ── Tanzania — northern circuit (most popular)
+  // Tarangire (110) before Lake Manyara (120): the classic loop from
+  // Arusha runs south-east to Tarangire first, then west to Manyara,
+  // then up to Ngorongoro and Serengeti. Operators previously got
+  // routed the wrong way round when typing destinations in random
+  // order.
   arusha:               { country: "Tanzania", order: 100 },
-  "lake manyara":       { country: "Tanzania", order: 110 },
-  manyara:              { country: "Tanzania", order: 110 },
-  tarangire:            { country: "Tanzania", order: 120 },
+  tarangire:            { country: "Tanzania", order: 110 },
+  "lake manyara":       { country: "Tanzania", order: 120 },
+  manyara:              { country: "Tanzania", order: 120 },
   ngorongoro:           { country: "Tanzania", order: 130, aliases: ["ngorongoro crater", "ngorongoro highlands"] },
   serengeti:            { country: "Tanzania", order: 140, aliases: ["central serengeti", "northern serengeti", "southern serengeti"] },
   "lake natron":        { country: "Tanzania", order: 145 },
@@ -110,8 +115,41 @@ const LOOKUP: Map<string, number> = (() => {
   return m;
 })();
 
+// Same shape but maps name → country, so autopilot can resolve a
+// country from a destination name without hardcoding fallbacks.
+const COUNTRY_LOOKUP: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const [name, entry] of Object.entries(TABLE)) {
+    m.set(normalise(name), entry.country);
+    for (const alias of entry.aliases ?? []) {
+      m.set(normalise(alias), entry.country);
+    }
+  }
+  return m;
+})();
+
 function normalise(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Look up the country for a single destination using the same
+ *  table + alias matching as the ordering function. Returns null when
+ *  the destination isn't in the table — caller decides what to do.
+ *  Used by autopilot to fill a missing country instead of hardcoding
+ *  a default that's wrong half the time. */
+export function countryOf(name: string): string | null {
+  if (!name) return null;
+  const norm = normalise(name);
+  const direct = COUNTRY_LOOKUP.get(norm);
+  if (direct !== undefined) return direct;
+  // Substring fallback — handle "Central Serengeti" → "serengeti".
+  let best: { len: number; country: string } | null = null;
+  for (const [key, country] of COUNTRY_LOOKUP.entries()) {
+    if (norm.includes(key)) {
+      if (!best || key.length > best.len) best = { len: key.length, country };
+    }
+  }
+  return best ? best.country : null;
 }
 
 /** Look up an ordering number for a single destination. Returns null

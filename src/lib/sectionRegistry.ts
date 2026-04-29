@@ -81,7 +81,10 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Itinerary at a Glance",
     icon: "☰",
     description: "Auto-generated table from day data",
-    variants: ["horizontal-rows", "default", "compact"],
+    // editorial-timeline is the new vertical journey rail (matches the
+    // luxury-magazine reference); compact retained for legacy proposals
+    // but new sections default to horizontal-rows.
+    variants: ["horizontal-rows", "editorial-timeline", "default", "compact"],
     defaultVariant: "horizontal-rows",
     defaultContent: {},
     dataSource: "days",

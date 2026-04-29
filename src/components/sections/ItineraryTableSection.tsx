@@ -1,26 +1,34 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useProposalStore } from "@/store/proposalStore";
+import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Day, Section } from "@/lib/types";
 
-// "Itinerary at a glance" — three variants:
+// "Itinerary at a glance" — multiple variants:
 //
-//  • horizontal-rows  (default) — magazine table with a dark header bar and
-//    zebra-striped rows. Consecutive days that share a destination collapse
-//    into a single grouped row ("Days 2-3 · 17-18 May · Tarangire · 2").
-//  • default           — at-a-glance stats strip + per-day table below.
-//  • compact           — same as default but tighter padding.
+//  • horizontal-rows     (default) — magazine table with a dark header bar
+//    and zebra-striped rows. Consecutive days that share a destination
+//    collapse into a single grouped row ("Days 2-3 · 17-18 May · Tarangire").
+//  • editorial-timeline  — vertical journey rail; day-card on the left,
+//    activity + accommodation rows on the right linked by a dashed line.
+//    Icons are recolourable per section via a hover-revealed style picker.
+//  • default             — at-a-glance stats strip + per-day table below.
+//  • compact             — same as default but tighter padding (legacy).
 //
 // Every variant pulls its background from `tokens.sectionSurface` (resolved
 // from the section's styleOverrides) so operators can recolour the block
 // from the section chrome without code changes.
 
 export function ItineraryTableSection({ section }: { section: Section }) {
-  const { proposal } = useProposalStore();
+  const { proposal, updateSectionContent } = useProposalStore();
   const { days, activeTier, client, trip, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant || "horizontal-rows";
+  const { mode } = useEditorStore();
+  const isEditor = mode === "editor";
 
   if (variant === "horizontal-rows") {
     return (
@@ -33,12 +41,41 @@ export function ItineraryTableSection({ section }: { section: Section }) {
     );
   }
 
+  if (variant === "editorial-timeline") {
+    return (
+      <EditorialTimelineLayout
+        days={days}
+        activeTier={activeTier}
+        arrivalDateISO={trip.arrivalDate}
+        tokens={tokens}
+        theme={theme}
+        isEditor={isEditor}
+        activityColor={section.content.timelineActivityColor as string | undefined}
+        accommodationColor={section.content.timelineAccommodationColor as string | undefined}
+        onStyleChange={(next) =>
+          updateSectionContent(section.id, {
+            timelineActivityColor: next.activityColor,
+            timelineAccommodationColor: next.accommodationColor,
+          })
+        }
+      />
+    );
+  }
+
   // ── Legacy "default" / "compact" — at-a-glance stats + classic table ──
   const compact = variant === "compact";
-  const destinations = [...new Set(days.map((d) => d.destination))];
-  const destinationsLine = destinations.length
-    ? destinations.join(" · ")
-    : trip.destinations.join(" · ");
+  // Route reads "Arusha → Zanzibar" — start to end. Replaced the old
+  // "Destinations" cell which jammed up to 6 names into a 25%-width
+  // column with awkward middot wrapping. The full route still lives
+  // in the day-by-day table below; the at-a-glance just gives clients
+  // the trip's geographic arc in one glance.
+  const orderedDayDestinations = [...new Set(days.map((d) => d.destination))];
+  const allDestinations =
+    orderedDayDestinations.length > 0 ? orderedDayDestinations : trip.destinations;
+  const route =
+    allDestinations.length > 1
+      ? `${allDestinations[0]} → ${allDestinations[allDestinations.length - 1]}`
+      : allDestinations[0] || "—";
   const duration = trip.nights
     ? `${trip.nights + 1} days · ${trip.nights} nights`
     : days.length
@@ -46,7 +83,7 @@ export function ItineraryTableSection({ section }: { section: Section }) {
       : trip.dates;
   const stats: { label: string; value: string }[] = [
     { label: "Duration", value: duration || "—" },
-    { label: "Destinations", value: destinationsLine || "—" },
+    { label: "Route", value: route },
     { label: "Guests", value: client.guestNames || "—" },
     { label: "Style", value: trip.tripStyle || trip.subtitle || "—" },
   ];
@@ -436,4 +473,452 @@ function parseColour(input: string): { r: number; g: number; b: number } | null 
     }
   }
   return null;
+}
+
+// ─── Editorial timeline variant ───────────────────────────────────────────
+//
+// Vertical journey rail. Each day stacks two rows: a coloured circular
+// activity icon + uppercase activity title, then a coloured circular
+// accommodation icon + italic "Accommodation" label + uppercase camp
+// name. A dashed vertical line links the icons day-to-day.
+//
+// Activity title source: day.subtitle (operator-written) → fallback to
+// day.destination. Day 1 falls back to "ARRIVAL"; the last day falls
+// back to "DEPARTURE". Day 1 + last day get an aeroplane icon; mid days
+// get a paw print.
+//
+// Colours are operator-pickable per section via a hover-revealed style
+// affordance that mirrors the contact-cards pattern. Glyphs stay white
+// for high contrast — no separate glyph-colour exposed.
+
+const DEFAULT_ACTIVITY_COLOR = "#e88c2e";       // warm safari orange
+const DEFAULT_ACCOMMODATION_COLOR = "#b34334";  // editorial brick red
+
+function EditorialTimelineLayout({
+  days,
+  activeTier,
+  arrivalDateISO,
+  tokens,
+  theme,
+  isEditor,
+  activityColor,
+  accommodationColor,
+  onStyleChange,
+}: {
+  days: Day[];
+  activeTier: keyof Day["tiers"];
+  arrivalDateISO: string | undefined;
+  tokens: ReturnType<typeof resolveTokens>;
+  theme: { displayFont: string; bodyFont: string };
+  isEditor: boolean;
+  activityColor?: string;
+  accommodationColor?: string;
+  onStyleChange: (next: { activityColor?: string; accommodationColor?: string }) => void;
+}) {
+  const aColor = activityColor || DEFAULT_ACTIVITY_COLOR;
+  const accColor = accommodationColor || DEFAULT_ACCOMMODATION_COLOR;
+
+  return (
+    <div className="py-12 md:py-16 px-6 md:px-12" style={{ background: tokens.sectionSurface }}>
+      <div className="relative group max-w-3xl mx-auto">
+        <div
+          className="text-[10px] uppercase tracking-[0.3em] mb-10"
+          style={{ color: tokens.mutedText }}
+        >
+          Itinerary at a glance
+        </div>
+
+        {days.length === 0 ? (
+          <div className="text-center py-14 text-[13px]" style={{ color: tokens.mutedText }}>
+            Add days in the Day-by-Day section to populate this timeline.
+          </div>
+        ) : (
+          <ol className="relative">
+            {days.map((day, idx) => (
+              <TimelineRow
+                key={day.id}
+                day={day}
+                idx={idx}
+                lastIdx={days.length - 1}
+                activeTier={activeTier}
+                arrivalDateISO={arrivalDateISO}
+                tokens={tokens}
+                theme={theme}
+                activityColor={aColor}
+                accommodationColor={accColor}
+              />
+            ))}
+          </ol>
+        )}
+
+        {isEditor && (
+          <TimelineStyleControl
+            activityColor={aColor}
+            accommodationColor={accColor}
+            onChange={onStyleChange}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TimelineRow({
+  day,
+  idx,
+  lastIdx,
+  activeTier,
+  arrivalDateISO,
+  tokens,
+  theme,
+  activityColor,
+  accommodationColor,
+}: {
+  day: Day;
+  idx: number;
+  lastIdx: number;
+  activeTier: keyof Day["tiers"];
+  arrivalDateISO: string | undefined;
+  tokens: ReturnType<typeof resolveTokens>;
+  theme: { displayFont: string; bodyFont: string };
+  activityColor: string;
+  accommodationColor: string;
+}) {
+  const isFirst = idx === 0;
+  const isLast = idx === lastIdx;
+  const dayDate = resolveDayDateLabel(day, arrivalDateISO);
+
+  // Activity title: subtitle wins (operator-written), else destination.
+  // Day 1 + last day get the special "ARRIVAL" / "DEPARTURE" fallback so
+  // a thin draft still reads like a journey.
+  const activityTitle =
+    (day.subtitle && day.subtitle.trim()) ||
+    (isFirst ? "ARRIVAL" : isLast ? "DEPARTURE" : day.destination || "");
+
+  const camp = day.tiers[activeTier]?.camp?.trim();
+  const showAccommodation = !!camp && !isLast;
+
+  // Last row in the list shouldn't extend the dashed connector down past
+  // its own content (no next day to connect to).
+  const showConnectorBelow = !isLast;
+
+  return (
+    <li className="relative pb-10 last:pb-0">
+      {/* Dashed connector — runs vertically through the icon column to
+          the next day's activity icon. Positioned behind the icons. */}
+      {showConnectorBelow && (
+        <span
+          aria-hidden
+          className="absolute"
+          style={{
+            left: 92,
+            top: 18,
+            bottom: -10,
+            width: 0,
+            borderLeft: `1.5px dashed ${tokens.border}`,
+          }}
+        />
+      )}
+
+      {/* Activity row — day card + activity icon + title */}
+      <div className="grid grid-cols-[64px_36px_1fr] items-center gap-x-4 mb-6">
+        <DayCard dayNumber={day.dayNumber} dateLabel={dayDate} tokens={tokens} theme={theme} />
+        <IconChip
+          color={activityColor}
+          glyph={isFirst || isLast ? <PlaneGlyph /> : <PawGlyph />}
+        />
+        <div
+          className="text-[14px] font-bold uppercase tracking-[0.04em] leading-tight"
+          style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+        >
+          {activityTitle}
+        </div>
+      </div>
+
+      {/* Accommodation row — only when the day has a camp */}
+      {showAccommodation && (
+        <div className="grid grid-cols-[64px_36px_1fr] items-start gap-x-4">
+          <div /> {/* spacer to align with day-card column */}
+          <IconChip color={accommodationColor} glyph={<LodgeGlyph />} />
+          <div className="leading-snug">
+            <div
+              className="text-[12px] italic"
+              style={{ color: tokens.mutedText, fontFamily: `'${theme.displayFont}', serif` }}
+            >
+              Accommodation
+            </div>
+            <div
+              className="text-[13.5px] font-bold uppercase tracking-[0.04em] mt-0.5"
+              style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              {camp}
+            </div>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function DayCard({
+  dayNumber,
+  dateLabel,
+  tokens,
+  theme,
+}: {
+  dayNumber: number;
+  dateLabel: string;
+  tokens: ReturnType<typeof resolveTokens>;
+  theme: { displayFont: string; bodyFont: string };
+}) {
+  return (
+    <div
+      className="rounded-md px-2 py-1.5 text-center shadow-sm"
+      style={{
+        background: "#ffffff",
+        border: `1px solid ${tokens.border}`,
+      }}
+    >
+      <div
+        className="text-[20px] font-bold leading-none tabular-nums"
+        style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
+      >
+        {dayNumber}
+      </div>
+      <div
+        className="text-[8px] uppercase tracking-[0.18em] font-semibold mt-0.5"
+        style={{ color: tokens.mutedText }}
+      >
+        {dateLabel ? dayShort(dateLabel) : "Day"}
+      </div>
+    </div>
+  );
+}
+
+// "29 May 2026" → "29 May" so the day card stays compact.
+function dayShort(label: string): string {
+  const parts = label.split(/\s+/);
+  if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
+  return label;
+}
+
+function IconChip({ color, glyph }: { color: string; glyph: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-full flex items-center justify-center shadow-sm"
+      style={{
+        width: 36,
+        height: 36,
+        background: color,
+        color: "#ffffff",
+      }}
+      aria-hidden
+    >
+      {glyph}
+    </div>
+  );
+}
+
+// Lucide-style glyphs sized for the 36px chip.
+function PlaneGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+    </svg>
+  );
+}
+
+function PawGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="11" cy="4" r="2" />
+      <circle cx="18" cy="8" r="2" />
+      <circle cx="4" cy="8" r="2" />
+      <circle cx="20" cy="14" r="2" />
+      <path d="M8.5 11.5C7 13.5 5 15 5 17a4 4 0 0 0 4 4c1 0 2-.5 3-1 1 .5 2 1 3 1a4 4 0 0 0 4-4c0-2-2-3.5-3.5-5.5C14.5 10 13.5 9 12 9s-2.5 1-3.5 2.5z"/>
+    </svg>
+  );
+}
+
+function LodgeGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 21V10l9-6 9 6v11" />
+      <path d="M9 21V14h6v7" />
+    </svg>
+  );
+}
+
+// ─── Timeline style picker ───────────────────────────────────────────────
+//
+// Same hover-pill + portal'd popover pattern as ContactCards. Two
+// rows of swatches: activity icon colour, accommodation icon colour.
+// Custom-hex picker per row.
+
+const ACTIVITY_PRESETS = [
+  { label: "Orange", value: "#e88c2e" },
+  { label: "Gold", value: "#c9a84c" },
+  { label: "Teal", value: "#1f3a3a" },
+  { label: "Sage", value: "#2d5a40" },
+  { label: "Copper", value: "#b06a3b" },
+  { label: "Charcoal", value: "#1a1a1a" },
+];
+
+const ACCOMMODATION_PRESETS = [
+  { label: "Brick", value: "#b34334" },
+  { label: "Burgundy", value: "#7d2e2e" },
+  { label: "Teal", value: "#1f3a3a" },
+  { label: "Sage", value: "#2d5a40" },
+  { label: "Copper", value: "#b06a3b" },
+  { label: "Charcoal", value: "#1a1a1a" },
+];
+
+function TimelineStyleControl({
+  activityColor,
+  accommodationColor,
+  onChange,
+}: {
+  activityColor: string;
+  accommodationColor: string;
+  onChange: (next: { activityColor?: string; accommodationColor?: string }) => void;
+}) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const recompute = () => {
+      if (ref.current) setAnchor(ref.current.getBoundingClientRect());
+    };
+    recompute();
+    window.addEventListener("scroll", recompute, true);
+    window.addEventListener("resize", recompute);
+    return () => {
+      window.removeEventListener("scroll", recompute, true);
+      window.removeEventListener("resize", recompute);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="absolute -top-2 right-0 px-2.5 py-1 rounded-full bg-black/80 text-white text-[10.5px] font-semibold shadow-md hover:bg-black transition-all duration-150 opacity-0 group-hover:opacity-100 backdrop-blur-sm flex items-center gap-1.5 print:hidden"
+        title="Customise timeline icon colours"
+        style={{ zIndex: 5 }}
+      >
+        🎨 Style
+      </button>
+
+      {open && anchor &&
+        createPortal(
+          <TimelineStylePopover
+            anchor={anchor}
+            activityColor={activityColor}
+            accommodationColor={accommodationColor}
+            onChange={onChange}
+            onClose={() => setOpen(false)}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function TimelineStylePopover({
+  anchor,
+  activityColor,
+  accommodationColor,
+  onChange,
+  onClose,
+}: {
+  anchor: DOMRect;
+  activityColor: string;
+  accommodationColor: string;
+  onChange: (next: { activityColor?: string; accommodationColor?: string }) => void;
+  onClose: () => void;
+}) {
+  const W = 280;
+  const left = Math.max(8, Math.min(anchor.right - W, window.innerWidth - W - 8));
+  const top = anchor.bottom + 8;
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10000 }} />
+      <div
+        className="ss-popover-in"
+        style={{ position: "fixed", top, left, width: W, zIndex: 10001 }}
+      >
+        <div className="bg-white rounded-2xl shadow-2xl border border-black/8 overflow-hidden">
+          <ColourSection
+            label="Activity icon"
+            presets={ACTIVITY_PRESETS}
+            current={activityColor}
+            onPick={(v) => onChange({ activityColor: v, accommodationColor })}
+          />
+          <ColourSection
+            label="Accommodation icon"
+            presets={ACCOMMODATION_PRESETS}
+            current={accommodationColor}
+            onPick={(v) => onChange({ activityColor, accommodationColor: v })}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ColourSection({
+  label,
+  presets,
+  current,
+  onPick,
+}: {
+  label: string;
+  presets: Array<{ label: string; value: string }>;
+  current: string;
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div className="px-4 py-3 border-t border-black/6 first:border-t-0">
+      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-black/45 mb-2">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            title={p.label}
+            onClick={() => onPick(p.value)}
+            className={`w-7 h-7 rounded-full transition ${
+              current === p.value
+                ? "ring-2 ring-[#1b3a2d] ring-offset-1"
+                : "hover:scale-105"
+            }`}
+            style={{
+              background: p.value,
+              border:
+                current === p.value
+                  ? "1px solid rgba(255,255,255,0.6)"
+                  : "1px solid rgba(0,0,0,0.08)",
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-2.5 flex items-center gap-2">
+        <input
+          type="color"
+          value={current.startsWith("#") && current.length === 7 ? current : "#101828"}
+          onChange={(e) => onPick(e.target.value)}
+          className="w-7 h-7 rounded border border-black/10 cursor-pointer p-0"
+          title={`Custom ${label.toLowerCase()}`}
+        />
+        <span className="text-[11px] text-black/45">Custom hex</span>
+      </div>
+    </div>
+  );
 }
