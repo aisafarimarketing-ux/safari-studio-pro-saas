@@ -6,6 +6,45 @@ import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
 import { isCoastCity } from "@/lib/safariRoutingRules";
 
+// ─── Map design rules — DO NOT RELAX WITHOUT OPERATOR SIGN-OFF ───────────
+//
+// Each rule below was added because the previous behaviour produced a
+// real complaint from the operator during a marathon design-review pass.
+// Don't unwind any of them when refactoring.
+//
+//   1. The map is a SCHEMATIC, not a strict-geography atlas. Coast
+//      destinations (Zanzibar, Mombasa, Diani, Watamu, Lamu, Pemba,
+//      Mafia, Nungwi, etc.) are compressed to 40% of their real
+//      distance from the inland centroid via compressCoastPositions().
+//      Direction preserved, distance shrunk. Inland stops untouched.
+//      Real coords still live on `coords` / `rawMarkerGroups` so
+//      click-to-fly selection by lat/lng still resolves correctly.
+//
+//   2. INLAND SAFARI CIRCUIT DOMINATES THE VIEWPORT.
+//      boundsOptions: maxZoom 10, padding [36, 36]. computeViewport
+//      uses 2% internal breathing-room expansion. The schematic
+//      compression in (1) is what keeps coast outliers inside the
+//      frame instead of blowing the bounds out across the ocean.
+//
+//   3. CLOSE MARKER PILLS DIVERGE across the four sides of their
+//      anchor. assignPillDirections() finds every pair within 60km
+//      and assigns members alternating up → down → right → left
+//      (sorted by start day for stability). buildDayPill honours
+//      the direction; oppositeDirection() mirrors the place-name
+//      tooltip to the far side so pill + caption never collide.
+//      Tarangire ↔ Manyara (~33km) was the canonical bug.
+//
+//   4. TRANSFER FLIGHTS CURVE AWAY from the safari circuit.
+//      buildLegPaths computes the inland centroid as an avoid-point
+//      and passes it to buildBezierArc, which flips its perpendicular
+//      bow vector when it would otherwise curve toward that point.
+//      Bow fraction 0.18. The Serengeti → Zanzibar leg must swing
+//      OUT over open territory, never slice through Tarangire /
+//      Manyara / Serengeti.
+//
+// Memory anchor: ~/.claude/.../memory/map_and_routing_rules.md
+// ─────────────────────────────────────────────────────────────────────────
+
 // Leaflet needs the DOM, so dynamic-import with ssr: false. The map tiles
 // come from Carto (Voyager style) — no API key, more colourful than raw
 // OSM without going illustrated.

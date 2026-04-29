@@ -23,6 +23,36 @@ import type { Day, TierKey } from "@/lib/types";
 // Library-only guarantee: Claude is shown the property list with stable
 // integer slots and must return slot indices, not free-form names. We map
 // indices back to library properties on the server. Out-of-range → dropped.
+//
+// ─── Day-generation rules — DO NOT RELAX WITHOUT OPERATOR SIGN-OFF ──────
+//
+// Each rule below was added because the previous behaviour produced a
+// real complaint from the operator. Don't unwind these when refactoring.
+//
+//   1. ARRIVAL AND DEPARTURE ARE ALWAYS GATEWAYS.
+//      Day 1 snaps to the FIRST gateway in `destinations`; the last day
+//      snaps to the LAST gateway. Gateways live in safariRoutingRules.ts
+//      (Arusha, Nairobi, Kilimanjaro, Zanzibar, Stone Town, Mombasa,
+//      Diani, Kigali, Entebbe, Kampala, Dar es Salaam). Parks
+//      (Tarangire, Manyara, Serengeti, Mara, Amboseli, Ngorongoro, etc.)
+//      can NEVER be a trip endpoint. The snap fires unconditionally —
+//      don't gate on "only if AI's pick isn't in the allowed list"
+//      (that's how Lake-Manyara-as-last-day slipped through).
+//
+//   2. COUNTRY RESOLVES FROM THE DESTINATION ORDERING TABLE.
+//      `country: stringOr(d.country, "") || countryOf(destination) || ""`.
+//      No hardcoded fallback. The previous "Kenya" default was stamping
+//      Tanzanian destinations as Kenyan whenever the AI omitted country.
+//
+//   3. NEVER FABRICATE PHANTOM DAYS.
+//      If the AI returns fewer days than `nights`, console.warn and
+//      skip — don't `while (draftDays.length < nights) draftDays.push({})`.
+//      Empty {} slots feed the modulo-cycle destination fallback and
+//      produce nonsense rows like "Day 7 · Lake Manyara, Kenya" on a
+//      Zanzibar-ending trip.
+//
+// Memory anchor: ~/.claude/.../memory/map_and_routing_rules.md
+// ─────────────────────────────────────────────────────────────────────────
 
 // Defaults to claude-sonnet-4-5-20250929 — Sonnet 4.5, dated
 // 2025-09-29. This is the production-stable Sonnet that the user
