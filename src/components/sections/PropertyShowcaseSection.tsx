@@ -5,6 +5,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
+import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
 import type {
   Section,
   Property,
@@ -266,6 +267,50 @@ function PropertyBlock({
               />
             </FactBlock>
 
+            {/* At-a-glance amenities — small SVG icons rendered from
+                property.amenities. Visual rhythm in the data column
+                that prints cleanly in PDF (every glyph is vector).
+                Hidden when the property has no amenities AND we're in
+                preview; in editor we show a placeholder that links to
+                the INFORMATION tab where amenities are managed. */}
+            {(property.amenities.length > 0 || isEditor) && (
+              <div
+                className="mt-7 mb-1"
+                style={{ borderTop: `1px solid ${tokens.border}` }}
+              >
+                <div
+                  className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mt-5 mb-3"
+                  style={{ color: tokens.mutedText }}
+                >
+                  At a glance
+                </div>
+                {property.amenities.length > 0 ? (
+                  <div
+                    className="grid grid-cols-3 gap-x-3 gap-y-3"
+                    style={{ color: tokens.headingText }}
+                  >
+                    {property.amenities.slice(0, 6).map((label) => (
+                      <div
+                        key={label}
+                        className="flex items-center gap-2 text-[11.5px] leading-tight"
+                        title={label}
+                      >
+                        <AmenityIcon label={label} size={16} color={tokens.accent} />
+                        <span className="truncate">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    className="text-[11.5px] italic"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    Add amenities in the Information tab.
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Fun Facts */}
             <FactBlock label="Fun Facts" tokens={tokens}>
               <FactRow
@@ -500,12 +545,14 @@ function StatsTab({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Lead photo — 4:3, the dominant image */}
+      {/* Lead photo — 5:4, slightly taller than 4:3 so it feels
+          editorial-cinematic, fills more of the right column, and
+          earns the visual weight the section deserves. */}
       <div
         className="relative overflow-hidden w-full"
         style={{
           background: tokens.cardBg,
-          aspectRatio: "4 / 3",
+          aspectRatio: "5 / 4",
           borderRadius: 4,
         }}
       >
@@ -573,7 +620,10 @@ function StatsTab({
                 className="relative overflow-hidden disabled:cursor-default group"
                 style={{
                   background: tokens.cardBg,
-                  aspectRatio: "1 / 1",
+                  // 4:5 thumbs (slight portrait) match the editorial
+                  // weight of the taller lead photo and give the row
+                  // more presence than 1:1 squares.
+                  aspectRatio: "4 / 5",
                   borderRadius: 4,
                   border: thumb ? "none" : `1px dashed ${tokens.border}`,
                   cursor: thumb ? "pointer" : "default",
@@ -928,8 +978,11 @@ function FactRow({
   onChange?: (next: string) => void;
 }) {
   const editable = Boolean(isEditor && onChange);
+  // Slightly bigger row + extra leading so the data column carries
+  // visual weight that matches the taller right-column gallery. Was
+  // 12.5px tight rows; now 13px with 1.6 leading.
   return (
-    <div className="grid grid-cols-[auto_1fr] gap-3 text-[12.5px]">
+    <div className="grid grid-cols-[auto_1fr] gap-3 text-[13px] leading-[1.6]">
       <div className="tabular-nums" style={{ color: tokens.mutedText }}>
         {label}
       </div>
