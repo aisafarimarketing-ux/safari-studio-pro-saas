@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
 import { nanoid } from "@/lib/nanoid";
 import { orderDestinations, countryOf } from "@/lib/destinationOrdering";
+import { classifyStop } from "@/lib/safariRoutingRules";
 import type { Day, TierKey } from "@/lib/types";
 
 // AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
@@ -605,18 +606,36 @@ ${JSON.stringify(userPayload, null, 2)}`;
     };
   });
 
-  // Clamp Day 1 to the first input destination, and the last day to the
-  // last input destination. The previous version only fired when the
-  // AI's pick wasn't in the allowed-set — so if Day 7 came back as
-  // "Lake Manyara" (which is in the list), the snap missed it even
-  // though the trip was supposed to end in Zanzibar. Now we always
-  // override the endpoints to the operator's intent.
+  // Clamp Day 1 + last day to the operator's intended ARRIVAL and
+  // DEPARTURE points. Real safaris fly in and out of *gateway* cities
+  // (Arusha, Nairobi, Zanzibar, Stone Town, Kilimanjaro, Entebbe,
+  // Kigali, Mombasa, Diani) — never national parks. So even though
+  // an operator typed the destinations as "Arusha, Tarangire, Lake
+  // Manyara, Serengeti", the trip's drop-off is still Arusha (the
+  // only gateway in the list), not the Serengeti or Lake Manyara.
+  //
+  // Logic:
+  //   arrivalGateway   = first gateway in the destinations list
+  //   departureGateway = last  gateway in the destinations list
+  //
+  // If the operator listed no gateways at all (just park names), we
+  // fall back to destinations[0] — best we can do without inventing
+  // a city the operator didn't name. They can fix it in the editor.
+  // If only one gateway exists (a typical loop trip from Arusha), we
+  // use it for both endpoints — the safari flies in and out of the
+  // same airport.
   if (destinations.length > 0 && days.length > 0) {
-    days[0].destination = destinations[0];
-    days[0].country = countryOf(destinations[0]) || days[0].country;
+    const arrivalGateway =
+      destinations.find((d) => classifyStop(d) === "gateway") || destinations[0];
+    const departureGateway =
+      [...destinations].reverse().find((d) => classifyStop(d) === "gateway") ||
+      arrivalGateway;
+
+    days[0].destination = arrivalGateway;
+    days[0].country = countryOf(arrivalGateway) || days[0].country;
     const last = days[days.length - 1];
-    last.destination = destinations[destinations.length - 1];
-    last.country = countryOf(destinations[destinations.length - 1]) || last.country;
+    last.destination = departureGateway;
+    last.country = countryOf(departureGateway) || last.country;
   }
 
   const inclusions = stringArray(parsed.inclusions, 12);
