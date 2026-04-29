@@ -150,7 +150,7 @@ export function ClosingSection({ section }: { section: Section }) {
 // ─── Shared building blocks ─────────────────────────────────────────────
 
 function ClosingShell({
-  pageBg: _pageBg,
+  pageBg,
   aiButtons,
   children,
 }: {
@@ -160,14 +160,15 @@ function ClosingShell({
 }) {
   return (
     <section
-      // Outer bg = SAND (cream) so the closing section is edge-to-edge
-      // cream, no visible green page-bg frame around an inset card.
-      // Inner padding gives content breathing room without re-introducing
-      // a "card on a frame" look. A 1px top border serves as the tiny
-      // break separating it from the previous section.
+      // Outer bg defaults to SAND (cream) so the closing section reads
+      // edge-to-edge cream out of the box, but the operator's
+      // SectionChrome bg-picker can override via `pageBg` (resolved
+      // from `sectionSurface` in pickPageBg above). Without this
+      // override the bg picker silently failed — operators reported
+      // changing closing bg with no visible effect.
       className="relative px-4 py-2 md:px-6 md:py-3"
       style={{
-        background: SAND,
+        background: pageBg || SAND,
         borderTop: `1px solid ${SAND_LINE}`,
       }}
     >
@@ -1750,8 +1751,23 @@ type VariantProps = {
 };
 
 function pickPageBg(section: Section, proposal: Proposal): string {
+  // Operators recolour the closing section via SectionChrome's bg
+  // picker, which writes to `sectionSurface` (the standard override
+  // path used by every other section). The closing originally
+  // ignored that and ran on a hardcoded SAND constant — operators
+  // reported the bg picker had no effect. Resolve order:
+  //   1. sectionSurface override (what the bg picker writes)
+  //   2. legacy pageBg override (kept for proposals that wrote here)
+  //   3. theme defaults
+  //   4. white as a safety net
   const overrides = section.styleOverrides as Record<string, string> | undefined;
-  return overrides?.pageBg ?? proposal.theme.tokens.pageBg ?? "#ffffff";
+  return (
+    overrides?.sectionSurface ??
+    overrides?.pageBg ??
+    proposal.theme.tokens.sectionSurface ??
+    proposal.theme.tokens.pageBg ??
+    "#ffffff"
+  );
 }
 
 function requestChangesPrefill(tripTitle?: string) {

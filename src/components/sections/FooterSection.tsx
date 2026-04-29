@@ -28,7 +28,7 @@ export function FooterSection({ section }: { section: Section }) {
     return (
       <div
         className="py-6 px-8 md:px-16 border-t"
-        style={{ background: tokens.pageBg, borderColor: tokens.border }}
+        style={{ background: tokens.sectionSurface, borderColor: tokens.border }}
       >
         <div className="max-w-5xl mx-auto flex items-center justify-between text-[12px]" style={{ color: tokens.mutedText }}>
           <span>{operator.companyName}</span>
@@ -50,7 +50,7 @@ export function FooterSection({ section }: { section: Section }) {
       <div
         className="py-10 md:py-12 px-6 md:px-12"
         style={{
-          background: tokens.pageBg,
+          background: tokens.sectionSurface,
           fontFamily: `'${theme.bodyFont}', sans-serif`,
         }}
       >
@@ -140,7 +140,7 @@ export function FooterSection({ section }: { section: Section }) {
     <div
       className="py-10 md:py-12 px-8 md:px-16 border-t"
       style={{
-        background: tokens.pageBg,
+        background: tokens.sectionSurface,
         borderColor: tokens.border,
         fontFamily: `'${theme.bodyFont}', sans-serif`,
       }}

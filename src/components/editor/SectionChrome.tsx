@@ -93,9 +93,14 @@ export function SectionChrome({ section, children }: Props) {
       >
         {children}
 
-        {/* ── Hover / selected controls — always mounted, fade in/out ── */}
+        {/* ── Hover / selected controls — always mounted, fade in/out ──
+            z-[700] is deliberate: Leaflet's map panes default to z-200
+            (tiles) / z-400 (markers) / z-600 (popups). Anything below
+            ~z-700 gets buried under the map in the Map section. Sized
+            below the side panel and modal layers (z-9999+) so this
+            chrome doesn't escape its containing section. */}
         <div
-          className={`absolute top-2 right-2 z-30 flex gap-1 transition-all duration-150 ${
+          className={`absolute top-2 right-2 z-[700] flex gap-1 transition-all duration-150 ${
             showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
           }`}
           onClick={(e) => e.stopPropagation()}
@@ -147,7 +152,7 @@ export function SectionChrome({ section, children }: Props) {
 
         {/* ── Inline label + layout variant switcher ── */}
         <div
-          className={`absolute top-2 left-2 z-30 flex items-center gap-1 transition-all duration-150 ${
+          className={`absolute top-2 left-2 z-[700] flex items-center gap-1 transition-all duration-150 ${
             showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
           }`}
           onClick={(e) => e.stopPropagation()}
