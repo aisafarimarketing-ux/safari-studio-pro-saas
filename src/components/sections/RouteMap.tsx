@@ -91,7 +91,15 @@ const KNOWN_SAFARI_COORDS: Array<{
   { match: /^arusha\b/i,                      lat: -3.3869, lng: 36.6829 },
   { match: /^moshi\b/i,                       lat: -3.3494, lng: 37.3408 },
   { match: /^kilimanjaro\b/i,                 lat: -3.0674, lng: 37.3556 },
-  { match: /^tarangire\b/i,                   lat: -3.8333, lng: 36.0000 },
+  // Tarangire pin nudged south to roughly the polygon's mid-southern
+  // third (real-park lat range -3.6 to -4.4). The old coord (-3.83,
+  // 36.0) sat at the park's NORTHERN edge, only ~33km from Lake
+  // Manyara — pin labels overlapped on the map. The southern position
+  // keeps the route line crossing through the park itself (Day 2
+  // pill ends up over the actual Tarangire polygon, not above it) and
+  // gives ~75km of visible separation from Manyara. The polygon
+  // OUTLINE stays at its OSM coords (untouched) — only the pin moves.
+  { match: /^tarangire\b/i,                   lat: -4.0500, lng: 36.0500 },
   { match: /^lake manyara\b|^manyara\b/i,     lat: -3.5833, lng: 35.8333 },
   { match: /^ngorongoro\b/i,                  lat: -3.2000, lng: 35.5000 },
   { match: /^serengeti\b/i,                   lat: -2.3333, lng: 34.8333 },
@@ -470,11 +478,11 @@ export function RouteMap({
   const viewport = computeViewport(
     viewportSource.length >= 1 ? viewportSource : markerGroups,
   );
-  // Spotlight bounds — used by the SVG mask overlay to clear ONLY the
-  // tight box around the inland circuit + offshore stops + park
-  // polygons. Everything outside is masked with translucent cream so
-  // un-needed Kenya / ocean / Lake Victoria fades out of attention.
-  const spotlightBounds = computeViewport(markerGroups);
+  // Spotlight mask removed — the bright focus area now occupies the
+  // entire frame. Bottom-cropping in computeViewport (last day pinned
+  // to the bottom edge) plus tight asymmetric leaflet padding means
+  // there's no dim "outside" region left to mask.
+
   // Pill direction assignment runs against the visible marker set so
   // the indexing lines up with the markers we actually render.
   const pillDirections = assignPillDirections(visibleMarkerGroups);
@@ -509,16 +517,18 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={viewport.bounds}
-        // Asymmetric padding — generous horizontal so day pills sit
-        // clear of the left/right edges, tight vertical so we don't
-        // pad in extra geography (Kenya north, ocean south) where the
-        // route doesn't reach. Operator brief: "no Kenyan side
-        // showing, no empty section below where our lines are". The
-        // vertical 24px just keeps the topmost pill from clipping the
-        // attribution chip; horizontal 90px gives the bowed legs and
-        // pill labels room to breathe outward. maxZoom 9 caps over-
-        // zoom on a single-park itinerary.
-        boundsOptions={{ padding: [90, 24], maxZoom: 9 }}
+        // Asymmetric padding via paddingTopLeft / paddingBottomRight.
+        // Horizontal 90px on each side gives bowed legs and pill
+        // labels room to breathe. Vertical: 24px on top (keeps the
+        // northernmost pill clear of the attribution chip), 4px on
+        // BOTTOM so the last day's pin sits flush against the bottom
+        // edge of the visible frame — no empty ocean below the route.
+        // maxZoom 9 caps over-zoom on a single-park itinerary.
+        boundsOptions={{
+          paddingTopLeft: [90, 24],
+          paddingBottomRight: [90, 4],
+          maxZoom: 9,
+        }}
         minZoom={5}
         maxZoom={12}
         inertia={false}
@@ -579,28 +589,10 @@ export function RouteMap({
           />
         ))}
 
-        {/* Spotlight mask — translucent cream wash covering everything
-            OUTSIDE the route's tight bounding box. Operator brief:
-            "close out the white areas showing un-involved locations".
-            Implemented as a Leaflet polygon-with-hole: outer ring is a
-            massive box (covers any visible map area), inner ring is
-            the focus rectangle around route + parks. Inset map skips
-            this — it's a small overview where everything is in scope. */}
-        {!inset && (
-          <Polygon
-            positions={[
-              buildSpotlightOuterRing(),
-              buildSpotlightInnerRing(spotlightBounds),
-            ]}
-            pathOptions={{
-              stroke: false,
-              fillColor: "#f4ead6",
-              fillOpacity: 0.62,
-              fillRule: "evenodd",
-              interactive: false,
-            }}
-          />
-        )}
+        {/* Spotlight mask removed — bottom-cropping (last day flush
+            to the bottom edge) plus tight padding means no empty
+            outside region left to mask. The bright basemap fills the
+            entire frame. */}
 
         {/* Per-leg rendering. Short circuit hops render as one continuous
             solid charcoal polyline (built up leg-by-leg so adjacent
@@ -1081,19 +1073,30 @@ function computeViewport(groups: CoordGroup[]): Viewport {
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Breathing-room expansion so the outermost markers don't sit
-  // flush against the viewport edge. 3% of the route span on each
-  // side keeps a small visual margin without padding in distant
-  // geography we don't need (Kenya beyond Serengeti's north, etc.).
-  // Combined with the asymmetric leaflet boundsOptions.padding,
-  // this gives a tight crop on the inland circuit.
+  // ── Bottom-crop rule ─────────────────────────────────────────────
+  // The map's bottom edge should align with the LAST DAY of the trip.
+  // For a one-way itinerary ending at the southernmost stop (Arusha →
+  // Zanzibar, last day = southernmost), we pin the south bound
+  // exactly to the last stop's lat with NO breathing-room below — the
+  // last pin sits flush against the bottom edge, no empty ocean.
+  // For round-trips where the last day isn't the southernmost (e.g.
+  // …→ Zanzibar → back to Arusha), we keep the natural min so the
+  // mid-trip southerly stop isn't cropped out.
+  const lastLat = groups[groups.length - 1].lat;
+  const lastIsSouthernmost = Math.abs(lastLat - south) < 0.001;
+
+  // Breathing-room expansion. North / east / west get the standard 3%
+  // visual margin; south skips it when the last day is the
+  // southernmost stop so the bottom edge sits ON the pin.
   const BREATHING = 0.03;
   const latSpan = north - south;
   const lngSpan = east - west;
-  south -= latSpan * BREATHING;
   north += latSpan * BREATHING;
   west -= lngSpan * BREATHING;
   east += lngSpan * BREATHING;
+  if (!lastIsSouthernmost) {
+    south -= latSpan * BREATHING;
+  }
 
   // Floor — don't return a degenerate bounds. If two stops happen to
   // sit on the same point, give the camera ~1° of context.
@@ -1134,54 +1137,9 @@ type LegPath = {
   skipArrow: boolean;
 };
 
-// ─── Spotlight mask helpers ──────────────────────────────────────────────
-//
-// The spotlight is a Leaflet polygon-with-hole: outer ring is a huge
-// box (covers any visible area at any reasonable zoom), inner ring is
-// the route's tight bounding rectangle expanded by a small margin. The
-// translucent cream fill on the polygon dims everything outside the
-// route — Kenya north of Serengeti, Indian Ocean east of Zanzibar,
-// Lake Victoria west — so the operator and client focus on the
-// inland circuit + offshore extension and nothing else.
-
-// Massive outer ring — ~30° in every direction, plenty to cover the
-// visible map at any zoom we're likely to use.
-function buildSpotlightOuterRing(): LatLngTuple[] {
-  return [
-    [40, -30],
-    [40, 70],
-    [-40, 70],
-    [-40, -30],
-  ];
-}
-
-// Inner ring — the spotlight cutout. Computed from the FULL marker
-// bounds (including coast extensions) plus a small lat/lng margin so
-// the route doesn't sit flush against the cutout edge. Inner ring
-// must wind in the OPPOSITE direction to the outer ring for the
-// even-odd fill rule to register a hole; we simply reverse it.
-function buildSpotlightInnerRing(viewport: {
-  bounds: [LatLngTuple, LatLngTuple];
-}): LatLngTuple[] {
-  const [[south, west], [north, east]] = viewport.bounds;
-  // Margin (in degrees) around the route bbox. Slightly wider on the
-  // east-west axis because parks tend to extend lng more than lat in
-  // East Africa, and the route's pill labels need horizontal room.
-  const padLat = 0.45;
-  const padLng = 0.55;
-  const s = south - padLat;
-  const n = north + padLat;
-  const w = west - padLng;
-  const e = east + padLng;
-  // Counter-clockwise relative to the outer ring (which we wrote
-  // clockwise). Even-odd fill makes this region a hole.
-  return [
-    [s, w],
-    [s, e],
-    [n, e],
-    [n, w],
-  ];
-}
+// Spotlight helpers removed — the mask is gone; bright basemap fills
+// the frame. Bottom-crop in computeViewport + tight asymmetric leaflet
+// padding handle the "no empty outside region" goal.
 
 /**
  * For each adjacent pair of groups, classify by haversine distance:

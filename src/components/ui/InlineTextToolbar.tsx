@@ -115,11 +115,14 @@ export function InlineTextToolbar() {
         setPos(null);
         return;
       }
-      // Don't show inside editor chrome (toolbars, popovers, etc.).
-      if (host.closest("[data-editor-chrome]")) {
-        setPos(null);
-        return;
-      }
+      // We deliberately do NOT skip when an ancestor has
+      // [data-editor-chrome] — SectionChrome wraps every section
+      // with that attribute, so the old check made the toolbar
+      // invisible everywhere. Selection inside the portal'd toolbar
+      // never reaches this point because none of the toolbar's
+      // descendants are contentEditable (the size input is a real
+      // <input>, not contenteditable), so `host` ends up null and
+      // we return earlier. No additional guard needed.
       const rect = range.getBoundingClientRect();
       // Position 88px above selection so we sit ABOVE the AI toolbar
       // (which positions at -44px). Coexists cleanly: AI close to
