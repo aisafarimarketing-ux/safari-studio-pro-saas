@@ -340,6 +340,14 @@ export function RouteMap({
   const groups = groupCoordsByLocation(coords);
   const markerGroups = mergeMarkerGroupsByCoord(groups);
 
+  // For each marker, compute which side of its anchor the pill should
+  // float on so close pairs (Tarangire ↔ Lake Manyara, ~33km) don't
+  // overlap each other. Cluster members get assigned alternating
+  // directions (up / down / left / right) cycling through the four
+  // sides — anything beyond a 4-way cluster falls back to "up", which
+  // is unlikely to occur on a single safari circuit.
+  const pillDirections = assignPillDirections(markerGroups);
+
   // Which marker group contains the selected day (if any)?
   const selectedGroupIndex = selectedDayId
     ? markerGroups.findIndex((g) =>
@@ -479,17 +487,19 @@ export function RouteMap({
 
         {markerGroups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
+          const pillDir = pillDirections[i];
           const icon = leafletRef.current
-            ? buildDayPill(leafletRef.current, g.dayLabel, isSelected)
+            ? buildDayPill(leafletRef.current, g.dayLabel, isSelected, pillDir)
             : undefined;
-          // Per-stop labelPosition or "auto". Leaflet's Tooltip
-          // direction prop accepts the same set of values minus
-          // "auto"; we map "auto" → undefined to fall back to its
-          // built-in side picker.
-          const direction =
+          // Tooltip direction follows the pill — when the pill floats
+          // above the anchor (default), the place-name caption sits
+          // below it; when the pill swings down/left/right, the caption
+          // mirrors the opposite side so they don't collide. An
+          // explicit operator override (g.labelPosition) still wins.
+          const tooltipDir =
             g.labelPosition && g.labelPosition !== "auto"
               ? g.labelPosition
-              : "auto";
+              : oppositeDirection(pillDir);
           return (
             <Marker
               key={`${g.lat}-${g.lng}-${g.startDay}`}
@@ -502,7 +512,7 @@ export function RouteMap({
                   caption next to each stop. Direction respects the
                   operator's per-stop labelPosition override. */}
               <Tooltip
-                direction={direction}
+                direction={tooltipDir}
                 offset={[0, 6]}
                 opacity={1}
                 permanent={true}
@@ -545,23 +555,53 @@ export function RouteMap({
         .ss-day-pill::after {
           content: "";
           position: absolute;
+          width: 0;
+          height: 0;
+          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+        }
+        /* Stem direction variants — the stem tip always sits on the
+           lat/lng anchor, so the four directions just rotate the same
+           tiny triangle around the pill. */
+        .ss-day-pill-up::after {
           top: 100%;
           left: 50%;
           transform: translateX(-50%);
-          width: 0;
-          height: 0;
           border-left: 5px solid transparent;
           border-right: 5px solid transparent;
           border-top: 6px solid #243c24;
-          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+        }
+        .ss-day-pill-down::after {
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-bottom: 6px solid #243c24;
+        }
+        .ss-day-pill-right::after {
+          right: 100%;
+          top: 50%;
+          transform: translateY(-50%);
+          border-top: 5px solid transparent;
+          border-bottom: 5px solid transparent;
+          border-right: 6px solid #243c24;
+        }
+        .ss-day-pill-left::after {
+          left: 100%;
+          top: 50%;
+          transform: translateY(-50%);
+          border-top: 5px solid transparent;
+          border-bottom: 5px solid transparent;
+          border-left: 6px solid #243c24;
         }
         .ss-day-pill.is-selected {
           background: #1b3a2d;
           box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.20), 0 4px 12px rgba(0, 0, 0, 0.30);
         }
-        .ss-day-pill.is-selected::after {
-          border-top-color: #1b3a2d;
-        }
+        .ss-day-pill-up.is-selected::after { border-top-color: #1b3a2d; }
+        .ss-day-pill-down.is-selected::after { border-bottom-color: #1b3a2d; }
+        .ss-day-pill-right.is-selected::after { border-right-color: #1b3a2d; }
+        .ss-day-pill-left.is-selected::after { border-left-color: #1b3a2d; }
 
         /* Destination label — typeset caption under the stem.
            No background, no border, no leader arrow. Just the place
@@ -699,31 +739,124 @@ function mergeMarkerGroupsByCoord(groups: CoordGroup[]): CoordGroup[] {
   return order.map((k) => byKey.get(k)!);
 }
 
+// Spread close marker pills across different sides of their anchors so
+// destinations < ~60km apart (Tarangire ↔ Lake Manyara, Manyara ↔
+// Karatu, Tarangire ↔ Karatu, etc.) don't pile their pills on top of
+// each other at typical safari-circuit zoom levels.
+//
+// Algorithm: for each marker, find every other marker within
+// PROXIMITY_KM. If any exist, the marker is part of a "close cluster".
+// Each cluster member is assigned a direction in turn — the first
+// member keeps "up", the second goes "down", third "right", fourth
+// "left", then it wraps. Markers with no close neighbours stay "up".
+//
+// We use deterministic ordering (stable sort by start day) so the
+// same trip always yields the same pill directions across renders.
+function assignPillDirections(groups: CoordGroup[]): PillDirection[] {
+  const PROXIMITY_KM = 60;
+  const cycle: PillDirection[] = ["up", "down", "right", "left"];
+  const dirs: PillDirection[] = groups.map(() => "up");
+
+  for (let i = 0; i < groups.length; i++) {
+    const me = groups[i];
+    // Build a cluster: this marker plus every other marker within
+    // PROXIMITY_KM. Sort by start day so cluster ordering is stable.
+    const cluster: number[] = [i];
+    for (let j = 0; j < groups.length; j++) {
+      if (j === i) continue;
+      const dist = haversineKm([me.lat, me.lng], [groups[j].lat, groups[j].lng]);
+      if (dist < PROXIMITY_KM) cluster.push(j);
+    }
+    if (cluster.length < 2) continue; // no close neighbours, keep "up"
+    cluster.sort((a, b) => groups[a].startDay - groups[b].startDay);
+    const myPos = cluster.indexOf(i);
+    dirs[i] = cycle[myPos % cycle.length];
+  }
+
+  return dirs;
+}
+
+// Opposite of a pill direction — used to place the destination tooltip
+// on the far side of the anchor from the pill, so pill and caption
+// never collide.
+function oppositeDirection(d: PillDirection): "top" | "bottom" | "left" | "right" {
+  switch (d) {
+    case "up": return "bottom";
+    case "down": return "top";
+    case "right": return "left";
+    case "left": return "right";
+  }
+}
+
+// Pill direction relative to its lat/lng anchor.
+//   "up"    — pill sits ABOVE the anchor, stem points down (default)
+//   "down"  — pill sits BELOW the anchor, stem points up
+//   "right" — pill sits TO THE RIGHT of the anchor, stem points left
+//   "left"  — pill sits TO THE LEFT of the anchor, stem points right
+//
+// Used to spread pills apart when two destinations sit close together
+// in lat/lng (e.g. Tarangire ↔ Lake Manyara, ~33km — they overlap at
+// the safari-circuit zoom).
+type PillDirection = "up" | "down" | "left" | "right";
+
 // Build a custom DivIcon for a stop — dark charcoal "Day X" pill with
-// a small stem pointing at the geographic anchor. Anchored bottom-
-// center so the stem touches the lat/lng. Sized roughly to the pill
-// content; iconSize doesn't have to be pixel-exact since these
-// markers aren't click-targets.
+// a small stem pointing at the geographic anchor. Direction controls
+// which side of the anchor the pill floats on; anchor placement and
+// stem orientation update in lock-step so the stem tip always lands
+// on the lat/lng.
 function buildDayPill(
   L: typeof import("leaflet"),
   dayLabel: string,
   isSelected: boolean = false,
+  direction: PillDirection = "up",
 ) {
   const text = `Day ${dayLabel}`;
   // Approximation — wider for longer labels (e.g. "Day 99-99").
   // Generous on the upper bound so text never clips inside the icon
   // bounding box.
-  const estWidth = Math.max(54, text.length * 6.4 + 22);
+  const pillWidth = Math.max(54, text.length * 6.4 + 22);
   const pillHeight = 22;
-  const stemHeight = 6;
-  const totalHeight = pillHeight + stemHeight;
-  const className = isSelected ? "ss-day-pill is-selected" : "ss-day-pill";
-  return L.divIcon({
-    className: "",
-    html: `<div class="${className}">${escape(text)}</div>`,
-    iconSize: [estWidth, totalHeight],
-    iconAnchor: [estWidth / 2, totalHeight], // bottom-center → stem tip sits on lat/lng
-  });
+  const stem = 6;
+  const sel = isSelected ? " is-selected" : "";
+  const className = `ss-day-pill ss-day-pill-${direction}${sel}`;
+  const html = `<div class="${className}">${escape(text)}</div>`;
+
+  // For each direction the icon's bounding box and anchor differ:
+  //   up    → box extends up from anchor; anchor at bottom-centre
+  //   down  → box extends down from anchor; anchor at top-centre
+  //   right → box extends right from anchor; anchor at left-centre
+  //   left  → box extends left from anchor; anchor at right-centre
+  switch (direction) {
+    case "down":
+      return L.divIcon({
+        className: "",
+        html,
+        iconSize: [pillWidth, pillHeight + stem],
+        iconAnchor: [pillWidth / 2, 0],
+      });
+    case "right":
+      return L.divIcon({
+        className: "",
+        html,
+        iconSize: [pillWidth + stem, pillHeight],
+        iconAnchor: [0, pillHeight / 2],
+      });
+    case "left":
+      return L.divIcon({
+        className: "",
+        html,
+        iconSize: [pillWidth + stem, pillHeight],
+        iconAnchor: [pillWidth + stem, pillHeight / 2],
+      });
+    case "up":
+    default:
+      return L.divIcon({
+        className: "",
+        html,
+        iconSize: [pillWidth, pillHeight + stem],
+        iconAnchor: [pillWidth / 2, pillHeight + stem],
+      });
+  }
 }
 
 // ─── Smart viewport helpers ──────────────────────────────────────────────
