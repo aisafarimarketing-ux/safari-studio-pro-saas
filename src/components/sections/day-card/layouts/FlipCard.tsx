@@ -125,16 +125,35 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
         </div>
       </div>
 
-      {/* Moment of the day — editorial pull-quote. Hidden in preview when
-          empty so the strip doesn't show a stub; visible in editor with
-          a hint so operators see the slot. */}
+      {/* Moment of the day — editorial pull-quote. AI button writes a
+          single evocative line; operator edits inline. Hidden in
+          preview when empty so the strip doesn't show a stub; visible
+          in editor with a hint + AI write button so operators see the
+          slot. */}
       {(data.momentOfDay || isEditor) && (
         <div
-          className="px-10 md:px-14 pt-8 pb-2"
+          className="relative px-10 md:px-14 pt-8 pb-2"
           style={{ background: tokens.cardBg }}
         >
+          {isEditor && (
+            <div className="absolute top-6 right-8 md:right-12 z-[35]">
+              <AIWriteButton
+                kind="day-moment"
+                currentText={data.momentOfDay}
+                context={{
+                  dayNumber: data.dayNumber,
+                  destination: data.destinationName,
+                  country: data.destinationCountry,
+                  phaseLabel: data.phaseLabel,
+                  highlights: data.highlights,
+                }}
+                onResult={(text) => onMomentOfDayChange(text.trim())}
+                compact
+              />
+            </div>
+          )}
           <div
-            className="outline-none italic leading-snug"
+            className="outline-none italic leading-snug pr-24"
             style={{
               color: tokens.headingText,
               fontFamily: `'${theme.displayFont}', serif`,
@@ -148,7 +167,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
           >
             {data.momentOfDay ||
               (isEditor
-                ? "The moment of the day — one signature line that hooks the reader."
+                ? "The moment of the day — one signature line. Click ✨ to draft."
                 : "")}
           </div>
         </div>

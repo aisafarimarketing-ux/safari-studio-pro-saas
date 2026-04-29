@@ -23,7 +23,13 @@ export function AIWriteButton({
   compact = false,
 }: {
   /** A label shown in the prompt so the model knows the section role. */
-  kind: "greeting" | "closing-signoff" | "closing-quote" | "custom" | "day-narrative";
+  kind:
+    | "greeting"
+    | "closing-signoff"
+    | "closing-quote"
+    | "custom"
+    | "day-narrative"
+    | "day-moment";
   currentText: string;
   context?: Record<string, unknown>;
   onResult: (text: string) => void;
@@ -175,6 +181,17 @@ function promptFor(kind: string): string {
       return "Write a single short, grounded line about safari travel — not a cliché, not a flourish. One sentence.";
     case "day-narrative":
       return "Write 2-3 grounded paragraphs describing what the guests will do on this safari day. Open with a concrete fact (a time, a distance, a named feature). Stay specific to the destination and activity. No clichés, no exclamation marks.";
+    case "day-moment":
+      // The "moment of the day" — one editorial pull-quote that
+      // captures the SINGLE most evocative thing about the day. A
+      // hook for skim-readers; a place for the operator to flex
+      // headline-writing. Strict constraints: one line max, ~12
+      // words, sensory specifics over adjectives, present tense
+      // (the guest is reading what's about to happen). No
+      // exclamation marks, no clichés ("magical", "unforgettable"),
+      // no question marks, no quotation marks (will be styled in
+      // italics already).
+      return "Write ONE line — the moment of the day. 8 to 14 words, present tense, sensory specifics, no clichés. Capture the single most evocative thing about this day in a way a skim-reader would stop on. Avoid 'magical', 'unforgettable', 'breathtaking'. No exclamation marks. No quotation marks (it will be rendered italic). Examples of the right register: 'Lions hunting at dawn — reserved seats at the Sunrise Hide.' / 'The crater rim at first light, before the trucks arrive.' / 'A walking safari with a Maasai guide, tracks fresh from last night.'";
     case "custom":
       return "Write a paragraph suitable for this proposal section.";
     default:

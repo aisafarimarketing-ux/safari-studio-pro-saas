@@ -102,6 +102,8 @@ type AutopilotDayOut = {
   country?: string;
   subtitle?: string;
   description?: string;
+  momentOfDay?: string;
+  driveTimeBefore?: string;
   board?: string;
   highlights?: string[];
   optionalActivities?: AutopilotOptionalActivity[];
@@ -199,6 +201,17 @@ const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
             country: { type: "string" },
             subtitle: { type: "string" },
             description: { type: "string" },
+            // Editorial pull-quote — ONE evocative line, 8-14 words,
+            // present tense, sensory specifics. Surfaces above the
+            // narrative as the day's hook. No clichés ("magical",
+            // "unforgettable"), no exclamation marks. Optional —
+            // operators can fill in via the AI button if blank.
+            momentOfDay: { type: "string" },
+            // How the traveller arrives at this day's location from
+            // the previous one. Free-form short text, e.g.
+            // "→ 2.5 hr scenic drive · Manyara to Tarangire". Day 1
+            // has no preceding day — this is unused there.
+            driveTimeBefore: { type: "string" },
             board: { type: "string" },
             highlights: { type: "array", items: { type: "string" } },
             optionalActivities: {
@@ -490,6 +503,20 @@ DAYS:
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
 
+DAY MOMENT-OF-THE-DAY (momentOfDay):
+- For EVERY day, write ONE editorial pull-quote — 8 to 14 words, present tense, sensory specifics. This is the day's hook for skim-readers.
+- Examples of the right register: "Lions hunting at dawn — reserved seats at the Sunrise Hide." / "The crater rim at first light, before the trucks arrive." / "A walking safari with a Maasai guide, tracks fresh from last night."
+- NO clichés ("magical", "unforgettable", "breathtaking", "trip of a lifetime"). NO exclamation marks. NO question marks. NO quotation marks (it renders italic).
+- Present tense only — the reader is anticipating, not remembering.
+- Lean on the day's actual content: the destination's signature thing, a time-of-day moment, a sensory detail. Different angle each day so a multi-day trip doesn't read repetitive.
+
+DRIVE-TIME / TRANSFER (driveTimeBefore):
+- For every day EXCEPT day 1, write a short transfer caption describing how the traveller arrives from the previous day's location.
+- Format: "→ {duration} {mode} · {from} to {to}". Examples: "→ 2.5 hr scenic drive · Manyara to Tarangire" / "✈ 1 hr flight · Arusha to Zanzibar" / "→ 30 min transfer · Lake Manyara to Ngorongoro Crater rim".
+- Drive time is realistic for the actual geography (don't invent — Tarangire to Manyara is ~1.5 hr, Serengeti to Arusha airstrip is ~1 hr fly or ~8 hr drive).
+- Use → for road, ✈ for flight. Keep the whole caption under 100 chars.
+- Day 1 has no preceding day — leave its driveTimeBefore empty/missing.
+
 OPTIONAL ACTIVITIES:
 - Produce 2–4 optional add-ons per day that genuinely belong to the day's destination. Real, specific things — named walks, named viewpoints, cultural visits, cooking classes, balloon safaris, hot springs, bike rides — not generic filler.
 - Each title is a short noun phrase (≤8 words). Each location is the named place it happens at (will be bolded in the UI). timeOfDay must be one of: Morning, Afternoon, Evening, All Day.
@@ -623,6 +650,13 @@ ${JSON.stringify(userPayload, null, 2)}`;
       country,
       subtitle: stringOr(d.subtitle, "") || undefined,
       description: stringOr(d.description, ""),
+      // Editorial pull-quote — clamped to 200 chars so a chatty AI
+      // can't write a paragraph here. Operators edit inline or
+      // click the AI button to redraft.
+      momentOfDay: stringOr(d.momentOfDay, "").slice(0, 200) || undefined,
+      // Drive-time chip text — clamped to 120 chars. Day 1 ignores
+      // this field (no preceding day), but storing it is harmless.
+      driveTimeBefore: stringOr(d.driveTimeBefore, "").slice(0, 120) || undefined,
       board: stringOr(d.board, "Full board"),
       highlights: Array.isArray(d.highlights)
         ? d.highlights.filter((h): h is string => typeof h === "string").slice(0, 5)
