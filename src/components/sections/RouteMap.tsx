@@ -454,22 +454,27 @@ export function RouteMap({
   // so the safari circuit stays tight in the main map. Coast markers
   // still render at real coords; they just sit outside the visible
   // bounds and a paired inset map shows them in geographic context.
-  // Inland-only mode (the main route map when a trip has offshore
-  // stops) filters coast cities out of EVERYTHING — viewport bounds,
-  // markers, AND legs. The paired inset map (rendered separately by
-  // MapSection) shows the offshore stops in geographic context. This
-  // keeps the main map tight on the safari circuit so the route fills
-  // the frame and there's no empty sea or distant Kenya in the crop.
+  // Every stop renders on the main map — pin AND leg, including
+  // offshore extensions to the coast (Zanzibar etc.). Operator brief:
+  // "show the line to the coast". The viewport bounds are still
+  // computed from inland-only stops in inland-only mode, but the
+  // marker + leg render passes through the full set so the route
+  // visually completes. White space outside the focus area is masked
+  // by the spotlight overlay below.
+  const visibleMarkerGroups = markerGroups;
+  const visibleGroups = groups;
   const inlandOnly = viewportMode === "inland-only";
-  const visibleMarkerGroups = inlandOnly
+  const viewportSource = inlandOnly
     ? markerGroups.filter((g) => !isCoastCity(g.placeName))
     : markerGroups;
-  const visibleGroups = inlandOnly
-    ? groups.filter((g) => !isCoastCity(g.placeName))
-    : groups;
-  const viewportSource =
-    visibleMarkerGroups.length >= 1 ? visibleMarkerGroups : markerGroups;
-  const viewport = computeViewport(viewportSource);
+  const viewport = computeViewport(
+    viewportSource.length >= 1 ? viewportSource : markerGroups,
+  );
+  // Spotlight bounds — used by the SVG mask overlay to clear ONLY the
+  // tight box around the inland circuit + offshore stops + park
+  // polygons. Everything outside is masked with translucent cream so
+  // un-needed Kenya / ocean / Lake Victoria fades out of attention.
+  const spotlightBounds = computeViewport(markerGroups);
   // Pill direction assignment runs against the visible marker set so
   // the indexing lines up with the markers we actually render.
   const pillDirections = assignPillDirections(visibleMarkerGroups);
@@ -558,24 +563,44 @@ export function RouteMap({
             skips polygons (it's a dots-only overview). */}
         {!inset && tripParks.map((park) => (
           <Polygon
-            key={park.name}
-            // Catmull-Rom smoothed ring — the registry stores 6-12
-            // hand-picked corners per park, which renders as a sharp
-            // polygon. Smoothing through those control points
-            // produces the softer, real-park-on-a-map look operators
-            // asked for, without needing GIS-grade boundary data.
-            positions={smoothPolygonCoords(park.coords)}
+            key={park.key}
+            // Real OSM boundary, pre-simplified at build time.
+            // Source: scripts/fetch-park-boundaries.mjs.
+            positions={park.coords}
             pathOptions={{
               color: "#2d5a40",
               weight: 1,
-              opacity: 0.55,
+              opacity: 0.6,
               fillColor: "#3a7a52",
-              fillOpacity: 0.18,
+              fillOpacity: 0.22,
               lineCap: "round",
               lineJoin: "round",
             }}
           />
         ))}
+
+        {/* Spotlight mask — translucent cream wash covering everything
+            OUTSIDE the route's tight bounding box. Operator brief:
+            "close out the white areas showing un-involved locations".
+            Implemented as a Leaflet polygon-with-hole: outer ring is a
+            massive box (covers any visible map area), inner ring is
+            the focus rectangle around route + parks. Inset map skips
+            this — it's a small overview where everything is in scope. */}
+        {!inset && (
+          <Polygon
+            positions={[
+              buildSpotlightOuterRing(),
+              buildSpotlightInnerRing(spotlightBounds),
+            ]}
+            pathOptions={{
+              stroke: false,
+              fillColor: "#f4ead6",
+              fillOpacity: 0.62,
+              fillRule: "evenodd",
+              interactive: false,
+            }}
+          />
+        )}
 
         {/* Per-leg rendering. Short circuit hops render as one continuous
             solid charcoal polyline (built up leg-by-leg so adjacent
@@ -1109,49 +1134,53 @@ type LegPath = {
   skipArrow: boolean;
 };
 
-// ─── Park polygon smoothing ──────────────────────────────────────────────
+// ─── Spotlight mask helpers ──────────────────────────────────────────────
 //
-// Catmull-Rom interpolation through a closed ring of control points.
-// Each polygon in safariParkBoundaries.ts stores 6-12 corners picked
-// by eye from a real map — rendered raw, those corners are visibly
-// angular and read as schematic shapes. Smoothing through them with
-// a Catmull-Rom spline produces a soft, real-park outline that hits
-// the same anchor points but rounds the corners between them.
-//
-// Sampling density: 8 sub-segments per control point, so a 9-vertex
-// park becomes a 72-vertex smooth ring — visually round, still cheap
-// for Leaflet to draw.
-function smoothPolygonCoords(coords: LatLngTuple[]): LatLngTuple[] {
-  const n = coords.length;
-  if (n < 4) return coords;
-  const SAMPLES = 8;
-  const out: LatLngTuple[] = [];
-  for (let i = 0; i < n; i++) {
-    const p0 = coords[(i - 1 + n) % n];
-    const p1 = coords[i];
-    const p2 = coords[(i + 1) % n];
-    const p3 = coords[(i + 2) % n];
-    for (let k = 0; k < SAMPLES; k++) {
-      const t = k / SAMPLES;
-      const t2 = t * t;
-      const t3 = t2 * t;
-      // Catmull-Rom basis (uniform parameterisation).
-      const lat =
-        0.5 *
-        (2 * p1[0] +
-          (-p0[0] + p2[0]) * t +
-          (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 +
-          (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3);
-      const lng =
-        0.5 *
-        (2 * p1[1] +
-          (-p0[1] + p2[1]) * t +
-          (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 +
-          (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3);
-      out.push([lat, lng]);
-    }
-  }
-  return out;
+// The spotlight is a Leaflet polygon-with-hole: outer ring is a huge
+// box (covers any visible area at any reasonable zoom), inner ring is
+// the route's tight bounding rectangle expanded by a small margin. The
+// translucent cream fill on the polygon dims everything outside the
+// route — Kenya north of Serengeti, Indian Ocean east of Zanzibar,
+// Lake Victoria west — so the operator and client focus on the
+// inland circuit + offshore extension and nothing else.
+
+// Massive outer ring — ~30° in every direction, plenty to cover the
+// visible map at any zoom we're likely to use.
+function buildSpotlightOuterRing(): LatLngTuple[] {
+  return [
+    [40, -30],
+    [40, 70],
+    [-40, 70],
+    [-40, -30],
+  ];
+}
+
+// Inner ring — the spotlight cutout. Computed from the FULL marker
+// bounds (including coast extensions) plus a small lat/lng margin so
+// the route doesn't sit flush against the cutout edge. Inner ring
+// must wind in the OPPOSITE direction to the outer ring for the
+// even-odd fill rule to register a hole; we simply reverse it.
+function buildSpotlightInnerRing(viewport: {
+  bounds: [LatLngTuple, LatLngTuple];
+}): LatLngTuple[] {
+  const [[south, west], [north, east]] = viewport.bounds;
+  // Margin (in degrees) around the route bbox. Slightly wider on the
+  // east-west axis because parks tend to extend lng more than lat in
+  // East Africa, and the route's pill labels need horizontal room.
+  const padLat = 0.45;
+  const padLng = 0.55;
+  const s = south - padLat;
+  const n = north + padLat;
+  const w = west - padLng;
+  const e = east + padLng;
+  // Counter-clockwise relative to the outer ring (which we wrote
+  // clockwise). Even-odd fill makes this region a hole.
+  return [
+    [s, w],
+    [s, e],
+    [n, e],
+    [n, w],
+  ];
 }
 
 /**

@@ -5,15 +5,12 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "./RouteMap";
-import { resolveSafariEndpoints, isCoastCity } from "@/lib/safariRoutingRules";
+import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import { countryOf } from "@/lib/destinationOrdering";
 
-// Does the trip include any offshore / coast destinations? Drives
-// whether the main map renders an inset overview alongside the
-// inland-only main view. Zanzibar, Mombasa, Diani, Lamu, etc.
-function hasOffshoreStops(days: Day[]): boolean {
-  return days.some((d) => isCoastCity(d.destination ?? ""));
-}
+// hasOffshoreStops removed — the main map now renders the FULL
+// route including coast extensions, masked outside the route's
+// bounds by the spotlight overlay. No paired inset map any more.
 import type { Section, TierKey, Day } from "@/lib/types";
 
 // Route variant — two-column editorial spread. Itinerary table on the left
@@ -393,36 +390,13 @@ export function MapSection({ section }: { section: Section }) {
                     presentationMode={!isEditor}
                     viewportMode="inland-only"
                   />
-                  {/* Inset overview — only renders when the trip has
-                      offshore stops. Sits in the bottom-right corner
-                      of the main map area, small (180px square) so it
-                      reads as supplementary, not competing. Shows
-                      every stop (including Zanzibar) at REAL coords
-                      so clients see the geographic relationship of
-                      the offshore extension to the safari mainland. */}
-                  {hasOffshoreStops(days) && (
-                    <div
-                      className="absolute bottom-4 right-4 overflow-hidden shadow-md"
-                      style={{
-                        width: 200,
-                        height: 200,
-                        borderRadius: 8,
-                        border: `2px solid ${tokens.cardBg}`,
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-                        zIndex: 600,
-                      }}
-                    >
-                      <RouteMap
-                        days={days}
-                        tokens={tokens}
-                        cachedCoords={cachedCoords}
-                        height="100%"
-                        presentationMode
-                        viewportMode="all"
-                        inset
-                      />
-                    </div>
-                  )}
+                  {/* Inset overview removed — the main map now carries
+                      the full route including offshore extensions to
+                      the coast (Zanzibar etc.), with a spotlight mask
+                      dimming the unvisited geography around it. The
+                      inset duplicated information without adding
+                      geographic context the spotlight doesn't already
+                      give. */}
                 </div>
               ) : (
                 <div
