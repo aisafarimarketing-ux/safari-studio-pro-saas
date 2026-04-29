@@ -34,8 +34,8 @@ export default function SelectOrganizationPage() {
 
         <OrganizationList
           hidePersonal
-          afterSelectOrganizationUrl="/proposals"
-          afterCreateOrganizationUrl="/proposals"
+          afterSelectOrganizationUrl="/dashboard"
+          afterCreateOrganizationUrl="/dashboard"
           skipInvitationScreen
           appearance={{
             elements: {
