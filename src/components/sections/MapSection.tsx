@@ -29,8 +29,32 @@ export function MapSection({ section }: { section: Section }) {
     days.find((d) => d.country?.trim())?.country?.trim() ||
     trip.destinations[0] ||
     "";
-  const countryName = (section.content.countryName as string) || primaryCountry || "Country";
+  // All unique countries the trip touches, in first-occurrence order.
+  // Used to render multiple flags on the rail header for cross-border
+  // trips (Tanzania + Kenya, etc.). Falls back to [primaryCountry] for
+  // single-country trips. The operator can still override countryName
+  // textually; the flags follow the underlying day data.
+  const tripCountries = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const d of days) {
+      const c = d.country?.trim();
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        out.push(c);
+      }
+    }
+    if (out.length === 0 && primaryCountry) out.push(primaryCountry);
+    return out;
+  })();
+  const countryName =
+    (section.content.countryName as string) ||
+    (tripCountries.length > 1 ? tripCountries.join(" · ") : tripCountries[0]) ||
+    "Country";
+  // Single-flag override stays editable for operators on legacy
+  // proposals; multi-country trips compute fresh from tripCountries.
   const countryFlag = (section.content.countryFlag as string) || flagFor(primaryCountry);
+  const countryFlags = tripCountries.map((c) => flagFor(c)).filter(Boolean);
   // Prefer days[] as the source of truth — that's what the itinerary table
   // and per-day sections actually render. trip.destinations is just the
   // original setup input and can drift out of sync after AI drafting.
@@ -146,11 +170,19 @@ export function MapSection({ section }: { section: Section }) {
                 >
                   {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
                 </h2>
-                <div className="mt-2 flex items-center gap-1.5">
-                  {countryFlag && (
-                    <span className="text-[14px] leading-none" aria-hidden>
-                      {countryFlag}
-                    </span>
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  {countryFlags.length > 0 ? (
+                    countryFlags.map((f, i) => (
+                      <span key={i} className="text-[14px] leading-none" aria-hidden>
+                        {f}
+                      </span>
+                    ))
+                  ) : (
+                    countryFlag && (
+                      <span className="text-[14px] leading-none" aria-hidden>
+                        {countryFlag}
+                      </span>
+                    )
                   )}
                   <span
                     className="text-[12px] font-semibold outline-none"
@@ -330,10 +362,15 @@ export function MapSection({ section }: { section: Section }) {
               </div>
             </aside>
 
-            {/* ── Map — dominant column ─────────────────────────── */}
-            <div className="min-w-0">
+            {/* ── Map — dominant column. Stretches to match the rail's
+                natural height via the grid's items-stretch. The
+                MAP_HEIGHT constant becomes a *minimum* here so trips
+                with very few days still render a sensibly-sized map.
+                Pixel-height fallback retained for the "no days yet"
+                placeholder so the section reserves space. */}
+            <div className="min-w-0 flex flex-col" style={{ minHeight: MAP_HEIGHT }}>
               {days.length > 0 ? (
-                <div className="overflow-hidden">
+                <div className="overflow-hidden flex-1 min-h-0">
                   <RouteMap
                     days={days}
                     tokens={tokens}
@@ -343,15 +380,14 @@ export function MapSection({ section }: { section: Section }) {
                         updateSectionContent(section.id, { coords });
                       }
                     }}
-                    height={MAP_HEIGHT}
+                    height="100%"
                     presentationMode={!isEditor}
                   />
                 </div>
               ) : (
                 <div
-                  className="flex items-center justify-center text-[13px]"
+                  className="flex items-center justify-center text-[13px] flex-1"
                   style={{
-                    height: MAP_HEIGHT,
                     background: tokens.cardBg,
                     color: tokens.mutedText,
                   }}

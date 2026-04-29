@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
 import { isCoastCity } from "@/lib/safariRoutingRules";
+import { parksInTrip } from "@/lib/safariParkBoundaries";
 
 // ─── Map design rules — DO NOT RELAX WITHOUT OPERATOR SIGN-OFF ───────────
 //
@@ -54,6 +55,7 @@ const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer)
 const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ssr: false });
 const Tooltip = dynamic(() => import("react-leaflet").then((m) => m.Tooltip), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
+const Polygon = dynamic(() => import("react-leaflet").then((m) => m.Polygon), { ssr: false });
 
 // ─── Known safari coords ──────────────────────────────────────────────────
 //
@@ -170,7 +172,10 @@ export function RouteMap({
   cachedCoords?: RouteCoord[];
   onCoordsResolved?: (coords: RouteCoord[]) => void;
   tokens: ThemeTokens;
-  height?: number;
+  /** Pixel height (number) or CSS height (string like "100%"). When
+   *  the parent grid uses items-stretch, pass "100%" so the map fills
+   *  the row height set by the rail beside it. */
+  height?: number | string;
   /** When set, that day's pin gets a selected ring and the map flies
    *  to it. Used by the "interactive" MapSection variant. */
   selectedDayId?: string | null;
@@ -437,6 +442,13 @@ export function RouteMap({
   const TRANSFER_THRESHOLD_KM = 250;
   const legPaths = buildLegPaths(groups, TRANSFER_THRESHOLD_KM);
 
+  // Park polygons for the trip — Serengeti, Tarangire, Lake Manyara,
+  // etc. Drawn at actual relative size under the route lines so
+  // clients see "Serengeti is huge, Lake Manyara is small" instead
+  // of identical pin dots. Only parks matched against the trip's
+  // destinations are rendered (parksInTrip filters internally).
+  const parkBoundaries = parksInTrip(rawMarkerGroups.map((g) => g.placeName));
+
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
       <MapContainer
@@ -485,6 +497,29 @@ export function RouteMap({
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
+
+        {/* Park polygons — translucent green regions showing the
+            actual relative size of every park in the trip. Renders
+            UNDER the route lines and markers so the day chrome
+            stays readable on top. Only parks whose names match a
+            destination in the trip get drawn (parksInTrip filters
+            against destinations) — Serengeti shows up huge next
+            to a tiny Lake Manyara, geographically honest. */}
+        {parkBoundaries.map((park) => (
+          <Polygon
+            key={park.name}
+            positions={park.coords}
+            pathOptions={{
+              color: "#2f5d3a",
+              weight: 1,
+              opacity: 0.55,
+              fillColor: "#3f7d4f",
+              fillOpacity: 0.18,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        ))}
 
         {/* Per-leg rendering. Short circuit hops render as one continuous
             solid charcoal polyline (built up leg-by-leg so adjacent
