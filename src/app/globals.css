@@ -219,6 +219,15 @@ body {
   box-shadow: inset 3px 0 0 rgba(27, 58, 45, 0.12);
 }
 
+/* Empty contentEditable placeholder — uses data-placeholder attribute.
+   Used by ContactRow and other label+editable-value patterns where the
+   label is static and the value field shows a faint hint when blank. */
+[contenteditable="true"][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
 /* ── Entrance animations ──────────────────────────────────────────────────── */
 
 @keyframes ss-popover-in {

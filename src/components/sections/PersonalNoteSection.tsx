@@ -7,6 +7,7 @@ import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { SignaturePad } from "@/components/editor/SignaturePad";
+import { ContactCards } from "@/components/sections/personal-note/ContactCards";
 import type { Section, Proposal } from "@/lib/types";
 
 // Personal Note — a branded letter from the consultant. Renders under every
@@ -263,40 +264,36 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             )}
           </div>
 
-          {/* Company + consultant contact */}
-          <div className="min-w-0 space-y-0.5" style={{ color: tokens.bodyText }}>
-            <div
-              className="text-[15px] font-semibold outline-none"
-              style={{ color: tokens.headingText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
-              }
-            >
-              {operator.companyName}
-            </div>
-            <div
-              className="text-[13px] outline-none"
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                updateOperator({ phone: e.currentTarget.textContent?.trim() ?? operator.phone })
-              }
-            >
-              {operator.phone || (isEditor ? "Phone" : "")}
-            </div>
-            <div
-              className="text-[13px] outline-none"
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                updateOperator({ email: e.currentTarget.textContent?.trim() ?? operator.email })
-              }
-            >
-              {operator.email || (isEditor ? "Email" : "")}
-            </div>
-          </div>
+          {/* Three contact cards — Phone / Email / WhatsApp. Sit between
+              the consultant photo on the left and the company logo on
+              the right; in editor mode each card's value is click-to-
+              edit and a "Style" affordance on hover lets the operator
+              recolour the icon chip + glyph for this proposal. */}
+          <ContactCards
+            isEditor={isEditor}
+            values={{
+              phone: operator.phone,
+              email: operator.email,
+              whatsapp: operator.whatsapp,
+            }}
+            style={{
+              iconBg: section.content.contactIconBg as string | undefined,
+              iconColor: section.content.contactIconColor as string | undefined,
+            }}
+            onValueChange={(next) =>
+              updateOperator({
+                phone: next.phone ?? operator.phone,
+                email: next.email ?? operator.email,
+                whatsapp: next.whatsapp ?? operator.whatsapp,
+              })
+            }
+            onStyleChange={(next) =>
+              updateSectionContent(section.id, {
+                contactIconBg: next.iconBg,
+                contactIconColor: next.iconColor,
+              })
+            }
+          />
 
           {/* Company logo */}
           <div
@@ -584,3 +581,4 @@ function EditorialLetterImageVariant({
     </div>
   );
 }
+
