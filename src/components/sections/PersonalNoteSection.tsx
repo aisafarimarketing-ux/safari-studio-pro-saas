@@ -233,42 +233,63 @@ export function PersonalNoteSection({ section }: { section: Section }) {
         style={{ borderTop: `1px solid ${tokens.border}` }}
       >
         <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6 md:gap-10">
-          {/* Consultant photo */}
-          <div
-            className="shrink-0 overflow-hidden cursor-pointer"
-            style={{ width: 96, height: 96, background: tokens.cardBg, borderRadius: 4 }}
-            onClick={() => {
-              if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
-            }}
-            onContextMenu={(e) => {
-              if (!isEditor) return;
-              e.preventDefault();
-              pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
-            }}
-            title={isEditor ? "Click / right-click to replace photo" : undefined}
-          >
-            {operator.consultantPhoto ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={operator.consultantPhoto}
-                alt={operator.consultantName}
-                className="w-full h-full object-cover"
-              />
-            ) : isEditor ? (
-              <div
-                className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                style={{ color: tokens.mutedText }}
-              >
-                + Photo
-              </div>
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-2xl font-bold"
-                style={{ color: tokens.accent }}
-              >
-                {operator.consultantName?.charAt(0) ?? "·"}
-              </div>
-            )}
+          {/* Consultant — photo + name stacked vertically. The photo
+              still drives the click-to-replace flow; the name sits
+              beneath as the editorial signature line. Both auto-
+              populate from the user's profile on new proposals via
+              applyIdentityToOperator (consultantIdentity.ts). */}
+          <div className="flex flex-col items-center gap-2 shrink-0" style={{ width: 96 }}>
+            <div
+              className="overflow-hidden cursor-pointer w-full"
+              style={{ height: 96, background: tokens.cardBg, borderRadius: 4 }}
+              onClick={() => {
+                if (isEditor) pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              }}
+              onContextMenu={(e) => {
+                if (!isEditor) return;
+                e.preventDefault();
+                pickImageAndSet((u) => updateOperator({ consultantPhoto: u }));
+              }}
+              title={isEditor ? "Click / right-click to replace photo" : undefined}
+            >
+              {operator.consultantPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={operator.consultantPhoto}
+                  alt={operator.consultantName}
+                  className="w-full h-full object-cover"
+                />
+              ) : isEditor ? (
+                <div
+                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
+                  style={{ color: tokens.mutedText }}
+                >
+                  + Photo
+                </div>
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
+                  style={{ color: tokens.accent }}
+                >
+                  {operator.consultantName?.charAt(0) ?? "·"}
+                </div>
+              )}
+            </div>
+            {/* Name beneath the photo — small caps, editorial. Always
+                visible (placeholder hint in editor when blank). */}
+            <div
+              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-center leading-tight outline-none w-full"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateOperator({
+                  consultantName: e.currentTarget.textContent?.trim() ?? operator.consultantName,
+                })
+              }
+            >
+              {operator.consultantName || (isEditor ? "Your name" : "")}
+            </div>
           </div>
 
           {/* Three contact cards — Phone / Email / WhatsApp. Sit between

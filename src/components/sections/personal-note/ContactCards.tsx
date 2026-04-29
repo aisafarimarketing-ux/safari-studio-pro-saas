@@ -91,12 +91,16 @@ export function ContactCards({
   const iconBg = style.iconBg || DEFAULT_ICON_BG;
   const cardBg = style.cardBg || DEFAULT_CARD_BG;
 
-  // Defensive strip: operators sometimes type "Phone: +255 …" or
-  // "Email: hello@…" into the inputs by habit, even though the card
+  // Defensive strip: operators sometimes type "Email: hello@…" or
+  // "WhatsApp: +255 …" into the inputs by habit, even though the card
   // already shows the label. Strip any leading "Label:" so the cards
-  // and the tel:/mailto:/wa.me links always carry the clean value —
-  // no support tickets about broken click-to-call later.
-  const phone = stripLabel("phone", values.phone);
+  // and the mailto:/wa.me links always carry the clean value — no
+  // support tickets about broken click-to-mail later.
+  // Phone removed from the social section per operator spec — it
+  // ate visual real estate that Email + WhatsApp now use to spread
+  // out generously. operator.phone still lives in the data model
+  // for other surfaces (footer, invoice, etc.); it's just not
+  // surfaced here.
   const email = stripLabel("email", values.email);
   const whatsapp = stripLabel("whatsapp", values.whatsapp);
 
@@ -108,20 +112,13 @@ export function ContactCards({
 
   const cards: CardSpec[] = [
     {
-      title: "Phone",
-      value: phone,
-      href: phone ? `tel:${phone.replace(/\s+/g, "")}` : "",
-      icon: <PhoneIcon />,
-      multiline: false,
-    },
-    {
       title: "Email",
       value: email,
       href: email ? `mailto:${email}` : "",
       icon: <MailIcon />,
       // Long addresses ("ops@africansafariexperience.com") would
-      // ellipsize even at 300px per card. Wrap to 2 lines instead so
-      // operators don't have to shorten their email to fit.
+      // ellipsize even at the wider 2-card width. Wrap to 2 lines
+      // instead so operators don't have to shorten their email.
       multiline: true,
     },
     {
@@ -134,22 +131,16 @@ export function ContactCards({
   ];
 
   // Plain-text print line. WhatsApp gets a label because a bare number
-  // wouldn't tell the reader it's chat-specific; phone/email are
-  // self-explanatory.
+  // wouldn't tell the reader it's chat-specific; email is self-evident.
   const printParts = [
-    phone || "",
     email || "",
     whatsapp ? `WhatsApp ${whatsapp}` : "",
   ].filter(Boolean);
 
-  // Card visibility — fundamental rule: if the operator has typed ANY
-  // contact value, render all three icons + cards. Empty cards in
-  // preview show an em-dash placeholder rather than vanishing, because
-  // operators consistently reported "icons missing in preview" when
-  // we hid empty cards individually — the gap between cards looked
-  // like a render failure even though it was by design. In editor we
-  // always render all three so operators see the full row.
-  const anyValueSet = !!(phone || email || whatsapp);
+  // Card visibility — if the operator has typed any contact value,
+  // render both cards. In editor we always render so operators see
+  // the slots.
+  const anyValueSet = !!(email || whatsapp);
   const visibleCards = isEditor || anyValueSet ? cards : [];
 
   return (
@@ -158,14 +149,7 @@ export function ContactCards({
           types into. Live-binds to onValueChange so the cards below
           update on every keystroke. Hidden in preview/share/print. */}
       {isEditor && (
-        <div className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <ContactInput
-            label="Phone"
-            icon={<PhoneIcon />}
-            placeholder="+255 712 345 678"
-            value={values.phone}
-            onChange={(v) => onValueChange({ ...values, phone: v })}
-          />
+        <div className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <ContactInput
             label="Email"
             icon={<MailIcon />}
@@ -190,7 +174,7 @@ export function ContactCards({
       {visibleCards.length > 0 && (
         <div
           data-contact-cards
-          className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-3 gap-3"
+          className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {visibleCards.map((c) => (
             <Card
@@ -616,24 +600,10 @@ function Section({
 }
 
 // ─── Icons ───────────────────────────────────────────────────────────────
-
-function PhoneIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
+// PhoneIcon removed alongside the Phone card. operator.phone still
+// exists in the data model and may be surfaced elsewhere (footer
+// minimal variant, etc.) — restore the icon component if a future
+// surface needs the phone glyph again.
 
 function MailIcon({ size = 18 }: { size?: number }) {
   return (
