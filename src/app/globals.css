@@ -228,6 +228,23 @@ body {
   pointer-events: none;
 }
 
+/* ── Contact cards print/screen toggle ────────────────────────────────
+   Used by ContactCards (Personal Note + Footer contact-cards variant).
+   Hand-rolled rather than Tailwind's `print:hidden` / `hidden print:block`
+   modifiers so the screen/print switch is auditable in one place and
+   doesn't depend on Tailwind config or build-environment quirks.
+   Operators reported icons missing in preview — locking these rules
+   down explicitly avoids that class of bug.
+   See memory/map_and_routing_rules.md → Personal Note contact rules. */
+.ss-contact-screen-only { /* show on screen, hide in print */ }
+@media print {
+  .ss-contact-screen-only { display: none !important; }
+}
+.ss-contact-print-only { display: none; }
+@media print {
+  .ss-contact-print-only { display: block !important; }
+}
+
 /* ── Entrance animations ──────────────────────────────────────────────────── */
 
 @keyframes ss-popover-in {

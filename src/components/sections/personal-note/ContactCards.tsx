@@ -33,6 +33,26 @@ import { createPortal } from "react-dom";
 // icons WhatsApp glyph (filled). The WhatsApp glyph is rendered slightly
 // smaller (15px vs 18px) so its filled mass matches the visual weight of
 // the outline phone/mail glyphs in the same chip.
+//
+// ─── Visibility rules — DO NOT REGRESS ───────────────────────────────────
+//
+//   1. The CARDS ROW renders whenever any value is set, in BOTH editor
+//      and preview/share. Never gate the entire row on `isEditor`.
+//   2. The PRINT FALLBACK row uses explicit @media print rules in
+//      globals.css (.ss-contact-print-only / .ss-contact-cards-screen)
+//      rather than Tailwind's `print:` modifiers, so the screen/print
+//      switch can't be broken by a Tailwind config change or build
+//      environment quirk.
+//   3. AUTO-CONTRAST GUARD on the icon chip: when iconColor and iconBg
+//      brightness are too close (operator picks white-on-white), fall
+//      back to the default brand teal so the glyph never renders
+//      invisibly in preview.
+//   4. The EDITOR INPUTS strip is the ONLY element gated by isEditor.
+//      Cards + print fallback are always conditional on data, never on
+//      editor mode.
+//
+// See memory/map_and_routing_rules.md → "Personal Note contact rules".
+// ──────────────────────────────────────────────────────────────────────────
 
 export type ContactCardsValues = {
   phone?: string;
@@ -126,7 +146,7 @@ export function ContactCards({
           types into. Live-binds to onValueChange so the cards below
           update on every keystroke. Hidden in preview/share/print. */}
       {isEditor && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 print:hidden">
+        <div className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <ContactInput
             label="Phone"
             icon={<PhoneIcon />}
@@ -158,7 +178,7 @@ export function ContactCards({
       {visibleCards.length > 0 && (
         <div
           data-contact-cards
-          className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:hidden"
+          className="ss-contact-screen-only grid grid-cols-1 sm:grid-cols-3 gap-3"
         >
           {visibleCards.map((c) => (
             <Card
@@ -182,7 +202,7 @@ export function ContactCards({
       {printParts.length > 0 && (
         <div
           data-contact-print
-          className="hidden print:block text-center"
+          className="ss-contact-print-only text-center"
           style={{
             fontSize: 11,
             letterSpacing: "0.06em",
@@ -247,6 +267,24 @@ function Card({
   const titleColor = textOn(cardBg, "#101828", "#ffffff");
   const valueColor = textOn(cardBg, "rgba(0,0,0,0.45)", "rgba(255,255,255,0.65)");
 
+  // Auto-contrast guard for the icon chip — if the operator-picked
+  // iconColor is too close to the iconBg in luminance, the glyph
+  // renders nearly invisibly (white-on-white was the original bug
+  // operators reported as "icons missing in preview"). When the
+  // brightness gap is < 35, fall back to a high-contrast pair anchored
+  // off the iconBg luminance: dark glyph on light chips, cream glyph
+  // on dark chips. The operator's stored colour is untouched — only
+  // the rendered chip is fixed.
+  const ICON_MIN_CONTRAST = 35;
+  const bgLum = brightness(iconBg);
+  const fgLum = brightness(iconColor);
+  const iconColorSafe =
+    Math.abs(bgLum - fgLum) < ICON_MIN_CONTRAST
+      ? bgLum > 140
+        ? "#1f3a3a"
+        : "#f5e8d8"
+      : iconColor;
+
   const baseClasses =
     "flex items-center gap-3.5 px-4 py-3 rounded-2xl shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all duration-200 no-underline";
   const interactiveClasses = interactive
@@ -268,7 +306,7 @@ function Card({
           width: 38,
           height: 38,
           background: iconBg,
-          color: iconColor,
+          color: iconColorSafe,
         }}
         aria-hidden
       >
@@ -392,7 +430,7 @@ function StyleControl({
         ref={ref}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="absolute -top-3 right-0 px-2.5 py-1 rounded-full bg-black/80 text-white text-[10.5px] font-semibold shadow-md hover:bg-black transition-all duration-150 opacity-0 group-hover:opacity-100 backdrop-blur-sm flex items-center gap-1.5 print:hidden"
+        className="ss-contact-screen-only absolute -top-3 right-0 px-2.5 py-1 rounded-full bg-black/80 text-white text-[10.5px] font-semibold shadow-md hover:bg-black transition-all duration-150 opacity-0 group-hover:opacity-100 backdrop-blur-sm flex items-center gap-1.5"
         title="Customise contact card colours"
         style={{ zIndex: 5 }}
       >

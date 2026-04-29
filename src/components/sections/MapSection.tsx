@@ -545,10 +545,19 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  const MAP_HEIGHT = 720;
+  // Bumped from 720 → 880 to match the route variant — wider geographic
+  // bounds need more vertical pixel space to keep the route lines and
+  // badge labels readable.
+  const MAP_HEIGHT = 880;
 
+  // Use tokens.sectionSurface, never tokens.pageBg — every map variant
+  // (route / interactive / default / full-width) needs its own
+  // configurable section background so operators can recolour the
+  // block from the section chrome. Using pageBg makes the section
+  // adopt page-level cream instead and looks like a missing wrapper.
+  // See memory/map_and_routing_rules.md (rule 5 for map variants).
   return (
-    <div className="py-2 md:py-3" style={{ background: tokens.pageBg }}>
+    <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
       <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
         {/* Card-rail (240px) + dominant map. Title + country chip live
             inside the rail header so the map can stretch the section's
