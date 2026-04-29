@@ -14,7 +14,36 @@ import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 function formatDuration(nights: number | undefined): string {
   if (!nights || nights < 1) return "—";
   const days = nights + 1;
-  return `${days} days / ${nights} nights`;
+  return `${days} days and ${nights} nights`;
+}
+
+// Format party size — prefer the structured adults/children split
+// when both are set, fall back to the operator's free-form pax string
+// otherwise. Examples:
+//   adults=2, children=1  → "2 adults and 1 child"
+//   adults=2, children=0  → "2 adults"
+//   adults=undefined      → client.pax (whatever the operator typed)
+function formatParty(client: { pax: string; adults?: number; children?: number }): string {
+  const a = client.adults;
+  const c = client.children;
+  if (typeof a === "number" && a > 0) {
+    const adultPart = `${a} ${a === 1 ? "adult" : "adults"}`;
+    if (typeof c === "number" && c > 0) {
+      const childPart = `${c} ${c === 1 ? "child" : "children"}`;
+      return `${adultPart} and ${childPart}`;
+    }
+    return adultPart;
+  }
+  return client.pax || "—";
+}
+
+// Destinations rendered as a period-separated list with the editorial
+// label "Your destinations" above. Periods (not middots) by operator
+// preference — gives the strip a more deliberate, sentence-cadence
+// feel.
+function formatDestinationsList(destinations: string[], limit = 6): string {
+  if (destinations.length === 0) return "";
+  return destinations.slice(0, limit).join(". ");
 }
 
 function CoverMeta({
@@ -37,6 +66,37 @@ function CoverMeta({
         {label}
       </div>
       <div className="text-[14px] font-medium" style={{ color: tokens.headingText }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// DarkMeta — parallel to CoverMeta, sized for white-text-on-dark
+// variants (centered-editorial, full-bleed-overlay, flip-split,
+// cinematic-split). Renders the editorial FOR / DATES / DURATIONS /
+// PARTY cells with white type and muted-white labels.
+function DarkMeta({
+  label,
+  theme,
+  children,
+}: {
+  label: string;
+  theme: ProposalTheme;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
+      <div
+        className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
+        style={{ color: "rgba(255,255,255,0.55)" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[13.5px] font-medium"
+        style={{ color: "rgba(255,255,255,0.92)" }}
+      >
         {children}
       </div>
     </div>
@@ -83,7 +143,6 @@ export function CoverSection({ section }: { section: Section }) {
   // the order the operator typed them in at Trip Setup. Old proposals
   // that pre-date the autopilot reorder still get a sensible cover.
   const orderedDestinations = orderDestinations(trip.destinations);
-  const durationLabel = formatDuration(trip.nights);
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,17 +183,6 @@ export function CoverSection({ section }: { section: Section }) {
   // this one — keeps the cover uncluttered and makes the same sign-off
   // style available under every cover variant.
   if (variant === "hero-letter") {
-    const coverLabel =
-      (section.content.coverLabel as string) ||
-      `Proposal for ${client.guestNames || "Your Guests"}`;
-    const tourLengthLabel = (section.content.tourLengthLabel as string) || "Tour Length";
-    const defaultTourLengthValue = trip.nights
-      ? `${trip.nights + 1} Days / ${trip.nights} Nights`
-      : `${proposal.days.length || "—"} Days / ${Math.max(0, proposal.days.length - 1) || "—"} Nights`;
-    const tourLengthValue = (section.content.tourLengthValue as string) || defaultTourLengthValue;
-    const travelersLabel = (section.content.travelersLabel as string) || "Travelers";
-    const travelersValue = (section.content.travelersValue as string) || client.pax || "—";
-
     const taupe = "#7a6e60";
     const metaBand = "#efece6";
 
@@ -195,16 +243,8 @@ export function CoverSection({ section }: { section: Section }) {
                   "linear-gradient(to top, rgba(30,28,25,0.92) 0%, rgba(30,28,25,0.82) 45%, rgba(30,28,25,0) 100%)",
               }}
             >
-              <div
-                className="text-[15px] text-white/75 mb-3 outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateSectionContent(section.id, { coverLabel: e.currentTarget.textContent ?? "" })
-                }
-              >
-                {coverLabel}
-              </div>
+              {/* Cover label removed per operator spec — title now
+                  leads the overlay. */}
               <h1
                 className="font-bold leading-[1.05] text-white outline-none"
                 style={{ fontSize: "clamp(2.2rem, 4.6vw, 3.6rem)", letterSpacing: "-0.01em" }}
@@ -218,11 +258,17 @@ export function CoverSection({ section }: { section: Section }) {
                 {trip.title}
               </h1>
               {orderedDestinations.length > 0 && (
-                <div
-                  className="mt-4 text-[11px] uppercase tracking-[0.32em] text-white/70 font-semibold"
-                  aria-label="Destinations"
-                >
-                  {orderedDestinations.slice(0, 6).join("  ·  ")}
+                <div className="mt-5">
+                  <div
+                    className="text-[10px] uppercase tracking-[0.32em] text-white/55 font-semibold mb-1.5"
+                  >
+                    Your destinations
+                  </div>
+                  <div
+                    className="text-[12px] uppercase tracking-[0.28em] text-white/85 font-semibold"
+                  >
+                    {formatDestinationsList(orderedDestinations, 6)}
+                  </div>
                 </div>
               )}
             </div>
@@ -278,46 +324,33 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
           <div>
             <div
-              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold outline-none"
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
               style={{ color: tokens.mutedText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateSectionContent(section.id, { tourLengthLabel: e.currentTarget.textContent ?? "" })}
             >
-              {tourLengthLabel}
+              Durations
             </div>
             <div
-              className="text-[14px] font-medium outline-none"
+              className="text-[14px] font-medium"
               style={{ color: tokens.headingText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateSectionContent(section.id, { tourLengthValue: e.currentTarget.textContent ?? "" })}
             >
-              {tourLengthValue}
+              {formatDuration(trip.nights)}
             </div>
           </div>
           <div>
             <div
-              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold outline-none"
+              className="text-[10px] uppercase tracking-[0.28em] mb-1.5 font-semibold"
               style={{ color: tokens.mutedText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateSectionContent(section.id, { travelersLabel: e.currentTarget.textContent ?? "" })}
             >
-              {travelersLabel}
+              Party
             </div>
             <div
               className="text-[14px] font-medium outline-none"
               style={{ color: tokens.headingText }}
               contentEditable={isEditor}
               suppressContentEditableWarning
-              onBlur={(e) => {
-                const next = e.currentTarget.textContent ?? "";
-                updateSectionContent(section.id, { travelersValue: next });
-                if (!section.content.travelersValue) updateClient({ pax: next });
-              }}
+              onBlur={(e) => updateClient({ pax: e.currentTarget.textContent?.trim() ?? client.pax })}
             >
-              {travelersValue}
+              {formatParty(client)}
             </div>
           </div>
         </div>
@@ -413,16 +446,9 @@ export function CoverSection({ section }: { section: Section }) {
             />
           </div>
 
-          {/* Middle — destinations + title + tagline */}
+          {/* Middle — title + destinations (label + list).
+              Tagline removed per operator spec. */}
           <div className="py-10">
-            {orderedDestinations.length > 0 && (
-              <div
-                className="text-[10px] uppercase tracking-[0.36em] mb-5"
-                style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {orderedDestinations.slice(0, 4).join("  ·  ")}
-              </div>
-            )}
             <h1
               className="font-bold leading-[0.98] tracking-tight outline-none"
               style={{
@@ -437,16 +463,22 @@ export function CoverSection({ section }: { section: Section }) {
             >
               {trip.title}
             </h1>
-            <p
-              className="mt-5 text-[15.5px] leading-relaxed max-w-md outline-none"
-              style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              data-ai-editable="cover-tagline"
-              onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
-            >
-              {(section.content.tagline as string) || trip.subtitle || "A draft itinerary, in detail"}
-            </p>
+            {orderedDestinations.length > 0 && (
+              <div className="mt-6">
+                <div
+                  className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                  style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  Your destinations
+                </div>
+                <div
+                  className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                  style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  {formatDestinationsList(orderedDestinations, 6)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bottom — meta strip */}
@@ -474,11 +506,11 @@ export function CoverSection({ section }: { section: Section }) {
                 {trip.dates || "—"}
               </span>
             </CoverMeta>
-            <CoverMeta label="Duration" tokens={tokens} theme={theme}>
-              {durationLabel}
+            <CoverMeta label="Durations" tokens={tokens} theme={theme}>
+              {formatDuration(trip.nights)}
             </CoverMeta>
             <CoverMeta label="Party" tokens={tokens} theme={theme}>
-              {client.pax || "—"}
+              {formatParty(client)}
             </CoverMeta>
           </div>
         </div>
@@ -490,14 +522,6 @@ export function CoverSection({ section }: { section: Section }) {
   // Kinfolk / Cereal / Wallpaper aesthetic. Full-bleed image with a paper-
   // band masthead in the lower third — issue line, big serif title, sub deck.
   if (variant === "editorial-magazine") {
-    // The masthead corner used to read "Issue No. 07" (derived from
-    // trip.nights), which is editorial chrome lifted from a magazine
-    // brief — but it's nonsense in a safari context (operators kept
-    // asking what the number meant). Default to a clean editorial
-    // label with a date underneath; still operator-editable.
-    const issue =
-      (section.content.issue as string) ||
-      ((operator.companyName ? `${operator.companyName} Edition` : "Safari Proposal").toUpperCase());
     return (
       <div
         className={`relative w-full overflow-hidden ${isEditor ? "min-h-[640px]" : "min-h-[640px]"}`}
@@ -535,12 +559,9 @@ export function CoverSection({ section }: { section: Section }) {
               logoHeight={40}
             />
           </div>
-          <div className="text-right text-white/75" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-            <div className="text-[10px] uppercase tracking-[0.32em]">{issue}</div>
-            <div className="text-[10px] tracking-[0.2em] mt-1 text-white/55">
-              {trip.dates || (trip.arrivalDate ?? "")}
-            </div>
-          </div>
+          {/* Edition / Issue line removed per operator spec.
+              Right side intentionally empty — the masthead is just
+              the logo. */}
         </div>
 
         {/* Lower paper band — masthead-style title block */}
@@ -553,15 +574,6 @@ export function CoverSection({ section }: { section: Section }) {
             }}
           >
             <div className="max-w-[820px]">
-              {orderedDestinations.length > 0 && (
-                <div
-                  className="text-[10px] uppercase tracking-[0.36em] mb-5"
-                  style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-                >
-                  {orderedDestinations.slice(0, 4).join("  ·  ")}
-                </div>
-              )}
-
               <h1
                 className="font-bold leading-[0.95] tracking-tight outline-none"
                 style={{
@@ -576,20 +588,22 @@ export function CoverSection({ section }: { section: Section }) {
                 {trip.title}
               </h1>
 
-              <div
-                className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-2"
-                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                <span
-                  className="text-[16px] outline-none"
-                  style={{ color: tokens.bodyText }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
-                >
-                  {(section.content.tagline as string) || trip.subtitle || "A draft itinerary, in detail"}
-                </span>
-              </div>
+              {orderedDestinations.length > 0 && (
+                <div className="mt-6">
+                  <div
+                    className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                    style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                  >
+                    Your destinations
+                  </div>
+                  <div
+                    className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                    style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                  >
+                    {formatDestinationsList(orderedDestinations, 6)}
+                  </div>
+                </div>
+              )}
 
               {/* Hairline + meta strip */}
               <div className="mt-8 pt-6 grid grid-cols-2 md:grid-cols-4 gap-6"
@@ -614,22 +628,14 @@ export function CoverSection({ section }: { section: Section }) {
                     {trip.dates || "—"}
                   </span>
                 </CoverMeta>
-                <CoverMeta label="Duration" tokens={tokens} theme={theme}>
-                  {durationLabel}
+                <CoverMeta label="Durations" tokens={tokens} theme={theme}>
+                  {formatDuration(trip.nights)}
                 </CoverMeta>
                 <CoverMeta label="Party" tokens={tokens} theme={theme}>
-                  {client.pax || "—"}
+                  {formatParty(client)}
                 </CoverMeta>
               </div>
-
-              {operator.consultantName && (
-                <div
-                  className="mt-6 text-[11px] uppercase tracking-[0.28em]"
-                  style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-                >
-                  Prepared by {operator.consultantName}
-                </div>
-              )}
+              {/* Consultant attribution removed per operator spec. */}
             </div>
           </div>
         </div>
@@ -685,34 +691,15 @@ export function CoverSection({ section }: { section: Section }) {
           }}
         />
 
-        {/* Top bar */}
+        {/* Top bar — logo only. Consultant attribution removed
+            per operator spec. */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-10">
           <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
-          {operator.consultantName && (
-            <span className="text-white/50 text-xs tracking-wide">
-              Prepared by {operator.consultantName}
-            </span>
-          )}
         </div>
 
-        {/* Centre — destinations as tracked wordmarks + giant title.
-            Pill chips traded for an editorial small-caps strip with
-            a hairline either side — matches the typographic register
-            of hero-letter / editorial-magazine. */}
+        {/* Centre — title + destinations (label + list).
+            Tagline removed per operator spec. */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-8 py-16">
-          {orderedDestinations.length > 0 && (
-            <div className="flex items-center justify-center gap-4 mb-8">
-              <div className="w-10 h-px" style={{ background: "rgba(255,255,255,0.35)" }} />
-              <div
-                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
-                style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {orderedDestinations.slice(0, 5).join("  ·  ")}
-              </div>
-              <div className="w-10 h-px" style={{ background: "rgba(255,255,255,0.35)" }} />
-            </div>
-          )}
-
           <h1
             className="text-[clamp(2.8rem,8vw,6rem)] font-bold leading-[1.05] text-white max-w-3xl outline-none"
             style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 24px rgba(0,0,0,0.3)" }}
@@ -723,15 +710,22 @@ export function CoverSection({ section }: { section: Section }) {
             {trip.title}
           </h1>
 
-          <p
-            className="mt-5 text-white/65 text-lg max-w-xl leading-relaxed outline-none"
-            style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
-          >
-            {(section.content.tagline as string) || trip.subtitle}
-          </p>
+          {orderedDestinations.length > 0 && (
+            <div className="mt-7">
+              <div
+                className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                style={{ color: "rgba(255,255,255,0.55)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                Your destinations
+              </div>
+              <div
+                className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                style={{ color: "rgba(255,255,255,0.85)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {formatDestinationsList(orderedDestinations, 6)}
+              </div>
+            </div>
+          )}
 
           {isEditor && !heroUrl && (
             <label className="mt-10 px-5 py-2.5 rounded-xl text-white/60 border border-white/25 text-sm cursor-pointer hover:border-white/50 hover:text-white/80 transition">
@@ -741,28 +735,38 @@ export function CoverSection({ section }: { section: Section }) {
           )}
         </div>
 
-        {/* Bottom bar — client details */}
+        {/* Bottom meta strip — FOR / DATES / DURATIONS / PARTY. */}
         <div className="relative z-10 px-10 pb-10">
-          <div className="max-w-3xl mx-auto flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-            <div style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-              <div
-                className="text-xl font-semibold text-white outline-none"
+          <div
+            className="max-w-3xl mx-auto pt-5 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.18)" }}
+          >
+            <DarkMeta label="For" theme={theme}>
+              <span
+                className="outline-none"
                 contentEditable={isEditor}
                 suppressContentEditableWarning
                 onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
               >
-                {client.guestNames}
-              </div>
-              <div className="text-white/55 text-sm mt-0.5 outline-none" contentEditable={isEditor} suppressContentEditableWarning
-                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}>
-                {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
-              </div>
-            </div>
-            {client.pax && (
-              <div className="text-white/45 text-sm" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-                {client.pax}
-              </div>
-            )}
+                {client.guestNames || "Your Guests"}
+              </span>
+            </DarkMeta>
+            <DarkMeta label="Dates" theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+              >
+                {trip.dates || "—"}
+              </span>
+            </DarkMeta>
+            <DarkMeta label="Durations" theme={theme}>
+              {formatDuration(trip.nights)}
+            </DarkMeta>
+            <DarkMeta label="Party" theme={theme}>
+              {formatParty(client)}
+            </DarkMeta>
           </div>
         </div>
       </div>
@@ -782,26 +786,6 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         <div className="max-w-3xl">
-          {/* Editorial label — quietly identifies the document type
-              before the destinations list, so the giant title doesn't
-              hit the eye cold. */}
-          <div
-            className="text-[10px] uppercase tracking-[0.34em] font-semibold mb-3"
-            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          >
-            Safari Proposal
-          </div>
-
-          {/* Destinations as overline */}
-          {orderedDestinations.length > 0 && (
-            <div
-              className="text-[11px] uppercase tracking-[0.36em] mb-6 font-semibold"
-              style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            >
-              {orderedDestinations.join("  ·  ")}
-            </div>
-          )}
-
           <h1
             className="text-[clamp(3rem,8vw,5.5rem)] font-bold leading-[0.95] tracking-tight outline-none"
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
@@ -812,48 +796,57 @@ export function CoverSection({ section }: { section: Section }) {
             {trip.title}
           </h1>
 
-          {/* Hairline rule — 1px is more refined than the previous 2px;
-              accent colour anchors it to the brand. */}
-          <div className="w-20 mt-8 mb-8" style={{ height: "1px", background: tokens.accent }} />
+          {orderedDestinations.length > 0 && (
+            <div className="mt-7">
+              <div
+                className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                Your destinations
+              </div>
+              <div
+                className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {formatDestinationsList(orderedDestinations, 6)}
+              </div>
+            </div>
+          )}
 
-          <p
-            className="text-lg leading-relaxed max-w-md outline-none"
-            style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
+          {/* Hairline rule — 1px brand accent. */}
+          <div className="w-20 mt-9 mb-8" style={{ height: "1px", background: tokens.accent }} />
+
+          {/* Meta strip — FOR / DATES / DURATIONS / PARTY. */}
+          <div
+            className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4"
+            style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
           >
-            {(section.content.tagline as string) || trip.subtitle}
-          </p>
-
-          <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-            <div
-              className="text-base font-semibold outline-none"
-              style={{ color: tokens.headingText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
-            >
-              For {client.guestNames}
-            </div>
-            <span style={{ color: tokens.border }}>|</span>
-            <div
-              className="text-sm outline-none"
-              style={{ color: tokens.mutedText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
-            >
-              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
-            </div>
-            {client.pax && (
-              <>
-                <span style={{ color: tokens.border }}>|</span>
-                <div className="text-sm" style={{ color: tokens.mutedText }}>
-                  {client.pax}
-                </div>
-              </>
-            )}
+            <CoverMeta label="For" tokens={tokens} theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+              >
+                {client.guestNames || "Your Guests"}
+              </span>
+            </CoverMeta>
+            <CoverMeta label="Dates" tokens={tokens} theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+              >
+                {trip.dates || "—"}
+              </span>
+            </CoverMeta>
+            <CoverMeta label="Durations" tokens={tokens} theme={theme}>
+              {formatDuration(trip.nights)}
+            </CoverMeta>
+            <CoverMeta label="Party" tokens={tokens} theme={theme}>
+              {formatParty(client)}
+            </CoverMeta>
           </div>
         </div>
       </div>
@@ -897,34 +890,15 @@ export function CoverSection({ section }: { section: Section }) {
           }}
         />
 
-        {/* Top: operator + (optional) consultant attribution. */}
+        {/* Top — logo only. Consultant attribution removed per
+            operator spec. */}
         <div className="relative z-10 flex items-start justify-between px-10 md:px-14 pt-10">
           <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
-          {operator.consultantName && (
-            <div
-              className="text-right text-white/65"
-              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            >
-              <div className="text-[10px] uppercase tracking-[0.28em]">Prepared by</div>
-              <div className="text-[12px] tracking-wide mt-1 text-white/85">
-                {operator.consultantName}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Bottom: title block on vignette. Centre-aligned to keep the
-            cover's editorial calm; meta strip below on a single hairline. */}
+        {/* Bottom: title + destinations + meta strip on vignette. */}
         <div className="absolute inset-x-0 bottom-0 z-10 px-10 md:px-16 pb-12">
           <div className="max-w-3xl mx-auto text-center">
-            {orderedDestinations.length > 0 && (
-              <div
-                className="text-[10.5px] uppercase tracking-[0.34em] text-white/75 font-semibold mb-5"
-                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {orderedDestinations.slice(0, 5).join("  ·  ")}
-              </div>
-            )}
             <h1
               className="font-bold text-white leading-[1.0] outline-none"
               style={{
@@ -938,57 +912,55 @@ export function CoverSection({ section }: { section: Section }) {
             >
               {trip.title}
             </h1>
-            {(section.content.tagline || trip.subtitle) && (
-              <p
-                className="mt-5 text-white/70 text-[15px] leading-relaxed max-w-xl mx-auto outline-none"
-                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
-              >
-                {(section.content.tagline as string) || trip.subtitle}
-              </p>
+
+            {orderedDestinations.length > 0 && (
+              <div className="mt-7">
+                <div
+                  className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                  style={{ color: "rgba(255,255,255,0.55)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  Your destinations
+                </div>
+                <div
+                  className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                  style={{ color: "rgba(255,255,255,0.85)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  {formatDestinationsList(orderedDestinations, 6)}
+                </div>
+              </div>
             )}
 
-            {/* Hairline + meta strip — single tracked-out line keeps the
-                composition airy. Edits flow back into the canonical
-                client / trip state. */}
+            {/* Hairline + 4-cell meta strip. */}
             <div
-              className="mt-8 pt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[12px] text-white/75"
-              style={{
-                borderTop: "1px solid rgba(255,255,255,0.22)",
-                fontFamily: `'${theme.bodyFont}', sans-serif`,
-              }}
+              className="mt-8 pt-5 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 text-left md:text-center"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.22)" }}
             >
-              <span
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
-              >
-                For {client.guestNames}
-              </span>
-              <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
-              <span
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
-              >
-                {trip.dates || "—"}
-              </span>
-              {trip.nights ? (
-                <>
-                  <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
-                  <span>{durationLabel}</span>
-                </>
-              ) : null}
-              {client.pax ? (
-                <>
-                  <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
-                  <span>{client.pax}</span>
-                </>
-              ) : null}
+              <DarkMeta label="For" theme={theme}>
+                <span
+                  className="outline-none"
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+                >
+                  {client.guestNames || "Your Guests"}
+                </span>
+              </DarkMeta>
+              <DarkMeta label="Dates" theme={theme}>
+                <span
+                  className="outline-none"
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+                >
+                  {trip.dates || "—"}
+                </span>
+              </DarkMeta>
+              <DarkMeta label="Durations" theme={theme}>
+                {formatDuration(trip.nights)}
+              </DarkMeta>
+              <DarkMeta label="Party" theme={theme}>
+                {formatParty(client)}
+              </DarkMeta>
             </div>
           </div>
         </div>
@@ -1032,40 +1004,64 @@ export function CoverSection({ section }: { section: Section }) {
           </div>
 
           <div className="space-y-6 text-right">
-            {orderedDestinations.length > 0 && (
-              <div
-                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
-                style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {orderedDestinations.slice(0, 5).join("  ·  ")}
-              </div>
-            )}
             <h1 className="text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold text-white leading-[1.0] outline-none"
               style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 20px rgba(0,0,0,0.2)" }}
               contentEditable={isEditor} suppressContentEditableWarning
               onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}>
               {trip.title}
             </h1>
-            <p className="text-white/60 text-[15px] leading-relaxed max-w-sm ml-auto outline-none"
-              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              contentEditable={isEditor} suppressContentEditableWarning
-              onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}>
-              {(section.content.tagline as string) || trip.subtitle}
-            </p>
+            {orderedDestinations.length > 0 && (
+              <div>
+                <div
+                  className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                  style={{ color: "rgba(255,255,255,0.55)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  Your destinations
+                </div>
+                <div
+                  className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                  style={{ color: "rgba(255,255,255,0.85)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                >
+                  {formatDestinationsList(orderedDestinations, 6)}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="text-right" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-            <div className="w-8 mb-5 ml-auto" style={{ height: "1px", background: "rgba(255,255,255,0.25)" }} />
-            <div className="text-lg font-semibold text-white mb-1 outline-none"
-              contentEditable={isEditor} suppressContentEditableWarning
-              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}>
-              {client.guestNames}
-            </div>
-            <div className="text-white/55 text-sm outline-none"
-              contentEditable={isEditor} suppressContentEditableWarning
-              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}>
-              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}{client.pax ? ` · ${client.pax}` : ""}
-            </div>
+          {/* Meta strip — FOR / DATES / DURATIONS / PARTY. */}
+          <div
+            className="grid grid-cols-2 gap-x-6 gap-y-4 text-right pt-5"
+            style={{
+              borderTop: "1px solid rgba(255,255,255,0.22)",
+              fontFamily: `'${theme.bodyFont}', sans-serif`,
+            }}
+          >
+            <DarkMeta label="For" theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+              >
+                {client.guestNames || "Your Guests"}
+              </span>
+            </DarkMeta>
+            <DarkMeta label="Dates" theme={theme}>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+              >
+                {trip.dates || "—"}
+              </span>
+            </DarkMeta>
+            <DarkMeta label="Durations" theme={theme}>
+              {formatDuration(trip.nights)}
+            </DarkMeta>
+            <DarkMeta label="Party" theme={theme}>
+              {formatParty(client)}
+            </DarkMeta>
           </div>
         </div>
 
@@ -1121,19 +1117,9 @@ export function CoverSection({ section }: { section: Section }) {
           <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
         </div>
 
-        {/* Middle: destinations + title + tagline. Destinations set as
-            a tracked-out small-caps strip — matches hero-letter and
-            the editorial-magazine masthead, away from startup pills. */}
+        {/* Middle — title + destinations (label + list).
+            Tagline removed per operator spec. */}
         <div className="space-y-6">
-          {orderedDestinations.length > 0 && (
-            <div
-              className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
-              style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            >
-              {orderedDestinations.slice(0, 5).join("  ·  ")}
-            </div>
-          )}
-
           <h1
             className="text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold text-white leading-[1.0] outline-none"
             style={{ fontFamily: `'${theme.displayFont}', serif`, textShadow: "0 2px 20px rgba(0,0,0,0.2)" }}
@@ -1144,45 +1130,58 @@ export function CoverSection({ section }: { section: Section }) {
             {trip.title}
           </h1>
 
-          <p
-            className="text-white/60 text-[15px] leading-relaxed max-w-sm outline-none"
-            style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
-          >
-            {(section.content.tagline as string) || trip.subtitle}
-          </p>
-        </div>
-
-        {/* Bottom: client info + consultant */}
-        <div style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-          <div
-            className="w-8 mb-5"
-            style={{ height: "1px", background: "rgba(255,255,255,0.25)" }}
-          />
-          <div
-            className="text-lg font-semibold text-white mb-1 outline-none"
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
-          >
-            {client.guestNames}
-          </div>
-          <div
-            className="text-white/55 text-sm outline-none"
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
-          >
-            {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}
-            {client.pax ? ` · ${client.pax}` : ""}
-          </div>
-          {operator.consultantName && (
-            <div className="mt-3 text-white/35 text-xs">
-              Prepared by {operator.consultantName}
+          {orderedDestinations.length > 0 && (
+            <div>
+              <div
+                className="text-[10px] uppercase tracking-[0.32em] mb-1.5 font-semibold"
+                style={{ color: "rgba(255,255,255,0.55)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                Your destinations
+              </div>
+              <div
+                className="text-[12px] uppercase tracking-[0.28em] font-semibold"
+                style={{ color: "rgba(255,255,255,0.85)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {formatDestinationsList(orderedDestinations, 6)}
+              </div>
             </div>
           )}
+        </div>
+
+        {/* Meta strip — FOR / DATES / DURATIONS / PARTY. */}
+        <div
+          className="grid grid-cols-2 gap-x-6 gap-y-4 pt-5"
+          style={{
+            borderTop: "1px solid rgba(255,255,255,0.22)",
+            fontFamily: `'${theme.bodyFont}', sans-serif`,
+          }}
+        >
+          <DarkMeta label="For" theme={theme}>
+            <span
+              className="outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+            >
+              {client.guestNames || "Your Guests"}
+            </span>
+          </DarkMeta>
+          <DarkMeta label="Dates" theme={theme}>
+            <span
+              className="outline-none"
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+            >
+              {trip.dates || "—"}
+            </span>
+          </DarkMeta>
+          <DarkMeta label="Durations" theme={theme}>
+            {formatDuration(trip.nights)}
+          </DarkMeta>
+          <DarkMeta label="Party" theme={theme}>
+            {formatParty(client)}
+          </DarkMeta>
         </div>
       </div>
 
