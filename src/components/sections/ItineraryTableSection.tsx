@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { isCoastCity } from "@/lib/safariRoutingRules";
 import type { Day, Section } from "@/lib/types";
 
 // "Itinerary at a glance" — multiple variants:
@@ -598,16 +599,37 @@ function TimelineRow({
     (day.subtitle && day.subtitle.trim()) ||
     (isFirst ? "ARRIVAL" : isLast ? "DEPARTURE" : day.destination || "");
 
-  // Accommodation logic: tiers[activeTier].camp can be empty when the AI
-  // didn't pick a property for that tier (or the operator deleted it).
-  // - In editor: always render the row so the operator sees the slot
-  //   and remembers to fill it (placeholder text in muted colour).
-  // - In preview/share: only render when camp is non-empty so clients
-  //   never see an empty "Accommodation —" stub.
-  // Removed the previous `!isLast` rule — some last-night-before-flight
-  // trips legitimately have an accommodation on the final day.
+  // Accommodation logic:
+  //   - Non-last day → render the row in BOTH editor and preview, even
+  //     when camp is empty. The icon row anchors the journey visually,
+  //     and operators saw "icons in editor only" before this fix because
+  //     the previous condition hid empty rows in preview.
+  //   - Last day  → render only when a camp is explicitly set. A real
+  //     departure day has no overnight; a final-night-before-flight
+  //     trip with the camp filled in still renders correctly.
+  //   - Camp text → real name when set, "Set in Day-by-Day section"
+  //     placeholder in editor when empty, polite "To be confirmed" in
+  //     preview when empty (clients see something deliberate, not a
+  //     dead stub).
   const camp = day.tiers[activeTier]?.camp?.trim() || "";
-  const showAccommodation = !!camp || isEditor;
+  const showAccommodation = !isLast || !!camp;
+  const campDisplay = camp || (isEditor ? "Set in Day-by-Day section" : "To be confirmed");
+
+  // Glyph priority for the activity icon:
+  //   1. First / last day → plane (always — these are flying days,
+  //      regardless of where the day's destination is)
+  //   2. Coast city → anchor (Zanzibar, Stone Town, Diani, Mombasa,
+  //      Watamu, Lamu, Pemba, Mafia, Nungwi, etc. — see COAST_RE in
+  //      safariRoutingRules.ts)
+  //   3. Default → paw print (game drive / safari activity)
+  const activityGlyph =
+    isFirst || isLast ? (
+      <PlaneGlyph />
+    ) : isCoastCity(day.destination) ? (
+      <AnchorGlyph />
+    ) : (
+      <PawGlyph />
+    );
 
   // Last row in the list shouldn't extend the dashed connector down past
   // its own content (no next day to connect to).
@@ -634,10 +656,7 @@ function TimelineRow({
       {/* Activity row — day card + activity icon + title */}
       <div className="grid grid-cols-[64px_36px_1fr] items-center gap-x-4 mb-6">
         <DayCard dayNumber={day.dayNumber} dateLabel={dayDate} tokens={tokens} theme={theme} />
-        <IconChip
-          color={activityColor}
-          glyph={isFirst || isLast ? <PlaneGlyph /> : <PawGlyph />}
-        />
+        <IconChip color={activityColor} glyph={activityGlyph} />
         <div
           className="text-[14px] font-bold uppercase tracking-[0.04em] leading-tight"
           style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
@@ -669,7 +688,7 @@ function TimelineRow({
                 opacity: camp ? 1 : 0.7,
               }}
             >
-              {camp || "Set in Day-by-Day section"}
+              {campDisplay}
             </div>
           </div>
         </div>
@@ -763,6 +782,19 @@ function LodgeGlyph() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M3 21V10l9-6 9 6v11" />
       <path d="M9 21V14h6v7" />
+    </svg>
+  );
+}
+
+// Anchor — used on coast / beach days (Zanzibar, Stone Town, Diani,
+// Mombasa, Watamu, Lamu, etc.) so the icon row reads as a beach stay
+// not a game drive.
+function AnchorGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="5" r="2" />
+      <line x1="12" y1="22" x2="12" y2="7" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
     </svg>
   );
 }

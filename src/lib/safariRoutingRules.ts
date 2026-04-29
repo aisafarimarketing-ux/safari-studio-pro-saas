@@ -34,6 +34,35 @@ const GATEWAY_RE: RegExp[] = [
   /\bkampala\b/i,
 ];
 
+// Coast / beach destinations — flagged separately because the editorial
+// timeline (and any future map / itinerary chrome) wants to render an
+// anchor glyph for these days rather than the default paw print. A
+// guest at Zanzibar's beach is not on a game drive, and the icon should
+// reflect that instinctively. Note: Zanzibar / Stone Town / Mombasa /
+// Diani also appear in GATEWAY_RE — that's intentional. The first/last
+// day at a coast gateway is still a flying day (plane glyph wins);
+// only the *non-endpoint* coast days swap to anchor.
+const COAST_RE: RegExp[] = [
+  // Tanzania — Zanzibar archipelago + mainland coast
+  /\bzanzibar\b/i,
+  /\bstone town\b/i,
+  /\bnungwi\b/i,
+  /\bkendwa\b/i,
+  /\bpaje\b/i,
+  /\bmatemwe\b/i,
+  /\bjambiani\b/i,
+  /\bkiwengwa\b/i,
+  /\bpemba\b/i,
+  /\bmafia\b/i,
+  /\bdar es salaam\b/i,
+  // Kenya coast
+  /\bdiani\b/i,
+  /\bmombasa\b/i,
+  /\bwatamu\b/i,
+  /\bmalindi\b/i,
+  /\blamu\b/i,
+];
+
 const PARK_RE: RegExp[] = [
   /\btarangire\b/i,
   /\bserengeti\b/i,
@@ -65,6 +94,16 @@ export function classifyStop(name: string): StopKind {
   for (const re of GATEWAY_RE) if (re.test(trimmed)) return "gateway";
   for (const re of PARK_RE) if (re.test(trimmed)) return "park";
   return "other";
+}
+
+/** Is this a coast / beach destination? Independent of gateway / park
+ *  classification — Zanzibar is both a gateway *and* a coast city, so
+ *  the timeline wants the anchor glyph for non-endpoint days but lets
+ *  the plane glyph win on arrival/departure days. */
+export function isCoastCity(name: string): boolean {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return false;
+  return COAST_RE.some((re) => re.test(trimmed));
 }
 
 export type SafariEndpoints = {
