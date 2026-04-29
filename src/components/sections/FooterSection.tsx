@@ -3,6 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
 import type { Section } from "@/lib/types";
 
 // FooterSection — last block of the proposal. Carries the operator
@@ -14,11 +15,13 @@ import type { Section } from "@/lib/types";
 // dense closing block.
 
 export function FooterSection({ section }: { section: Section }) {
-  const { proposal, updateOperator } = useProposalStore();
+  const { proposal, updateOperator, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
+  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
+  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
 
   if (section.layoutVariant === "minimal") {
     return (
@@ -209,14 +212,21 @@ export function FooterSection({ section }: { section: Section }) {
       <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-8 md:gap-12 items-start">
         {/* ── Identity (left) — logo + company + consultant inline ── */}
         <div className="flex items-start gap-4">
-          {operator.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={operator.logoUrl}
-              alt={operator.companyName}
-              className="h-12 w-auto object-contain shrink-0"
-            />
-          ) : null}
+          {(effectiveLogoUrl || isEditor) && (
+            <div className="shrink-0">
+              <EditableOperatorLogoTile
+                bare
+                isEditor={isEditor}
+                logoUrl={effectiveLogoUrl}
+                companyName={operator.companyName}
+                logoHeight={48}
+                isOverridden={!!logoOverrideUrl}
+                onLogoChange={(url) =>
+                  updateSectionContent(section.id, { logoOverrideUrl: url })
+                }
+              />
+            </div>
+          )}
 
           <div className="min-w-0">
             <div

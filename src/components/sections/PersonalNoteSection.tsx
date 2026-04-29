@@ -8,6 +8,7 @@ import { uploadImage } from "@/lib/uploadImage";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { SignaturePad } from "@/components/editor/SignaturePad";
 import { ContactCards } from "@/components/sections/personal-note/ContactCards";
+import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
 import type { Section, Proposal } from "@/lib/types";
 
 // Personal Note — a branded letter from the consultant. Renders under every
@@ -295,46 +296,27 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             }
           />
 
-          {/* Company logo */}
+          {/* Company logo — same hover editor as the cover (Replace,
+              Remove BG, Reset). `bare` because the logo here sits on
+              the section bg directly, not inside a paper tile. */}
           <div
-            className="shrink-0 flex items-center justify-center cursor-pointer"
+            className="shrink-0 flex items-center justify-center"
             style={{ width: 92, height: 92 }}
-            onClick={() => {
-              if (isEditor) pickImageAndSet((u) => updateOperator({ logoUrl: u }));
-            }}
-            onContextMenu={(e) => {
-              if (!isEditor) return;
-              e.preventDefault();
-              pickImageAndSet((u) => updateOperator({ logoUrl: u }));
-            }}
-            title={isEditor ? "Click / right-click to replace logo" : undefined}
           >
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={operator.logoUrl}
-                alt={operator.companyName}
-                className="max-w-full max-h-full object-contain"
-              />
-            ) : isEditor ? (
-              <div
-                className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
-                style={{
-                  color: tokens.mutedText,
-                  border: `1px dashed ${tokens.border}`,
-                  borderRadius: 4,
-                }}
-              >
-                + Logo
-              </div>
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-[11px] uppercase tracking-[0.28em] font-semibold text-center"
-                style={{ color: tokens.headingText }}
-              >
-                {operator.companyName}
-              </div>
-            )}
+            <EditableOperatorLogoTile
+              bare
+              isEditor={isEditor}
+              logoUrl={
+                (section.content.logoOverrideUrl as string | undefined) ||
+                operator.logoUrl
+              }
+              companyName={operator.companyName}
+              logoHeight={68}
+              isOverridden={!!section.content.logoOverrideUrl}
+              onLogoChange={(url) =>
+                updateSectionContent(section.id, { logoOverrideUrl: url })
+              }
+            />
           </div>
         </div>
       </div>

@@ -3,47 +3,36 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { uploadImage } from "@/lib/uploadImage";
+import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
 import type { Section } from "@/lib/types";
 
 export function OperatorHeaderSection({ section }: { section: Section }) {
-  const { proposal, updateOperator } = useProposalStore();
+  const { proposal, updateOperator, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
+  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
+  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
+  const handleLogoChange = (url: string | undefined) =>
+    updateSectionContent(section.id, { logoOverrideUrl: url });
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataUrl = await uploadImage(file, { maxDimension: 800 });
-      updateOperator({ logoUrl: dataUrl });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Logo upload failed");
-    }
-  };
-
-  const LogoBlock = ({ maxH = "h-10", className = "" }: { maxH?: string; className?: string }) => (
-    <div className={`flex items-center gap-3 ${className}`}>
-      {operator.logoUrl ? (
-        <div className="relative group">
-          <img src={operator.logoUrl} alt={operator.companyName} className={`${maxH} object-contain`} />
-          {isEditor && (
-            <label className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer bg-black/30 rounded transition">
-              <input type="file" accept="image/*,.svg" className="hidden" onChange={handleLogoUpload} />
-              <span className="text-white text-[9px] font-medium">Replace</span>
-            </label>
-          )}
-        </div>
-      ) : isEditor ? (
-        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed cursor-pointer hover:bg-black/3 transition" style={{ borderColor: tokens.border }}>
-          <input type="file" accept="image/*,.svg" className="hidden" onChange={handleLogoUpload} />
-          <span className="text-[11px]" style={{ color: tokens.mutedText }}>+ Logo</span>
-        </label>
-      ) : null}
-    </div>
+  // Bound version of LogoBlock — closes over the section/operator
+  // state above so the JSX call sites stay terse. Defined as a JSX
+  // element factory rather than a component to avoid the React 19
+  // "create components during render" rule (each variant just calls
+  // renderLogoBlock(args)).
+  const renderLogoBlock = (logoHeight = 40, className = "") => (
+    <LogoBlock
+      logoHeight={logoHeight}
+      className={className}
+      isEditor={isEditor}
+      logoUrl={effectiveLogoUrl}
+      companyName={operator.companyName}
+      isOverridden={!!logoOverrideUrl}
+      onLogoChange={handleLogoChange}
+    />
   );
 
   // ── Centered-brand — logo + name centered ───────────────────────────────────
@@ -51,8 +40,8 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
     return (
       <div className="py-6 px-8 md:px-16 text-center" style={{ background: tokens.sectionSurface, borderBottom: `1px solid ${tokens.border}` }}>
         <div className="max-w-5xl mx-auto">
-          <LogoBlock maxH="h-12" className="justify-center" />
-          {!operator.logoUrl && (
+          {renderLogoBlock(48, "justify-center")}
+          {!effectiveLogoUrl && (
             <div
               className="text-sm font-semibold tracking-wide mt-1 outline-none"
               style={{ color: tokens.headingText }}
@@ -79,7 +68,7 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
       <div className="py-5 px-8 md:px-16" style={{ background: tokens.sectionSurface, borderBottom: `1px solid ${tokens.border}` }}>
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <LogoBlock maxH="h-10" />
+            {renderLogoBlock(40)}
             <div>
               <div
                 className="text-sm font-semibold outline-none"
@@ -114,8 +103,8 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
       <div className="relative z-20 py-4 px-8 md:px-16" style={{ background: "transparent" }}>
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <LogoBlock maxH="h-8" />
-            {!operator.logoUrl && (
+            {renderLogoBlock(32)}
+            {!effectiveLogoUrl && (
               <span className="text-xs uppercase tracking-[0.2em] font-semibold" style={{ color: tokens.mutedText }}>
                 {operator.companyName}
               </span>
@@ -134,8 +123,8 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
     <div className="py-4 px-8 md:px-16" style={{ background: tokens.pageBg, borderBottom: `1px solid ${tokens.border}` }}>
       <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <LogoBlock maxH="h-8" />
-          {!operator.logoUrl && (
+          {renderLogoBlock(32)}
+          {!effectiveLogoUrl && (
             <div
               className="text-[13px] font-semibold outline-none"
               style={{ color: tokens.headingText }}
@@ -152,6 +141,41 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
           {operator.phone && <><span className="text-black/10">|</span><span>{operator.phone}</span></>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Module-scope LogoBlock — kept outside OperatorHeaderSection so React
+// 19's static-components rule doesn't flag it (re-creating components
+// inside the render function resets state on every parent render).
+function LogoBlock({
+  logoHeight,
+  className,
+  isEditor,
+  logoUrl,
+  companyName,
+  isOverridden,
+  onLogoChange,
+}: {
+  logoHeight: number;
+  className: string;
+  isEditor: boolean;
+  logoUrl: string | undefined;
+  companyName: string;
+  isOverridden: boolean;
+  onLogoChange: (url: string | undefined) => void;
+}) {
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <EditableOperatorLogoTile
+        bare
+        isEditor={isEditor}
+        logoUrl={logoUrl}
+        companyName={companyName}
+        logoHeight={logoHeight}
+        isOverridden={isOverridden}
+        onLogoChange={onLogoChange}
+      />
     </div>
   );
 }

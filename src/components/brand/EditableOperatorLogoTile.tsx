@@ -45,6 +45,10 @@ type Props = {
   className?: string;
   logoHeight?: number;
   isEditor?: boolean;
+  /** Render the logo with no tile chrome. The hover editor still
+   *  appears, but the tile-colour picker hides since there's no tile
+   *  to colour. Used in Personal Note bottom strip + Footer. */
+  bare?: boolean;
   /** Per-proposal tile colour override. */
   tileBgOverride?: string;
   /** Called when the cleaned/replaced logo URL changes. */
@@ -63,6 +67,7 @@ export function EditableOperatorLogoTile(props: Props) {
     companyName,
     className,
     logoHeight,
+    bare,
     tileBgOverride,
     onLogoChange,
     onTileColorChange,
@@ -78,6 +83,7 @@ export function EditableOperatorLogoTile(props: Props) {
         className={className}
         logoHeight={logoHeight}
         tileBgOverride={tileBgOverride}
+        bare={bare}
       />
     );
   }
@@ -88,6 +94,7 @@ export function EditableOperatorLogoTile(props: Props) {
       companyName={companyName}
       className={className}
       logoHeight={logoHeight}
+      bare={bare}
       tileBgOverride={tileBgOverride}
       onLogoChange={onLogoChange}
       onTileColorChange={onTileColorChange}
@@ -103,6 +110,7 @@ function EditableInner({
   companyName,
   className,
   logoHeight,
+  bare,
   tileBgOverride,
   onLogoChange,
   onTileColorChange,
@@ -165,6 +173,28 @@ function EditableInner({
     onTileColorChange?.(color);
   }
 
+  // Replace logo — open a file picker, push the chosen file through
+  // the existing upload pipeline, save the resulting URL as a per-
+  // proposal override (the same channel as Remove background).
+  function handleReplaceLogo() {
+    if (!onLogoChange) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.svg";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const url = await uploadImage(file, { maxDimension: 800 });
+        onLogoChange(url);
+        setMenuOpen(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't upload logo");
+      }
+    };
+    input.click();
+  }
+
   const showFloating = (hover || menuOpen) && !!anchor;
 
   return (
@@ -175,13 +205,37 @@ function EditableInner({
         onMouseLeave={() => setHover(false)}
         className="inline-block relative"
       >
-        <OperatorLogoTile
-          logoUrl={logoUrl}
-          companyName={companyName}
-          className={className}
-          logoHeight={logoHeight}
-          tileBgOverride={tileBgOverride}
-        />
+        {logoUrl || companyName ? (
+          <OperatorLogoTile
+            logoUrl={logoUrl}
+            companyName={companyName}
+            className={className}
+            logoHeight={logoHeight}
+            tileBgOverride={tileBgOverride}
+            bare={bare}
+          />
+        ) : (
+          // Empty state — operator has no global logo and no override.
+          // Click anywhere on this slot to open the file picker; the
+          // upload lands as a per-section override (same channel as
+          // "Replace logo"). Sized to roughly match logoHeight so the
+          // placeholder doesn't disrupt the surrounding layout.
+          <button
+            type="button"
+            onClick={handleReplaceLogo}
+            className="flex items-center justify-center text-[10.5px] uppercase tracking-[0.22em] font-semibold text-black/40 hover:text-black/70 hover:border-black/30 transition cursor-pointer"
+            style={{
+              minHeight: (logoHeight ?? 44) + 14,
+              minWidth: 92,
+              padding: "8px 14px",
+              border: "1px dashed rgba(0,0,0,0.2)",
+              borderRadius: 6,
+              background: "rgba(0,0,0,0.02)",
+            }}
+          >
+            + Add logo
+          </button>
+        )}
         {removing && (
           <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-white/85 backdrop-blur-sm pointer-events-none">
             <div className="text-[11px] font-semibold text-black/70 tabular-nums">
@@ -201,12 +255,15 @@ function EditableInner({
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}
             onRemoveBackground={handleRemoveBackground}
+            onReplaceLogo={handleReplaceLogo}
             onResetLogo={handleResetLogo}
             onPickColor={handlePickColor}
             tileBgOverride={tileBgOverride}
             isOverridden={!!isOverridden}
             removing={removing}
             error={error}
+            hasLogo={!!logoUrl}
+            showTileColour={!bare}
           />,
           document.body,
         )}
@@ -224,12 +281,15 @@ function FloatingChrome({
   onMouseEnter,
   onMouseLeave,
   onRemoveBackground,
+  onReplaceLogo,
   onResetLogo,
   onPickColor,
   tileBgOverride,
   isOverridden,
   removing,
   error,
+  hasLogo,
+  showTileColour,
 }: {
   anchor: DOMRect;
   menuOpen: boolean;
@@ -238,12 +298,15 @@ function FloatingChrome({
   onMouseEnter: () => void;
   onMouseLeave: () => void;
   onRemoveBackground: () => void;
+  onReplaceLogo: () => void;
   onResetLogo: () => void;
   onPickColor: (color: string | undefined) => void;
   tileBgOverride?: string;
   isOverridden: boolean;
   removing: boolean;
   error: string | null;
+  hasLogo: boolean;
+  showTileColour: boolean;
 }) {
   // Edit pill sits at top-right of the tile.
   const pillStyle: React.CSSProperties = {
@@ -295,21 +358,35 @@ function FloatingChrome({
             style={menuStyle}
             className="bg-white rounded-xl shadow-2xl border border-black/10 overflow-hidden"
           >
-            {/* Remove background */}
+            {/* Replace logo — file picker, saves to per-section override.
+                Always available so operators can swap the logo for this
+                proposal without going to Brand DNA settings. */}
             <button
               type="button"
-              onClick={onRemoveBackground}
-              disabled={removing}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 text-[13px] text-left hover:bg-black/4 transition disabled:opacity-50"
+              onClick={onReplaceLogo}
+              className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[13px] text-left hover:bg-black/4 transition"
             >
-              <span className="flex items-center gap-2">
-                <span aria-hidden>✨</span>
-                Remove background
-              </span>
-              <span className="text-[10px] uppercase tracking-wider text-black/35">
-                {removing ? "Working…" : "ML"}
-              </span>
+              <span aria-hidden>📷</span>
+              {hasLogo ? "Replace logo…" : "Upload logo…"}
             </button>
+
+            {/* Remove background — only when there's a logo to clean. */}
+            {hasLogo && (
+              <button
+                type="button"
+                onClick={onRemoveBackground}
+                disabled={removing}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 text-[13px] text-left hover:bg-black/4 transition disabled:opacity-50 border-t border-black/6"
+              >
+                <span className="flex items-center gap-2">
+                  <span aria-hidden>✨</span>
+                  Remove background
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-black/35">
+                  {removing ? "Working…" : "ML"}
+                </span>
+              </button>
+            )}
 
             {isOverridden && (
               <button
@@ -327,39 +404,43 @@ function FloatingChrome({
               </div>
             )}
 
-            {/* Tile colour */}
-            <div className="border-t border-black/6 px-3.5 py-3">
-              <div className="text-[10px] uppercase tracking-wider text-black/40 mb-2 font-semibold">
-                Tile colour
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <Swatch
-                  label="Auto"
-                  selected={!tileBgOverride}
-                  onClick={() => onPickColor(undefined)}
-                  isAuto
-                />
-                {PRESET_SWATCHES.map((s) => (
+            {/* Tile colour — hidden when the logo renders bare (no tile
+                to colour). Brightness detection still drives the
+                wordmark fallback colour silently. */}
+            {showTileColour && (
+              <div className="border-t border-black/6 px-3.5 py-3">
+                <div className="text-[10px] uppercase tracking-wider text-black/40 mb-2 font-semibold">
+                  Tile colour
+                </div>
+                <div className="flex flex-wrap gap-1.5">
                   <Swatch
-                    key={s.value}
-                    label={s.label}
-                    color={s.value}
-                    selected={tileBgOverride === s.value}
-                    onClick={() => onPickColor(s.value)}
+                    label="Auto"
+                    selected={!tileBgOverride}
+                    onClick={() => onPickColor(undefined)}
+                    isAuto
                   />
-                ))}
+                  {PRESET_SWATCHES.map((s) => (
+                    <Swatch
+                      key={s.value}
+                      label={s.label}
+                      color={s.value}
+                      selected={tileBgOverride === s.value}
+                      onClick={() => onPickColor(s.value)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={hexFromColor(tileBgOverride) || "#f5e8d8"}
+                    onChange={(e) => onPickColor(e.target.value)}
+                    className="w-8 h-8 rounded border border-black/10 cursor-pointer p-0"
+                    title="Custom colour"
+                  />
+                  <span className="text-[11px] text-black/45">Custom hex</span>
+                </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  type="color"
-                  value={hexFromColor(tileBgOverride) || "#f5e8d8"}
-                  onChange={(e) => onPickColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-black/10 cursor-pointer p-0"
-                  title="Custom colour"
-                />
-                <span className="text-[11px] text-black/45">Custom hex</span>
-              </div>
-            </div>
+            )}
           </div>
         </>
       )}

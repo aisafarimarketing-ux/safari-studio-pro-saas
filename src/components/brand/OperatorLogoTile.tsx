@@ -44,6 +44,12 @@ export function OperatorLogoTile({
    *  both `toneOverride` and the brightness-detection auto tone.
    *  Used by the per-proposal logo controls in the editor. */
   tileBgOverride,
+  /** Render the logo with no tile chrome — no padding, no background,
+   *  no shadow. Used in places where the logo sits directly on the
+   *  section surface (Personal Note bottom strip, Footer). The hover
+   *  editor still wraps this via EditableOperatorLogoTile and the
+   *  brightness detection still drives the wordmark fallback colour. */
+  bare = false,
 }: {
   logoUrl?: string;
   companyName?: string;
@@ -51,6 +57,7 @@ export function OperatorLogoTile({
   logoHeight?: number;
   toneOverride?: Tone;
   tileBgOverride?: string;
+  bare?: boolean;
 }) {
   const [autoTone, setAutoTone] = useState<Tone>("light");
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -78,22 +85,28 @@ export function OperatorLogoTile({
   const tileBg = tileBgOverride ?? (effectiveTone === "dark" ? TILE_DARK : TILE_LIGHT);
   const wordmarkColor = effectiveTone === "dark" ? "#f5e8d8" : "#1f3a3a";
 
-  return (
-    <div
-      className={`inline-flex items-center ${className}`}
-      style={{
+  // Bare mode: just the img/wordmark, no tile chrome. The brightness
+  // detection still runs (so the wordmark fallback's colour is correct
+  // against light vs dark section backgrounds).
+  const innerStyle: React.CSSProperties = bare
+    ? {}
+    : {
         background: tileBg,
         backdropFilter: "blur(6px)",
         WebkitBackdropFilter: "blur(6px)",
         borderRadius: 8,
         padding: "10px 14px",
         boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
-        // Subtle hairline matches the tone — adds editorial precision.
         border:
           effectiveTone === "dark"
             ? "1px solid rgba(245,232,216,0.10)"
             : "1px solid rgba(31,58,58,0.08)",
-      }}
+      };
+
+  return (
+    <div
+      className={`inline-flex items-center ${className}`}
+      style={innerStyle}
     >
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -104,7 +117,7 @@ export function OperatorLogoTile({
           style={{
             height: logoHeight,
             width: "auto",
-            maxWidth: 220,
+            maxWidth: bare ? "100%" : 220,
             objectFit: "contain",
             display: "block",
           }}
@@ -115,7 +128,7 @@ export function OperatorLogoTile({
       ) : (
         <span
           className="text-[12px] uppercase tracking-[0.28em] font-semibold whitespace-nowrap"
-          style={{ color: wordmarkColor }}
+          style={{ color: bare ? "currentColor" : wordmarkColor }}
         >
           {companyName}
         </span>
