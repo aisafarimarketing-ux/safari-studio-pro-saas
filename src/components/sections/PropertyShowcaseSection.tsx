@@ -149,6 +149,51 @@ function PropertyBlock({
       }}
     >
       <div className="max-w-6xl mx-auto px-8 md:px-12">
+        {/* Editorial standfirst — promotes whyWeChoseThis from the
+            INFORMATION tab to a magazine-quality pull-quote above the
+            property block. Italic display serif, centred, hairline
+            ornaments either side. Hidden in preview when blank;
+            visible in editor with a subtle hint so operators see the
+            slot. The aim is a moment of editorial voice ABOVE every
+            property — the thing Safari Portal / Safari Office don't
+            do. */}
+        {(property.whyWeChoseThis || isEditor) && (
+          <div className="mb-8 md:mb-10 flex items-center gap-4 max-w-3xl mx-auto">
+            <span
+              aria-hidden
+              className="flex-1 h-px"
+              style={{ background: tokens.border }}
+            />
+            <div
+              className="text-center italic outline-none leading-snug"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(16px, 1.85vw, 21px)",
+                opacity: property.whyWeChoseThis ? 0.92 : 0.5,
+                maxWidth: "60ch",
+              }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                useProposalStore.getState().updateProperty(property.id, {
+                  whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
+                })
+              }
+            >
+              {property.whyWeChoseThis ||
+                (isEditor
+                  ? "Why this lodge for these guests? One editorial line."
+                  : "")}
+            </div>
+            <span
+              aria-hidden
+              className="flex-1 h-px"
+              style={{ background: tokens.border }}
+            />
+          </div>
+        )}
+
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}
           <div>
@@ -314,6 +359,9 @@ function PropertyBlock({
             {activeTab === "stats" && (
               <StatsTab
                 imageUrl={activeCarouselImage}
+                carouselImages={carouselImages}
+                carouselIndex={carouselIndex}
+                onSelectImage={setCarouselIndex}
                 property={property}
                 isEditor={isEditor}
                 tokens={tokens}
@@ -394,11 +442,17 @@ function TabBar({
 
 function StatsTab({
   imageUrl,
+  carouselImages,
+  carouselIndex,
+  onSelectImage,
   property,
   isEditor,
   tokens,
 }: {
   imageUrl: string | null;
+  carouselImages: string[];
+  carouselIndex: number;
+  onSelectImage: (i: number) => void;
   property: Property;
   isEditor: boolean;
   tokens: ThemeTokens;
@@ -429,19 +483,39 @@ function StatsTab({
     }
   };
 
+  // Magazine collage: 1 large lead + up to 3 thumbnails of OTHER images
+  // visible at once. Replaces the single-image-at-a-time carousel that
+  // left a sea of white space below the lead photo. Clicking a thumbnail
+  // promotes it to the lead position; if the property has > 4 images
+  // total, the third thumbnail shows a "+N more" overlay that cycles
+  // through the rest on click.
+  const MAX_THUMBS = 3;
+  const otherImages = carouselImages
+    .map((url, i) => ({ url, i }))
+    .filter(({ i }) => i !== carouselIndex);
+  const thumbs = otherImages.slice(0, MAX_THUMBS);
+  const hasMore = otherImages.length > MAX_THUMBS;
+  // The "+N more" thumb advances through the leftover images.
+  const nextLeftoverIndex = hasMore ? otherImages[MAX_THUMBS].i : null;
+
   return (
-    <div>
+    <div className="flex flex-col gap-2">
+      {/* Lead photo — 4:3, the dominant image */}
       <div
         className="relative overflow-hidden w-full"
         style={{
           background: tokens.cardBg,
-          aspectRatio: "16 / 10",
+          aspectRatio: "4 / 3",
           borderRadius: 4,
         }}
       >
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={property.name} className="absolute inset-0 w-full h-full object-cover" />
+          <img
+            src={imageUrl}
+            alt={property.name}
+            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+          />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
             <input type="file" accept="image/*" className="hidden" onChange={uploadLead} />
@@ -470,6 +544,78 @@ function StatsTab({
           </label>
         )}
       </div>
+
+      {/* Thumbnail row — 3-up grid of other images. Click to promote
+          to the lead position. Hidden when the property has 1 image
+          or none (the lead alone tells the story). Shown as add-photo
+          placeholders in editor mode when slots are empty so the
+          operator sees there's a gallery slot to fill. */}
+      {(carouselImages.length > 1 || isEditor) && (
+        <div className="grid grid-cols-3 gap-2">
+          {Array.from({ length: MAX_THUMBS }).map((_, slotIdx) => {
+            const thumb = thumbs[slotIdx];
+            const isLastSlotWithMore = slotIdx === MAX_THUMBS - 1 && hasMore;
+            const moreCount = otherImages.length - MAX_THUMBS;
+            return (
+              <button
+                key={slotIdx}
+                type="button"
+                onClick={() => {
+                  if (thumb) {
+                    if (isLastSlotWithMore && nextLeftoverIndex !== null) {
+                      onSelectImage(nextLeftoverIndex);
+                    } else {
+                      onSelectImage(thumb.i);
+                    }
+                  }
+                }}
+                disabled={!thumb}
+                className="relative overflow-hidden disabled:cursor-default group"
+                style={{
+                  background: tokens.cardBg,
+                  aspectRatio: "1 / 1",
+                  borderRadius: 4,
+                  border: thumb ? "none" : `1px dashed ${tokens.border}`,
+                  cursor: thumb ? "pointer" : "default",
+                }}
+                title={
+                  isLastSlotWithMore
+                    ? `+${moreCount} more — click to advance`
+                    : thumb
+                      ? "View as lead image"
+                      : ""
+                }
+              >
+                {thumb ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={thumb.url}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                    />
+                    {isLastSlotWithMore && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center text-white text-[14px] font-semibold tracking-wide backdrop-blur-[1px]"
+                        style={{ background: "rgba(0,0,0,0.45)" }}
+                      >
+                        +{moreCount} more
+                      </div>
+                    )}
+                  </>
+                ) : isEditor ? (
+                  <span
+                    className="absolute inset-0 flex items-center justify-center text-[10.5px] uppercase tracking-[0.22em]"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    + Add
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -703,27 +849,12 @@ function InformationTab({
         </div>
       </section>
 
-      {(property.whyWeChoseThis || isEditor) && (
-        <section>
-          <div
-            className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
-            style={{ color: tokens.mutedText }}
-          >
-            Why we chose it
-          </div>
-          <div
-            className="text-[14px] leading-[1.8] whitespace-pre-line outline-none"
-            style={{ color: tokens.bodyText }}
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            onBlur={(e) =>
-              updateProperty(property.id, { whyWeChoseThis: e.currentTarget.textContent ?? "" })
-            }
-          >
-            {property.whyWeChoseThis || (isEditor ? "Why this specific lodge for these guests?" : "")}
-          </div>
-        </section>
-      )}
+      {/* Why-we-chose-this used to live here as its own section. It's
+          now promoted to a magazine-style standfirst above the property
+          block (see PropertyBlock — the italic display-serif quote
+          flanked by hairline ornaments). One source of truth, edited
+          either there or here — but only rendered once. The amenity
+          block stays inside the INFORMATION tab. */}
 
       {(property.amenities.length > 0 || isEditor) && (
         <section>
