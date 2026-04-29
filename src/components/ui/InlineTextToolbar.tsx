@@ -56,14 +56,37 @@ const PRESET_HIGHLIGHTS: { value: string; label: string }[] = [
   { value: "rgba(0, 0, 0, 0.85)", label: "Black" },
 ];
 
+// Broad font roster grouped by character — serifs / sans / display /
+// handwriting / mono. The proposal's two theme fonts (display + body)
+// are surfaced FIRST in the menu (see themeFonts below) so operators
+// don't have to scan to find them.
 const FONT_FAMILY_OPTIONS = [
   { value: "", label: "Default" },
-  { value: "'Playfair Display', serif", label: "Playfair" },
+  // ── Serif (editorial / book) ──────────────────────────────────────
+  { value: "'Playfair Display', serif", label: "Playfair Display" },
   { value: "'Cormorant Garamond', serif", label: "Cormorant" },
-  { value: "'EB Garamond', serif", label: "Garamond" },
-  { value: "'Inter', sans-serif", label: "Inter" },
+  { value: "'EB Garamond', serif", label: "EB Garamond" },
   { value: "'Lora', serif", label: "Lora" },
+  { value: "'Merriweather', serif", label: "Merriweather" },
+  { value: "'Crimson Pro', serif", label: "Crimson Pro" },
+  { value: "'Source Serif Pro', serif", label: "Source Serif" },
+  // ── Sans (modern / corporate) ─────────────────────────────────────
+  { value: "'Inter', sans-serif", label: "Inter" },
   { value: "'Montserrat', sans-serif", label: "Montserrat" },
+  { value: "'Roboto', sans-serif", label: "Roboto" },
+  { value: "'Open Sans', sans-serif", label: "Open Sans" },
+  { value: "'Poppins', sans-serif", label: "Poppins" },
+  { value: "'Raleway', sans-serif", label: "Raleway" },
+  { value: "'Work Sans', sans-serif", label: "Work Sans" },
+  { value: "'IBM Plex Sans', sans-serif", label: "IBM Plex Sans" },
+  // ── Display (loud / poster) ───────────────────────────────────────
+  { value: "'Bebas Neue', sans-serif", label: "Bebas Neue" },
+  { value: "'Oswald', sans-serif", label: "Oswald" },
+  // ── Handwriting / script ──────────────────────────────────────────
+  { value: "'Caveat', cursive", label: "Caveat" },
+  { value: "'Pacifico', cursive", label: "Pacifico" },
+  { value: "'Italianno', cursive", label: "Italianno" },
+  // ── Mono ──────────────────────────────────────────────────────────
   { value: "monospace", label: "Mono" },
 ] as const;
 
@@ -124,18 +147,27 @@ export function InlineTextToolbar() {
       // <input>, not contenteditable), so `host` ends up null and
       // we return earlier. No additional guard needed.
       const rect = range.getBoundingClientRect();
-      // Position 88px above selection so we sit ABOVE the AI toolbar
-      // (which positions at -44px). Coexists cleanly: AI close to
-      // text, formatting one tier up. If there's not enough space
-      // above, drop below.
+      // Smart position: prefer ABOVE the selection (88px above so we
+      // stack above the AI toolbar at -44px). If there's not enough
+      // viewport space above, flip BELOW the selection. Horizontal:
+      // centre over the selection, clamped to viewport edges so the
+      // toolbar never runs off-screen.
       const W = 520;
+      const TOOLBAR_H = 52;
       const margin = 12;
       let left = rect.left + rect.width / 2 - W / 2;
       const vw = window.innerWidth;
+      const vh = window.innerHeight;
       if (left < margin) left = margin;
       if (left + W > vw - margin) left = vw - W - margin;
       let top = rect.top - 88;
-      if (top < margin) top = rect.bottom + 52;
+      // Not enough room above? Flip below the selection.
+      if (top < margin) top = rect.bottom + 12;
+      // Last-resort: clamp to viewport bottom so we don't disappear
+      // entirely on a selection at the very bottom of the page.
+      if (top + TOOLBAR_H > vh - margin) {
+        top = Math.max(margin, vh - TOOLBAR_H - margin);
+      }
       setPos({ top, left });
       rangeRef.current = range.cloneRange();
       hostRef.current = host;
@@ -544,10 +576,17 @@ function PopoverPanel({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 6, scale: 0.97 }}
       transition={{ type: "spring", damping: 22, stiffness: 380 }}
-      className="absolute mt-1.5 rounded-xl py-2 px-1.5 min-w-[200px]"
+      className="absolute mt-1.5 rounded-xl py-2 px-1.5 min-w-[200px] overflow-y-auto"
       style={{
         ...alignmentStyle,
         top: "100%",
+        // Cap the popover height to a reasonable fraction of the
+        // viewport so a long font list scrolls instead of running
+        // off-screen. Smart-position direction (above/below toolbar)
+        // is handled by the toolbar itself flipping its baseline if
+        // there's no room above the selection — see the `top` calc
+        // in the selectionchange handler.
+        maxHeight: "min(420px, 60vh)",
         background: "#0a0a0a",
         border: "1px solid rgba(255,255,255,0.08)",
         boxShadow:

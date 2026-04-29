@@ -246,10 +246,24 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  // The map renders at 100% of its grid cell. Using `items-stretch` on
-  // the parent grid means the cell's height matches the rail's natural
-  // content height — so the map and the day-card list sit at the same
-  // height, bottom-aligned. No fixed MAP_HEIGHT any more.
+  // Route bbox aspect — drives the map column's CSS aspect-ratio so
+  // the route fills the frame exactly, without empty Lake Victoria /
+  // Indian Ocean / Kenya around it. Operator brief: "make it occupy
+  // the billboard". Computed from cached coords; falls back to a
+  // gentle default before coords resolve.
+  const mapAspect = (() => {
+    if (!cachedCoords || cachedCoords.length < 2) return 1.2;
+    const lats = cachedCoords.map((c) => c.lat);
+    const lngs = cachedCoords.map((c) => c.lng);
+    const latSpan = Math.max(...lats) - Math.min(...lats);
+    const lngSpan = Math.max(...lngs) - Math.min(...lngs);
+    if (latSpan < 0.001 || lngSpan < 0.001) return 1.2;
+    // Clamp so very-narrow trips (single park) don't produce extreme
+    // aspect ratios. Range 0.7 (slightly portrait) to 1.8 (modest
+    // landscape) covers every practical East African itinerary.
+    const raw = lngSpan / latSpan;
+    return Math.min(1.8, Math.max(0.7, raw));
+  })();
 
   return (
     <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
@@ -326,10 +340,13 @@ function InteractiveMap({
           </div>
         </header>
 
-        {/* Rail (day cards + END) ‖ map. items-stretch makes the map
-            cell match the rail's natural content height — they sit at
-            the same height, bottom-aligned. */}
-        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
+        {/* Rail (day cards + END) ‖ map. items-start so the rail and
+            map can have INDEPENDENT natural heights. The map column
+            uses CSS aspect-ratio to size itself to the route's bbox
+            aspect — that's how it "fills the billboard" with no empty
+            geography around the route. The shorter column's empty
+            cell space shows through to the section's bg. */}
+        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-start">
           {/* Sidebar */}
           <div className="flex flex-col pr-1">
             {/* Day cards — clickable, fly the map to the selected pin.
@@ -458,11 +475,12 @@ function InteractiveMap({
               rail's natural content height. items-stretch on the
               parent grid + height="100%" on RouteMap is what couples
               the two. ─────────────────────────── */}
-          <div className="min-w-0 flex">
+          <div className="min-w-0">
             {days.length > 0 ? (
               <div
-                className="overflow-hidden flex-1 min-h-0 relative"
+                className="overflow-hidden relative w-full"
                 style={{
+                  aspectRatio: mapAspect,
                   borderRadius: 10,
                   border: `1px solid ${tokens.border}`,
                 }}
@@ -479,8 +497,9 @@ function InteractiveMap({
               </div>
             ) : (
               <div
-                className="flex flex-1 items-center justify-center text-[13px]"
+                className="flex items-center justify-center text-[13px] w-full"
                 style={{
+                  aspectRatio: mapAspect,
                   background: tokens.cardBg,
                   color: tokens.mutedText,
                   borderRadius: 10,
