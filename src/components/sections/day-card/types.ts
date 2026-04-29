@@ -90,6 +90,9 @@ export type DayCardLayoutProps = {
   tokens: ThemeTokens;
   theme: ProposalTheme;
   activeTier: TierKey;
+  /** Operator-picked override for the day-card head strip background.
+   *  When unset, layouts fall back to `tokens.sectionSurface`. */
+  dayHeadBg?: string;
 
   // Text editing (reusing contentEditable pattern with data-ai-editable)
   onDestinationChange: (next: string) => void;

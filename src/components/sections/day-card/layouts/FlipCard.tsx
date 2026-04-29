@@ -2,6 +2,8 @@
 
 import { ImageSlot } from "../ImageSlot";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
+import { RichEditable } from "@/components/editor/RichEditable";
+import { sanitizeRichText } from "@/lib/sanitizeRichText";
 import type { DayCardLayoutProps } from "../types";
 
 // FlipCard — magazine-spread day card.
@@ -41,6 +43,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
     tokens,
     theme,
     flip,
+    dayHeadBg,
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,
@@ -62,10 +65,11 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
   return (
     <div className="flex flex-col" style={{ background: tokens.cardBg }}>
       {/* Top strip — same as editorial-stack so trip-flip + stack
-          variants on the same proposal stay visually consistent. */}
+          variants on the same proposal stay visually consistent.
+          Background honours the dayHeadBg override when set. */}
       <div
         className="flex items-center gap-4 px-10 md:px-14 py-5"
-        style={{ background: tokens.sectionSurface }}
+        style={{ background: dayHeadBg ?? tokens.sectionSurface }}
       >
         <div
           className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-[0.18em]"
@@ -226,24 +230,23 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
               Today
             </div>
             {isEditor ? (
-              <div
+              <RichEditable
+                isEditor
+                as="div"
+                value={data.narrative || ""}
+                onChange={onNarrativeChange}
                 className="text-[15px] leading-[1.85] whitespace-pre-line outline-none"
                 style={{ color: tokens.bodyText }}
-                contentEditable
-                suppressContentEditableWarning
-                data-ai-editable="day-narrative"
-                onBlur={(e) => onNarrativeChange(e.currentTarget.textContent ?? "")}
-              >
-                {data.narrative ||
-                  "Write the day's narrative — what the traveller sees, hears, does."}
-              </div>
+                dataAttrs={{ "data-ai-editable": "day-narrative" }}
+              />
             ) : (
               <div
                 className="text-[15px] leading-[1.85] whitespace-pre-line"
                 style={{ color: tokens.bodyText }}
-              >
-                {data.narrative}
-              </div>
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeRichText(data.narrative ?? ""),
+                }}
+              />
             )}
           </div>
         </div>

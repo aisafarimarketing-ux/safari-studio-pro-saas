@@ -174,6 +174,7 @@ export function DayCard({
     tokens,
     theme,
     activeTier: activeTier as TierKey,
+    dayHeadBg: section.styleOverrides?.dayHeadBg,
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,

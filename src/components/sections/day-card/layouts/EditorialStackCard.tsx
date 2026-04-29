@@ -2,6 +2,8 @@
 
 import { ImageSlot } from "../ImageSlot";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
+import { RichEditable } from "@/components/editor/RichEditable";
+import { sanitizeRichText } from "@/lib/sanitizeRichText";
 import type { DayCardLayoutProps } from "../types";
 import type { OptionalActivity } from "@/lib/types";
 
@@ -30,6 +32,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
     isEditor,
     tokens,
     theme,
+    dayHeadBg,
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,
@@ -40,10 +43,13 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
 
   return (
     <div className="flex flex-col" style={{ background: tokens.cardBg }}>
-      {/* Top strip — day badge + destination label + optional phase */}
+      {/* Top strip — day badge + destination label + optional phase.
+          Background colour is independent from the section surface so
+          operators can recolour the head row without affecting the
+          gutter. Falls back to sectionSurface when no override is set. */}
       <div
         className="flex items-center gap-4 px-10 md:px-14 py-5"
-        style={{ background: tokens.sectionSurface }}
+        style={{ background: dayHeadBg ?? tokens.sectionSurface }}
       >
         <div
           className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-[0.18em]"
@@ -152,16 +158,15 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
         )}
 
         {isEditor ? (
-          <div
+          <RichEditable
+            isEditor
+            as="div"
+            value={data.narrative || ""}
+            onChange={onNarrativeChange}
             className="text-[15px] leading-[1.85] whitespace-pre-line outline-none max-w-[68ch]"
             style={{ color: tokens.bodyText }}
-            contentEditable
-            suppressContentEditableWarning
-            data-ai-editable="day-narrative"
-            onBlur={(e) => onNarrativeChange(e.currentTarget.textContent ?? "")}
-          >
-            {data.narrative || "Write the day's narrative… use **bold** for place names."}
-          </div>
+            dataAttrs={{ "data-ai-editable": "day-narrative" }}
+          />
         ) : (
           <NarrativeBody narrative={data.narrative ?? ""} tokens={tokens} />
         )}
@@ -548,7 +553,12 @@ function NarrativeBody({
   narrative: string;
   tokens: DayCardLayoutProps["tokens"];
 }) {
-  const paragraphs = narrative
+  // narrative may now contain inline HTML from the rich-text toolbar
+  // (color / font-size spans). Sanitisation happens on save and again
+  // here as defence-in-depth. Paragraph splitting works on the
+  // surviving text — sanitiser preserves \n.
+  const sanitized = sanitizeRichText(narrative);
+  const paragraphs = sanitized
     .split(/\n{2,}|\n/)
     .map((p) => p.trim())
     .filter(Boolean);
@@ -567,34 +577,24 @@ function NarrativeBody({
         >
           →
         </span>
-        <span>{renderInlineBold(lead)}</span>
+        <span dangerouslySetInnerHTML={{ __html: lead }} />
       </div>
       {rest.map((p, i) => (
         <p
           key={i}
           className="text-[15px] leading-[1.85]"
           style={{ color: tokens.bodyText }}
-        >
-          {renderInlineBold(p)}
-        </p>
+          dangerouslySetInnerHTML={{ __html: p }}
+        />
       ))}
     </div>
   );
 }
 
-function renderInlineBold(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} style={{ fontWeight: 700 }}>
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
+// renderInlineBold removed — the rich-text toolbar (color + font-size
+// spans, persisted via sanitizeRichText) supersedes the markdown-style
+// **bold** shorthand. Operators emphasise words by selecting them and
+// picking a colour or larger size from the floating toolbar.
 
 // ─── Day-type glyph ─────────────────────────────────────────────────────
 //

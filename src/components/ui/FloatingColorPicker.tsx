@@ -114,6 +114,7 @@ export function FloatingColorPicker() {
     pageBg: "Page background",
     sectionSurface: "Section background",
     cardBg: "Card background",
+    dayHeadBg: "Day-head background",
     accent: "Accent color",
     secondaryAccent: "Secondary accent",
     headingText: "Heading color",

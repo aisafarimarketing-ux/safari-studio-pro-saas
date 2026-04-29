@@ -4,6 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
+import { RichEditable } from "@/components/editor/RichEditable";
 import type { Section } from "@/lib/types";
 
 export function CustomTextSection({ section }: { section: Section }) {
@@ -41,16 +42,15 @@ export function CustomTextSection({ section }: { section: Section }) {
             {heading || (isEditor ? "Section heading" : "")}
           </h2>
         )}
-        <div
+        <RichEditable
+          isEditor={isEditor}
+          as="div"
+          value={body || ""}
+          onChange={(next) => updateSectionContent(section.id, { body: next })}
           className="text-base leading-[1.9] outline-none whitespace-pre-line"
           style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          data-ai-editable="custom"
-          onBlur={(e) => updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" })}
-        >
-          {body || (isEditor ? "Click to start typing..." : "")}
-        </div>
+          dataAttrs={{ "data-ai-editable": "custom" }}
+        />
       </div>
     </div>
   );

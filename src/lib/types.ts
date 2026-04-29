@@ -262,6 +262,11 @@ export type SectionType =
 export type StyleOverrides = Partial<ThemeTokens> & {
   padding?: string;
   maxWidth?: string;
+  /** Day-card head strip background — distinct from sectionSurface so
+   *  the day-cards section can colour the head row (day number / location
+   *  header) independently from the body card and the section gutter.
+   *  Only consumed by EditorialStackCard / FlipCard. */
+  dayHeadBg?: string;
 };
 
 export interface Section {

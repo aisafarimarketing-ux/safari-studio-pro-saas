@@ -61,7 +61,7 @@ export function DayJourneySection({ section }: { section: Section }) {
               className="text-h1 font-bold tracking-tight"
               style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             >
-              Your journey
+              Detailed Itinerary
             </h2>
           </div>
           <div className="text-small pb-1 text-right" style={{ color: tokens.mutedText }}>

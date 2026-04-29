@@ -41,18 +41,75 @@ export function SectionChrome({ section, children }: Props) {
   const reg = SECTION_REGISTRY[section.type];
   const variants = reg?.variants ?? [];
 
-  // Resolve the actual section background: override > global token
+  // Resolve actual rendered colours per token: override > global token.
   const overrides = section.styleOverrides as Record<string, string>;
   const resolvedBg = overrides?.sectionSurface ?? proposal.theme.tokens.sectionSurface;
+  const themeTokens = proposal.theme.tokens;
 
-  const handleBgColorClick = (e: React.MouseEvent) => {
+  // Per-section-type token pickers. Every section gets the section bg
+  // pill; the day-cards section gets extra pills covering the structural
+  // tokens that drive its small objects so the operator can recolour
+  // the day head, the card body, and the accent (day-number badge,
+  // tier pill, amenity icon, carousel dot — all `tokens.accent`)
+  // independently from one swatch row. Other sections-with-cards
+  // (property showcase) get card bg + accent.
+  type PickerSpec = {
+    token: keyof typeof themeTokens | "dayHeadBg";
+    title: string;
+    swatch: string;
+  };
+  const pickerSpecs: PickerSpec[] = [
+    {
+      token: "sectionSurface",
+      title: "Section background",
+      swatch: resolvedBg,
+    },
+  ];
+  if (section.type === "dayJourney") {
+    pickerSpecs.push(
+      {
+        token: "dayHeadBg",
+        title: "Day-head background",
+        swatch: overrides?.dayHeadBg ?? themeTokens.sectionSurface,
+      },
+      {
+        token: "cardBg",
+        title: "Card background",
+        swatch: overrides?.cardBg ?? themeTokens.cardBg,
+      },
+      {
+        token: "accent",
+        title: "Accent — day badge, tier pill, icons",
+        swatch: overrides?.accent ?? themeTokens.accent,
+      },
+    );
+  } else if (section.type === "propertyShowcase") {
+    pickerSpecs.push(
+      {
+        token: "cardBg",
+        title: "Card background",
+        swatch: overrides?.cardBg ?? themeTokens.cardBg,
+      },
+      {
+        token: "accent",
+        title: "Accent — amenity icons, carousel dots",
+        swatch: overrides?.accent ?? themeTokens.accent,
+      },
+    );
+  }
+
+  const handlePickerClick = (
+    e: React.MouseEvent,
+    token: PickerSpec["token"],
+    swatch: string,
+  ) => {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     openFloatingPicker({
       x: rect.left,
       y: rect.bottom + 6,
-      color: resolvedBg,
-      token: "sectionSurface",
+      color: swatch,
+      token,
       sectionId: section.id,
     });
   };
@@ -114,16 +171,19 @@ export function SectionChrome({ section, children }: Props) {
             ⠿
           </button>
 
-          <button
-            onClick={handleBgColorClick}
-            className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
-            title="Section background"
-          >
-            <span
-              className="w-4 h-4 rounded-sm border border-black/15"
-              style={{ background: resolvedBg }}
-            />
-          </button>
+          {pickerSpecs.map((spec) => (
+            <button
+              key={spec.token}
+              onClick={(e) => handlePickerClick(e, spec.token, spec.swatch)}
+              className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
+              title={spec.title}
+            >
+              <span
+                className="w-4 h-4 rounded-sm border border-black/15"
+                style={{ background: spec.swatch }}
+              />
+            </button>
+          ))}
 
           <button
             onClick={(e) => { e.stopPropagation(); duplicateSection(section.id); }}

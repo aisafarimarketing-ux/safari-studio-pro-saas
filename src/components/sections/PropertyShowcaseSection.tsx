@@ -80,7 +80,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
             letterSpacing: "-0.015em",
           }}
         >
-          Your Accommodations
+          Your accommodations
         </h2>
       </header>
       {properties.map((property, idx) => (

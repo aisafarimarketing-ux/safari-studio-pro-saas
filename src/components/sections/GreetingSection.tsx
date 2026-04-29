@@ -4,6 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
+import { RichEditable } from "@/components/editor/RichEditable";
 import type { Section } from "@/lib/types";
 
 // Greeting — 4 layout variants, all on the editorial scale.
@@ -17,8 +18,11 @@ export function GreetingSection({ section }: { section: Section }) {
   const variant = section.layoutVariant;
   const body = section.content.body as string;
 
-  const onBodyBlur = (e: React.FocusEvent<HTMLDivElement>) =>
-    updateSectionContent(section.id, { body: e.currentTarget.textContent ?? "" });
+  // The greeting body now supports inline color + font-size (rich-text
+  // toolbar). Save innerHTML, sanitised to the allow-list, so the
+  // toolbar's spans round-trip through preview / share / PDF.
+  const onBodyChange = (next: string) =>
+    updateSectionContent(section.id, { body: next });
 
   const aiButton = isEditor ? (
     <div className="absolute top-14 right-4 z-[35]">
@@ -66,16 +70,15 @@ export function GreetingSection({ section }: { section: Section }) {
               A note from your consultant
             </div>
             <BigQuote theme={theme} tokens={tokens} />
-            <div
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              data-ai-editable="greeting"
+            <RichEditable
+              isEditor={isEditor}
+              as="div"
+              value={body || ""}
+              onChange={onBodyChange}
               className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
               style={{ color: tokens.bodyText, fontFamily: `'${theme.displayFont}', serif` }}
-              onBlur={onBodyBlur}
-            >
-              {body}
-            </div>
+              dataAttrs={{ "data-ai-editable": "greeting" }}
+            />
           </div>
         </div>
       </div>
@@ -94,16 +97,15 @@ export function GreetingSection({ section }: { section: Section }) {
           >
             Welcome
           </div>
-          <div
-            contentEditable={isEditor}
-            suppressContentEditableWarning
-            data-ai-editable="greeting"
+          <RichEditable
+            isEditor={isEditor}
+            as="div"
+            value={body || ""}
+            onChange={onBodyChange}
             className="text-body-lg leading-loose whitespace-pre-line outline-none"
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-            onBlur={onBodyBlur}
-          >
-            {body}
-          </div>
+            dataAttrs={{ "data-ai-editable": "greeting" }}
+          />
           <div className="mt-12 inline-flex items-center gap-3">
             <ConsultantAvatar operator={operator} tokens={tokens} size={32} textSize="text-small" />
             <span className="text-small font-medium" style={{ color: tokens.headingText }}>
@@ -129,15 +131,15 @@ export function GreetingSection({ section }: { section: Section }) {
             >
               A personal note
             </div>
-            <div
-              contentEditable={isEditor}
-              suppressContentEditableWarning
+            <RichEditable
+              isEditor={isEditor}
+              as="div"
+              value={body || ""}
+              onChange={onBodyChange}
               className="text-body-lg leading-loose whitespace-pre-line outline-none"
               style={{ color: tokens.bodyText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              onBlur={onBodyBlur}
-            >
-              {body}
-            </div>
+              dataAttrs={{ "data-ai-editable": "greeting" }}
+            />
             <div className="mt-12 flex items-center gap-4">
               <ConsultantAvatar operator={operator} tokens={tokens} size={40} textSize="text-small" />
               <div>
@@ -169,16 +171,15 @@ export function GreetingSection({ section }: { section: Section }) {
 
         <BigQuote theme={theme} tokens={tokens} />
 
-        <div
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          data-ai-editable="greeting"
+        <RichEditable
+          isEditor={isEditor}
+          as="div"
+          value={body || ""}
+          onChange={onBodyChange}
           className="text-body-lg leading-loose whitespace-pre-line outline-none relative z-10"
           style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
-          onBlur={onBodyBlur}
-        >
-          {body}
-        </div>
+          dataAttrs={{ "data-ai-editable": "greeting" }}
+        />
 
         <div
           className="mt-16 pt-12 flex items-center gap-6"

@@ -158,13 +158,16 @@ export function MapSection({ section }: { section: Section }) {
           <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
             {/* ── Left rail ───────────────────────────────────────── */}
             <aside className="min-w-0 flex flex-col">
-              {/* Rail header — Map eyebrow + small title + country chip */}
+              {/* Rail header — eyebrow ("Itinerary at a glance") +
+                  dynamic A→B title + country chip(s). The eyebrow is
+                  the section's editorial title; the H2 below is the
+                  trip-specific subhead. */}
               <div className="mb-3">
                 <div
                   className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-1"
                   style={{ color: tokens.mutedText }}
                 >
-                  Map
+                  Itinerary at a glance
                 </div>
                 <h2
                   className="font-bold leading-[1.15] outline-none"

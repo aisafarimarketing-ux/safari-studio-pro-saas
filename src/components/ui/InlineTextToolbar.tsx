@@ -1,107 +1,218 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { ColorPickerPopover } from "./ColorPickerPopover";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEditorStore } from "@/store/editorStore";
 
-interface ToolbarPos {
-  top: number;
-  left: number;
-}
+// ─── InlineTextToolbar ───────────────────────────────────────────────────
+//
+// Floating mini-toolbar that appears whenever the operator selects text
+// inside any contentEditable element on the proposal AND editor mode
+// is on. Two affordances:
+//
+//   • Colour picker  — preset swatches (charcoal / teal / sage / gold
+//     / copper / brick / cream / white)
+//   • Font-size input — type a number (10 / 14 / 20…), apply on Enter
+//     or blur, in pixels
+//
+// Apply path: wrap the current Range in a fresh <span style="…"> via
+// surroundContents() (with extractContents+insert fallback for ranges
+// that cross node boundaries). The contentEditable element is the
+// source of truth — its onBlur handler must save innerHTML, not
+// textContent, for the styling to round-trip.
+//
+// Why Range manipulation, not document.execCommand: execCommand
+// foreColor / fontSize are deprecated, the fontSize variant is
+// 1-7 scale (not pixels), and they emit non-deterministic markup
+// across browsers. Range + inline-styled span is auditable and
+// compatible with our sanitiser.
+//
+// Mounted once at the editor chrome root (ProposalEditor.tsx) so a
+// single instance handles every contentEditable in the document.
+
+const PRESET_COLORS: { value: string; label: string }[] = [
+  { value: "#101828", label: "Charcoal" },
+  { value: "#1f3a3a", label: "Teal" },
+  { value: "#2d5a40", label: "Sage" },
+  { value: "#c9a84c", label: "Gold" },
+  { value: "#b06a3b", label: "Copper" },
+  { value: "#b34334", label: "Brick" },
+  { value: "#f5e8d8", label: "Cream" },
+  { value: "#ffffff", label: "White" },
+];
 
 export function InlineTextToolbar() {
-  const [visible, setVisible] = useState(false);
-  const [pos, setPos] = useState<ToolbarPos>({ top: 0, left: 0 });
-  const [color, setColor] = useState("#000000");
-
-  const update = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      setVisible(false);
-      return;
-    }
-    const range = sel.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    if (rect.width === 0) {
-      setVisible(false);
-      return;
-    }
-    setPos({
-      top: rect.top + window.scrollY - 44,
-      left: rect.left + window.scrollX + rect.width / 2,
-    });
-    setVisible(true);
-  }, []);
+  const mode = useEditorStore((s) => s.mode);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // Track the most recent Range so apply-clicks can re-target it
+  // after focus moves to a toolbar control (which clears the
+  // window selection).
+  const rangeRef = useRef<Range | null>(null);
+  // contentEditable host of the current selection — used so we can
+  // dispatch a synthetic input/blur to trigger the section's save
+  // path after applying a style change.
+  const hostRef = useRef<HTMLElement | null>(null);
+  const [sizeInput, setSizeInput] = useState<string>("");
 
   useEffect(() => {
-    document.addEventListener("selectionchange", update);
-    return () => document.removeEventListener("selectionchange", update);
-  }, [update]);
+    // Only subscribe in editor mode. When the operator switches to
+    // preview, the cleanup unsubscribes; we don't reset `pos` here
+    // (that would be a setState-in-effect rule violation), but the
+    // render guard below hides the toolbar regardless of pos.
+    if (mode !== "editor") return;
+    const onSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setPos(null);
+        rangeRef.current = null;
+        hostRef.current = null;
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      // Walk up to find the nearest contentEditable host. Only show
+      // the toolbar when the selection is actually inside an editable
+      // region — avoids false-positives from random page text.
+      let node: Node | null = range.commonAncestorContainer;
+      let host: HTMLElement | null = null;
+      while (node && node !== document.body) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as HTMLElement;
+          if (el.isContentEditable) {
+            host = el;
+            break;
+          }
+        }
+        node = node.parentNode;
+      }
+      if (!host) {
+        setPos(null);
+        rangeRef.current = null;
+        hostRef.current = null;
+        return;
+      }
+      // Skip when the selection is inside editor chrome itself —
+      // e.g. selecting text in this very toolbar shouldn't re-trigger
+      // the toolbar.
+      if (host.closest("[data-editor-chrome]")) {
+        setPos(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      // Toolbar is ~280px wide; centre it horizontally over the
+      // selection, clamped to the viewport with a 12px margin so it
+      // never clips the screen edges. If there isn't room above the
+      // selection, drop it below.
+      const W = 280;
+      let left = rect.left + rect.width / 2 - W / 2;
+      const margin = 12;
+      const vw = window.innerWidth;
+      if (left < margin) left = margin;
+      if (left + W > vw - margin) left = vw - W - margin;
+      let top = rect.top - 44;
+      if (top < margin) top = rect.bottom + 8;
+      setPos({ top, left });
+      rangeRef.current = range.cloneRange();
+      hostRef.current = host;
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [mode]);
 
-  const exec = (cmd: string, value?: string) => {
-    document.execCommand(cmd, false, value);
+  // Apply inline style to the current range. Wraps the selected nodes
+  // in a fresh <span>; if the range crosses node boundaries (so
+  // surroundContents would throw), fall back to extractContents +
+  // insert which is permissive.
+  const applyStyle = (style: { color?: string; fontSize?: string }) => {
+    const range = rangeRef.current;
+    const host = hostRef.current;
+    if (!range || !host) return;
+
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    const span = document.createElement("span");
+    if (style.color) span.style.color = style.color;
+    if (style.fontSize) span.style.fontSize = style.fontSize;
+    try {
+      range.surroundContents(span);
+    } catch {
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      range.insertNode(span);
+    }
+
+    // Re-select the wrapping span so the operator can stack another
+    // change (e.g. set colour then size) without re-highlighting.
+    sel.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    sel.addRange(newRange);
+    rangeRef.current = newRange.cloneRange();
+
+    // Synthetic input event so the host's onInput-style handler fires
+    // immediately. The host's onBlur save still runs when focus
+    // eventually leaves; this just gives a faster preview.
+    host.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  if (!visible) return null;
+  const onColor = (value: string) => applyStyle({ color: value });
+  const onSize = (value: string) => {
+    const n = parseInt(value, 10);
+    if (!isFinite(n) || n < 6 || n > 200) return;
+    applyStyle({ fontSize: `${n}px` });
+  };
 
-  return (
+  if (mode !== "editor" || !pos || typeof window === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed z-[60] flex items-center gap-0.5 bg-[#1a1a1a] rounded-lg px-2 py-1.5 shadow-xl pointer-events-auto"
-      style={{
-        top: pos.top,
-        left: pos.left,
-        transform: "translateX(-50%)",
+      data-editor-chrome
+      className="fixed z-[10000] bg-white rounded-xl shadow-xl border border-black/10 p-1.5 flex items-center gap-1.5 ss-popover-in"
+      style={{ top: pos.top, left: pos.left, width: 280 }}
+      onMouseDown={(e) => {
+        // Prevent the contentEditable from losing focus / clearing
+        // selection when the operator clicks a toolbar control.
+        e.preventDefault();
       }}
-      onMouseDown={(e) => e.preventDefault()}
     >
-      <ToolBtn onClick={() => exec("bold")} title="Bold">
-        <strong>B</strong>
-      </ToolBtn>
-      <ToolBtn onClick={() => exec("italic")} title="Italic">
-        <em>I</em>
-      </ToolBtn>
-      <div className="w-px h-4 bg-white/20 mx-1" />
-      <ToolBtn onClick={() => exec("fontSize", "5")} title="Larger">
-        A+
-      </ToolBtn>
-      <ToolBtn onClick={() => exec("fontSize", "3")} title="Smaller">
-        A-
-      </ToolBtn>
-      <div className="w-px h-4 bg-white/20 mx-1" />
-      <ColorPickerPopover
-        value={color}
-        onChange={(c) => {
-          setColor(c);
-          exec("foreColor", c);
-        }}
-      >
-        <span className="text-white text-sm px-1.5 py-0.5 rounded hover:bg-white/15 transition cursor-pointer flex items-center gap-1">
-          A
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ background: color }}
-          />
-        </span>
-      </ColorPickerPopover>
-    </div>
-  );
-}
+      {/* Colour swatches */}
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c.value}
+          type="button"
+          title={c.label}
+          onClick={() => onColor(c.value)}
+          className="w-5 h-5 rounded-full border border-black/15 hover:scale-110 transition"
+          style={{ background: c.value }}
+        />
+      ))}
 
-function ToolBtn({
-  children,
-  onClick,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="text-white text-sm px-1.5 py-0.5 rounded hover:bg-white/20 transition"
-    >
-      {children}
-    </button>
+      {/* Divider */}
+      <span aria-hidden className="w-px h-5 bg-black/10 mx-0.5" />
+
+      {/* Numeric font-size input — type any pixel value. */}
+      <input
+        type="number"
+        min={6}
+        max={200}
+        placeholder="Size"
+        value={sizeInput}
+        onChange={(e) => setSizeInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSize(sizeInput);
+          }
+        }}
+        onBlur={() => {
+          if (sizeInput) onSize(sizeInput);
+        }}
+        className="w-14 text-[12px] text-center border border-black/10 rounded-md py-1 outline-none focus:border-[#1b3a2d]"
+      />
+      <span className="text-[10px] text-black/35 -ml-0.5">px</span>
+    </div>,
+    document.body,
   );
 }
