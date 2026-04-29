@@ -52,7 +52,9 @@ import { isCoastCity } from "@/lib/safariRoutingRules";
 const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ssr: false });
-const Tooltip = dynamic(() => import("react-leaflet").then((m) => m.Tooltip), { ssr: false });
+// Tooltip import removed — place name now baked into the day pill's
+// DivIcon (see buildDayPill) so pill + caption render as one unit
+// with zero gap, regardless of zoom or pill direction.
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
 // Polygon import removed — park boundaries no longer drawn as overlay
 // polygons. ESRI Topographic basemap shows parks naturally.
@@ -605,38 +607,23 @@ export function RouteMap({
           const icon = leafletRef.current
             ? inset
               ? buildDotIcon(leafletRef.current)
-              : buildDayPill(leafletRef.current, g.dayLabel, isSelected, pillDir)
+              : buildDayPill(leafletRef.current, g.dayLabel, g.placeName, isSelected, pillDir)
             : undefined;
-          // Tooltip direction follows the pill — when the pill floats
-          // above the anchor (default), the place-name caption sits
-          // below it; when the pill swings down/left/right, the caption
-          // mirrors the opposite side so they don't collide. An
-          // explicit operator override (g.labelPosition) still wins.
-          const tooltipDir =
-            g.labelPosition && g.labelPosition !== "auto"
-              ? g.labelPosition
-              : oppositeDirection(pillDir);
+          // Place name now lives INSIDE the pill icon (baked in as
+          // part of the same DivIcon HTML). The Leaflet Tooltip is
+          // gone — it used to sit on the OPPOSITE side of the
+          // anchor from the pill, separating "Day 1" from "Arusha"
+          // by the marker dot. Operator wanted them tightly together,
+          // so they're now a single icon stack.
           return (
+            // Place name is baked into the icon HTML (see
+            // buildDayPill) — no separate Tooltip needed.
             <Marker
               key={`${g.lat}-${g.lng}-${g.startDay}`}
               position={[g.lat, g.lng]}
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
-            >
-              {/* Destination label — only on the main map. The inset
-                  is a dots-only overview, no labels. */}
-              {!inset && (
-                <Tooltip
-                  direction={tooltipDir}
-                  offset={[0, 6]}
-                  opacity={1}
-                  permanent={true}
-                  className="ss-stop-label"
-                >
-                  {g.placeName}
-                </Tooltip>
-              )}
-            </Marker>
+            />
           );
         })}
       </MapContainer>
@@ -678,30 +665,29 @@ export function RouteMap({
           box-shadow: 0 0 0 3px rgba(27, 58, 45, 0.20), 0 4px 12px rgba(0, 0, 0, 0.30);
         }
 
-        /* Destination label — typeset caption under the stem.
-           No background, no border, no leader arrow. Just the place
-           name in dark green so it reads as part of the map's
-           editorial layer instead of a UI chip. Subtle text shadow
-           keeps the label readable when it lands on a road or coast. */
-        .leaflet-tooltip.ss-stop-label {
-          background: transparent;
+        /* Day-stop stack — the day pill + place name baked together
+           into a single DivIcon. flex column with zero gap so the
+           pill and label read as one unit, never separated by the
+           marker dot. */
+        .ss-day-stop {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          line-height: 1;
+        }
+        .ss-place-baked {
           color: #243c24;
-          border: none;
-          border-radius: 0;
-          padding: 0;
-          font-size: 11.5px;
-          font-weight: 700;
-          letter-spacing: 0.005em;
-          box-shadow: none;
-          white-space: nowrap;
           font-family: system-ui, sans-serif;
+          font-size: 10.5px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          line-height: 1.1;
+          white-space: nowrap;
           text-shadow:
             0 0 3px rgba(247, 245, 240, 0.95),
             0 0 6px rgba(247, 245, 240, 0.85),
             0 1px 2px rgba(247, 245, 240, 0.85);
-        }
-        .leaflet-tooltip.ss-stop-label::before {
-          display: none;
         }
 
         /* Directional arrow chip — small cream circle with a charcoal
@@ -851,18 +837,6 @@ function assignPillDirections(groups: CoordGroup[]): PillDirection[] {
   return dirs;
 }
 
-// Opposite of a pill direction — used to place the destination tooltip
-// on the far side of the anchor from the pill, so pill and caption
-// never collide.
-function oppositeDirection(d: PillDirection): "top" | "bottom" | "left" | "right" {
-  switch (d) {
-    case "up": return "bottom";
-    case "down": return "top";
-    case "right": return "left";
-    case "left": return "right";
-  }
-}
-
 // Pill direction relative to its lat/lng anchor.
 //   "up"    — pill sits ABOVE the anchor, stem points down (default)
 //   "down"  — pill sits BELOW the anchor, stem points up
@@ -889,62 +863,81 @@ function buildDotIcon(L: typeof import("leaflet")) {
   });
 }
 
-// Build a custom DivIcon for a stop — dark charcoal "Day X" pill with
-// a small stem pointing at the geographic anchor. Direction controls
-// which side of the anchor the pill floats on; anchor placement and
-// stem orientation update in lock-step so the stem tip always lands
-// on the lat/lng.
+// Build a custom DivIcon for a stop — dark charcoal "Day X" pill +
+// the place name caption, baked into a single tightly-stacked icon
+// so they always read as one visual unit. Operator brief: "Day and
+// location to be very close" — combining them into one icon
+// guarantees zero gap regardless of zoom level or pill direction.
+//
+// Layout inside the icon:
+//   ┌──────┐
+//   │Day 1 │   ← dark pill (10.5px / 3-9px padding)
+//   └──────┘
+//   Arusha    ← place caption (small caps, dark with cream text-shadow)
+//
+// The pill+label stack is treated as one rectangle for sizing /
+// anchoring. Direction shifts the whole stack relative to the lat/lng:
+//   up    — stack above anchor (anchor at bottom-centre)
+//   down  — stack below anchor (anchor at top-centre)
+//   right — stack to the right (anchor at left-centre)
+//   left  — stack to the left (anchor at right-centre)
 function buildDayPill(
   L: typeof import("leaflet"),
   dayLabel: string,
+  placeName: string,
   isSelected: boolean = false,
   direction: PillDirection = "up",
 ) {
-  const text = `Day ${dayLabel}`;
-  // Sized for the smaller pill (10.5px font, 3px/9px padding). Width
-  // approximation gives ~6.0px per char + 18px paddings.
-  const pillWidth = Math.max(40, text.length * 6.0 + 18);
-  const pillHeight = 18;
-  // Stem dropped — pill anchors directly at its base on the lat/lng.
-  const stem = 0;
+  const dayText = `Day ${dayLabel}`;
+  const placeText = (placeName ?? "").trim();
   const sel = isSelected ? " is-selected" : "";
-  const className = `ss-day-pill ss-day-pill-${direction}${sel}`;
-  const html = `<div class="${className}">${escape(text)}</div>`;
+  const html =
+    `<div class="ss-day-stop">` +
+      `<div class="ss-day-pill${sel}">${escape(dayText)}</div>` +
+      (placeText
+        ? `<div class="ss-place-baked">${escape(placeText)}</div>`
+        : "") +
+    `</div>`;
 
-  // For each direction the icon's bounding box and anchor differ:
-  //   up    → box extends up from anchor; anchor at bottom-centre
-  //   down  → box extends down from anchor; anchor at top-centre
-  //   right → box extends right from anchor; anchor at left-centre
-  //   left  → box extends left from anchor; anchor at right-centre
+  // Approximate stack dimensions. Width is whichever of pill or label
+  // is wider; height is pill + label + tiny gap.
+  const pillWidth = Math.max(40, dayText.length * 6.0 + 18);
+  const labelWidth = Math.max(30, placeText.length * 6.5);
+  const stackWidth = Math.max(pillWidth, labelWidth);
+  const pillHeight = 18;
+  const labelHeight = placeText ? 14 : 0;
+  const gap = placeText ? 2 : 0;
+  const stackHeight = pillHeight + gap + labelHeight;
+
   switch (direction) {
     case "down":
       return L.divIcon({
         className: "",
         html,
-        iconSize: [pillWidth, pillHeight + stem],
-        iconAnchor: [pillWidth / 2, 0],
+        iconSize: [stackWidth, stackHeight],
+        iconAnchor: [stackWidth / 2, 0],
       });
     case "right":
       return L.divIcon({
         className: "",
         html,
-        iconSize: [pillWidth + stem, pillHeight],
-        iconAnchor: [0, pillHeight / 2],
+        iconSize: [stackWidth, stackHeight],
+        iconAnchor: [0, stackHeight / 2],
       });
     case "left":
       return L.divIcon({
         className: "",
         html,
-        iconSize: [pillWidth + stem, pillHeight],
-        iconAnchor: [pillWidth + stem, pillHeight / 2],
+        iconSize: [stackWidth, stackHeight],
+        iconAnchor: [stackWidth, stackHeight / 2],
       });
     case "up":
     default:
       return L.divIcon({
         className: "",
         html,
-        iconSize: [pillWidth, pillHeight + stem],
-        iconAnchor: [pillWidth / 2, pillHeight + stem],
+        iconSize: [stackWidth, stackHeight],
+        iconAnchor: [stackWidth / 2, stackHeight],
       });
   }
 }
