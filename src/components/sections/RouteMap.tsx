@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
 import { isCoastCity } from "@/lib/safariRoutingRules";
+import { parksInTrip } from "@/lib/safariParkBoundaries";
 
 // ─── Map design rules — DO NOT RELAX WITHOUT OPERATOR SIGN-OFF ───────────
 //
@@ -20,27 +21,30 @@ import { isCoastCity } from "@/lib/safariRoutingRules";
 //      Real coords still live on `coords` / `rawMarkerGroups` so
 //      click-to-fly selection by lat/lng still resolves correctly.
 //
-//   2. INLAND SAFARI CIRCUIT DOMINATES THE VIEWPORT.
-//      boundsOptions: maxZoom 10, padding [36, 36]. computeViewport
-//      uses 2% internal breathing-room expansion. The schematic
-//      compression in (1) is what keeps coast outliers inside the
-//      frame instead of blowing the bounds out across the ocean.
+//   2. ROUTE OPENS UP — NOT TOO TIGHT.
+//      boundsOptions: maxZoom 8, padding [110, 110]. computeViewport
+//      uses 6% internal breathing-room expansion. Operators reported
+//      the earlier tight crops felt cramped; this combination gives
+//      the markers + bowed leg curves room to breathe.
 //
 //   3. CLOSE MARKER PILLS DIVERGE across the four sides of their
 //      anchor. assignPillDirections() finds every pair within 60km
 //      and assigns members alternating up → down → right → left
 //      (sorted by start day for stability). buildDayPill honours
-//      the direction; oppositeDirection() mirrors the place-name
-//      tooltip to the far side so pill + caption never collide.
-//      Tarangire ↔ Manyara (~33km) was the canonical bug.
+//      the direction. The place name is now BAKED into the same
+//      DivIcon as the day pill so they read as one unit (no
+//      separate Leaflet Tooltip). Tarangire ↔ Manyara (~33km) was
+//      the canonical bug.
 //
-//   4. TRANSFER FLIGHTS CURVE AWAY from the safari circuit.
-//      buildLegPaths computes the inland centroid as an avoid-point
-//      and passes it to buildBezierArc, which flips its perpendicular
-//      bow vector when it would otherwise curve toward that point.
-//      Bow fraction 0.18. The Serengeti → Zanzibar leg must swing
-//      OUT over open territory, never slice through Tarangire /
-//      Manyara / Serengeti.
+//   4. EVERY LEG BOWS OUTWARD from the trip centroid — like a
+//      stretched bow opening up rather than chords folded inward.
+//      buildLegPaths computes the trip centroid as the avoid-point;
+//      buildBezierArc flips the perpendicular when it would point
+//      back toward the centroid. Bow fractions: 0.20 for circuit
+//      (road) legs, 0.30 for transfer (flight) legs. Park polygons
+//      from safariParkBoundaries.ts render as a soft green wash
+//      under the markers, but ONLY for the parks actually visited
+//      on this trip (parksInTrip filter).
 //
 // Memory anchor: ~/.claude/.../memory/map_and_routing_rules.md
 // ─────────────────────────────────────────────────────────────────────────
@@ -56,8 +60,12 @@ const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ss
 // DivIcon (see buildDayPill) so pill + caption render as one unit
 // with zero gap, regardless of zoom or pill direction.
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
-// Polygon import removed — park boundaries no longer drawn as overlay
-// polygons. ESRI Topographic basemap shows parks naturally.
+// Polygon — re-introduced to render translucent park outlines under
+// the markers. Only parks that actually appear in the itinerary are
+// drawn (parksInTrip filter), so the operator sees the TRUE relative
+// size of each park visited (Serengeti vast, Lake Manyara a thin
+// strip) rather than identical pin dots over a flat basemap.
+const Polygon = dynamic(() => import("react-leaflet").then((m) => m.Polygon), { ssr: false });
 
 // ─── Known safari coords ──────────────────────────────────────────────────
 //
@@ -468,8 +476,12 @@ export function RouteMap({
   const TRANSFER_THRESHOLD_KM = 250;
   const legPaths = buildLegPaths(groups, TRANSFER_THRESHOLD_KM);
 
-  // parkBoundaries removed alongside the polygon overlays. The ESRI
-  // Topographic basemap renders park outlines naturally.
+  // Parks visited on this trip — only the polygons that appear in the
+  // itinerary get drawn, never the full registry. The basemap already
+  // tints all of East Africa's parks softly; this overlay gives the
+  // ones actually visited a stronger green wash so the eye reads the
+  // safari geography at a glance.
+  const tripParks = parksInTrip(markerGroups.map((g) => g.placeName));
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
@@ -478,15 +490,14 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={viewport.bounds}
-        // Padding 36px — gives day badges + tooltips clear breathing
-        // room from the viewport edge. The bounds in computeViewport
-        // already use a tiny 2% breathing-room expansion; this
-        // pixel-based padding does the rest. Larger than 36px starts
-        // to compress the route on multi-region trips (safari + coast).
-        // maxZoom 9 prevents over-zoom on a tight single-region
-        // itinerary (would otherwise show city streets, looking like
-        // Google Maps not a route diagram).
-        boundsOptions={{ padding: [60, 60], maxZoom: 9 }}
+        // Generous padding so the route opens up rather than reading
+        // as a taut diagram squeezed against the frame. 110px on each
+        // side combined with the 6% computeViewport breathing-room
+        // gives the markers and bowed legs space to BREATHE — operator
+        // brief: "open up nicely, not too tight". maxZoom 8 keeps a
+        // single-region trip from over-zooming into city-streets
+        // territory (looking like Google Maps, not a route diagram).
+        boundsOptions={{ padding: [110, 110], maxZoom: 8 }}
         minZoom={5}
         maxZoom={12}
         inertia={false}
@@ -525,11 +536,25 @@ export function RouteMap({
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
         />
-        {/* Park polygon overlays removed — operators wanted the parks
-            to look natural, "as on a real map", not boxed. The
-            Topographic basemap above carries park boundaries
-            already. parksInTrip / safariParkBoundaries.ts retained
-            for any future overlay use. */}
+        {/* Park polygon overlays — only parks visited on THIS trip.
+            Soft green wash, low-opacity outline. Drawn FIRST so leg
+            polylines and day pills layer cleanly on top. Inset map
+            skips polygons (it's a dots-only overview). */}
+        {!inset && tripParks.map((park) => (
+          <Polygon
+            key={park.name}
+            positions={park.coords}
+            pathOptions={{
+              color: "#2d5a40",
+              weight: 1,
+              opacity: 0.55,
+              fillColor: "#3a7a52",
+              fillOpacity: 0.18,
+              lineCap: "round",
+              lineJoin: "round",
+            }}
+          />
+        ))}
 
         {/* Per-leg rendering. Short circuit hops render as one continuous
             solid charcoal polyline (built up leg-by-leg so adjacent
@@ -580,14 +605,15 @@ export function RouteMap({
         {!inset && leafletRef.current && legPaths.map((leg, i) => {
           if (leg.skipArrow) return null;
           const [a, b] = leg.endpoints;
-          const midLat = (a[0] + b[0]) / 2;
-          const midLng = (a[1] + b[1]) / 2;
+          // Arrow sits on the bowed curve's midpoint (t=0.5 of the
+          // bezier), bearing follows the chord A→B since the bezier
+          // tangent at the midpoint is parallel to AB.
           const angleDeg =
             (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
           return (
             <Marker
               key={`arrow-${i}`}
-              position={[midLat, midLng]}
+              position={leg.midpoint}
               icon={buildArrowIcon(leafletRef.current!, angleDeg)}
               interactive={false}
               keyboard={false}
@@ -1009,12 +1035,13 @@ function computeViewport(groups: CoordGroup[]): Viewport {
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Tiny breathing-room expansion so the outermost markers don't sit
-  // flush against the viewport edge. 2% of the route span on each
-  // side, combined with the larger leaflet boundsOptions.padding,
-  // keeps markers comfortably inside the visible map without wasting
-  // map area on empty margins (which used to crush the route).
-  const BREATHING = 0.02;
+  // Breathing-room expansion so the outermost markers don't sit
+  // flush against the viewport edge. 6% of the route span on each
+  // side, combined with the leaflet boundsOptions.padding [110, 110],
+  // gives the route + bowed leg curves room to spread out instead of
+  // reading as a tight diagram. Operator brief: "open up nicely, not
+  // too tight" — this number is the internal half of that.
+  const BREATHING = 0.06;
   const latSpan = north - south;
   const lngSpan = east - west;
   south -= latSpan * BREATHING;
@@ -1050,9 +1077,12 @@ function computeViewport(groups: CoordGroup[]): Viewport {
 type LegPath = {
   kind: "circuit" | "transfer";
   path: LatLngExpression[];
-  /** Endpoints used for arrow placement / bearing. Always [from, to]
-   *  even for curved transfer legs. */
+  /** Endpoints used for arrow bearing. Always [from, to] even for
+   *  curved transfer legs. */
   endpoints: [LatLngTuple, LatLngTuple];
+  /** Bezier midpoint at t=0.5 — where the directional-arrow chip
+   *  should sit so it lands ON the bowed curve, not the chord. */
+  midpoint: LatLngTuple;
   /** Skip the directional-arrow chip on legs shorter than ~25km
    *  (e.g. two stops in the same region) to avoid clutter. */
   skipArrow: boolean;
@@ -1073,9 +1103,14 @@ function buildLegPaths(
   transferThresholdKm: number,
 ): LegPath[] {
   if (groups.length < 2) return [];
-  // No avoid-curve calculation any more — every leg renders as a
-  // straight 2-point line. Roads vs flights differ in stroke style,
-  // not in path geometry.
+  // Trip centroid — every leg bows AWAY from this point, so the
+  // sequence of legs reads like a stretched bow opening outward
+  // instead of a folded chord pulled inward. Operator brief:
+  // "naturally open the lines as if you were stretching a bow".
+  const centroid: LatLngTuple = [
+    groups.reduce((s, g) => s + g.lat, 0) / groups.length,
+    groups.reduce((s, g) => s + g.lng, 0) / groups.length,
+  ];
   const out: LegPath[] = [];
   for (let i = 0; i < groups.length - 1; i++) {
     const a: LatLngTuple = [groups[i].lat, groups[i].lng];
@@ -1083,24 +1118,78 @@ function buildLegPaths(
     const distKm = haversineKm(a, b);
     const kind: "circuit" | "transfer" =
       distKm > transferThresholdKm ? "transfer" : "circuit";
-    // Both road and flight paths render as straight 2-point lines.
-    // The visual distinction lives in pathOptions at the render
-    // site (roads dotted, flights solid). The Bezier curve we used
-    // to draw on long flights is gone — operators wanted flights
-    // shown as straight lines, like a real atlas.
+    // Bow fraction differs by kind. Long-haul flights bow more so
+    // the leg reads as an aerial arc; short circuit drives bow less
+    // so they still feel like ground travel between nearby parks.
+    const bowFraction = kind === "transfer" ? 0.30 : 0.20;
+    const { path, midpoint } = buildBezierArc(a, b, centroid, bowFraction);
     out.push({
       kind,
-      path: [a, b],
+      path,
       endpoints: [a, b],
+      midpoint,
       skipArrow: distKm < 25,
     });
   }
   return out;
 }
 
-// buildBezierArc removed — flights now render as straight 2-point
-// lines per operator brief. Restore from git history if a future
-// design needs curved transfers again.
+// Quadratic Bézier sampled into smooth segments. Control point sits
+// at the midpoint of AB shifted along the AB perpendicular, in
+// whichever direction faces AWAY from `avoid` (the trip centroid).
+// Net effect: every leg curves outward from the trip's centre, so
+// the assembled sequence opens up like a stretched bow rather than
+// folding inward over the safari circuit.
+function buildBezierArc(
+  a: LatLngTuple,
+  b: LatLngTuple,
+  avoid: LatLngTuple,
+  bowFraction: number,
+): { path: LatLngTuple[]; midpoint: LatLngTuple } {
+  const dy = b[0] - a[0];
+  const dx = b[1] - a[1];
+  const mid: LatLngTuple = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  // Perpendicular to AB. Treat lat as y, lng as x; the perpendicular
+  // is (-dx, dy) or (dx, -dy) depending on which side we want.
+  let perpLat = -dx;
+  let perpLng = dy;
+  const perpLen = Math.hypot(perpLat, perpLng) || 1;
+  perpLat /= perpLen;
+  perpLng /= perpLen;
+  // Outward direction = midpoint − centroid. Flip the perpendicular
+  // when its dot product with outward is negative (i.e. it points
+  // back toward the centroid).
+  const outLat = mid[0] - avoid[0];
+  const outLng = mid[1] - avoid[1];
+  const dot = perpLat * outLat + perpLng * outLng;
+  if (dot < 0) {
+    perpLat = -perpLat;
+    perpLng = -perpLng;
+  }
+  const legLen = Math.hypot(dy, dx) || 1;
+  const offset = legLen * bowFraction;
+  const ctrl: LatLngTuple = [
+    mid[0] + perpLat * offset,
+    mid[1] + perpLng * offset,
+  ];
+  // 28 segments — smooth at all zooms, cheap to render.
+  const N = 28;
+  const points: LatLngTuple[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const u = 1 - t;
+    const lat = u * u * a[0] + 2 * u * t * ctrl[0] + t * t * b[0];
+    const lng = u * u * a[1] + 2 * u * t * ctrl[1] + t * t * b[1];
+    points.push([lat, lng]);
+  }
+  // Bezier midpoint at t=0.5 — used for the arrow-chip position so
+  // it lands on the bowed curve rather than the straight chord.
+  const midpoint: LatLngTuple = [
+    0.25 * a[0] + 0.5 * ctrl[0] + 0.25 * b[0],
+    0.25 * a[1] + 0.5 * ctrl[1] + 0.25 * b[1],
+  ];
+  return { path: points, midpoint };
+}
 
 // compressCoastPositions removed — it was a schematic lie that worked
 // under a flat / labelless basemap but broke under a real cartographic
