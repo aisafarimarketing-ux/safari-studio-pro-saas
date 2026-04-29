@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
+import { isCoastCity } from "@/lib/safariRoutingRules";
 
 // Leaflet needs the DOM, so dynamic-import with ssr: false. The map tiles
 // come from Carto (Voyager style) — no API key, more colourful than raw
@@ -767,65 +768,46 @@ function computeViewport(groups: CoordGroup[]): Viewport {
     };
   }
 
-  // Centroid + per-stop distances.
-  const centroidLat = groups.reduce((s, g) => s + g.lat, 0) / groups.length;
-  const centroidLng = groups.reduce((s, g) => s + g.lng, 0) / groups.length;
-  const distances = groups.map((g) =>
-    haversineKm([g.lat, g.lng], [centroidLat, centroidLng]),
-  );
-  const sortedDistances = [...distances].sort((a, b) => a - b);
-  const median = sortedDistances[Math.floor(sortedDistances.length / 2)];
+  // Coast / beach destinations are excluded from viewport calculation.
+  // Why: a typical East-African itinerary mixes a tight inland safari
+  // circuit (Arusha → Tarangire → Manyara → Serengeti, all within
+  // ~300km of each other) with a far-flung beach extension (Zanzibar,
+  // Mombasa, Diani, 700km+ off the coast). If the bounds try to
+  // include both, the safari circuit collapses into a tiny corner of
+  // the map and the route lines + day labels crowd into an unreadable
+  // cluster — which is exactly what operators reported.
+  //
+  // Solution: fit bounds to the inland stops only. Coast markers still
+  // render — they're just off the initial viewport. Clients can click
+  // a coast day in the side rail and FlyToSelected will pan/zoom there
+  // smoothly. The route line going to the coast disappears at the
+  // viewport edge, naturally communicating "the trip continues offshore".
+  //
+  // Edge case: an entirely-coastal trip (Diani + Mombasa + Watamu) has
+  // no inland stops; we fall back to fitting all groups. Same for any
+  // trip we can't classify (operators with niche destinations the
+  // table doesn't know).
+  const inland = groups.filter((g) => !isCoastCity(g.placeName));
+  const fitGroups = inland.length >= 2 ? inland : groups;
 
-  // Outlier rule: > 2.5× median AND > 200km from centroid. The 200km
-  // floor stops the algorithm from declaring outliers on a tightly
-  // clustered itinerary where one stop is just a bit further.
-  const OUTLIER_FACTOR = 2.5;
-  const OUTLIER_MIN_KM = 200;
-  const cutoff = Math.max(median * OUTLIER_FACTOR, OUTLIER_MIN_KM);
-  const core = groups.filter((_, i) => distances[i] <= cutoff);
-  const outliers = groups.filter((_, i) => distances[i] > cutoff);
-
-  // Fall-through: no outliers, just fit the full set.
-  const all = core.length > 0 ? core : groups;
-  const lats = all.map((g) => g.lat);
-  const lngs = all.map((g) => g.lng);
+  const lats = fitGroups.map((g) => g.lat);
+  const lngs = fitGroups.map((g) => g.lng);
   let south = Math.min(...lats);
   let north = Math.max(...lats);
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Outlier inclusion: extend bounds PAST each outlier so the
-  // outlier sits comfortably inside the viewport with breathing
-  // room for its pill + label. PADDING_RATIO is the fraction of
-  // the core-to-outlier gap added as margin BEYOND the outlier on
-  // its side. At 0.15: outlier is well inside the frame, 15% of
-  // the gap as breathing room.
-  //
-  // Earlier (0.25) was the inverse — extended only 25% of the gap
-  // TOWARD the outlier, so the outlier landed OUTSIDE bounds
-  // (off-screen). User's "Zanzibar pill hidden" report exactly
-  // matches that bug.
-  if (outliers.length > 0) {
-    const PADDING_RATIO = 0.15;
-    for (const o of outliers) {
-      if (o.lat < south) {
-        const gap = south - o.lat;
-        south = o.lat - PADDING_RATIO * gap;
-      }
-      if (o.lat > north) {
-        const gap = o.lat - north;
-        north = o.lat + PADDING_RATIO * gap;
-      }
-      if (o.lng < west) {
-        const gap = west - o.lng;
-        west = o.lng - PADDING_RATIO * gap;
-      }
-      if (o.lng > east) {
-        const gap = o.lng - east;
-        east = o.lng + PADDING_RATIO * gap;
-      }
-    }
-  }
+  // Small breathing-room expansion so the outermost markers don't sit
+  // flush against the viewport edge. 8% of the route span on each
+  // side, combined with leaflet's boundsOptions padding, leaves the
+  // markers comfortably inside the visible map without wasting space.
+  const BREATHING = 0.08;
+  const latSpan = north - south;
+  const lngSpan = east - west;
+  south -= latSpan * BREATHING;
+  north += latSpan * BREATHING;
+  west -= lngSpan * BREATHING;
+  east += lngSpan * BREATHING;
 
   // Floor — don't return a degenerate bounds. If two stops happen to
   // sit on the same point, give the camera ~1° of context.
