@@ -546,6 +546,7 @@ function EditorialTimelineLayout({
                 theme={theme}
                 activityColor={aColor}
                 accommodationColor={accColor}
+                isEditor={isEditor}
               />
             ))}
           </ol>
@@ -573,6 +574,7 @@ function TimelineRow({
   theme,
   activityColor,
   accommodationColor,
+  isEditor,
 }: {
   day: Day;
   idx: number;
@@ -583,6 +585,7 @@ function TimelineRow({
   theme: { displayFont: string; bodyFont: string };
   activityColor: string;
   accommodationColor: string;
+  isEditor: boolean;
 }) {
   const isFirst = idx === 0;
   const isLast = idx === lastIdx;
@@ -595,8 +598,16 @@ function TimelineRow({
     (day.subtitle && day.subtitle.trim()) ||
     (isFirst ? "ARRIVAL" : isLast ? "DEPARTURE" : day.destination || "");
 
-  const camp = day.tiers[activeTier]?.camp?.trim();
-  const showAccommodation = !!camp && !isLast;
+  // Accommodation logic: tiers[activeTier].camp can be empty when the AI
+  // didn't pick a property for that tier (or the operator deleted it).
+  // - In editor: always render the row so the operator sees the slot
+  //   and remembers to fill it (placeholder text in muted colour).
+  // - In preview/share: only render when camp is non-empty so clients
+  //   never see an empty "Accommodation —" stub.
+  // Removed the previous `!isLast` rule — some last-night-before-flight
+  // trips legitimately have an accommodation on the final day.
+  const camp = day.tiers[activeTier]?.camp?.trim() || "";
+  const showAccommodation = !!camp || isEditor;
 
   // Last row in the list shouldn't extend the dashed connector down past
   // its own content (no next day to connect to).
@@ -635,7 +646,8 @@ function TimelineRow({
         </div>
       </div>
 
-      {/* Accommodation row — only when the day has a camp */}
+      {/* Accommodation row — always rendered in editor so operators see
+          the slot; in preview only rendered when there's a camp. */}
       {showAccommodation && (
         <div className="grid grid-cols-[64px_36px_1fr] items-start gap-x-4">
           <div /> {/* spacer to align with day-card column */}
@@ -649,9 +661,15 @@ function TimelineRow({
             </div>
             <div
               className="text-[13.5px] font-bold uppercase tracking-[0.04em] mt-0.5"
-              style={{ color: tokens.headingText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              style={{
+                color: camp ? tokens.headingText : tokens.mutedText,
+                fontFamily: `'${theme.bodyFont}', sans-serif`,
+                fontStyle: camp ? "normal" : "italic",
+                fontWeight: camp ? 700 : 400,
+                opacity: camp ? 1 : 0.7,
+              }}
             >
-              {camp}
+              {camp || "Set in Day-by-Day section"}
             </div>
           </div>
         </div>
