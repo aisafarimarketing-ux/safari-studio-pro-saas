@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { LatLngExpression, LatLngTuple } from "leaflet";
 import type { Day, ThemeTokens } from "@/lib/types";
-import { isCoastCity } from "@/lib/safariRoutingRules";
 
 // Leaflet needs the DOM, so dynamic-import with ssr: false. The map tiles
 // come from Carto (Voyager style) — no API key, more colourful than raw
@@ -382,12 +381,15 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={viewport.bounds}
-        // Padding 20px (tight) — combined with computeViewport's
-        // outlier-bias, keeps the core route filling 70-80% of the
-        // visible map. maxZoom 9 prevents over-zoom on a tight
-        // single-region itinerary (would otherwise show city streets,
-        // looking like Google Maps not a route diagram).
-        boundsOptions={{ padding: [20, 20], maxZoom: 9 }}
+        // Padding 36px — gives day badges + tooltips clear breathing
+        // room from the viewport edge. The bounds in computeViewport
+        // already use a tiny 2% breathing-room expansion; this
+        // pixel-based padding does the rest. Larger than 36px starts
+        // to compress the route on multi-region trips (safari + coast).
+        // maxZoom 9 prevents over-zoom on a tight single-region
+        // itinerary (would otherwise show city streets, looking like
+        // Google Maps not a route diagram).
+        boundsOptions={{ padding: [36, 36], maxZoom: 9 }}
         minZoom={5}
         maxZoom={12}
         inertia={false}
@@ -768,40 +770,35 @@ function computeViewport(groups: CoordGroup[]): Viewport {
     };
   }
 
-  // Coast / beach destinations are excluded from viewport calculation.
-  // Why: a typical East-African itinerary mixes a tight inland safari
-  // circuit (Arusha → Tarangire → Manyara → Serengeti, all within
-  // ~300km of each other) with a far-flung beach extension (Zanzibar,
-  // Mombasa, Diani, 700km+ off the coast). If the bounds try to
-  // include both, the safari circuit collapses into a tiny corner of
-  // the map and the route lines + day labels crowd into an unreadable
-  // cluster — which is exactly what operators reported.
-  //
-  // Solution: fit bounds to the inland stops only. Coast markers still
-  // render — they're just off the initial viewport. Clients can click
-  // a coast day in the side rail and FlyToSelected will pan/zoom there
-  // smoothly. The route line going to the coast disappears at the
-  // viewport edge, naturally communicating "the trip continues offshore".
-  //
-  // Edge case: an entirely-coastal trip (Diani + Mombasa + Watamu) has
-  // no inland stops; we fall back to fitting all groups. Same for any
-  // trip we can't classify (operators with niche destinations the
-  // table doesn't know).
-  const inland = groups.filter((g) => !isCoastCity(g.placeName));
-  const fitGroups = inland.length >= 2 ? inland : groups;
-
-  const lats = fitGroups.map((g) => g.lat);
-  const lngs = fitGroups.map((g) => g.lng);
+  // Bounds fit ALL destinations — inland safari stops AND coast
+  // extensions. Earlier we filtered coast cities to keep the safari
+  // circuit roomy, but operators reported that hid Zanzibar / Mombasa
+  // days entirely from the map. Trade-off accepted: a trip combining
+  // a Tanzanian safari with a Zanzibar beach extension has bounds
+  // ~3-4× the safari-only span, so the safari circuit is compressed.
+  // We compensate via:
+  //   - tiny internal breathing-room (2%) so we don't inflate bounds
+  //   - leaflet boundsOptions.padding [36, 36] so markers sit clear
+  //     of the viewport edge
+  //   - taller MAP_HEIGHT in MapSection so the wider bounds get more
+  //     pixels to spread across.
+  // Net: every day is visible at its real geographic position, the
+  // route lines remain readable, and the offshore handoff (mainland
+  // → Zanzibar) reads as a long dashed transfer leg — which is the
+  // honest depiction of the trip.
+  const lats = groups.map((g) => g.lat);
+  const lngs = groups.map((g) => g.lng);
   let south = Math.min(...lats);
   let north = Math.max(...lats);
   let west = Math.min(...lngs);
   let east = Math.max(...lngs);
 
-  // Small breathing-room expansion so the outermost markers don't sit
-  // flush against the viewport edge. 8% of the route span on each
-  // side, combined with leaflet's boundsOptions padding, leaves the
-  // markers comfortably inside the visible map without wasting space.
-  const BREATHING = 0.08;
+  // Tiny breathing-room expansion so the outermost markers don't sit
+  // flush against the viewport edge. 2% of the route span on each
+  // side, combined with the larger leaflet boundsOptions.padding,
+  // keeps markers comfortably inside the visible map without wasting
+  // map area on empty margins (which used to crush the route).
+  const BREATHING = 0.02;
   const latSpan = north - south;
   const lngSpan = east - west;
   south -= latSpan * BREATHING;
@@ -956,7 +953,7 @@ function RefitOnResize({
       try {
         m.invalidateSize();
         m.fitBounds(viewport.bounds, {
-          padding: [20, 20],
+          padding: [36, 36],
           maxZoom: 9,
           animate: false,
         });

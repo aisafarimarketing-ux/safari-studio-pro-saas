@@ -111,7 +111,11 @@ export function MapSection({ section }: { section: Section }) {
       return proposal.properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
     };
 
-    const MAP_HEIGHT = 720;
+    // Bumped from 720 → 880 so multi-region trips (safari + Zanzibar
+    // / Mombasa coast) get more vertical pixels — the wider geographic
+    // bounds need more screen real estate to keep the route circuit
+    // readable instead of cramming everything into a tight strip.
+    const MAP_HEIGHT = 880;
 
     return (
       <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
