@@ -470,7 +470,14 @@ export function CoverSection({ section }: { section: Section }) {
   // Kinfolk / Cereal / Wallpaper aesthetic. Full-bleed image with a paper-
   // band masthead in the lower third — issue line, big serif title, sub deck.
   if (variant === "editorial-magazine") {
-    const issue = (section.content.issue as string) || `Issue No. ${String(trip.nights ?? 1).padStart(2, "0")}`;
+    // The masthead corner used to read "Issue No. 07" (derived from
+    // trip.nights), which is editorial chrome lifted from a magazine
+    // brief — but it's nonsense in a safari context (operators kept
+    // asking what the number meant). Default to a clean editorial
+    // label with a date underneath; still operator-editable.
+    const issue =
+      (section.content.issue as string) ||
+      ((operator.companyName ? `${operator.companyName} Edition` : "Safari Proposal").toUpperCase());
     return (
       <div
         className={`relative w-full overflow-hidden ${isEditor ? "min-h-[640px]" : "min-h-[640px]"}`}
@@ -671,19 +678,21 @@ export function CoverSection({ section }: { section: Section }) {
           )}
         </div>
 
-        {/* Centre — destination tags + giant title */}
+        {/* Centre — destinations as tracked wordmarks + giant title.
+            Pill chips traded for an editorial small-caps strip with
+            a hairline either side — matches the typographic register
+            of hero-letter / editorial-magazine. */}
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-8 py-16">
           {orderedDestinations.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-2 mb-8">
-              {orderedDestinations.map((d) => (
-                <span
-                  key={d}
-                  className="px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase"
-                  style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", backdropFilter: "blur(6px)" }}
-                >
-                  {d}
-                </span>
-              ))}
+            <div className="flex items-center justify-center gap-4 mb-8">
+              <div className="w-10 h-px" style={{ background: "rgba(255,255,255,0.35)" }} />
+              <div
+                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
+                style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {orderedDestinations.slice(0, 5).join("  ·  ")}
+              </div>
+              <div className="w-10 h-px" style={{ background: "rgba(255,255,255,0.35)" }} />
             </div>
           )}
 
@@ -760,10 +769,23 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         <div className="max-w-3xl">
+          {/* Editorial label — quietly identifies the document type
+              before the destinations list, so the giant title doesn't
+              hit the eye cold. */}
+          <div
+            className="text-[10px] uppercase tracking-[0.34em] font-semibold mb-3"
+            style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          >
+            Safari Proposal
+          </div>
+
           {/* Destinations as overline */}
           {orderedDestinations.length > 0 && (
-            <div className="text-[10px] uppercase tracking-[0.35em] mb-6" style={{ color: tokens.accent }}>
-              {orderedDestinations.join(" · ")}
+            <div
+              className="text-[11px] uppercase tracking-[0.36em] mb-6 font-semibold"
+              style={{ color: tokens.accent, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              {orderedDestinations.join("  ·  ")}
             </div>
           )}
 
@@ -777,7 +799,9 @@ export function CoverSection({ section }: { section: Section }) {
             {trip.title}
           </h1>
 
-          <div className="w-16 mt-8 mb-8" style={{ height: "2px", background: tokens.accent }} />
+          {/* Hairline rule — 1px is more refined than the previous 2px;
+              accent colour anchors it to the brand. */}
+          <div className="w-20 mt-8 mb-8" style={{ height: "1px", background: tokens.accent }} />
 
           <p
             className="text-lg leading-relaxed max-w-md outline-none"
@@ -823,7 +847,11 @@ export function CoverSection({ section }: { section: Section }) {
     );
   }
 
-  // ── Full-bleed-overlay — image with centered text block overlay ─────────────
+  // ── Full-bleed-overlay — type set directly on the photo ───────────────────
+  // Used to be a frosted-glass card centred on the image. The card looked
+  // skeuomorphic and dated; replaced with type-on-vignette so the photo
+  // reads at full luxury weight, matching the editorial register of
+  // hero-letter and the split-panel variants.
   if (variant === "full-bleed-overlay") {
     return (
       <div
@@ -842,55 +870,116 @@ export function CoverSection({ section }: { section: Section }) {
           </label>
         ) : null}
 
-        {/* Dark overlay */}
-        <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.5)" }} />
+        {/* Editorial vignette — heavy at top + bottom, lighter in the
+            middle so the photo carries the centre of the page. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to bottom,
+              rgba(0,0,0,0.55) 0%,
+              rgba(0,0,0,0.18) 28%,
+              rgba(0,0,0,0.18) 58%,
+              rgba(0,0,0,0.78) 100%
+            )`,
+          }}
+        />
 
-        {/* Centered card */}
-        <div className="relative z-10 flex items-center justify-center min-h-[inherit] px-8 py-16">
-          <div
-            className="max-w-lg text-center p-12 md:p-16 rounded-2xl"
-            style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)" }}
-          >
-            {(operator.logoUrl || operator.companyName) && (
-              <div className="flex justify-center mb-6">
-                <OperatorLogoTile
-                  logoUrl={operator.logoUrl}
-                  companyName={operator.companyName}
-                  logoHeight={40}
-                />
+        {/* Top: operator + (optional) consultant attribution. */}
+        <div className="relative z-10 flex items-start justify-between px-10 md:px-14 pt-10">
+          <OperatorLogoTile
+            logoUrl={operator.logoUrl}
+            companyName={operator.companyName}
+            logoHeight={40}
+          />
+          {operator.consultantName && (
+            <div
+              className="text-right text-white/65"
+              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              <div className="text-[10px] uppercase tracking-[0.28em]">Prepared by</div>
+              <div className="text-[12px] tracking-wide mt-1 text-white/85">
+                {operator.consultantName}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom: title block on vignette. Centre-aligned to keep the
+            cover's editorial calm; meta strip below on a single hairline. */}
+        <div className="absolute inset-x-0 bottom-0 z-10 px-10 md:px-16 pb-12">
+          <div className="max-w-3xl mx-auto text-center">
+            {orderedDestinations.length > 0 && (
+              <div
+                className="text-[10.5px] uppercase tracking-[0.34em] text-white/75 font-semibold mb-5"
+                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {orderedDestinations.slice(0, 5).join("  ·  ")}
               </div>
             )}
             <h1
-              className="text-[clamp(2rem,5vw,3.5rem)] font-bold text-white leading-[1.05] outline-none"
-              style={{ fontFamily: `'${theme.displayFont}', serif` }}
+              className="font-bold text-white leading-[1.0] outline-none"
+              style={{
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(2.4rem, 6vw, 4.6rem)",
+                textShadow: "0 2px 24px rgba(0,0,0,0.35)",
+              }}
               contentEditable={isEditor}
               suppressContentEditableWarning
               onBlur={(e) => updateTrip({ title: e.currentTarget.textContent?.trim() ?? trip.title })}
             >
               {trip.title}
             </h1>
-            {orderedDestinations.length > 0 && (
-              <div className="mt-4 text-[10.5px] uppercase tracking-[0.32em] text-white/65 font-semibold">
-                {orderedDestinations.slice(0, 5).join("  ·  ")}
-              </div>
+            {(section.content.tagline || trip.subtitle) && (
+              <p
+                className="mt-5 text-white/70 text-[15px] leading-relaxed max-w-xl mx-auto outline-none"
+                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateSectionContent(section.id, { tagline: e.currentTarget.textContent ?? "" })}
+              >
+                {(section.content.tagline as string) || trip.subtitle}
+              </p>
             )}
-            <div className="w-10 mx-auto my-6" style={{ height: "1px", background: "rgba(255,255,255,0.25)" }} />
+
+            {/* Hairline + meta strip — single tracked-out line keeps the
+                composition airy. Edits flow back into the canonical
+                client / trip state. */}
             <div
-              className="text-white/70 text-sm outline-none"
-              style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+              className="mt-8 pt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[12px] text-white/75"
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.22)",
+                fontFamily: `'${theme.bodyFont}', sans-serif`,
+              }}
             >
-              For {client.guestNames}
-            </div>
-            <div
-              className="text-white/45 text-xs mt-2 outline-none"
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
-            >
-              {trip.dates}{trip.nights ? ` · ${durationLabel}` : ""}{client.pax ? ` · ${client.pax}` : ""}
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateClient({ guestNames: e.currentTarget.textContent?.trim() ?? client.guestNames })}
+              >
+                For {client.guestNames}
+              </span>
+              <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
+              <span
+                className="outline-none"
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => updateTrip({ dates: e.currentTarget.textContent?.trim() ?? trip.dates })}
+              >
+                {trip.dates || "—"}
+              </span>
+              {trip.nights ? (
+                <>
+                  <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
+                  <span>{durationLabel}</span>
+                </>
+              ) : null}
+              {client.pax ? (
+                <>
+                  <span style={{ color: "rgba(255,255,255,0.3)" }}>·</span>
+                  <span>{client.pax}</span>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
@@ -939,13 +1028,11 @@ export function CoverSection({ section }: { section: Section }) {
 
           <div className="space-y-6 text-right">
             {orderedDestinations.length > 0 && (
-              <div className="flex flex-wrap justify-end gap-2">
-                {orderedDestinations.map((d) => (
-                  <span key={d} className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
-                    style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)", backdropFilter: "blur(4px)", border: "1px solid rgba(255,255,255,0.18)" }}>
-                    {d}
-                  </span>
-                ))}
+              <div
+                className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
+                style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+              >
+                {orderedDestinations.slice(0, 5).join("  ·  ")}
               </div>
             )}
             <h1 className="text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold text-white leading-[1.0] outline-none"
@@ -1033,24 +1120,16 @@ export function CoverSection({ section }: { section: Section }) {
           />
         </div>
 
-        {/* Middle: destinations + title + tagline */}
+        {/* Middle: destinations + title + tagline. Destinations set as
+            a tracked-out small-caps strip — matches hero-letter and
+            the editorial-magazine masthead, away from startup pills. */}
         <div className="space-y-6">
           {orderedDestinations.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {orderedDestinations.map((d) => (
-                <span
-                  key={d}
-                  className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
-                  style={{
-                    background: "rgba(255,255,255,0.12)",
-                    color: "rgba(255,255,255,0.8)",
-                    backdropFilter: "blur(4px)",
-                    border: "1px solid rgba(255,255,255,0.18)",
-                  }}
-                >
-                  {d}
-                </span>
-              ))}
+            <div
+              className="text-[10.5px] uppercase tracking-[0.32em] font-semibold"
+              style={{ color: "rgba(255,255,255,0.78)", fontFamily: `'${theme.bodyFont}', sans-serif` }}
+            >
+              {orderedDestinations.slice(0, 5).join("  ·  ")}
             </div>
           )}
 
