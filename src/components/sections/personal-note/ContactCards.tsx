@@ -6,24 +6,33 @@ import { createPortal } from "react-dom";
 // ─── ContactCards ────────────────────────────────────────────────────────
 //
 // Three pill-style cards — Phone, Email, WhatsApp — used in the bottom
-// strip of the Personal Note section. Each card has a circular icon
-// chip on the left and a "Title / value" text stack on the right.
+// strip of the Personal Note section and in the Footer's contact-cards
+// variant. Each card pairs a circular icon chip with a "Title / value"
+// stack — Phone, Email, WhatsApp.
 //
-// Icons are inline SVGs (no react-icons dep): Lucide-style outlines for
-// phone + mail; the official simple-icons WhatsApp glyph for brand
-// recognition. Stroke colour comes from currentColor so the chip's text
-// colour can drive the icon colour without extra plumbing.
+// Three render modes share one component:
 //
-// Editor mode adds:
-//   - Click-to-edit on each card's value (the contentEditable span shows
-//     "Add phone…" placeholder when blank, mirroring the ContactRow
-//     pattern in PersonalNoteSection).
-//   - A small "Style" affordance that appears on hover — opens a popover
-//     with two swatch rows: chip background + chip icon. Saved per
-//     section as content.contactIconBg / .contactIconColor.
+//   1. EDITOR  — three labelled inputs sit above the cards; the cards
+//      themselves are display-only (no inline contentEditable). Operators
+//      type into the inputs, see the cards update live, and a "🎨 Style"
+//      affordance reveals on hover for chip / icon / card-background
+//      colour customisation.
 //
-// Visuals: rounded-2xl, soft shadow, hover lift + shadow bump, ~150ms
-// ease-out — Shadcn / Framer caliber.
+//   2. PREVIEW (share view) — inputs strip is gone; cards become real
+//      anchors with tel: / mailto: / wa.me hrefs so clients tap to call,
+//      mail, or chat. Cards with no value are hidden entirely so the row
+//      doesn't show "Phone — empty" placeholders.
+//
+//   3. PRINT / PDF — print CSS hides the cards row entirely; in its
+//      place, a single tracked-out small-caps line renders the values
+//      as plain text ("+255 712 … · operator@safari.com · WhatsApp +255
+//      712 …"). Tiny icons render unreliably across PDF engines and add
+//      nothing to a printed deck.
+//
+// Icons: Lucide-style outlines for Phone + Mail; the official simple-
+// icons WhatsApp glyph (filled). The WhatsApp glyph is rendered slightly
+// smaller (15px vs 18px) so its filled mass matches the visual weight of
+// the outline phone/mail glyphs in the same chip.
 
 export type ContactCardsValues = {
   phone?: string;
@@ -34,10 +43,12 @@ export type ContactCardsValues = {
 export type ContactCardsStyle = {
   iconColor?: string;
   iconBg?: string;
+  cardBg?: string;
 };
 
 const DEFAULT_ICON_BG = "rgba(31, 58, 58, 0.08)";   // muted teal tint
 const DEFAULT_ICON_COLOR = "#1f3a3a";                // brand teal
+const DEFAULT_CARD_BG = "#ffffff";                   // white pill
 
 export function ContactCards({
   values,
@@ -54,50 +65,126 @@ export function ContactCards({
 }) {
   const iconColor = style.iconColor || DEFAULT_ICON_COLOR;
   const iconBg = style.iconBg || DEFAULT_ICON_BG;
+  const cardBg = style.cardBg || DEFAULT_CARD_BG;
+
+  // wa.me requires digits-only; strip everything else for the href but
+  // keep the operator's formatted number for display.
+  const whatsappHref = values.whatsapp
+    ? `https://wa.me/${values.whatsapp.replace(/[^0-9]/g, "")}`
+    : "";
+
+  const cards: CardSpec[] = [
+    {
+      title: "Phone",
+      value: values.phone,
+      href: values.phone ? `tel:${values.phone.replace(/\s+/g, "")}` : "",
+      icon: <PhoneIcon />,
+    },
+    {
+      title: "Email",
+      value: values.email,
+      href: values.email ? `mailto:${values.email}` : "",
+      icon: <MailIcon />,
+    },
+    {
+      title: "WhatsApp",
+      value: values.whatsapp,
+      href: whatsappHref,
+      icon: <WhatsAppIcon />,
+    },
+  ];
+
+  // Plain-text print line. WhatsApp gets a label because a bare number
+  // wouldn't tell the reader it's chat-specific; phone/email are
+  // self-explanatory.
+  const printParts = [
+    values.phone || "",
+    values.email || "",
+    values.whatsapp ? `WhatsApp ${values.whatsapp}` : "",
+  ].filter(Boolean);
+
+  const visibleCards = cards.filter((c) => isEditor || c.value);
 
   return (
     <div className="relative group w-full">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
-        <Card
-          title="Phone"
-          value={values.phone}
-          placeholder="Add phone in settings"
-          icon={<PhoneIcon />}
-          iconColor={iconColor}
-          iconBg={iconBg}
-          isEditor={isEditor}
-          onCommit={(v) => onValueChange({ ...values, phone: v })}
-        />
-        <Card
-          title="Email"
-          value={values.email}
-          placeholder="Add email in settings"
-          icon={<MailIcon />}
-          iconColor={iconColor}
-          iconBg={iconBg}
-          isEditor={isEditor}
-          onCommit={(v) => onValueChange({ ...values, email: v })}
-        />
-        <Card
-          title="WhatsApp"
-          value={values.whatsapp}
-          placeholder="Add WhatsApp in settings"
-          icon={<WhatsAppIcon />}
-          iconColor={iconColor}
-          iconBg={iconBg}
-          isEditor={isEditor}
-          onCommit={(v) => onValueChange({ ...values, whatsapp: v })}
-        />
-      </div>
+      {/* Editor-only inputs strip — three labelled fields the operator
+          types into. Live-binds to onValueChange so the cards below
+          update on every keystroke. Hidden in preview/share/print. */}
+      {isEditor && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 print:hidden">
+          <ContactInput
+            label="Phone"
+            icon={<PhoneIcon />}
+            placeholder="+255 712 345 678"
+            value={values.phone}
+            onChange={(v) => onValueChange({ ...values, phone: v })}
+          />
+          <ContactInput
+            label="Email"
+            icon={<MailIcon />}
+            placeholder="hello@safari.com"
+            value={values.email}
+            onChange={(v) => onValueChange({ ...values, email: v })}
+            inputType="email"
+          />
+          <ContactInput
+            label="WhatsApp"
+            icon={<WhatsAppIcon size={14} />}
+            placeholder="+255 712 345 678"
+            value={values.whatsapp}
+            onChange={(v) => onValueChange({ ...values, whatsapp: v })}
+          />
+        </div>
+      )}
 
-      {/* Editor-only style affordance — sits over the cards row, fades
-          in on hover of any card. Uses the same portal pattern as the
-          cover logo controls so the popover escapes any overflow:hidden
-          parent. */}
+      {/* Cards row — display only. In preview each card is an anchor
+          with the right href; in editor each card is a div. Cards with
+          no value are hidden in preview so empty slots don't show. */}
+      {visibleCards.length > 0 && (
+        <div
+          data-contact-cards
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:hidden"
+        >
+          {visibleCards.map((c) => (
+            <Card
+              key={c.title}
+              title={c.title}
+              value={c.value}
+              href={c.href}
+              icon={c.icon}
+              iconColor={iconColor}
+              iconBg={iconBg}
+              cardBg={cardBg}
+              isEditor={isEditor}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Print-only plain-text line. Centered, tracked-out small caps
+          to match editorial register. */}
+      {printParts.length > 0 && (
+        <div
+          data-contact-print
+          className="hidden print:block text-center"
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.06em",
+            color: "rgba(0,0,0,0.6)",
+            lineHeight: 1.6,
+          }}
+        >
+          {printParts.join("  ·  ")}
+        </div>
+      )}
+
+      {/* Style picker — editor only. Sits over the cards row top-right;
+          fades in on hover. Portal'd menu so it escapes any overflow. */}
       {isEditor && (
         <StyleControl
           iconColor={iconColor}
           iconBg={iconBg}
+          cardBg={cardBg}
           onChange={onStyleChange}
         />
       )}
@@ -105,32 +192,57 @@ export function ContactCards({
   );
 }
 
-// ─── One card ────────────────────────────────────────────────────────────
+type CardSpec = {
+  title: string;
+  value: string | undefined;
+  href: string;
+  icon: React.ReactNode;
+};
+
+// ─── One card (display-only) ─────────────────────────────────────────────
 
 function Card({
   title,
   value,
-  placeholder,
+  href,
   icon,
   iconColor,
   iconBg,
+  cardBg,
   isEditor,
-  onCommit,
 }: {
   title: string;
   value: string | undefined;
-  placeholder: string;
+  href: string;
   icon: React.ReactNode;
   iconColor: string;
   iconBg: string;
+  cardBg: string;
   isEditor: boolean;
-  onCommit: (next: string | undefined) => void;
 }) {
-  return (
-    <div
-      className="group relative flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:shadow-[0_4px_14px_rgba(16,24,40,0.08)] hover:-translate-y-[1px] transition-all duration-200"
-      style={{ border: "1px solid rgba(16,24,40,0.06)" }}
-    >
+  const hasValue = !!value;
+  const interactive = !isEditor && hasValue;
+
+  // Auto-pick text colour against the card bg so cream / charcoal /
+  // black backgrounds remain legible without per-section plumbing.
+  const titleColor = textOn(cardBg, "#101828", "#ffffff");
+  const valueColor = textOn(cardBg, "rgba(0,0,0,0.45)", "rgba(255,255,255,0.65)");
+
+  const baseClasses =
+    "flex items-center gap-3.5 px-4 py-3 rounded-2xl shadow-[0_1px_2px_rgba(16,24,40,0.06)] transition-all duration-200 no-underline";
+  const interactiveClasses = interactive
+    ? "hover:shadow-[0_4px_14px_rgba(16,24,40,0.1)] hover:-translate-y-[1px] cursor-pointer"
+    : "";
+
+  const cardStyle: React.CSSProperties = {
+    background: cardBg,
+    border: "1px solid rgba(16,24,40,0.06)",
+    color: titleColor,
+    textDecoration: "none",
+  };
+
+  const inner = (
+    <>
       <div
         className="shrink-0 flex items-center justify-center rounded-full transition-colors duration-200"
         style={{
@@ -144,35 +256,95 @@ function Card({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold text-[#101828] leading-tight">
+        <div
+          className="text-[13px] font-semibold leading-tight"
+          style={{ color: titleColor }}
+        >
           {title}
         </div>
-        <span
-          className="block mt-0.5 text-[12px] text-black/45 leading-tight outline-none truncate"
-          contentEditable={isEditor}
-          suppressContentEditableWarning
-          data-placeholder={isEditor ? placeholder : ""}
-          onBlur={(e) => {
-            const next = e.currentTarget.textContent?.trim() || "";
-            onCommit(next || undefined);
-          }}
+        <div
+          className="mt-0.5 text-[12px] leading-tight truncate"
+          style={{ color: valueColor }}
         >
-          {value || ""}
-        </span>
+          {value || (isEditor ? "Not set" : "")}
+        </div>
       </div>
+    </>
+  );
+
+  if (interactive) {
+    return (
+      <a
+        href={href}
+        target={href.startsWith("http") ? "_blank" : undefined}
+        rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
+        className={`${baseClasses} ${interactiveClasses}`}
+        style={cardStyle}
+      >
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <div className={baseClasses} style={cardStyle}>
+      {inner}
     </div>
   );
 }
 
-// ─── Style control (icon + chip colour pickers) ──────────────────────────
+// ─── Editor input row ────────────────────────────────────────────────────
+
+function ContactInput({
+  label,
+  icon,
+  placeholder,
+  value,
+  onChange,
+  inputType = "text",
+}: {
+  label: string;
+  icon: React.ReactNode;
+  placeholder: string;
+  value: string | undefined;
+  onChange: (next: string | undefined) => void;
+  inputType?: "text" | "email";
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] uppercase tracking-[0.16em] font-semibold text-black/45 mb-1.5">
+        {label}
+      </span>
+      <div className="flex items-center gap-2 px-3 h-9 rounded-lg bg-white border border-black/8 focus-within:border-[#1b3a2d]/40 focus-within:ring-2 focus-within:ring-[#1b3a2d]/8 transition">
+        <span className="text-black/35 shrink-0" aria-hidden>
+          {icon}
+        </span>
+        <input
+          type={inputType}
+          value={value ?? ""}
+          onChange={(e) => {
+            const next = e.target.value;
+            onChange(next === "" ? undefined : next);
+          }}
+          placeholder={placeholder}
+          className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-black/30"
+        />
+      </div>
+    </label>
+  );
+}
+
+// ─── Style control (icon chip / icon colour / card bg) ───────────────────
 
 function StyleControl({
   iconColor,
   iconBg,
+  cardBg,
   onChange,
 }: {
   iconColor: string;
   iconBg: string;
+  cardBg: string;
   onChange: (next: ContactCardsStyle) => void;
 }) {
   const ref = useRef<HTMLButtonElement | null>(null);
@@ -199,7 +371,7 @@ function StyleControl({
         ref={ref}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="absolute -top-3 right-0 px-2.5 py-1 rounded-full bg-black/80 text-white text-[10.5px] font-semibold shadow-md hover:bg-black transition-all duration-150 opacity-0 group-hover:opacity-100 backdrop-blur-sm flex items-center gap-1.5"
+        className="absolute -top-3 right-0 px-2.5 py-1 rounded-full bg-black/80 text-white text-[10.5px] font-semibold shadow-md hover:bg-black transition-all duration-150 opacity-0 group-hover:opacity-100 backdrop-blur-sm flex items-center gap-1.5 print:hidden"
         title="Customise contact card colours"
         style={{ zIndex: 5 }}
       >
@@ -213,6 +385,7 @@ function StyleControl({
             anchor={anchor}
             iconColor={iconColor}
             iconBg={iconBg}
+            cardBg={cardBg}
             onChange={onChange}
             onClose={() => setOpen(false)}
           />,
@@ -240,16 +413,27 @@ const ICON_COLOR_PRESETS = [
   { label: "Cream", value: "#f5e8d8" },
 ];
 
+const CARD_BG_PRESETS = [
+  { label: "White", value: "#ffffff" },
+  { label: "Cream", value: "#f5e8d8" },
+  { label: "Sand", value: "#ede4d3" },
+  { label: "Stone", value: "#f3f3f1" },
+  { label: "Charcoal", value: "#1a1a1a" },
+  { label: "Black", value: "#000000" },
+];
+
 function StylePopover({
   anchor,
   iconColor,
   iconBg,
+  cardBg,
   onChange,
   onClose,
 }: {
   anchor: DOMRect;
   iconColor: string;
   iconBg: string;
+  cardBg: string;
   onChange: (next: ContactCardsStyle) => void;
   onClose: () => void;
 }) {
@@ -274,84 +458,99 @@ function StylePopover({
         }}
       >
         <div className="bg-white rounded-2xl shadow-2xl border border-black/8 overflow-hidden">
-          <div className="px-4 pt-4 pb-3">
-            <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-black/45 mb-2">
-              Icon chip
-            </div>
-            <SwatchRow
-              presets={CHIP_BG_PRESETS}
-              current={iconBg}
-              onPick={(v) => onChange({ iconBg: v, iconColor })}
-            />
-          </div>
-          <div className="border-t border-black/6 px-4 pt-3 pb-4">
-            <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-black/45 mb-2">
-              Icon colour
-            </div>
-            <SwatchRow
-              presets={ICON_COLOR_PRESETS}
-              current={iconColor}
-              onPick={(v) => onChange({ iconBg, iconColor: v })}
-            />
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                type="color"
-                value={hexFrom(iconColor) || "#101828"}
-                onChange={(e) => onChange({ iconBg, iconColor: e.target.value })}
-                className="w-7 h-7 rounded border border-black/10 cursor-pointer p-0"
-                title="Custom icon colour"
-              />
-              <span className="text-[11px] text-black/45">Custom hex</span>
-            </div>
-          </div>
+          <Section
+            label="Icon chip"
+            presets={CHIP_BG_PRESETS}
+            current={iconBg}
+            onPick={(v) => onChange({ iconBg: v, iconColor, cardBg })}
+          />
+          <Section
+            label="Icon colour"
+            presets={ICON_COLOR_PRESETS}
+            current={iconColor}
+            onPick={(v) => onChange({ iconBg, iconColor: v, cardBg })}
+            withCustom
+            onCustom={(v) => onChange({ iconBg, iconColor: v, cardBg })}
+          />
+          <Section
+            label="Card background"
+            presets={CARD_BG_PRESETS}
+            current={cardBg}
+            onPick={(v) => onChange({ iconBg, iconColor, cardBg: v })}
+            withCustom
+            onCustom={(v) => onChange({ iconBg, iconColor, cardBg: v })}
+          />
         </div>
       </div>
     </>
   );
 }
 
-function SwatchRow({
+function Section({
+  label,
   presets,
   current,
   onPick,
+  withCustom,
+  onCustom,
 }: {
+  label: string;
   presets: Array<{ label: string; value: string }>;
   current: string;
-  onPick: (value: string) => void;
+  onPick: (v: string) => void;
+  withCustom?: boolean;
+  onCustom?: (v: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {presets.map((p) => (
-        <button
-          key={p.value}
-          type="button"
-          title={p.label}
-          onClick={() => onPick(p.value)}
-          className={`w-7 h-7 rounded-full transition ${
-            current === p.value
-              ? "ring-2 ring-[#1b3a2d] ring-offset-1"
-              : "hover:scale-105"
-          }`}
-          style={{
-            background: p.value,
-            border:
+    <div className="px-4 py-3 border-t border-black/6 first:border-t-0">
+      <div className="text-[10px] uppercase tracking-[0.16em] font-semibold text-black/45 mb-2">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {presets.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            title={p.label}
+            onClick={() => onPick(p.value)}
+            className={`w-7 h-7 rounded-full transition ${
               current === p.value
-                ? "1px solid rgba(255,255,255,0.6)"
-                : "1px solid rgba(0,0,0,0.08)",
-          }}
-        />
-      ))}
+                ? "ring-2 ring-[#1b3a2d] ring-offset-1"
+                : "hover:scale-105"
+            }`}
+            style={{
+              background: p.value,
+              border:
+                current === p.value
+                  ? "1px solid rgba(255,255,255,0.6)"
+                  : "1px solid rgba(0,0,0,0.08)",
+            }}
+          />
+        ))}
+      </div>
+      {withCustom && onCustom && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <input
+            type="color"
+            value={hexFrom(current) || "#101828"}
+            onChange={(e) => onCustom(e.target.value)}
+            className="w-7 h-7 rounded border border-black/10 cursor-pointer p-0"
+            title={`Custom ${label.toLowerCase()}`}
+          />
+          <span className="text-[11px] text-black/45">Custom hex</span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Icons ───────────────────────────────────────────────────────────────
 
-function PhoneIcon() {
+function PhoneIcon({ size = 18 }: { size?: number }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -365,11 +564,11 @@ function PhoneIcon() {
   );
 }
 
-function MailIcon() {
+function MailIcon({ size = 18 }: { size?: number }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -384,13 +583,15 @@ function MailIcon() {
   );
 }
 
-// Official simple-icons WhatsApp path. Filled glyph reads instantly as
-// the WhatsApp brand mark.
-function WhatsAppIcon() {
+// Simple-icons WhatsApp glyph (filled). Rendered at 15px so its
+// solid mass matches the visual weight of the 18px stroke-2 phone /
+// mail glyphs in the same chip — without this it reads as visibly
+// heavier and the row feels imbalanced.
+function WhatsAppIcon({ size = 15 }: { size?: number }) {
   return (
     <svg
-      width="18"
-      height="18"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden
@@ -422,6 +623,8 @@ function PaletteIcon() {
   );
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
 // Strip rgba/hex variants down to a 6-char hex for <input type="color">.
 function hexFrom(color: string | undefined): string | undefined {
   if (!color) return undefined;
@@ -432,4 +635,37 @@ function hexFrom(color: string | undefined): string | undefined {
   const toHex = (n: number) =>
     Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
   return `#${toHex(parseInt(m[1], 10))}${toHex(parseInt(m[2], 10))}${toHex(parseInt(m[3], 10))}`;
+}
+
+// Pick a foreground colour given a background. Used so card title +
+// value text stay legible whatever bg the operator picks (white card →
+// charcoal text; charcoal card → cream text).
+function textOn(bg: string, light: string, dark: string): string {
+  const b = brightness(bg);
+  return b > 140 ? light : dark;
+}
+
+function brightness(color: string): number {
+  const t = color.trim();
+  if (t.startsWith("#")) {
+    const cleaned = t.slice(1);
+    const full =
+      cleaned.length === 3
+        ? cleaned.split("").map((c) => c + c).join("")
+        : cleaned.slice(0, 6);
+    if (full.length !== 6) return 200;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    if ([r, g, b].some((n) => Number.isNaN(n))) return 200;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(t);
+  if (m) {
+    const r = parseInt(m[1], 10);
+    const g = parseInt(m[2], 10);
+    const b = parseInt(m[3], 10);
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  return 200;
 }

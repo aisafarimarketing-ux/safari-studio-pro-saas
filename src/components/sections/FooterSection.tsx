@@ -4,6 +4,7 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
+import { ContactCards } from "@/components/sections/personal-note/ContactCards";
 import type { Section } from "@/lib/types";
 
 // FooterSection — last block of the proposal. Carries the operator
@@ -39,44 +40,12 @@ export function FooterSection({ section }: { section: Section }) {
 
   // Contact-cards — three pill cards in a horizontal row. Counterpart
   // to the editorial-letter-image PersonalNote variant: clean, light,
-  // hover-lift, no clutter.
+  // hover-lift, no clutter. Now shares the ContactCards component with
+  // the Personal Note's bottom strip so the editor inputs, style picker
+  // (chip / icon / card-bg colours), clickable hrefs in preview, and
+  // PDF plain-text fallback all behave consistently between the two
+  // surfaces.
   if (section.layoutVariant === "contact-cards") {
-    const cards: Array<{ label: string; value: string; href: string; icon: React.ReactNode }> = [];
-    if (operator.phone) {
-      cards.push({
-        label: "Phone",
-        value: operator.phone,
-        href: `tel:${operator.phone.replace(/\s+/g, "")}`,
-        icon: <PhoneIcon />,
-      });
-    }
-    if (operator.email) {
-      cards.push({
-        label: "Email",
-        value: operator.email,
-        href: `mailto:${operator.email}`,
-        icon: <EmailIcon />,
-      });
-    }
-    if (operator.whatsapp) {
-      cards.push({
-        label: "WhatsApp",
-        value: "Chat on WhatsApp",
-        href: `https://wa.me/${operator.whatsapp.replace(/[^0-9]/g, "")}`,
-        icon: <WhatsAppIcon />,
-      });
-    }
-    // Editor-only: render placeholder cards when nothing's set so the
-    // operator can see the layout and click into settings.
-    if (cards.length === 0 && isEditor) {
-      cards.push(
-        { label: "Phone",    value: "Add phone in settings",    href: "#", icon: <PhoneIcon /> },
-        { label: "Email",    value: "Add email in settings",    href: "#", icon: <EmailIcon /> },
-        { label: "WhatsApp", value: "Add WhatsApp in settings", href: "#", icon: <WhatsAppIcon /> },
-      );
-    }
-    if (cards.length === 0) return null;
-
     return (
       <div
         className="py-10 md:py-12 px-6 md:px-12"
@@ -85,67 +54,34 @@ export function FooterSection({ section }: { section: Section }) {
           fontFamily: `'${theme.bodyFont}', sans-serif`,
         }}
       >
-        <div className="mx-auto" style={{ maxWidth: 1140 }}>
-          <div
-            className="grid gap-3 md:gap-4"
-            style={{
-              gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))`,
+        <div className="mx-auto" style={{ maxWidth: 1200 }}>
+          <ContactCards
+            isEditor={isEditor}
+            values={{
+              phone: operator.phone,
+              email: operator.email,
+              whatsapp: operator.whatsapp,
             }}
-          >
-            {cards.map((c) => (
-              <a
-                key={c.label}
-                href={c.href}
-                target={c.href.startsWith("http") ? "_blank" : undefined}
-                rel={c.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                className="group flex items-center gap-3 transition-transform"
-                style={{
-                  background: "#FFFFFF",
-                  border: `1px solid ${tokens.border}`,
-                  borderRadius: 14,
-                  padding: "16px 18px",
-                  textDecoration: "none",
-                  boxShadow: "0 1px 0 rgba(13,38,32,0.02)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 12px 28px -12px rgba(13,38,32,0.18)";
-                  e.currentTarget.style.borderColor = "rgba(13,38,32,0.16)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 1px 0 rgba(13,38,32,0.02)";
-                  e.currentTarget.style.borderColor = tokens.border;
-                }}
-              >
-                <span
-                  className="shrink-0 flex items-center justify-center"
-                  style={{
-                    width: 44, height: 44, borderRadius: "50%",
-                    background: "rgba(27,58,45,0.07)",
-                    color: "#1b3a2d",
-                  }}
-                  aria-hidden
-                >
-                  {c.icon}
-                </span>
-                <div className="min-w-0">
-                  <div
-                    className="text-[12.5px] font-semibold"
-                    style={{ color: tokens.headingText, lineHeight: 1.2 }}
-                  >
-                    {c.label}
-                  </div>
-                  <div
-                    className="text-[12.5px] mt-0.5 truncate"
-                    style={{ color: tokens.mutedText, lineHeight: 1.3 }}
-                  >
-                    {c.value}
-                  </div>
-                </div>
-              </a>
-            ))}
-          </div>
+            style={{
+              iconBg: section.content.contactIconBg as string | undefined,
+              iconColor: section.content.contactIconColor as string | undefined,
+              cardBg: section.content.contactCardBg as string | undefined,
+            }}
+            onValueChange={(next) =>
+              updateOperator({
+                phone: next.phone ?? "",
+                email: next.email ?? "",
+                whatsapp: next.whatsapp ?? "",
+              })
+            }
+            onStyleChange={(next) =>
+              updateSectionContent(section.id, {
+                contactIconBg: next.iconBg,
+                contactIconColor: next.iconColor,
+                contactCardBg: next.cardBg,
+              })
+            }
+          />
         </div>
       </div>
     );
@@ -353,30 +289,3 @@ function ContactRow({
   );
 }
 
-// ─── Icons used by the contact-cards variant ─────────────────────────────
-
-function PhoneIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3.5 5 a1.5 1.5 0 0 1 1.5-1.5h1.6a1 1 0 0 1 1 .8l.5 2.5a1 1 0 0 1-.3 1l-1.3 1.3a9 9 0 0 0 4.6 4.6l1.3-1.3a1 1 0 0 1 1-.3l2.5.5a1 1 0 0 1 .8 1V15a1.5 1.5 0 0 1-1.5 1.5C8 16.5 1.5 10 1.5 4.5" />
-    </svg>
-  );
-}
-
-function EmailIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="2" y="4" width="14" height="10" rx="1.6" />
-      <path d="M2.5 5 L9 10 L15.5 5" />
-    </svg>
-  );
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 3.4L3 21" />
-      <path d="M9 10a3 3 0 0 0 3 3l1.5-1.5a1 1 0 0 1 1 0l2 1.3a1 1 0 0 1 .3 1.2l-.3.6a3 3 0 0 1-3 2" />
-    </svg>
-  );
-}

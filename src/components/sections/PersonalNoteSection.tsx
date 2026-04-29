@@ -110,7 +110,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
         </div>
       )}
 
-      <div className={`mx-auto px-10 md:px-14 py-10 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
+      <div className={`mx-auto px-10 md:px-14 pt-10 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
         {/* Greeting body */}
         <div
           className="text-[15px] font-semibold mb-3 outline-none"
@@ -221,12 +221,18 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Branded contact strip — consultant photo · company info · logo */}
-        <div
-          className="mt-10 pt-8 grid grid-cols-[auto_1fr_auto] items-center gap-6"
-          style={{ borderTop: `1px solid ${tokens.border}` }}
-        >
+      {/* Branded contact strip — wider container so the photo, the
+          three contact cards, and the logo all have room to breathe.
+          The letter above stays in the narrow editorial column for
+          readability; the strip below uses 1200px because it carries
+          chrome (icons, photo, logo) rather than prose. */}
+      <div
+        className="mx-auto px-6 md:px-10 mt-10 pt-8 pb-12 max-w-[1200px]"
+        style={{ borderTop: `1px solid ${tokens.border}` }}
+      >
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6 md:gap-10">
           {/* Consultant photo */}
           <div
             className="shrink-0 overflow-hidden cursor-pointer"
@@ -280,18 +286,20 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             style={{
               iconBg: section.content.contactIconBg as string | undefined,
               iconColor: section.content.contactIconColor as string | undefined,
+              cardBg: section.content.contactCardBg as string | undefined,
             }}
             onValueChange={(next) =>
               updateOperator({
-                phone: next.phone ?? operator.phone,
-                email: next.email ?? operator.email,
-                whatsapp: next.whatsapp ?? operator.whatsapp,
+                phone: next.phone ?? "",
+                email: next.email ?? "",
+                whatsapp: next.whatsapp ?? "",
               })
             }
             onStyleChange={(next) =>
               updateSectionContent(section.id, {
                 contactIconBg: next.iconBg,
                 contactIconColor: next.iconColor,
+                contactCardBg: next.cardBg,
               })
             }
           />
