@@ -426,20 +426,13 @@ export function RouteMap({
   // directions (up / down / left / right) cycling through the four
   // sides — anything beyond a 4-way cluster falls back to "up", which
   // is unlikely to occur on a single safari circuit.
-  const pillDirections = assignPillDirections(markerGroups);
+  // Pill direction indices align with whatever group set the markers
+  // render from. Computed AFTER the inland-only filter below so close
+  // pairs that survive (Tarangire ↔ Manyara) get unique sides.
+  // (assigned just below the inlandOnly filter.)
 
-  // Which marker group contains the selected day (if any)? Matches by
-  // REAL lat/lng (rawMarkerGroups) since `coords` carries the
-  // operator's actual coordinates — the compressed `markerGroups`
-  // wouldn't line up for coast destinations. Returned index is still
-  // valid for the parallel compressed array.
-  const selectedGroupIndex = selectedDayId
-    ? rawMarkerGroups.findIndex((g) =>
-        coords.some(
-          (c) => c.dayId === selectedDayId && Math.abs(c.lat - g.lat) < 0.0001 && Math.abs(c.lng - g.lng) < 0.0001,
-        ),
-      )
-    : -1;
+  // (selectedGroupIndex is computed below against visibleMarkerGroups
+  // so the highlight maps to the markers we actually render.)
 
   // ── Smart viewport ──
   //
@@ -461,27 +454,48 @@ export function RouteMap({
   // so the safari circuit stays tight in the main map. Coast markers
   // still render at real coords; they just sit outside the visible
   // bounds and a paired inset map shows them in geographic context.
-  const viewportGroups =
-    viewportMode === "inland-only"
-      ? markerGroups.filter((g) => !isCoastCity(g.placeName))
-      : markerGroups;
+  // Inland-only mode (the main route map when a trip has offshore
+  // stops) filters coast cities out of EVERYTHING — viewport bounds,
+  // markers, AND legs. The paired inset map (rendered separately by
+  // MapSection) shows the offshore stops in geographic context. This
+  // keeps the main map tight on the safari circuit so the route fills
+  // the frame and there's no empty sea or distant Kenya in the crop.
+  const inlandOnly = viewportMode === "inland-only";
+  const visibleMarkerGroups = inlandOnly
+    ? markerGroups.filter((g) => !isCoastCity(g.placeName))
+    : markerGroups;
+  const visibleGroups = inlandOnly
+    ? groups.filter((g) => !isCoastCity(g.placeName))
+    : groups;
   const viewportSource =
-    viewportGroups.length >= 1 ? viewportGroups : markerGroups;
+    visibleMarkerGroups.length >= 1 ? visibleMarkerGroups : markerGroups;
   const viewport = computeViewport(viewportSource);
+  // Pill direction assignment runs against the visible marker set so
+  // the indexing lines up with the markers we actually render.
+  const pillDirections = assignPillDirections(visibleMarkerGroups);
+  // Selected-day index is found in visibleMarkerGroups so the
+  // highlight aligns with the rendered marker ordering.
+  const selectedGroupIndex = selectedDayId
+    ? visibleMarkerGroups.findIndex((g) =>
+        coords.some(
+          (c) =>
+            c.dayId === selectedDayId &&
+            Math.abs(c.lat - g.lat) < 0.0001 &&
+            Math.abs(c.lng - g.lng) < 0.0001,
+        ),
+      )
+    : -1;
 
-  // Split adjacent legs into "circuit" (solid) and "transfer" (dashed
-  // curve). Long-haul legs above TRANSFER_THRESHOLD_KM render as a
-  // gentle Bézier curve so they read as a flight rather than an
-  // implausibly straight 700km drive over ocean.
+  // Split adjacent legs into "circuit" (short drives) and "transfer"
+  // (long flights). Both bow outward from the trip centroid; the kind
+  // affects bow magnitude and stroke style only.
   const TRANSFER_THRESHOLD_KM = 250;
-  const legPaths = buildLegPaths(groups, TRANSFER_THRESHOLD_KM);
+  const legPaths = buildLegPaths(visibleGroups, TRANSFER_THRESHOLD_KM);
 
-  // Parks visited on this trip — only the polygons that appear in the
-  // itinerary get drawn, never the full registry. The basemap already
-  // tints all of East Africa's parks softly; this overlay gives the
-  // ones actually visited a stronger green wash so the eye reads the
-  // safari geography at a glance.
-  const tripParks = parksInTrip(markerGroups.map((g) => g.placeName));
+  // Parks visited on this trip — only polygons whose match regex hits
+  // a stop ON the visible (inland) marker set. Drawn as a soft green
+  // wash so the visited parks pop against the basemap's natural tint.
+  const tripParks = parksInTrip(visibleMarkerGroups.map((g) => g.placeName));
 
   return (
     <div className="relative w-full overflow-hidden" style={{ height, background: tokens.cardBg }}>
@@ -490,14 +504,16 @@ export function RouteMap({
         zoom={6}
         scrollWheelZoom={false}
         bounds={viewport.bounds}
-        // Generous padding so the route opens up rather than reading
-        // as a taut diagram squeezed against the frame. 110px on each
-        // side combined with the 6% computeViewport breathing-room
-        // gives the markers and bowed legs space to BREATHE — operator
-        // brief: "open up nicely, not too tight". maxZoom 8 keeps a
-        // single-region trip from over-zooming into city-streets
-        // territory (looking like Google Maps, not a route diagram).
-        boundsOptions={{ padding: [110, 110], maxZoom: 8 }}
+        // Asymmetric padding — generous horizontal so day pills sit
+        // clear of the left/right edges, tight vertical so we don't
+        // pad in extra geography (Kenya north, ocean south) where the
+        // route doesn't reach. Operator brief: "no Kenyan side
+        // showing, no empty section below where our lines are". The
+        // vertical 24px just keeps the topmost pill from clipping the
+        // attribution chip; horizontal 90px gives the bowed legs and
+        // pill labels room to breathe outward. maxZoom 9 caps over-
+        // zoom on a single-park itinerary.
+        boundsOptions={{ padding: [90, 24], maxZoom: 9 }}
         minZoom={5}
         maxZoom={12}
         inertia={false}
@@ -521,7 +537,7 @@ export function RouteMap({
         <FlyToSelected
           map={mapRef}
           selectedGroupIndex={selectedGroupIndex}
-          groups={markerGroups}
+          groups={visibleMarkerGroups}
         />
         <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
@@ -543,7 +559,12 @@ export function RouteMap({
         {!inset && tripParks.map((park) => (
           <Polygon
             key={park.name}
-            positions={park.coords}
+            // Catmull-Rom smoothed ring — the registry stores 6-12
+            // hand-picked corners per park, which renders as a sharp
+            // polygon. Smoothing through those control points
+            // produces the softer, real-park-on-a-map look operators
+            // asked for, without needing GIS-grade boundary data.
+            positions={smoothPolygonCoords(park.coords)}
             pathOptions={{
               color: "#2d5a40",
               weight: 1,
@@ -622,7 +643,7 @@ export function RouteMap({
           );
         })}
 
-        {markerGroups.map((g, i) => {
+        {visibleMarkerGroups.map((g, i) => {
           const isSelected = i === selectedGroupIndex;
           const pillDir = pillDirections[i];
           // Inset mode renders simple dots only — no labels, no
@@ -1036,12 +1057,12 @@ function computeViewport(groups: CoordGroup[]): Viewport {
   let east = Math.max(...lngs);
 
   // Breathing-room expansion so the outermost markers don't sit
-  // flush against the viewport edge. 6% of the route span on each
-  // side, combined with the leaflet boundsOptions.padding [110, 110],
-  // gives the route + bowed leg curves room to spread out instead of
-  // reading as a tight diagram. Operator brief: "open up nicely, not
-  // too tight" — this number is the internal half of that.
-  const BREATHING = 0.06;
+  // flush against the viewport edge. 3% of the route span on each
+  // side keeps a small visual margin without padding in distant
+  // geography we don't need (Kenya beyond Serengeti's north, etc.).
+  // Combined with the asymmetric leaflet boundsOptions.padding,
+  // this gives a tight crop on the inland circuit.
+  const BREATHING = 0.03;
   const latSpan = north - south;
   const lngSpan = east - west;
   south -= latSpan * BREATHING;
@@ -1088,15 +1109,61 @@ type LegPath = {
   skipArrow: boolean;
 };
 
+// ─── Park polygon smoothing ──────────────────────────────────────────────
+//
+// Catmull-Rom interpolation through a closed ring of control points.
+// Each polygon in safariParkBoundaries.ts stores 6-12 corners picked
+// by eye from a real map — rendered raw, those corners are visibly
+// angular and read as schematic shapes. Smoothing through them with
+// a Catmull-Rom spline produces a soft, real-park outline that hits
+// the same anchor points but rounds the corners between them.
+//
+// Sampling density: 8 sub-segments per control point, so a 9-vertex
+// park becomes a 72-vertex smooth ring — visually round, still cheap
+// for Leaflet to draw.
+function smoothPolygonCoords(coords: LatLngTuple[]): LatLngTuple[] {
+  const n = coords.length;
+  if (n < 4) return coords;
+  const SAMPLES = 8;
+  const out: LatLngTuple[] = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = coords[(i - 1 + n) % n];
+    const p1 = coords[i];
+    const p2 = coords[(i + 1) % n];
+    const p3 = coords[(i + 2) % n];
+    for (let k = 0; k < SAMPLES; k++) {
+      const t = k / SAMPLES;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      // Catmull-Rom basis (uniform parameterisation).
+      const lat =
+        0.5 *
+        (2 * p1[0] +
+          (-p0[0] + p2[0]) * t +
+          (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 +
+          (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3);
+      const lng =
+        0.5 *
+        (2 * p1[1] +
+          (-p0[1] + p2[1]) * t +
+          (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 +
+          (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3);
+      out.push([lat, lng]);
+    }
+  }
+  return out;
+}
+
 /**
  * For each adjacent pair of groups, classify by haversine distance:
- *   - ≤ transferThresholdKm → "circuit" (solid straight line)
- *   - > transferThresholdKm → "transfer" (dashed curved arc)
+ *   - ≤ transferThresholdKm → "circuit" (short drive, modest bow)
+ *   - > transferThresholdKm → "transfer" (long flight, generous bow)
  *
- * Curve uses a quadratic Bézier with a perpendicular-offset control
- * point so the arc bows consistently. Curved transfers visually
- * differentiate long-haul flights / road moves from the dense
- * mainland circuit.
+ * Bow direction is OUTWARD from the inland-circuit centroid — the
+ * computed centroid filters out coast cities so a Tanzania→Zanzibar
+ * leg correctly bows AWAY from the safari mainland (over open
+ * water/territory) instead of slicing back through Tarangire /
+ * Manyara / Serengeti.
  */
 function buildLegPaths(
   groups: CoordGroup[],
@@ -1107,9 +1174,19 @@ function buildLegPaths(
   // sequence of legs reads like a stretched bow opening outward
   // instead of a folded chord pulled inward. Operator brief:
   // "naturally open the lines as if you were stretching a bow".
+  //
+  // Centroid uses the INLAND stops only — when a trip mixes a safari
+  // circuit with a coast extension (Zanzibar etc.), an averaged
+  // centroid lands inside the safari area and the long Serengeti →
+  // Zanzibar leg ends up bowing INTO Tarangire / Manyara instead of
+  // outward over open territory. Filtering coast cities gives a
+  // centroid in the heart of the inland circuit, so transfer legs
+  // correctly swing wide of the safari area.
+  const inland = groups.filter((g) => !isCoastCity(g.placeName));
+  const centroidSource = inland.length >= 2 ? inland : groups;
   const centroid: LatLngTuple = [
-    groups.reduce((s, g) => s + g.lat, 0) / groups.length,
-    groups.reduce((s, g) => s + g.lng, 0) / groups.length,
+    centroidSource.reduce((s, g) => s + g.lat, 0) / centroidSource.length,
+    centroidSource.reduce((s, g) => s + g.lng, 0) / centroidSource.length,
   ];
   const out: LegPath[] = [];
   for (let i = 0; i < groups.length - 1; i++) {
