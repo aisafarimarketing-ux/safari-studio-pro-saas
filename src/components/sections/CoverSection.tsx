@@ -6,6 +6,7 @@ import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { orderDestinations } from "@/lib/destinationOrdering";
 import { DraggableImage } from "@/components/ui/DraggableImage";
+import { OperatorLogoTile } from "@/components/brand/OperatorLogoTile";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // "8 days / 7 nights" — safari convention is nights+1 days. Operators
@@ -116,40 +117,37 @@ export function CoverSection({ section }: { section: Section }) {
 
     return (
       <div style={{ background: tokens.pageBg, fontFamily: `'${theme.bodyFont}', sans-serif` }}>
-        {/* 1mm-ish taupe top border — brand chrome */}
-        <div style={{ height: 8, background: taupe }} />
-
-        {/* Logo strip — operator branding above the hero. Used to live only
-            in the PersonalNote sign-off; operators told us the cover felt
-            anonymous without it. */}
-        {(operator.logoUrl || operator.companyName) && (
-          <div className="px-10 md:px-14 pt-7 pb-5 flex items-center">
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={operator.logoUrl}
-                alt={operator.companyName}
-                className="h-16 md:h-20 object-contain"
-              />
-            ) : (
-              <span
-                className="text-[12px] uppercase tracking-[0.32em] font-semibold"
-                style={{ color: tokens.headingText }}
-              >
-                {operator.companyName}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Hero zone — full-width photo + title overlay */}
+        {/* Hero zone — edge-to-edge photo from the very top. The logo
+            now overlays the hero in the top-left as a "paper tile",
+            removing the previous green page-bg strip above the image
+            and giving the cover a luxury-travel cinematic feel. */}
         <div className="relative">
-          {/* Full-width hero photo */}
           <div
             className="relative w-full"
             style={{ aspectRatio: "16 / 9", background: tokens.cardBg }}
             onContextMenu={handleImageContextMenu}
           >
+            {/* Operator logo tile — top-left of hero. Auto-detects
+                whether to use a cream or charcoal tile based on the
+                logo's brightness so any operator's logo reads cleanly
+                regardless of background. */}
+            {(operator.logoUrl || operator.companyName) && (
+              <div className="absolute top-5 left-5 md:top-7 md:left-9 z-10">
+                <OperatorLogoTile
+                  logoUrl={operator.logoUrl}
+                  companyName={operator.companyName}
+                  logoHeight={40}
+                />
+              </div>
+            )}
+            {/* 1mm-ish taupe top border — kept as brand chrome but now
+                sits ON the hero with a subtle drop-shadow so it reads
+                without claiming page-bg space. */}
+            <div
+              aria-hidden
+              className="absolute top-0 left-0 right-0 z-10"
+              style={{ height: 4, background: taupe, opacity: 0.85 }}
+            />
             {heroUrl ? (
               <DraggableImage
                 src={heroUrl}
@@ -384,19 +382,15 @@ export function CoverSection({ section }: { section: Section }) {
           className="relative flex flex-col justify-between p-10 md:p-14"
           style={{ order: imageFirst ? 2 : 1 }}
         >
-          {/* Top — operator */}
+          {/* Top — operator. OperatorLogoTile handles every kind of
+              logo (light/dark/colored bg/text-only) with auto-tile
+              detection. */}
           <div className="flex items-center gap-3">
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
-            ) : (
-              <span
-                className="text-[10px] uppercase tracking-[0.32em] font-semibold"
-                style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {operator.companyName || "Safari Studio"}
-              </span>
-            )}
+            <OperatorLogoTile
+              logoUrl={operator.logoUrl}
+              companyName={operator.companyName || "Safari Studio"}
+              logoHeight={40}
+            />
           </div>
 
           {/* Middle — destinations + title + tagline */}
@@ -502,20 +496,16 @@ export function CoverSection({ section }: { section: Section }) {
           style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)" }}
         />
 
-        {/* Masthead row — operator left, edition right */}
+        {/* Masthead row — operator left, edition right.
+            OperatorLogoTile auto-picks light or dark tile based on
+            the logo's brightness. */}
         <div className="relative z-10 flex items-center justify-between px-10 md:px-14 pt-10">
           <div className="flex items-center gap-3">
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
-            ) : (
-              <span
-                className="text-[11px] uppercase tracking-[0.32em] font-semibold text-white/85"
-                style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}
-              >
-                {operator.companyName || "Safari Studio"}
-              </span>
-            )}
+            <OperatorLogoTile
+              logoUrl={operator.logoUrl}
+              companyName={operator.companyName || "Safari Studio"}
+              logoHeight={40}
+            />
           </div>
           <div className="text-right text-white/75" style={{ fontFamily: `'${theme.bodyFont}', sans-serif` }}>
             <div className="text-[10px] uppercase tracking-[0.32em]">{issue}</div>
@@ -669,13 +659,11 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Top bar */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-10">
-          {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
-          ) : (
-            <span className="text-white/70 text-xs uppercase tracking-[0.25em] font-semibold">
-              {operator.companyName}
-            </span>
-          )}
+          <OperatorLogoTile
+            logoUrl={operator.logoUrl}
+            companyName={operator.companyName}
+            logoHeight={40}
+          />
           {operator.consultantName && (
             <span className="text-white/50 text-xs tracking-wide">
               Prepared by {operator.consultantName}
@@ -764,13 +752,11 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Operator top-left */}
         <div className="absolute top-8 left-10">
-          {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-14 md:h-16 object-contain" />
-          ) : (
-            <span className="text-[10px] uppercase tracking-[0.3em] font-semibold" style={{ color: tokens.mutedText }}>
-              {operator.companyName}
-            </span>
-          )}
+          <OperatorLogoTile
+            logoUrl={operator.logoUrl}
+            companyName={operator.companyName}
+            logoHeight={36}
+          />
         </div>
 
         <div className="max-w-3xl">
@@ -865,19 +851,15 @@ export function CoverSection({ section }: { section: Section }) {
             className="max-w-lg text-center p-12 md:p-16 rounded-2xl"
             style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)" }}
           >
-            {operator.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={operator.logoUrl}
-                alt={operator.companyName}
-                className="h-14 md:h-16 mx-auto mb-6 object-contain"
-                style={{ filter: "brightness(0) invert(1)", opacity: 0.92 }}
-              />
-            ) : operator.companyName ? (
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 mb-8 font-semibold">
-                {operator.companyName}
+            {(operator.logoUrl || operator.companyName) && (
+              <div className="flex justify-center mb-6">
+                <OperatorLogoTile
+                  logoUrl={operator.logoUrl}
+                  companyName={operator.companyName}
+                  logoHeight={40}
+                />
               </div>
-            ) : null}
+            )}
             <h1
               className="text-[clamp(2rem,5vw,3.5rem)] font-bold text-white leading-[1.05] outline-none"
               style={{ fontFamily: `'${theme.displayFont}', serif` }}
@@ -948,11 +930,11 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Right: text column */}
         <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
           <div className="flex items-center justify-end gap-3">
-            {operator.logoUrl ? (
-              <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
-            ) : (
-              <span className="text-white/60 text-xs uppercase tracking-[0.25em] font-semibold">{operator.companyName}</span>
-            )}
+            <OperatorLogoTile
+              logoUrl={operator.logoUrl}
+              companyName={operator.companyName}
+              logoHeight={40}
+            />
           </div>
 
           <div className="space-y-6 text-right">
@@ -1044,13 +1026,11 @@ export function CoverSection({ section }: { section: Section }) {
       <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
-          {operator.logoUrl ? (
-            <img src={operator.logoUrl} alt={operator.companyName} className="h-16 md:h-20 object-contain" />
-          ) : (
-            <span className="text-white/60 text-xs uppercase tracking-[0.25em] font-semibold">
-              {operator.companyName}
-            </span>
-          )}
+          <OperatorLogoTile
+            logoUrl={operator.logoUrl}
+            companyName={operator.companyName}
+            logoHeight={40}
+          />
         </div>
 
         {/* Middle: destinations + title + tagline */}
