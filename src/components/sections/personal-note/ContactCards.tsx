@@ -67,30 +67,45 @@ export function ContactCards({
   const iconBg = style.iconBg || DEFAULT_ICON_BG;
   const cardBg = style.cardBg || DEFAULT_CARD_BG;
 
+  // Defensive strip: operators sometimes type "Phone: +255 …" or
+  // "Email: hello@…" into the inputs by habit, even though the card
+  // already shows the label. Strip any leading "Label:" so the cards
+  // and the tel:/mailto:/wa.me links always carry the clean value —
+  // no support tickets about broken click-to-call later.
+  const phone = stripLabel("phone", values.phone);
+  const email = stripLabel("email", values.email);
+  const whatsapp = stripLabel("whatsapp", values.whatsapp);
+
   // wa.me requires digits-only; strip everything else for the href but
   // keep the operator's formatted number for display.
-  const whatsappHref = values.whatsapp
-    ? `https://wa.me/${values.whatsapp.replace(/[^0-9]/g, "")}`
+  const whatsappHref = whatsapp
+    ? `https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}`
     : "";
 
   const cards: CardSpec[] = [
     {
       title: "Phone",
-      value: values.phone,
-      href: values.phone ? `tel:${values.phone.replace(/\s+/g, "")}` : "",
+      value: phone,
+      href: phone ? `tel:${phone.replace(/\s+/g, "")}` : "",
       icon: <PhoneIcon />,
+      multiline: false,
     },
     {
       title: "Email",
-      value: values.email,
-      href: values.email ? `mailto:${values.email}` : "",
+      value: email,
+      href: email ? `mailto:${email}` : "",
       icon: <MailIcon />,
+      // Long addresses ("ops@africansafariexperience.com") would
+      // ellipsize even at 300px per card. Wrap to 2 lines instead so
+      // operators don't have to shorten their email to fit.
+      multiline: true,
     },
     {
       title: "WhatsApp",
-      value: values.whatsapp,
+      value: whatsapp,
       href: whatsappHref,
       icon: <WhatsAppIcon />,
+      multiline: false,
     },
   ];
 
@@ -98,9 +113,9 @@ export function ContactCards({
   // wouldn't tell the reader it's chat-specific; phone/email are
   // self-explanatory.
   const printParts = [
-    values.phone || "",
-    values.email || "",
-    values.whatsapp ? `WhatsApp ${values.whatsapp}` : "",
+    phone || "",
+    email || "",
+    whatsapp ? `WhatsApp ${whatsapp}` : "",
   ].filter(Boolean);
 
   const visibleCards = cards.filter((c) => isEditor || c.value);
@@ -156,6 +171,7 @@ export function ContactCards({
               iconBg={iconBg}
               cardBg={cardBg}
               isEditor={isEditor}
+              multiline={c.multiline}
             />
           ))}
         </div>
@@ -197,6 +213,7 @@ type CardSpec = {
   value: string | undefined;
   href: string;
   icon: React.ReactNode;
+  multiline: boolean;
 };
 
 // ─── One card (display-only) ─────────────────────────────────────────────
@@ -210,6 +227,7 @@ function Card({
   iconBg,
   cardBg,
   isEditor,
+  multiline,
 }: {
   title: string;
   value: string | undefined;
@@ -219,6 +237,7 @@ function Card({
   iconBg: string;
   cardBg: string;
   isEditor: boolean;
+  multiline: boolean;
 }) {
   const hasValue = !!value;
   const interactive = !isEditor && hasValue;
@@ -263,7 +282,9 @@ function Card({
           {title}
         </div>
         <div
-          className="mt-0.5 text-[12px] leading-tight truncate"
+          className={`mt-0.5 text-[12px] leading-tight ${
+            multiline ? "line-clamp-2 break-all" : "truncate"
+          }`}
           style={{ color: valueColor }}
         >
           {value || (isEditor ? "Not set" : "")}
@@ -624,6 +645,20 @@ function PaletteIcon() {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+// Operators sometimes paste/type "Phone: +255 …", "Email: hello@…",
+// "WhatsApp: +255 …" into the value inputs even though the card
+// already labels each field. The "Phone:" prefix then ends up
+// embedded in tel:/mailto:/wa.me hrefs and breaks click-to-call /
+// click-to-mail entirely. Strip a leading label-colon defensively so
+// however the operator types it, the cards and links carry a clean
+// value. Case-insensitive, whitespace-tolerant, idempotent.
+function stripLabel(label: string, value: string | undefined): string | undefined {
+  if (!value) return value;
+  const re = new RegExp(`^\\s*${label}\\s*:\\s*`, "i");
+  const cleaned = value.replace(re, "").trim();
+  return cleaned || undefined;
+}
 
 // Strip rgba/hex variants down to a 6-char hex for <input type="color">.
 function hexFrom(color: string | undefined): string | undefined {
