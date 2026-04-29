@@ -559,6 +559,47 @@ function EditorialLetterImageVariant({
         </div>
       </div>
 
+      {/* Contact strip — three social cards (Phone / Email / WhatsApp).
+          Originally this variant punted contact details to the Footer's
+          contact-cards variant, but operators reported "icons missing"
+          when their proposal sat on this default Personal Note variant
+          and they hadn't (or didn't) add a Footer contact-cards section.
+          Render the strip in-section so contacts are always visible
+          here regardless of footer configuration. The Style picker on
+          the cards lets operators recolour to taste. */}
+      <div
+        className="mx-auto px-6 md:px-12 mt-8 pt-8 pb-10"
+        style={{ maxWidth: 1200, borderTop: `1px solid ${tokens.border}` }}
+      >
+        <ContactCards
+          isEditor={isEditor}
+          values={{
+            phone: operator.phone,
+            email: operator.email,
+            whatsapp: operator.whatsapp,
+          }}
+          style={{
+            iconBg: section.content.contactIconBg as string | undefined,
+            iconColor: section.content.contactIconColor as string | undefined,
+            cardBg: section.content.contactCardBg as string | undefined,
+          }}
+          onValueChange={(next) =>
+            updateOperator({
+              phone: next.phone ?? "",
+              email: next.email ?? "",
+              whatsapp: next.whatsapp ?? "",
+            })
+          }
+          onStyleChange={(next) =>
+            updateSectionContent(section.id, {
+              contactIconBg: next.iconBg,
+              contactIconColor: next.iconColor,
+              contactCardBg: next.cardBg,
+            })
+          }
+        />
+      </div>
+
       {isEditor && signaturePadOpen && (
         <SignaturePad
           onClose={() => setSignaturePadOpen(false)}
