@@ -94,8 +94,14 @@ export function InlineTextToolbar() {
   const mode = useEditorStore((s) => s.mode);
   const { proposal } = useProposalStore();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // Direction the popover panels open: "down" anchors them under the
+  // toolbar (default — toolbar at top of viewport); "up" flips them
+  // above the toolbar when the toolbar is in the lower half of the
+  // viewport so the panel doesn't run off-screen.
+  const [popoverDir, setPopoverDir] = useState<"up" | "down">("down");
   const rangeRef = useRef<Range | null>(null);
   const hostRef = useRef<HTMLElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [sizeInput, setSizeInput] = useState<string>("");
   const [openMenu, setOpenMenu] = useState<
     null | "color" | "highlight" | "font"
@@ -109,19 +115,31 @@ export function InlineTextToolbar() {
     { value: `'${proposal.theme.bodyFont}', sans-serif`, label: `${proposal.theme.bodyFont} (body)` },
   ];
 
+  // Persistent visibility model — the toolbar appears on the first
+  // text highlight in editor mode and STAYS visible until the
+  // operator clicks the X. Subsequent selection changes update the
+  // saved Range so format clicks always target the latest selection,
+  // but they don't tear the toolbar down. Operator brief: "appears
+  // on highlighting text and only goes on X."
   useEffect(() => {
     if (mode !== "editor") return;
     const onSelectionChange = () => {
+      // If focus is currently inside the toolbar (size input, etc.),
+      // selectionchange events fire as a side-effect of the input
+      // taking focus. Don't tear down the saved Range or reposition
+      // the toolbar in that case — the operator is mid-interaction.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && toolbarRef.current?.contains(active)) return;
+
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-        setPos(null);
-        rangeRef.current = null;
-        hostRef.current = null;
-        setOpenMenu(null);
+        // Selection lost (clicked elsewhere, keyboard nav, etc.).
+        // We deliberately do NOT clear pos / rangeRef here — the
+        // toolbar must stay open until X. Format clicks continue to
+        // target the previously-saved range.
         return;
       }
       const range = sel.getRangeAt(0);
-      // Climb to the nearest contentEditable host.
       let node: Node | null = range.commonAncestorContainer;
       let host: HTMLElement | null = null;
       while (node && node !== document.body) {
@@ -135,23 +153,17 @@ export function InlineTextToolbar() {
         node = node.parentNode;
       }
       if (!host) {
-        setPos(null);
+        // New selection isn't inside any contentEditable. Keep the
+        // toolbar where it was; the saved range still applies.
         return;
       }
-      // We deliberately do NOT skip when an ancestor has
-      // [data-editor-chrome] — SectionChrome wraps every section
-      // with that attribute, so the old check made the toolbar
-      // invisible everywhere. Selection inside the portal'd toolbar
-      // never reaches this point because none of the toolbar's
-      // descendants are contentEditable (the size input is a real
-      // <input>, not contenteditable), so `host` ends up null and
-      // we return earlier. No additional guard needed.
+
+      // Real text highlight inside an editable region — save the
+      // range, host, and (re)position the toolbar above the
+      // selection. If the toolbar is in the lower half of the
+      // viewport, popover panels open UP instead of DOWN so the
+      // long font list doesn't run off-screen.
       const rect = range.getBoundingClientRect();
-      // Smart position: prefer ABOVE the selection (88px above so we
-      // stack above the AI toolbar at -44px). If there's not enough
-      // viewport space above, flip BELOW the selection. Horizontal:
-      // centre over the selection, clamped to viewport edges so the
-      // toolbar never runs off-screen.
       const W = 520;
       const TOOLBAR_H = 52;
       const margin = 12;
@@ -161,13 +173,14 @@ export function InlineTextToolbar() {
       if (left < margin) left = margin;
       if (left + W > vw - margin) left = vw - W - margin;
       let top = rect.top - 88;
-      // Not enough room above? Flip below the selection.
       if (top < margin) top = rect.bottom + 12;
-      // Last-resort: clamp to viewport bottom so we don't disappear
-      // entirely on a selection at the very bottom of the page.
       if (top + TOOLBAR_H > vh - margin) {
         top = Math.max(margin, vh - TOOLBAR_H - margin);
       }
+      // Popover direction: if toolbar's bottom is past 60% of the
+      // viewport, flip popovers up. Otherwise default down.
+      const toolbarBottom = top + TOOLBAR_H;
+      setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
       setPos({ top, left });
       rangeRef.current = range.cloneRange();
       hostRef.current = host;
@@ -175,6 +188,16 @@ export function InlineTextToolbar() {
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [mode]);
+
+  // Explicit close — only path that hides the toolbar. Resets
+  // saved range so a fresh selection re-shows it.
+  const closeToolbar = () => {
+    setPos(null);
+    setOpenMenu(null);
+    rangeRef.current = null;
+    hostRef.current = null;
+    setSizeInput("");
+  };
 
   // ── Apply helpers ──
 
@@ -295,6 +318,7 @@ export function InlineTextToolbar() {
       {pos && (
         <motion.div
           key="ss-text-toolbar"
+          ref={toolbarRef}
           data-editor-chrome
           initial={{ opacity: 0, y: 8, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -302,7 +326,12 @@ export function InlineTextToolbar() {
           transition={{ type: "spring", damping: 22, stiffness: 360 }}
           className="fixed z-[10000]"
           style={{ top: pos.top, left: pos.left, width: 520 }}
-          onMouseDown={(e) => e.preventDefault()}
+          // NOTE: no onMouseDown=preventDefault on the wrapper. We
+          // need clicks on the size / hex inputs to focus them
+          // normally so the operator can type. Buttons that should
+          // preserve the contentEditable selection (B / I / U / S /
+          // popover triggers / clear / X) call preventDefault
+          // themselves via the shared button components.
         >
           <div
             className="rounded-xl shadow-2xl flex items-center gap-0.5 px-1.5 py-1.5"
@@ -339,7 +368,9 @@ export function InlineTextToolbar() {
               <Caret />
             </PopoverBtn>
 
-            {/* Size — numeric input in pixels */}
+            {/* Size — numeric input in pixels. The wrapper does NOT
+                preventDefault on mousedown so clicking the input
+                focuses it normally and the operator can type digits. */}
             <div className="flex items-center gap-1 px-1">
               <span className="text-[10px] uppercase tracking-wider text-white/40">
                 Size
@@ -395,12 +426,20 @@ export function InlineTextToolbar() {
             <ToolbarBtn title="Clear formatting" onClick={clearFormatting}>
               <ClearIcon />
             </ToolbarBtn>
+
+            {/* Close — the ONLY way to dismiss the toolbar. Operator
+                brief: "appears on highlighting text and only goes
+                on X." */}
+            <Divider />
+            <ToolbarBtn title="Close" onClick={closeToolbar}>
+              <CloseIcon />
+            </ToolbarBtn>
           </div>
 
           {/* ── Popovers — anchored under the toolbar ────────────── */}
           <AnimatePresence>
             {openMenu === "font" && (
-              <PopoverPanel key="font-panel" align="left">
+              <PopoverPanel key="font-panel" align="left" direction={popoverDir}>
                 {[...themeFonts, ...FONT_FAMILY_OPTIONS].map((f) => (
                   <button
                     key={f.label}
@@ -417,7 +456,7 @@ export function InlineTextToolbar() {
             )}
 
             {openMenu === "color" && (
-              <PopoverPanel key="color-panel" align="center">
+              <PopoverPanel key="color-panel" align="center" direction={popoverDir}>
                 <div className="text-[10px] uppercase tracking-wider text-white/40 px-1.5 mb-1.5">
                   Text colour
                 </div>
@@ -453,7 +492,7 @@ export function InlineTextToolbar() {
             )}
 
             {openMenu === "highlight" && (
-              <PopoverPanel key="highlight-panel" align="center">
+              <PopoverPanel key="highlight-panel" align="center" direction={popoverDir}>
                 <div className="text-[10px] uppercase tracking-wider text-white/40 px-1.5 mb-1.5">
                   Highlight
                 </div>
@@ -505,6 +544,10 @@ function ToolbarBtn({
     <button
       type="button"
       title={title}
+      // preventDefault on mousedown so clicking the button doesn't
+      // shift focus away from the contentEditable; the saved Range
+      // stays valid for the format apply.
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
         active
@@ -532,6 +575,7 @@ function PopoverBtn({
     <button
       type="button"
       title={title}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onToggle}
       className={`h-7 px-2 flex items-center gap-1 rounded-md transition-colors ${
         open
@@ -559,9 +603,15 @@ function Caret() {
 function PopoverPanel({
   children,
   align = "left",
+  direction = "down",
 }: {
   children: React.ReactNode;
   align?: "left" | "center" | "right";
+  /** Open downwards (default) or upwards relative to the toolbar.
+   *  Driven by `popoverDir` in the parent — flips up when the
+   *  toolbar is in the lower half of the viewport so the panel
+   *  doesn't run off-screen. */
+  direction?: "up" | "down";
 }) {
   const alignmentStyle =
     align === "center"
@@ -569,23 +619,23 @@ function PopoverPanel({
       : align === "right"
       ? { right: 0 }
       : { left: 0 };
+  const directionStyle =
+    direction === "up"
+      ? { bottom: "100%", marginBottom: 6 }
+      : { top: "100%", marginTop: 6 };
   return (
     <motion.div
       data-editor-chrome
-      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      initial={{ opacity: 0, y: direction === "up" ? -6 : 6, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.97 }}
+      exit={{ opacity: 0, y: direction === "up" ? -6 : 6, scale: 0.97 }}
       transition={{ type: "spring", damping: 22, stiffness: 380 }}
-      className="absolute mt-1.5 rounded-xl py-2 px-1.5 min-w-[200px] overflow-y-auto"
+      className="absolute rounded-xl py-2 px-1.5 min-w-[200px] overflow-y-auto"
       style={{
         ...alignmentStyle,
-        top: "100%",
-        // Cap the popover height to a reasonable fraction of the
-        // viewport so a long font list scrolls instead of running
-        // off-screen. Smart-position direction (above/below toolbar)
-        // is handled by the toolbar itself flipping its baseline if
-        // there's no room above the selection — see the `top` calc
-        // in the selectionchange handler.
+        ...directionStyle,
+        // Cap the popover height to a fraction of the viewport so a
+        // long font list scrolls instead of running off-screen.
         maxHeight: "min(420px, 60vh)",
         background: "#0a0a0a",
         border: "1px solid rgba(255,255,255,0.08)",
@@ -675,6 +725,25 @@ function ClearIcon() {
       <path d="M3 11l3-3" />
       <path d="M5 5l4-2 3 3-2 4-3 1z" />
       <path d="M2 12.5h7" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 3 L11 11" />
+      <path d="M11 3 L3 11" />
     </svg>
   );
 }

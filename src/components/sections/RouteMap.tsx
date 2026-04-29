@@ -91,15 +91,14 @@ const KNOWN_SAFARI_COORDS: Array<{
   { match: /^arusha\b/i,                      lat: -3.3869, lng: 36.6829 },
   { match: /^moshi\b/i,                       lat: -3.3494, lng: 37.3408 },
   { match: /^kilimanjaro\b/i,                 lat: -3.0674, lng: 37.3556 },
-  // Tarangire pin nudged south to roughly the polygon's mid-southern
-  // third (real-park lat range -3.6 to -4.4). The old coord (-3.83,
-  // 36.0) sat at the park's NORTHERN edge, only ~33km from Lake
-  // Manyara — pin labels overlapped on the map. The southern position
-  // keeps the route line crossing through the park itself (Day 2
-  // pill ends up over the actual Tarangire polygon, not above it) and
-  // gives ~75km of visible separation from Manyara. The polygon
-  // OUTLINE stays at its OSM coords (untouched) — only the pin moves.
-  { match: /^tarangire\b/i,                   lat: -4.0500, lng: 36.0500 },
+  // Tarangire pin pushed to the polygon's southern third (real-park
+  // lat range -3.6 to -4.4). The old north-edge coord (-3.83, 36.0)
+  // overlapped Manyara's pin (33km). At (-4.25, 36.15) the pin
+  // lands deep inside the park with ~90km of visible separation from
+  // Manyara, and the route line bows naturally between them (Day 2
+  // pill clears Day 3 entirely). Polygon OUTLINE unchanged — OSM
+  // coords are untouched, only the pin moves.
+  { match: /^tarangire\b/i,                   lat: -4.2500, lng: 36.1500 },
   { match: /^lake manyara\b|^manyara\b/i,     lat: -3.5833, lng: 35.8333 },
   { match: /^ngorongoro\b/i,                  lat: -3.2000, lng: 35.5000 },
   { match: /^serengeti\b/i,                   lat: -2.3333, lng: 34.8333 },
@@ -1182,10 +1181,12 @@ function buildLegPaths(
     const distKm = haversineKm(a, b);
     const kind: "circuit" | "transfer" =
       distKm > transferThresholdKm ? "transfer" : "circuit";
-    // Bow fraction differs by kind. Long-haul flights bow more so
-    // the leg reads as an aerial arc; short circuit drives bow less
-    // so they still feel like ground travel between nearby parks.
-    const bowFraction = kind === "transfer" ? 0.30 : 0.20;
+    // Bow fractions tuned for visual separation — close-pair stops
+    // (Tarangire ↔ Manyara) need a generous arc between them so the
+    // pins don't crowd. Circuit 0.32 gives short drives a clear
+    // sweep; transfer 0.40 makes long flights read as an aerial arc
+    // rather than a chord.
+    const bowFraction = kind === "transfer" ? 0.40 : 0.32;
     const { path, midpoint } = buildBezierArc(a, b, centroid, bowFraction);
     out.push({
       kind,
