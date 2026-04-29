@@ -2,63 +2,91 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEditorStore } from "@/store/editorStore";
+import { useProposalStore } from "@/store/proposalStore";
 
 // ─── InlineTextToolbar ───────────────────────────────────────────────────
 //
-// Floating mini-toolbar that appears whenever the operator selects text
-// inside any contentEditable element on the proposal AND editor mode
-// is on. Two affordances:
+// Robust black-themed floating formatting editor. Appears whenever the
+// operator selects text inside any contentEditable element on the
+// proposal AND editor mode is on. Coexists with AISelectionToolbar
+// (rewrites/shorten/lengthen/tone) — this one stacks ABOVE the AI
+// toolbar so both can show without overlap on long-form selections.
 //
-//   • Colour picker  — preset swatches (charcoal / teal / sage / gold
-//     / copper / brick / cream / white)
-//   • Font-size input — type a number (10 / 14 / 20…), apply on Enter
-//     or blur, in pixels
+// Controls (compact horizontal pill):
 //
-// Apply path: wrap the current Range in a fresh <span style="…"> via
-// surroundContents() (with extractContents+insert fallback for ranges
-// that cross node boundaries). The contentEditable element is the
-// source of truth — its onBlur handler must save innerHTML, not
-// textContent, for the styling to round-trip.
+//   B  I  U  S    |  Aa Font ▾    |  ⓢ Size   |  ● Color  |  ▢ Highlight  |  ⌫ Clear
 //
-// Why Range manipulation, not document.execCommand: execCommand
-// foreColor / fontSize are deprecated, the fontSize variant is
-// 1-7 scale (not pixels), and they emit non-deterministic markup
-// across browsers. Range + inline-styled span is auditable and
-// compatible with our sanitiser.
+// All formatting applies via Range manipulation, wrapping the selected
+// nodes in a fresh <span style="…"> (with extractContents fallback).
+// Toggle commands (B / I / U / S) check the surrounding context for
+// existing inline tags and patch them in-place; non-toggle commands
+// always wrap.
 //
-// Mounted once at the editor chrome root (ProposalEditor.tsx) so a
-// single instance handles every contentEditable in the document.
+// Save path: the section's contentEditable owns the saved HTML. When
+// converted to RichEditable, the onBlur fires sanitizeRichText and
+// persists. For sections still on the plain-text textContent path, the
+// inline formatting is visible in editor only and gets stripped on
+// blur — ConvertCallback queue is the long-form fix.
+//
+// Visual taste: Shadcn dark — solid black surface, subtle border,
+// icon-button hover states, Framer-motion fade+slide entry. Single
+// pill, no chunky chrome.
 
 const PRESET_COLORS: { value: string; label: string }[] = [
+  { value: "#ffffff", label: "White" },
   { value: "#101828", label: "Charcoal" },
   { value: "#1f3a3a", label: "Teal" },
   { value: "#2d5a40", label: "Sage" },
   { value: "#c9a84c", label: "Gold" },
   { value: "#b06a3b", label: "Copper" },
   { value: "#b34334", label: "Brick" },
-  { value: "#f5e8d8", label: "Cream" },
-  { value: "#ffffff", label: "White" },
+  { value: "#8a4ca8", label: "Plum" },
+  { value: "#3a6ea5", label: "Indigo" },
 ];
+
+const PRESET_HIGHLIGHTS: { value: string; label: string }[] = [
+  { value: "transparent", label: "None" },
+  { value: "rgba(255, 240, 100, 0.55)", label: "Yellow" },
+  { value: "rgba(120, 200, 255, 0.45)", label: "Blue" },
+  { value: "rgba(120, 230, 160, 0.45)", label: "Green" },
+  { value: "rgba(255, 170, 200, 0.45)", label: "Pink" },
+  { value: "rgba(245, 232, 216, 0.85)", label: "Cream" },
+  { value: "rgba(0, 0, 0, 0.85)", label: "Black" },
+];
+
+const FONT_FAMILY_OPTIONS = [
+  { value: "", label: "Default" },
+  { value: "'Playfair Display', serif", label: "Playfair" },
+  { value: "'Cormorant Garamond', serif", label: "Cormorant" },
+  { value: "'EB Garamond', serif", label: "Garamond" },
+  { value: "'Inter', sans-serif", label: "Inter" },
+  { value: "'Lora', serif", label: "Lora" },
+  { value: "'Montserrat', sans-serif", label: "Montserrat" },
+  { value: "monospace", label: "Mono" },
+] as const;
 
 export function InlineTextToolbar() {
   const mode = useEditorStore((s) => s.mode);
+  const { proposal } = useProposalStore();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  // Track the most recent Range so apply-clicks can re-target it
-  // after focus moves to a toolbar control (which clears the
-  // window selection).
   const rangeRef = useRef<Range | null>(null);
-  // contentEditable host of the current selection — used so we can
-  // dispatch a synthetic input/blur to trigger the section's save
-  // path after applying a style change.
   const hostRef = useRef<HTMLElement | null>(null);
   const [sizeInput, setSizeInput] = useState<string>("");
+  const [openMenu, setOpenMenu] = useState<
+    null | "color" | "highlight" | "font"
+  >(null);
+
+  // Theme fonts surfaced as the first two custom-named entries in the
+  // font menu so operators can pick "the proposal's heading font" by
+  // name without knowing the family string.
+  const themeFonts = [
+    { value: `'${proposal.theme.displayFont}', serif`, label: `${proposal.theme.displayFont} (display)` },
+    { value: `'${proposal.theme.bodyFont}', sans-serif`, label: `${proposal.theme.bodyFont} (body)` },
+  ];
 
   useEffect(() => {
-    // Only subscribe in editor mode. When the operator switches to
-    // preview, the cleanup unsubscribes; we don't reset `pos` here
-    // (that would be a setState-in-effect rule violation), but the
-    // render guard below hides the toolbar regardless of pos.
     if (mode !== "editor") return;
     const onSelectionChange = () => {
       const sel = window.getSelection();
@@ -66,12 +94,11 @@ export function InlineTextToolbar() {
         setPos(null);
         rangeRef.current = null;
         hostRef.current = null;
+        setOpenMenu(null);
         return;
       }
       const range = sel.getRangeAt(0);
-      // Walk up to find the nearest contentEditable host. Only show
-      // the toolbar when the selection is actually inside an editable
-      // region — avoids false-positives from random page text.
+      // Climb to the nearest contentEditable host.
       let node: Node | null = range.commonAncestorContainer;
       let host: HTMLElement | null = null;
       while (node && node !== document.body) {
@@ -86,30 +113,26 @@ export function InlineTextToolbar() {
       }
       if (!host) {
         setPos(null);
-        rangeRef.current = null;
-        hostRef.current = null;
         return;
       }
-      // Skip when the selection is inside editor chrome itself —
-      // e.g. selecting text in this very toolbar shouldn't re-trigger
-      // the toolbar.
+      // Don't show inside editor chrome (toolbars, popovers, etc.).
       if (host.closest("[data-editor-chrome]")) {
         setPos(null);
         return;
       }
       const rect = range.getBoundingClientRect();
-      // Toolbar is ~280px wide; centre it horizontally over the
-      // selection, clamped to the viewport with a 12px margin so it
-      // never clips the screen edges. If there isn't room above the
-      // selection, drop it below.
-      const W = 280;
-      let left = rect.left + rect.width / 2 - W / 2;
+      // Position 88px above selection so we sit ABOVE the AI toolbar
+      // (which positions at -44px). Coexists cleanly: AI close to
+      // text, formatting one tier up. If there's not enough space
+      // above, drop below.
+      const W = 520;
       const margin = 12;
+      let left = rect.left + rect.width / 2 - W / 2;
       const vw = window.innerWidth;
       if (left < margin) left = margin;
       if (left + W > vw - margin) left = vw - W - margin;
-      let top = rect.top - 44;
-      if (top < margin) top = rect.bottom + 8;
+      let top = rect.top - 88;
+      if (top < margin) top = rect.bottom + 52;
       setPos({ top, left });
       rangeRef.current = range.cloneRange();
       hostRef.current = host;
@@ -118,23 +141,35 @@ export function InlineTextToolbar() {
     return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [mode]);
 
-  // Apply inline style to the current range. Wraps the selected nodes
-  // in a fresh <span>; if the range crosses node boundaries (so
-  // surroundContents would throw), fall back to extractContents +
-  // insert which is permissive.
-  const applyStyle = (style: { color?: string; fontSize?: string }) => {
-    const range = rangeRef.current;
-    const host = hostRef.current;
-    if (!range || !host) return;
+  // ── Apply helpers ──
 
+  const restoreRange = (): { range: Range; sel: Selection } | null => {
+    const range = rangeRef.current;
+    const sel = window.getSelection();
+    if (!range || !sel) return null;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return { range, sel };
+  };
+
+  const reselectSpan = (span: HTMLElement) => {
     const sel = window.getSelection();
     if (!sel) return;
     sel.removeAllRanges();
-    sel.addRange(range);
+    const r = document.createRange();
+    r.selectNodeContents(span);
+    sel.addRange(r);
+    rangeRef.current = r.cloneRange();
+  };
 
+  const wrapInSpan = (
+    style: Partial<CSSStyleDeclaration>,
+  ): HTMLElement | null => {
+    const ctx = restoreRange();
+    if (!ctx) return null;
+    const { range } = ctx;
     const span = document.createElement("span");
-    if (style.color) span.style.color = style.color;
-    if (style.fontSize) span.style.fontSize = style.fontSize;
+    Object.assign(span.style, style);
     try {
       range.surroundContents(span);
     } catch {
@@ -142,77 +177,462 @@ export function InlineTextToolbar() {
       span.appendChild(frag);
       range.insertNode(span);
     }
-
-    // Re-select the wrapping span so the operator can stack another
-    // change (e.g. set colour then size) without re-highlighting.
-    sel.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.selectNodeContents(span);
-    sel.addRange(newRange);
-    rangeRef.current = newRange.cloneRange();
-
-    // Synthetic input event so the host's onInput-style handler fires
-    // immediately. The host's onBlur save still runs when focus
-    // eventually leaves; this just gives a faster preview.
-    host.dispatchEvent(new Event("input", { bubbles: true }));
+    reselectSpan(span);
+    hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+    return span;
   };
 
-  const onColor = (value: string) => applyStyle({ color: value });
-  const onSize = (value: string) => {
-    const n = parseInt(value, 10);
+  // Toggle a tag (b / i / u / s). If the entire selection is already
+  // inside the tag, unwrap it; otherwise wrap.
+  const toggleTag = (tag: "b" | "i" | "u" | "s") => {
+    const ctx = restoreRange();
+    if (!ctx) return;
+    const { range, sel } = ctx;
+    const ancestor = range.commonAncestorContainer.parentElement;
+    const inside = ancestor?.closest(tag);
+    if (inside && range.toString() === inside.textContent) {
+      // Unwrap — replace tag with its children.
+      const parent = inside.parentNode;
+      if (parent) {
+        while (inside.firstChild) parent.insertBefore(inside.firstChild, inside);
+        parent.removeChild(inside);
+      }
+      hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+      // Restore selection roughly — collapse to the original range
+      // start. Re-wrapping isn't needed; React will rerender on save.
+      sel.removeAllRanges();
+      return;
+    }
+    const el = document.createElement(tag);
+    try {
+      range.surroundContents(el);
+    } catch {
+      const frag = range.extractContents();
+      el.appendChild(frag);
+      range.insertNode(el);
+    }
+    sel.removeAllRanges();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    sel.addRange(r);
+    rangeRef.current = r.cloneRange();
+    hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  const setColor = (color: string) => {
+    wrapInSpan({ color });
+    setOpenMenu(null);
+  };
+
+  const setHighlight = (bg: string) => {
+    wrapInSpan({ backgroundColor: bg === "transparent" ? "" : bg });
+    setOpenMenu(null);
+  };
+
+  const setFontFamily = (family: string) => {
+    wrapInSpan({ fontFamily: family });
+    setOpenMenu(null);
+  };
+
+  const applySize = (raw: string) => {
+    const n = parseInt(raw, 10);
     if (!isFinite(n) || n < 6 || n > 200) return;
-    applyStyle({ fontSize: `${n}px` });
+    wrapInSpan({ fontSize: `${n}px` });
+  };
+
+  // Strip every inline span/tag wrapping the selection — restores to
+  // plain text. Useful when an operator wants to undo formatting
+  // without ctrl-z (which only undoes the last action).
+  const clearFormatting = () => {
+    const ctx = restoreRange();
+    if (!ctx) return;
+    const { range } = ctx;
+    const text = range.toString();
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
   if (mode !== "editor" || !pos || typeof window === "undefined") return null;
 
   return createPortal(
-    <div
+    <AnimatePresence>
+      {pos && (
+        <motion.div
+          key="ss-text-toolbar"
+          data-editor-chrome
+          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.96 }}
+          transition={{ type: "spring", damping: 22, stiffness: 360 }}
+          className="fixed z-[10000]"
+          style={{ top: pos.top, left: pos.left, width: 520 }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div
+            className="rounded-xl shadow-2xl flex items-center gap-0.5 px-1.5 py-1.5"
+            style={{
+              background: "#0a0a0a",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow:
+                "0 12px 30px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25)",
+            }}
+          >
+            {/* Bold / Italic / Underline / Strikethrough */}
+            <ToolbarBtn title="Bold" onClick={() => toggleTag("b")}>
+              <BoldIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Italic" onClick={() => toggleTag("i")}>
+              <ItalicIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Underline" onClick={() => toggleTag("u")}>
+              <UnderlineIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Strikethrough" onClick={() => toggleTag("s")}>
+              <StrikeIcon />
+            </ToolbarBtn>
+
+            <Divider />
+
+            {/* Font family */}
+            <PopoverBtn
+              title="Font"
+              open={openMenu === "font"}
+              onToggle={() => setOpenMenu(openMenu === "font" ? null : "font")}
+            >
+              <span className="text-[12px] font-medium tracking-tight">Aa</span>
+              <Caret />
+            </PopoverBtn>
+
+            {/* Size — numeric input in pixels */}
+            <div className="flex items-center gap-1 px-1">
+              <span className="text-[10px] uppercase tracking-wider text-white/40">
+                Size
+              </span>
+              <input
+                type="number"
+                min={6}
+                max={200}
+                placeholder="--"
+                value={sizeInput}
+                onChange={(e) => setSizeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applySize(sizeInput);
+                  }
+                }}
+                onBlur={() => {
+                  if (sizeInput) applySize(sizeInput);
+                }}
+                className="w-12 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[12px] text-white text-center outline-none focus:border-white/30 transition-colors"
+              />
+              <span className="text-[10px] text-white/35">px</span>
+            </div>
+
+            <Divider />
+
+            {/* Text color */}
+            <PopoverBtn
+              title="Text colour"
+              open={openMenu === "color"}
+              onToggle={() => setOpenMenu(openMenu === "color" ? null : "color")}
+            >
+              <ColorChipIcon />
+              <Caret />
+            </PopoverBtn>
+
+            {/* Background highlight */}
+            <PopoverBtn
+              title="Highlight"
+              open={openMenu === "highlight"}
+              onToggle={() =>
+                setOpenMenu(openMenu === "highlight" ? null : "highlight")
+              }
+            >
+              <HighlightIcon />
+              <Caret />
+            </PopoverBtn>
+
+            <Divider />
+
+            {/* Clear formatting */}
+            <ToolbarBtn title="Clear formatting" onClick={clearFormatting}>
+              <ClearIcon />
+            </ToolbarBtn>
+          </div>
+
+          {/* ── Popovers — anchored under the toolbar ────────────── */}
+          <AnimatePresence>
+            {openMenu === "font" && (
+              <PopoverPanel key="font-panel" align="left">
+                {[...themeFonts, ...FONT_FAMILY_OPTIONS].map((f) => (
+                  <button
+                    key={f.label}
+                    type="button"
+                    onClick={() => setFontFamily(f.value)}
+                    className="w-full text-left px-2.5 py-1.5 text-[12.5px] rounded-md hover:bg-white/10 transition-colors flex items-center gap-2"
+                    style={{ fontFamily: f.value || "inherit" }}
+                  >
+                    <span className="flex-1 text-white/85">{f.label}</span>
+                    <span className="text-white/35 text-[11px]">Aa</span>
+                  </button>
+                ))}
+              </PopoverPanel>
+            )}
+
+            {openMenu === "color" && (
+              <PopoverPanel key="color-panel" align="center">
+                <div className="text-[10px] uppercase tracking-wider text-white/40 px-1.5 mb-1.5">
+                  Text colour
+                </div>
+                <div className="grid grid-cols-9 gap-1 px-1">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      title={c.label}
+                      onClick={() => setColor(c.value)}
+                      className="w-6 h-6 rounded-md border border-white/10 hover:scale-110 transition-transform"
+                      style={{ background: c.value }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-2 px-1">
+                  <span className="text-[10px] uppercase tracking-wider text-white/40">
+                    Hex
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="#000000"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = (e.currentTarget.value || "").trim();
+                        if (/^#[0-9a-f]{3,8}$/i.test(v)) setColor(v);
+                      }
+                    }}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[11.5px] text-white outline-none focus:border-white/30 font-mono"
+                  />
+                </div>
+              </PopoverPanel>
+            )}
+
+            {openMenu === "highlight" && (
+              <PopoverPanel key="highlight-panel" align="center">
+                <div className="text-[10px] uppercase tracking-wider text-white/40 px-1.5 mb-1.5">
+                  Highlight
+                </div>
+                <div className="grid grid-cols-7 gap-1 px-1">
+                  {PRESET_HIGHLIGHTS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      title={c.label}
+                      onClick={() => setHighlight(c.value)}
+                      className="w-7 h-7 rounded-md border border-white/10 hover:scale-110 transition-transform flex items-center justify-center"
+                      style={{
+                        background:
+                          c.value === "transparent"
+                            ? "repeating-conic-gradient(rgba(255,255,255,0.12) 0% 25%, transparent 0% 50%) 50% / 8px 8px"
+                            : c.value,
+                      }}
+                    >
+                      {c.value === "transparent" && (
+                        <span className="text-[8px] text-white/50">—</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </PopoverPanel>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+// ─── Subcomponents ───────────────────────────────────────────────────────
+
+function ToolbarBtn({
+  children,
+  onClick,
+  title,
+  active,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  title: string;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
+        active
+          ? "bg-white/15 text-white"
+          : "text-white/75 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PopoverBtn({
+  children,
+  onToggle,
+  open,
+  title,
+}: {
+  children: React.ReactNode;
+  onToggle: () => void;
+  open: boolean;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onToggle}
+      className={`h-7 px-2 flex items-center gap-1 rounded-md transition-colors ${
+        open
+          ? "bg-white/15 text-white"
+          : "text-white/75 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <span className="w-px h-5 bg-white/10 mx-0.5" aria-hidden />;
+}
+
+function Caret() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden>
+      <path d="M2 3 L4 5.5 L6 3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PopoverPanel({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "center" | "right";
+}) {
+  const alignmentStyle =
+    align === "center"
+      ? { left: "50%", transform: "translateX(-50%)" }
+      : align === "right"
+      ? { right: 0 }
+      : { left: 0 };
+  return (
+    <motion.div
       data-editor-chrome
-      className="fixed z-[10000] bg-white rounded-xl shadow-xl border border-black/10 p-1.5 flex items-center gap-1.5 ss-popover-in"
-      style={{ top: pos.top, left: pos.left, width: 280 }}
-      onMouseDown={(e) => {
-        // Prevent the contentEditable from losing focus / clearing
-        // selection when the operator clicks a toolbar control.
-        e.preventDefault();
+      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.97 }}
+      transition={{ type: "spring", damping: 22, stiffness: 380 }}
+      className="absolute mt-1.5 rounded-xl py-2 px-1.5 min-w-[200px]"
+      style={{
+        ...alignmentStyle,
+        top: "100%",
+        background: "#0a0a0a",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow:
+          "0 12px 30px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3)",
       }}
     >
-      {/* Colour swatches */}
-      {PRESET_COLORS.map((c) => (
-        <button
-          key={c.value}
-          type="button"
-          title={c.label}
-          onClick={() => onColor(c.value)}
-          className="w-5 h-5 rounded-full border border-black/15 hover:scale-110 transition"
-          style={{ background: c.value }}
-        />
-      ))}
+      {children}
+    </motion.div>
+  );
+}
 
-      {/* Divider */}
-      <span aria-hidden className="w-px h-5 bg-black/10 mx-0.5" />
+// ─── Icons (inline SVG to avoid lucide dep) ──────────────────────────────
 
-      {/* Numeric font-size input — type any pixel value. */}
-      <input
-        type="number"
-        min={6}
-        max={200}
-        placeholder="Size"
-        value={sizeInput}
-        onChange={(e) => setSizeInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onSize(sizeInput);
-          }
-        }}
-        onBlur={() => {
-          if (sizeInput) onSize(sizeInput);
-        }}
-        className="w-14 text-[12px] text-center border border-black/10 rounded-md py-1 outline-none focus:border-[#1b3a2d]"
+function BoldIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3.5 2.5h4a2.5 2.5 0 0 1 0 5h-4z" />
+      <path d="M3.5 7.5h4.5a2.5 2.5 0 0 1 0 5H3.5z" />
+    </svg>
+  );
+}
+
+function ItalicIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <line x1="6" y1="2" x2="11" y2="2" />
+      <line x1="3" y1="12" x2="8" y2="12" />
+      <line x1="9" y1="2" x2="5" y2="12" />
+    </svg>
+  );
+}
+
+function UnderlineIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <path d="M3.5 2v5a3.5 3.5 0 0 0 7 0V2" />
+      <line x1="2.5" y1="12" x2="11.5" y2="12" />
+    </svg>
+  );
+}
+
+function StrikeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2.5 7h9" />
+      <path d="M9.5 4a3 3 0 0 0-5-1.5" />
+      <path d="M4.5 10a3 3 0 0 0 5 1.5" />
+    </svg>
+  );
+}
+
+function ColorChipIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M2.5 11.5h9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
       />
-      <span className="text-[10px] text-black/35 -ml-0.5">px</span>
-    </div>,
-    document.body,
+      <path
+        d="M3.5 9.5L7 2l3.5 7.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M5 7h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function HighlightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 2.5l3 3-5 5-3 .5.5-3z" />
+      <path d="M3 12.5h8" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 11l3-3" />
+      <path d="M5 5l4-2 3 3-2 4-3 1z" />
+      <path d="M2 12.5h7" />
+    </svg>
   );
 }

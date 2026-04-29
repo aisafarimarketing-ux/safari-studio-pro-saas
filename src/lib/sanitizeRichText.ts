@@ -20,12 +20,19 @@
 const ALLOWED_STYLE_PROPS = new Set([
   "color",
   "font-size",
+  "font-family",
   "background-color",
   "font-weight",
   "font-style",
+  "text-decoration",
+  "text-decoration-line",
 ]);
 
-const ALLOWED_TAGS = new Set(["span", "br"]);
+// Bold / italic / underline / strikethrough are common enough that the
+// allow-list carries them as semantic tags rather than forcing the
+// toolbar to wrap with style-only spans (which would survive but read
+// less semantically in the saved HTML).
+const ALLOWED_TAGS = new Set(["span", "br", "b", "i", "u", "s", "strong", "em"]);
 
 export function sanitizeRichText(input: string | null | undefined): string {
   if (!input) return "";
@@ -99,7 +106,7 @@ function filterStyle(raw: string): string {
     const value = decl.slice(idx + 1).trim();
     if (!ALLOWED_STYLE_PROPS.has(prop)) continue;
     if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) continue;
-    if (value.length > 80) continue; // sanity cap
+    if (value.length > 200) continue; // sanity cap (font-family strings can run long)
     out.push(`${prop}: ${value}`);
   }
   return out.join("; ");
@@ -108,9 +115,10 @@ function filterStyle(raw: string): string {
 function stripTagsFallback(input: string): string {
   // Server-side stripper — used for SSR rendering of pre-existing
   // saved HTML so we never inject raw markup before hydration.
-  // Keeps text + line-break tags only.
+  // Keeps the allow-listed tags (span / br / b / i / u / s / strong /
+  // em) and their style attributes, drops anything else.
   return String(input)
     .replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, "")
-    .replace(/<(?!\/?br\b|\/?span\b)[^>]*>/gi, "")
+    .replace(/<(?!\/?(?:br|span|b|i|u|s|strong|em)\b)[^>]*>/gi, "")
     .replace(/\s(on\w+|href|src)=("[^"]*"|'[^']*'|[^\s>]*)/gi, "");
 }
