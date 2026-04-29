@@ -91,8 +91,26 @@ export function EditorToolbar({
   // Side effect: notifies the server so it can flip Proposal.status from
   // "draft" → "sent" on first share and fire the GHL `proposal_sent`
   // workflow. Fire-and-forget — clipboard copy never waits on this.
+  //
+  // Defensive id resolution: cross-check the Zustand store's id against
+  // localStorage.activeProposalId (the source of truth for "what was
+  // last opened"). They should always match — if they don't, the store
+  // is stale and we'd otherwise share a link to the wrong proposal.
+  // localStorage wins; warn loudly so the bug shows up in dev. This was
+  // operator-reported as "shared a link, recipient saw a completely
+  // different proposal."
   const handleShare = async () => {
-    const id = useProposalStore.getState().proposal.id;
+    const storeId = useProposalStore.getState().proposal.id;
+    let id = storeId;
+    try {
+      const stored = localStorage.getItem("activeProposalId");
+      if (stored && stored !== storeId) {
+        console.warn(
+          `[share] proposal id mismatch: store=${storeId}, localStorage=${stored}. Using localStorage.`,
+        );
+        id = stored;
+      }
+    } catch {}
     const url = `${window.location.origin}/p/${id}`;
     void fetch(`/api/proposals/${id}/share`, { method: "POST" }).catch(() => {});
     try {

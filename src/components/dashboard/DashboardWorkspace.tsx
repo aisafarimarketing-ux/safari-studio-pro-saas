@@ -79,6 +79,28 @@ type Summary = {
   }>;
 };
 
+// Pick the active proposal for the hero tile + its Share button.
+// localStorage.activeProposalId wins (set by ProposalEditor whenever a
+// proposal is opened); fallback to proposals[0] only when nothing is
+// stored or the stored id no longer exists in the list (proposal
+// deleted, signed out and back in, etc).
+//
+// Why this matters: operators reported sharing a link and seeing a
+// completely different proposal — the dashboard had been hardcoded to
+// proposals[0] (newest) regardless of which proposal they had open in
+// the editor.
+function pickActiveProposal(
+  proposals: ProposalRow[] | null,
+  activeProposalId: string | null,
+): ProposalRow | null {
+  if (!proposals || proposals.length === 0) return null;
+  if (activeProposalId) {
+    const match = proposals.find((p) => p.id === activeProposalId);
+    if (match) return match;
+  }
+  return proposals[0];
+}
+
 export function DashboardWorkspace() {
   const router = useRouter();
   const { organization } = useOrganization();
@@ -97,6 +119,14 @@ export function DashboardWorkspace() {
   // the "Workspace" library tiles on the dashboard — Properties and Brand
   // DNA each have their own pages reachable from the sidebar.
   const [hasProperties, setHasProperties] = useState(false);
+  // Reads localStorage on mount so the Active proposal tile + its
+  // Share button refer to whatever the operator was last editing,
+  // not just proposals[0]. Re-reads on mount only — re-rendering
+  // localStorage on every render would cause infinite loops.
+  const [activeProposalId, setActiveProposalId] = useState<string | null>(null);
+  useEffect(() => {
+    try { setActiveProposalId(localStorage.getItem("activeProposalId")); } catch {}
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -278,7 +308,16 @@ export function DashboardWorkspace() {
   };
 
   const orgName = organization?.name ?? "your workspace";
-  const activeProposal = proposals?.[0] ?? null;
+  // Active proposal hero tile + its Share button must reflect the
+  // proposal the operator is ACTUALLY editing, not just `proposals[0]`
+  // (the most recent). Operators reported sharing a link and seeing a
+  // different proposal — they had been editing an older proposal but
+  // the dashboard was always showing the newest. Source of truth:
+  // `localStorage.activeProposalId`, set by ProposalEditor /
+  // /studio/[id] redirector / "Open" action below. Fallback to
+  // proposals[0] only when nothing is stored or the stored id is
+  // gone (e.g. proposal deleted).
+  const activeProposal = pickActiveProposal(proposals, activeProposalId);
 
   return (
     <DashboardThemeProvider>
