@@ -442,7 +442,7 @@ The JSON shape (all keys required unless marked optional):
     "tagline": "One sentence. Names the destinations or the trip's signature. 8-14 words. Not a cliché."
   },
   "greeting": {
-    "body": "3-4 sentences. OPEN with the guests' names. Reference one specific destination or activity. Mention the nights. End on an invitation — not a sales pitch. Never generic."
+    "body": "Four parts in 4-6 sentences total. (1) Greet by FIRST NAME ONLY — never use the surname or full name (e.g. 'Sam, ...' not 'Sam Kombe, ...'). When there are multiple guests, use only first names ('Sam and Lily, ...'). (2) Thank them for choosing the operator's company by name. (3) Tell them why this trip and timing is a strong choice — be specific to the destinations and the season they're travelling, not generic praise. (4) Set expectations — what they'll experience, in concrete sensory terms (animals, landscapes, moments), without overselling. End on an invitation, never a sales pitch. No clichés ('trip of a lifetime', 'magical', 'unforgettable')."
   },
   "days": [
     {

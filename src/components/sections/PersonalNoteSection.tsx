@@ -24,6 +24,32 @@ import type { Section, Proposal } from "@/lib/types";
 // Every text field is contentEditable and wired to the right store slice.
 // Every image slot is click-to-upload / right-click-to-replace.
 
+// Pull first names out of `client.guestNames`. The opener should
+// greet by FIRST NAME ONLY — never the surname or full name. Handles
+// single-guest, two-guest (& / and / ,), and three+ guest cases.
+//   "Sam Kombe"                  → "Sam"
+//   "Sam Kombe & Lily Wong"      → "Sam and Lily"
+//   "Sam Kombe, Lily Wong"       → "Sam and Lily"
+//   "Sam Kombe, Lily, John Doe"  → "Sam, Lily and John"
+function extractFirstNames(fullNames: string | undefined): string {
+  if (!fullNames) return "";
+  const guests = fullNames
+    .split(/\s*[,&]\s*|\s+and\s+/i)
+    .map((g) => g.trim())
+    .filter(Boolean);
+  const firstNames = guests
+    .map((name) => name.split(/\s+/)[0])
+    .filter(Boolean);
+  if (firstNames.length === 0) return "";
+  if (firstNames.length === 1) return firstNames[0];
+  if (firstNames.length === 2) return `${firstNames[0]} and ${firstNames[1]}`;
+  return (
+    firstNames.slice(0, -1).join(", ") +
+    " and " +
+    firstNames[firstNames.length - 1]
+  );
+}
+
 export function PersonalNoteSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent, updateOperator } = useProposalStore();
   const { mode } = useEditorStore();
@@ -41,7 +67,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
   const signOff = (section.content.signOff as string) || "Best regards,";
   const opener =
     (section.content.opener as string) ||
-    `Good day ${client.guestNames?.split(/[,&]|and/)[0]?.trim() || "there"},`;
+    `Good day ${extractFirstNames(client.guestNames) || "there"},`;
 
   const pickImageAndSet = (onPicked: (dataUrl: string) => void) => {
     const input = document.createElement("input");

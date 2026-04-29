@@ -174,7 +174,15 @@ export function AIWriteButton({
 function promptFor(kind: string): string {
   switch (kind) {
     case "greeting":
-      return "Write a 3-4 sentence opening greeting for a safari proposal, addressing the named guests directly.";
+      // Four-part editorial greeting brief:
+      //   1. Greet by FIRST NAME only (never surname / full name).
+      //   2. Thank them for choosing the operator's company by name.
+      //   3. Why their trip + timing is a strong choice — specific
+      //      to the destinations and season, not generic praise.
+      //   4. Set expectations in concrete sensory terms.
+      // 4-6 sentences total, ends on an invitation. No clichés
+      // ("trip of a lifetime", "magical", "unforgettable").
+      return "Write a 4-6 sentence opening greeting for a safari proposal in four parts: (1) Greet by FIRST NAME only — never the surname or full name (e.g. 'Sam,' not 'Sam Kombe,'). When there are multiple guests, use only first names ('Sam and Lily,'). (2) Thank them for choosing the operator's company by name. (3) Tell them why this trip and timing is a strong choice — be specific to the destinations and the season they're travelling, not generic praise. (4) Set expectations — what they'll experience, in concrete sensory terms (animals, landscapes, moments), without overselling. End on an invitation, not a sales pitch. No clichés ('trip of a lifetime', 'magical', 'unforgettable').";
     case "closing-signoff":
       return "Write a warm 2-3 sentence sign-off from the consultant that feels personal and invites follow-up.";
     case "closing-quote":
