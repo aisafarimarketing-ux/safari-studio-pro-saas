@@ -246,96 +246,92 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  // Bumped from 720 → 880 to match the route variant — wider geographic
-  // bounds need more vertical pixel space to keep the route lines and
-  // badge labels readable.
-  const MAP_HEIGHT = 880;
+  // The map renders at 100% of its grid cell. Using `items-stretch` on
+  // the parent grid means the cell's height matches the rail's natural
+  // content height — so the map and the day-card list sit at the same
+  // height, bottom-aligned. No fixed MAP_HEIGHT any more.
 
-  // Use tokens.sectionSurface, never tokens.pageBg — every map variant
-  // (route / interactive / default / full-width) needs its own
-  // configurable section background so operators can recolour the
-  // block from the section chrome. Using pageBg makes the section
-  // adopt page-level cream instead and looks like a missing wrapper.
-  // See memory/map_and_routing_rules.md (rule 5 for map variants).
   return (
     <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
       <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
-        {/* Card-rail (240px) + dominant map. Title + country chip live
-            inside the rail header so the map can stretch the section's
-            full vertical room. Same proportions as the route variant. */}
-        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
-          {/* Sidebar */}
-          <div
-            className="flex flex-col pr-1 overflow-y-auto"
-            style={{ maxHeight: MAP_HEIGHT }}
-          >
-            {/* Rail header */}
-            <div className="mb-3">
-              <div
-                className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-1"
+        {/* ── Header band — full width across both columns ────────────
+            Row 1: "Itinerary at a glance" eyebrow on the left, country
+            flag(s) and the dynamic A→B title on the right. Row 2:
+            START · place. Both rows live above the rail+map grid so
+            the section reads as one editorial block, not two columns
+            with separate headers. */}
+        <header className="mb-3 md:mb-4">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <div
+              className="text-[9.5px] uppercase tracking-[0.28em] font-semibold"
+              style={{ color: tokens.mutedText }}
+            >
+              Itinerary at a glance
+            </div>
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
+              {countryFlags.length > 1 ? (
+                countryFlags.map((f, i) => (
+                  <span key={i} className="text-[16px] leading-none" aria-hidden>
+                    {f}
+                  </span>
+                ))
+              ) : (
+                countryFlag && (
+                  <span className="text-[16px] leading-none" aria-hidden>
+                    {countryFlag}
+                  </span>
+                )
+              )}
+              <span
+                className="text-[11.5px] uppercase tracking-[0.18em] font-semibold outline-none"
                 style={{ color: tokens.mutedText }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
               >
-                Map
-              </div>
+                {countryName}
+              </span>
               <h2
                 className="font-bold leading-[1.15]"
                 style={{
                   color: tokens.headingText,
                   fontFamily: `'${theme.displayFont}', serif`,
-                  fontSize: "clamp(16px, 1.6vw, 19px)",
+                  fontSize: "clamp(18px, 1.8vw, 22px)",
                   letterSpacing: "-0.005em",
                 }}
               >
                 {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
               </h2>
-              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                {countryFlags.length > 1 ? (
-                  countryFlags.map((f, i) => (
-                    <span key={i} className="text-[14px] leading-none" aria-hidden>
-                      {f}
-                    </span>
-                  ))
-                ) : (
-                  countryFlag && (
-                    <span className="text-[14px] leading-none" aria-hidden>
-                      {countryFlag}
-                    </span>
-                  )
-                )}
-                <span
-                  className="text-[12px] font-semibold outline-none"
-                  style={{ color: tokens.headingText }}
-                  contentEditable={isEditor}
-                  suppressContentEditableWarning
-                  onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
-                >
-                  {countryName}
-                </span>
-              </div>
             </div>
-
-            {/* Start point */}
+          </div>
+          <div
+            className="mt-2 flex items-baseline gap-2"
+            style={{ borderBottom: `1px solid ${tokens.border}`, paddingBottom: 8 }}
+          >
             <div
-              className="pb-2.5 mb-2.5"
-              style={{ borderBottom: `1px solid ${tokens.border}` }}
+              className="text-[9px] uppercase tracking-[0.24em] font-semibold"
+              style={{ color: tokens.mutedText }}
             >
-              <div
-                className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
-                style={{ color: tokens.mutedText }}
-              >
-                Start
-              </div>
-              <div
-                className="text-[12.5px] outline-none"
-                style={{ color: tokens.headingText }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => onStartPointChange(e.currentTarget.textContent ?? "")}
-              >
-                {startPoint}
-              </div>
+              Start
             </div>
+            <div
+              className="text-[12.5px] outline-none"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) => onStartPointChange(e.currentTarget.textContent ?? "")}
+            >
+              {startPoint}
+            </div>
+          </div>
+        </header>
 
+        {/* Rail (day cards + END) ‖ map. items-stretch makes the map
+            cell match the rail's natural content height — they sit at
+            the same height, bottom-aligned. */}
+        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
+          {/* Sidebar */}
+          <div className="flex flex-col pr-1">
             {/* Day cards — clickable, fly the map to the selected pin.
                 Wrapped in a flex-1 container so the rail's End block
                 can flex to the bottom of the column. */}
@@ -458,11 +454,14 @@ function InteractiveMap({
             </div>
           </div>
 
-          {/* ── Map — dominant column ─────────────────────────── */}
-          <div className="min-w-0">
+          {/* ── Map — fills the grid cell so its height matches the
+              rail's natural content height. items-stretch on the
+              parent grid + height="100%" on RouteMap is what couples
+              the two. ─────────────────────────── */}
+          <div className="min-w-0 flex">
             {days.length > 0 ? (
               <div
-                className="overflow-hidden"
+                className="overflow-hidden flex-1 min-h-0 relative"
                 style={{
                   borderRadius: 10,
                   border: `1px solid ${tokens.border}`,
@@ -473,16 +472,15 @@ function InteractiveMap({
                   tokens={tokens}
                   cachedCoords={cachedCoords}
                   onCoordsResolved={onCoordsResolved}
-                  height={MAP_HEIGHT}
+                  height="100%"
                   selectedDayId={selectedDayId}
                   presentationMode={!isEditor}
                 />
               </div>
             ) : (
               <div
-                className="flex items-center justify-center text-[13px]"
+                className="flex flex-1 items-center justify-center text-[13px]"
                 style={{
-                  height: MAP_HEIGHT,
                   background: tokens.cardBg,
                   color: tokens.mutedText,
                   borderRadius: 10,
@@ -492,7 +490,6 @@ function InteractiveMap({
                 {isEditor ? "Add days with destinations to draw the route." : "Route coming soon."}
               </div>
             )}
-
           </div>
         </div>
       </div>
