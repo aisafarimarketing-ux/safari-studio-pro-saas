@@ -1,0 +1,412 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { OperatorLogoTile } from "./OperatorLogoTile";
+import { removeLogoBackground } from "@/lib/removeLogoBackground";
+import { uploadImage } from "@/lib/uploadImage";
+
+// ─── EditableOperatorLogoTile ──────────────────────────────────────────
+//
+// Editor-only wrapper around OperatorLogoTile. Shows a small "Edit logo"
+// affordance on hover; clicking it opens a dropdown with two actions:
+//
+//   1. Remove background — runs the same browser ML model used in the
+//      Brand DNA settings. Saves the cleaned PNG to a *proposal-level*
+//      override (section.content.logoOverrideUrl) — the operator's
+//      global brand logo is left untouched.
+//
+//   2. Tile colour       — picks the colour of the rounded tile behind
+//      the logo. Default "Auto" lets brightness detection choose between
+//      cream and charcoal; the swatches override that choice for this
+//      proposal only (section.content.logoTileColor).
+//
+// The dropdown menu is portal'd to document.body so it escapes any
+// overflow:hidden parent (the cover variants frequently clip their
+// children to the hero photo's bounds). Same with the floating "Edit"
+// pill — it positions itself via getBoundingClientRect each render.
+//
+// In non-editor mode this component is a transparent pass-through to
+// OperatorLogoTile — clients see exactly what they would have seen,
+// no editor chrome leaks into the share view.
+
+const PRESET_SWATCHES: Array<{ label: string; value: string }> = [
+  { label: "Cream", value: "rgba(245, 232, 216, 0.92)" },
+  { label: "White", value: "rgba(255, 255, 255, 0.94)" },
+  { label: "Sand", value: "rgba(229, 215, 195, 0.92)" },
+  { label: "Charcoal", value: "rgba(26, 26, 26, 0.88)" },
+  { label: "Teal", value: "rgba(31, 58, 58, 0.92)" },
+  { label: "Black", value: "rgba(0, 0, 0, 0.85)" },
+];
+
+type Props = {
+  logoUrl?: string;
+  companyName?: string;
+  className?: string;
+  logoHeight?: number;
+  isEditor?: boolean;
+  /** Per-proposal tile colour override. */
+  tileBgOverride?: string;
+  /** Called when the cleaned/replaced logo URL changes. */
+  onLogoChange?: (url: string | undefined) => void;
+  /** Called when the tile colour changes (undefined = back to auto). */
+  onTileColorChange?: (color: string | undefined) => void;
+  /** Whether the current logo is a proposal-level override (vs the
+   *  operator's global logo). Drives the "Reset to brand logo" action. */
+  isOverridden?: boolean;
+};
+
+export function EditableOperatorLogoTile(props: Props) {
+  const {
+    isEditor,
+    logoUrl,
+    companyName,
+    className,
+    logoHeight,
+    tileBgOverride,
+    onLogoChange,
+    onTileColorChange,
+    isOverridden,
+  } = props;
+
+  // Pass-through in client / share view — no editor chrome.
+  if (!isEditor) {
+    return (
+      <OperatorLogoTile
+        logoUrl={logoUrl}
+        companyName={companyName}
+        className={className}
+        logoHeight={logoHeight}
+        tileBgOverride={tileBgOverride}
+      />
+    );
+  }
+
+  return (
+    <EditableInner
+      logoUrl={logoUrl}
+      companyName={companyName}
+      className={className}
+      logoHeight={logoHeight}
+      tileBgOverride={tileBgOverride}
+      onLogoChange={onLogoChange}
+      onTileColorChange={onTileColorChange}
+      isOverridden={isOverridden}
+    />
+  );
+}
+
+// All the editor-only state lives here so we don't pay for refs / effects
+// in the share-view render path.
+function EditableInner({
+  logoUrl,
+  companyName,
+  className,
+  logoHeight,
+  tileBgOverride,
+  onLogoChange,
+  onTileColorChange,
+  isOverridden,
+}: Omit<Props, "isEditor">) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [hover, setHover] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+
+  // Track the tile's screen position so the portal'd toolbar/menu can
+  // position themselves correctly. Recompute on hover/scroll/resize.
+  useEffect(() => {
+    if (!hover && !menuOpen) return;
+    const recompute = () => {
+      if (wrapRef.current) setAnchor(wrapRef.current.getBoundingClientRect());
+    };
+    recompute();
+    window.addEventListener("scroll", recompute, true);
+    window.addEventListener("resize", recompute);
+    return () => {
+      window.removeEventListener("scroll", recompute, true);
+      window.removeEventListener("resize", recompute);
+    };
+  }, [hover, menuOpen]);
+
+  async function handleRemoveBackground() {
+    if (!logoUrl || !onLogoChange) return;
+    setRemoving(true);
+    setProgress(0);
+    setError(null);
+    try {
+      const { dataUrl } = await removeLogoBackground(logoUrl, (loaded, total) => {
+        setProgress(total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0);
+      });
+      // Push through upload pipeline so the cleaned PNG ends up on
+      // Supabase Storage rather than a multi-MB data URL embedded in
+      // the proposal JSON.
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], "logo-cleaned.png", { type: "image/png" });
+      const url = await uploadImage(file, { maxDimension: 800 });
+      onLogoChange(url);
+      setMenuOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't remove background");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  function handleResetLogo() {
+    onLogoChange?.(undefined);
+    setMenuOpen(false);
+  }
+
+  function handlePickColor(color: string | undefined) {
+    onTileColorChange?.(color);
+  }
+
+  const showFloating = (hover || menuOpen) && !!anchor;
+
+  return (
+    <>
+      <div
+        ref={wrapRef}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        className="inline-block relative"
+      >
+        <OperatorLogoTile
+          logoUrl={logoUrl}
+          companyName={companyName}
+          className={className}
+          logoHeight={logoHeight}
+          tileBgOverride={tileBgOverride}
+        />
+        {removing && (
+          <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-white/85 backdrop-blur-sm pointer-events-none">
+            <div className="text-[11px] font-semibold text-black/70 tabular-nums">
+              {progress}%
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showFloating &&
+        createPortal(
+          <FloatingChrome
+            anchor={anchor!}
+            menuOpen={menuOpen}
+            onToggleMenu={() => setMenuOpen((v) => !v)}
+            onCloseMenu={() => setMenuOpen(false)}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            onRemoveBackground={handleRemoveBackground}
+            onResetLogo={handleResetLogo}
+            onPickColor={handlePickColor}
+            tileBgOverride={tileBgOverride}
+            isOverridden={!!isOverridden}
+            removing={removing}
+            error={error}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+// ─── Floating chrome (button + menu) ─────────────────────────────────────
+
+function FloatingChrome({
+  anchor,
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
+  onMouseEnter,
+  onMouseLeave,
+  onRemoveBackground,
+  onResetLogo,
+  onPickColor,
+  tileBgOverride,
+  isOverridden,
+  removing,
+  error,
+}: {
+  anchor: DOMRect;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onRemoveBackground: () => void;
+  onResetLogo: () => void;
+  onPickColor: (color: string | undefined) => void;
+  tileBgOverride?: string;
+  isOverridden: boolean;
+  removing: boolean;
+  error: string | null;
+}) {
+  // Edit pill sits at top-right of the tile.
+  const pillStyle: React.CSSProperties = {
+    position: "fixed",
+    top: anchor.top - 10,
+    left: anchor.right - 64,
+    zIndex: 10000,
+  };
+  // Menu drops below the tile, left-aligned. Clamp inside the viewport
+  // so it doesn't get cut off when the cover is near the right edge.
+  const MENU_W = 240;
+  const menuLeft = Math.max(
+    8,
+    Math.min(anchor.left, window.innerWidth - MENU_W - 8),
+  );
+  const menuStyle: React.CSSProperties = {
+    position: "fixed",
+    top: anchor.bottom + 6,
+    left: menuLeft,
+    width: MENU_W,
+    zIndex: 10001,
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        style={pillStyle}
+        className="px-2.5 py-1 rounded-md text-[10.5px] font-semibold bg-black/80 text-white hover:bg-black transition shadow-lg backdrop-blur-sm flex items-center gap-1.5"
+        title="Edit logo"
+      >
+        <span aria-hidden>✎</span>
+        Edit logo
+      </button>
+
+      {menuOpen && (
+        <>
+          {/* Click-away catcher */}
+          <div
+            onClick={onCloseMenu}
+            style={{ position: "fixed", inset: 0, zIndex: 10000 }}
+          />
+          <div
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+            style={menuStyle}
+            className="bg-white rounded-xl shadow-2xl border border-black/10 overflow-hidden"
+          >
+            {/* Remove background */}
+            <button
+              type="button"
+              onClick={onRemoveBackground}
+              disabled={removing}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 text-[13px] text-left hover:bg-black/4 transition disabled:opacity-50"
+            >
+              <span className="flex items-center gap-2">
+                <span aria-hidden>✨</span>
+                Remove background
+              </span>
+              <span className="text-[10px] uppercase tracking-wider text-black/35">
+                {removing ? "Working…" : "ML"}
+              </span>
+            </button>
+
+            {isOverridden && (
+              <button
+                type="button"
+                onClick={onResetLogo}
+                className="w-full flex items-center px-3.5 py-2 text-[12px] text-black/55 hover:bg-black/4 transition border-t border-black/6"
+              >
+                ↶ Reset to brand logo
+              </button>
+            )}
+
+            {error && (
+              <div className="px-3.5 py-2 text-[11px] text-[#b34334] border-t border-black/6 bg-[#b34334]/5">
+                {error}
+              </div>
+            )}
+
+            {/* Tile colour */}
+            <div className="border-t border-black/6 px-3.5 py-3">
+              <div className="text-[10px] uppercase tracking-wider text-black/40 mb-2 font-semibold">
+                Tile colour
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <Swatch
+                  label="Auto"
+                  selected={!tileBgOverride}
+                  onClick={() => onPickColor(undefined)}
+                  isAuto
+                />
+                {PRESET_SWATCHES.map((s) => (
+                  <Swatch
+                    key={s.value}
+                    label={s.label}
+                    color={s.value}
+                    selected={tileBgOverride === s.value}
+                    onClick={() => onPickColor(s.value)}
+                  />
+                ))}
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  type="color"
+                  value={hexFromColor(tileBgOverride) || "#f5e8d8"}
+                  onChange={(e) => onPickColor(e.target.value)}
+                  className="w-8 h-8 rounded border border-black/10 cursor-pointer p-0"
+                  title="Custom colour"
+                />
+                <span className="text-[11px] text-black/45">Custom hex</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function Swatch({
+  label,
+  color,
+  selected,
+  onClick,
+  isAuto,
+}: {
+  label: string;
+  color?: string;
+  selected: boolean;
+  onClick: () => void;
+  isAuto?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={`w-7 h-7 rounded border transition ${
+        selected ? "ring-2 ring-[#1b3a2d] ring-offset-1" : "border-black/10 hover:border-black/30"
+      } ${isAuto ? "text-[8px] font-bold text-black/50 flex items-center justify-center" : ""}`}
+      style={
+        isAuto
+          ? { background: "linear-gradient(135deg, #f5e8d8 0%, #f5e8d8 50%, #1a1a1a 50%, #1a1a1a 100%)" }
+          : { background: color }
+      }
+    >
+      {isAuto ? "A" : null}
+    </button>
+  );
+}
+
+// HTML <input type="color"> only accepts #rrggbb. Strip alpha and rgba()
+// down to a hex so the picker is initialised to the closest match.
+function hexFromColor(color: string | undefined): string | undefined {
+  if (!color) return undefined;
+  const t = color.trim();
+  if (t.startsWith("#")) return t.length === 7 ? t : undefined;
+  const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(t);
+  if (!m) return undefined;
+  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
+  return `#${toHex(parseInt(m[1], 10))}${toHex(parseInt(m[2], 10))}${toHex(parseInt(m[3], 10))}`;
+}

@@ -40,18 +40,23 @@ export function OperatorLogoTile({
   /** Force a tile tone, skipping brightness detection. Use when the
    *  operator has explicitly chosen a treatment in settings. */
   toneOverride,
+  /** Operator-picked exact tile colour (any CSS colour). Overrides
+   *  both `toneOverride` and the brightness-detection auto tone.
+   *  Used by the per-proposal logo controls in the editor. */
+  tileBgOverride,
 }: {
   logoUrl?: string;
   companyName?: string;
   className?: string;
   logoHeight?: number;
   toneOverride?: Tone;
+  tileBgOverride?: string;
 }) {
   const [autoTone, setAutoTone] = useState<Tone>("light");
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    if (toneOverride || !logoUrl) return;
+    if (toneOverride || tileBgOverride || !logoUrl) return;
     let cancelled = false;
     void detectLogoTone(logoUrl).then((tone) => {
       if (!cancelled) setAutoTone(tone);
@@ -59,13 +64,19 @@ export function OperatorLogoTile({
     return () => {
       cancelled = true;
     };
-  }, [logoUrl, toneOverride]);
+  }, [logoUrl, toneOverride, tileBgOverride]);
 
   if (!logoUrl && !companyName) return null;
 
-  const tone = toneOverride ?? autoTone;
-  const tileBg = tone === "dark" ? TILE_DARK : TILE_LIGHT;
-  const wordmarkColor = tone === "dark" ? "#f5e8d8" : "#1f3a3a";
+  // Resolve tile bg + companion wordmark colour. Explicit tileBgOverride
+  // wins; otherwise we use the named tone (forced or auto-detected).
+  const effectiveTone: Tone = tileBgOverride
+    ? hexBrightness(tileBgOverride) > 128
+      ? "light"
+      : "dark"
+    : (toneOverride ?? autoTone);
+  const tileBg = tileBgOverride ?? (effectiveTone === "dark" ? TILE_DARK : TILE_LIGHT);
+  const wordmarkColor = effectiveTone === "dark" ? "#f5e8d8" : "#1f3a3a";
 
   return (
     <div
@@ -79,7 +90,7 @@ export function OperatorLogoTile({
         boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
         // Subtle hairline matches the tone — adds editorial precision.
         border:
-          tone === "dark"
+          effectiveTone === "dark"
             ? "1px solid rgba(245,232,216,0.10)"
             : "1px solid rgba(31,58,58,0.08)",
       }}
@@ -111,6 +122,39 @@ export function OperatorLogoTile({
       )}
     </div>
   );
+}
+
+// ─── Hex brightness — quick perceptual luminance for picked colours ─────
+//
+// Used when an operator picks an exact tile colour (via the per-proposal
+// logo controls). We need to know whether to render the wordmark fallback
+// in cream or teal — this function decides.
+
+function hexBrightness(color: string): number {
+  // Accept #rgb, #rrggbb, or rgba()/rgb()-ish strings; bail back to a
+  // mid-range default if we can't parse so the wordmark never disappears.
+  const hex = color.trim();
+  if (hex.startsWith("#")) {
+    const cleaned = hex.slice(1);
+    const full =
+      cleaned.length === 3
+        ? cleaned.split("").map((c) => c + c).join("")
+        : cleaned.slice(0, 6);
+    if (full.length !== 6) return 200;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    if ([r, g, b].some((n) => Number.isNaN(n))) return 200;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  const m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(hex);
+  if (m) {
+    const r = parseInt(m[1], 10);
+    const g = parseInt(m[2], 10);
+    const b = parseInt(m[3], 10);
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  return 200;
 }
 
 // ─── Brightness detection ───────────────────────────────────────────────

@@ -6,7 +6,7 @@ import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { orderDestinations } from "@/lib/destinationOrdering";
 import { DraggableImage } from "@/components/ui/DraggableImage";
-import { OperatorLogoTile } from "@/components/brand/OperatorLogoTile";
+import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
 import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // "8 days / 7 nights" — safari convention is nights+1 days. Operators
@@ -55,6 +55,29 @@ export function CoverSection({ section }: { section: Section }) {
   const variant = section.layoutVariant;
   const onHeroPositionChange = (next: string) =>
     updateSectionContent(section.id, { heroImagePosition: next });
+
+  // ─── Per-proposal logo controls ─────────────────────────────────────────
+  // The cover lets operators tweak the brand logo for *this* proposal
+  // without touching their global Brand DNA settings. Two overrides:
+  //   - logoOverrideUrl: a cleaned/replaced PNG (e.g. background removed)
+  //   - logoTileColor:   the colour of the rounded tile behind the logo
+  // Either falsey → fall back to the global operator.logoUrl + auto tone.
+  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
+  const logoTileColor = section.content.logoTileColor as string | undefined;
+  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
+  const handleLogoChange = (url: string | undefined) =>
+    updateSectionContent(section.id, { logoOverrideUrl: url });
+  const handleTileColorChange = (color: string | undefined) =>
+    updateSectionContent(section.id, { logoTileColor: color });
+  const logoTileProps = {
+    logoUrl: effectiveLogoUrl,
+    companyName: operator.companyName,
+    tileBgOverride: logoTileColor,
+    isEditor,
+    isOverridden: !!logoOverrideUrl,
+    onLogoChange: handleLogoChange,
+    onTileColorChange: handleTileColorChange,
+  };
 
   // Always render destinations in geographic safari order, regardless of
   // the order the operator typed them in at Trip Setup. Old proposals
@@ -131,13 +154,9 @@ export function CoverSection({ section }: { section: Section }) {
                 whether to use a cream or charcoal tile based on the
                 logo's brightness so any operator's logo reads cleanly
                 regardless of background. */}
-            {(operator.logoUrl || operator.companyName) && (
+            {(effectiveLogoUrl || operator.companyName) && (
               <div className="absolute top-5 left-5 md:top-7 md:left-9 z-10">
-                <OperatorLogoTile
-                  logoUrl={operator.logoUrl}
-                  companyName={operator.companyName}
-                  logoHeight={40}
-                />
+                <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
               </div>
             )}
             {/* 1mm-ish taupe top border — kept as brand chrome but now
@@ -382,12 +401,13 @@ export function CoverSection({ section }: { section: Section }) {
           className="relative flex flex-col justify-between p-10 md:p-14"
           style={{ order: imageFirst ? 2 : 1 }}
         >
-          {/* Top — operator. OperatorLogoTile handles every kind of
-              logo (light/dark/colored bg/text-only) with auto-tile
-              detection. */}
+          {/* Top — operator. EditableOperatorLogoTile handles every kind
+              of logo (light/dark/colored bg/text-only) with auto-tile
+              detection, and exposes per-proposal logo controls
+              (background removal + tile colour) on hover in editor. */}
           <div className="flex items-center gap-3">
-            <OperatorLogoTile
-              logoUrl={operator.logoUrl}
+            <EditableOperatorLogoTile
+              {...logoTileProps}
               companyName={operator.companyName || "Safari Studio"}
               logoHeight={40}
             />
@@ -504,12 +524,13 @@ export function CoverSection({ section }: { section: Section }) {
         />
 
         {/* Masthead row — operator left, edition right.
-            OperatorLogoTile auto-picks light or dark tile based on
-            the logo's brightness. */}
+            EditableOperatorLogoTile auto-picks light or dark tile based
+            on the logo's brightness; in editor mode operators can
+            override the tile colour or strip the bg per-proposal. */}
         <div className="relative z-10 flex items-center justify-between px-10 md:px-14 pt-10">
           <div className="flex items-center gap-3">
-            <OperatorLogoTile
-              logoUrl={operator.logoUrl}
+            <EditableOperatorLogoTile
+              {...logoTileProps}
               companyName={operator.companyName || "Safari Studio"}
               logoHeight={40}
             />
@@ -666,11 +687,7 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Top bar */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-10">
-          <OperatorLogoTile
-            logoUrl={operator.logoUrl}
-            companyName={operator.companyName}
-            logoHeight={40}
-          />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
           {operator.consultantName && (
             <span className="text-white/50 text-xs tracking-wide">
               Prepared by {operator.consultantName}
@@ -761,11 +778,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Operator top-left */}
         <div className="absolute top-8 left-10">
-          <OperatorLogoTile
-            logoUrl={operator.logoUrl}
-            companyName={operator.companyName}
-            logoHeight={36}
-          />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={36} />
         </div>
 
         <div className="max-w-3xl">
@@ -886,11 +899,7 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Top: operator + (optional) consultant attribution. */}
         <div className="relative z-10 flex items-start justify-between px-10 md:px-14 pt-10">
-          <OperatorLogoTile
-            logoUrl={operator.logoUrl}
-            companyName={operator.companyName}
-            logoHeight={40}
-          />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
           {operator.consultantName && (
             <div
               className="text-right text-white/65"
@@ -1019,11 +1028,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Right: text column */}
         <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
           <div className="flex items-center justify-end gap-3">
-            <OperatorLogoTile
-              logoUrl={operator.logoUrl}
-              companyName={operator.companyName}
-              logoHeight={40}
-            />
+            <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
           </div>
 
           <div className="space-y-6 text-right">
@@ -1113,11 +1118,7 @@ export function CoverSection({ section }: { section: Section }) {
       <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
-          <OperatorLogoTile
-            logoUrl={operator.logoUrl}
-            companyName={operator.companyName}
-            logoHeight={40}
-          />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
         </div>
 
         {/* Middle: destinations + title + tagline. Destinations set as
