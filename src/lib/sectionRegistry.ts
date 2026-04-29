@@ -231,8 +231,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Map",
     icon: "◎",
     description: "Interactive route map with pins for each day",
-    variants: ["route", "interactive", "default", "full-width"],
-    defaultVariant: "route",
+    // Legacy variants (route / default / full-width) consolidated into
+    // `interactive` — it's the only one with the modern logic
+    // (real park polygons, bowed routes, spotlight mask, full coast
+    // reach). Existing proposals that still carry the legacy variant
+    // names render through the same component since MapSection
+    // unconditionally delegates to InteractiveMap.
+    variants: ["interactive"],
+    defaultVariant: "interactive",
     defaultContent: { caption: "", coords: [] },
   },
 };
