@@ -35,7 +35,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   });
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ property });
+  // Explicit no-cache headers — operators reported deleted property
+  // images resurrecting in the day-card picker even after a hard
+  // browser refresh. Default Next.js / Vercel response caching can
+  // hold a property GET for several minutes; setting no-store at the
+  // route level forces every fetch (browser + edge + CDN) to round-
+  // trip to Postgres. The picker also passes cache:"no-store" client-
+  // side; both sides agreeing eliminates the stale-payload class of
+  // bug entirely.
+  return NextResponse.json(
+    { property },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        Pragma: "no-cache",
+      },
+    },
+  );
 }
 
 // PUT /api/properties/:id — full upsert. Replaces images / tags /

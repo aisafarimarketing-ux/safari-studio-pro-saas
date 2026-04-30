@@ -80,8 +80,16 @@ export function DayPropertyPicker({
           }
         }
 
+        // cache: "no-store" is critical here. Without it, browsers + the
+        // Next.js / Vercel edge can serve a cached property list whose
+        // image references are stale by hours or days, so an operator
+        // who deletes a property's images sees them resurrect when they
+        // re-open the picker. POST is normally non-cacheable but some
+        // CDN configurations (Cloudflare 5xx pages, edge worker passes)
+        // do store POST responses. Belt + braces.
         const rankRes = await fetch("/api/properties/rank", {
           method: "POST",
+          cache: "no-store",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...(locationId ? { locationId } : {}),
@@ -97,6 +105,7 @@ export function DayPropertyPicker({
         if (list.length === 0 && locationId) {
           const fallback = await fetch("/api/properties/rank", {
             method: "POST",
+            cache: "no-store",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 30 }),
           });
@@ -124,9 +133,29 @@ export function DayPropertyPicker({
     if (selecting) return;
     setSelecting(property.id);
     try {
-      // Fetch the full payload so we get all gallery images.
-      const full = await fetch(`/api/properties/${property.id}`);
+      // Fetch the full payload — cache:"no-store" + a cache-busting
+      // query param so any intermediate proxy (Vercel edge, browser
+      // disk cache, service worker) is forced to round-trip to Postgres.
+      // Operators reported deleted images resurrecting on re-pick; the
+      // root cause was a stale cached response. Without this, even a
+      // hard refresh wasn't enough — the browser served the old payload
+      // because the GET URL had been seen before.
+      const cacheBuster = `t=${Date.now()}`;
+      const full = await fetch(`/api/properties/${property.id}?${cacheBuster}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = full.ok ? await full.json() : null;
+      // If the GET-by-id failed, fall back to the rank list's data —
+      // but log it loudly. This was previously silent and an auth
+      // hiccup (401, 409) on the GET would silently use the rank
+      // payload's stale images. Diagnostic helps pin down recurring
+      // "stale image" reports.
+      if (!data) {
+        console.warn(
+          `[DayPropertyPicker] /api/properties/${property.id} did not return data (status ${full.status}); falling back to rank-cached property record. This may show stale images.`,
+        );
+      }
       const p = (data?.property ?? property) as LibraryProperty & {
         images: { url: string; isCover: boolean; order: number }[];
       };
