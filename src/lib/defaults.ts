@@ -187,12 +187,12 @@ function buildDefaultSections(): Section[] {
   //   12 Closing (personal sign-off)
   //   13 Footer (operator contact)
   return [
-    // Cover — hero-letter variant carries the full cover-plus-greeting on
-    // page one. If the user switches to a different cover variant, the
-    // standalone Greeting section below it takes over (hero-letter auto-
-    // suppresses its inline greeting when a standalone greeting exists so
-    // the two never duplicate).
-    makeSection("cover", 0, "hero-letter", {
+    // Cover — split-60-40-left: 60% image on the left, 40% text panel on
+    // the right. Operator-default per request — replaces the older
+    // hero-letter for new proposals. Existing proposals keep whatever
+    // they were saved with; only fresh autopilot / blank / template
+    // builds pick this up.
+    makeSection("cover", 0, "split-60-40-left", {
       heroImageUrl: "",
       coverLabel: "Proposal for the Anderson Family",
       tourLengthLabel: "Tour Length",
@@ -214,16 +214,22 @@ function buildDefaultSections(): Section[] {
     }),
     makeSection("itineraryTable", 2, "default"),
     makeSection("map", 3, "route", { coords: [] }),
-    makeSection("dayJourney", 4, "editorial-stack"),
+    // Day-by-day — left-flip: image on the left of every day card,
+    // narrative on the right. Operator-default per request. Magazine
+    // rhythm without alternation; trip-flip and right-flip remain
+    // available as overrides per-section.
+    makeSection("dayJourney", 4, "left-flip"),
     makeSection("propertyShowcase", 5, "editorial-carousel"),
     // Pricing now carries inclusions/exclusions + payment schedule,
     // cancellation, insurance, and T&Cs. No standalone inclusions section
     // in the default flow — still available in the registry for legacy.
     makeSection("pricing", 6, "editorial"),
     makeSection("practicalInfo", 7, "two-column-notes"),
-    // Closing — focused booking moment. The contact details that used to
-    // live in this section's right column now live in the Footer below.
-    makeSection("closing", 8, "closing-farewell", {
+    // Closing — stack: vertical layout (image rail on top, letter +
+    // CTA below). Operator-default per request. Other variants
+    // (split-card, gallery-row) remain available as per-section
+    // overrides via SectionChrome.
+    makeSection("closing", 8, "stack", {
       quote: "Take only memories, leave only footprints.",
       attribution: "— Chief Seattle",
       signOff:
@@ -485,7 +491,10 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   if (!hasDayJourney) {
     const mapIdx = sections.findIndex((s) => s.type === "map");
     const insertAt = mapIdx >= 0 ? mapIdx + 1 : sections.length;
-    sections.splice(insertAt, 0, makeSection("dayJourney", insertAt, "editorial-stack"));
+    // Auto-recovery insert — match the buildDefaultSections() default
+    // (left-flip) so a recovered proposal looks like a freshly-built
+    // one, not stuck on the old editorial-stack.
+    sections.splice(insertAt, 0, makeSection("dayJourney", insertAt, "left-flip"));
     changed = true;
   }
   const hasPropertyShowcase = sections.some((s) => s.type === "propertyShowcase");
