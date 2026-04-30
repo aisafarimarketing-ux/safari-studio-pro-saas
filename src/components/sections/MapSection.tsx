@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-// RouteMap (Leaflet-based geographic map) is no longer rendered — the
-// InteractiveMap variant now uses RouteSchematic, a pure-SVG itinerary
-// diagram. The legacy file is kept untouched for reference / future
-// reuse but isn't imported anywhere in the active render path.
-import { RouteSchematic } from "./RouteSchematic";
+// Real cartographic map — Carto Voyager basemap via MapLibre GL.
+// Replaces RouteSchematic (parchment-style SVG diagram). Operators
+// asked for actual geography back: real coastlines, real park outlines
+// via the basemap, real road network reference. RouteSchematic stays
+// in the repo for reference but is no longer imported anywhere.
+import { RouteRealMap } from "./RouteRealMap";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import { countryOf } from "@/lib/destinationOrdering";
 
@@ -453,12 +454,15 @@ function InteractiveMap({
             )}
           </div>
 
-          {/* ── Map column — fills the grid cell. The schematic's
-              own SVG renders at preserveAspectRatio="xMidYMid meet"
-              so its content stays undistorted; the cell shape is
-              parchment to absorb any aspect slack. ── */}
-          <div className="min-w-0 relative" style={{ background: tokens.cardBg }}>
-            <RouteSchematic
+          {/* ── Map column — fills the grid cell with a real
+              MapLibre-rendered basemap. The map fits its bounds to
+              the route on first paint and re-fits when stops change.
+              Cooperative gestures so it doesn't hijack scroll. ── */}
+          <div
+            className="min-w-0 relative overflow-hidden rounded-lg"
+            style={{ background: tokens.cardBg, minHeight: 360 }}
+          >
+            <RouteRealMap
               days={days}
               tokens={tokens}
               theme={theme}
