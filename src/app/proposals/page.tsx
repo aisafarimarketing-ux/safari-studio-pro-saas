@@ -13,6 +13,7 @@ import { BrandDNADashboardCard } from "@/components/brand-dna/BrandDNADashboardC
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
+import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 
 type ProposalSummary = {
   id: string;
@@ -293,6 +294,7 @@ export default function ProposalsPage() {
 
       {/* ── Content ────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto px-6 py-12">
+        <BackToDashboard className="mb-4" />
         <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-black/85">

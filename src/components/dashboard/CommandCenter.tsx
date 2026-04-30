@@ -469,6 +469,7 @@ function CommandSidebar({
           <SidebarItem href="/dashboard" label="Overview" active />
           <SidebarItem href="/requests" label="Requests" badge={sidebarCounts?.requests} />
           <SidebarItem href="/proposals" label="Proposals" badge={sidebarCounts?.proposals} />
+          <SidebarItem href="/properties" label="Property Library" />
           <SidebarItem href="/reservations" label="Reservations" badge={sidebarCounts?.reservations} />
         </SidebarGroup>
 

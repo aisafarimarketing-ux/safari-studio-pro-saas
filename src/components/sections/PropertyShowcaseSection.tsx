@@ -41,8 +41,22 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
-  const { theme, properties } = proposal;
+  const { theme, properties: allProperties, days, activeTier } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
+
+  // Operator brief F1: only render properties that are actually
+  // referenced by at least one day's active-tier camp pick. Orphan
+  // properties (added to proposal.properties via library / autopilot
+  // but never linked to a day) stay in the data but don't appear in
+  // the showcase. Case-insensitive name match.
+  const referencedCampNames = new Set<string>();
+  for (const d of days) {
+    const camp = d.tiers?.[activeTier as TierKey]?.camp?.trim().toLowerCase();
+    if (camp) referencedCampNames.add(camp);
+  }
+  const properties = allProperties.filter((p) =>
+    referencedCampNames.has(p.name.trim().toLowerCase()),
+  );
 
   if (properties.length === 0) {
     return (

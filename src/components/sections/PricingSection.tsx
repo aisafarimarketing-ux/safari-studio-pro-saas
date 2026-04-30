@@ -50,7 +50,24 @@ export function PricingSection({ section }: { section: Section }) {
   const tier = pricing[activeTier];
   const currency = tier.currency || "USD";
   const unitPriceNum = parseFloat(tier.pricePerPerson || "0") || 0;
-  const subtotalNum = qty * unitPriceNum;
+  const adultsSubtotal = qty * unitPriceNum;
+
+  // Child pricing — second row when there's a child in the party.
+  // Quantity defaults to client.children; price stored on
+  // section.content.childPrice (string for editability). Hidden
+  // entirely when childCount = 0 AND no childPrice set.
+  const childCount = (() => {
+    const stored = section.content.childCount;
+    if (typeof stored === "number" && stored > 0) return stored;
+    return client.children && client.children > 0 ? client.children : 0;
+  })();
+  const childLabel = (section.content.childLabel as string) || "Child";
+  const childPriceNum =
+    parseFloat((section.content.childPrice as string) || "0") || 0;
+  const childSubtotal = childCount * childPriceNum;
+  const showChildRow = childCount > 0 || childPriceNum > 0 || isEditor;
+
+  const totalNum = adultsSubtotal + childSubtotal;
 
   const formatMoney = (n: number) =>
     new Intl.NumberFormat(undefined, {
@@ -58,7 +75,9 @@ export function PricingSection({ section }: { section: Section }) {
       maximumFractionDigits: 2,
     }).format(n);
 
-  const fmtSubtotal = `${currencySymbol(currency)}${formatMoney(subtotalNum)}`;
+  const fmtAdultsSubtotal = `${currencySymbol(currency)}${formatMoney(adultsSubtotal)}`;
+  const fmtChildSubtotal = `${currencySymbol(currency)}${formatMoney(childSubtotal)}`;
+  const fmtTotal = `${currencySymbol(currency)}${formatMoney(totalNum)}`;
 
   // ── Auxiliary content (unchanged from previous version) ─────────
   const paymentSchedule =
@@ -159,9 +178,78 @@ export function PricingSection({ section }: { section: Section }) {
                 className="text-[14px] text-right font-semibold"
                 style={{ color: tokens.headingText }}
               >
-                {fmtSubtotal}
+                {fmtAdultsSubtotal}
               </div>
             </div>
+
+            {/* Child row — rendered when there's a child in the
+                party OR the operator has set a child price. Hidden
+                entirely otherwise (in editor too, unless we're in
+                editor mode where the slot stays visible to set up). */}
+            {showChildRow && (
+              <>
+                <div
+                  className="mx-6 md:mx-8"
+                  style={{ height: 1, background: tokens.border, opacity: 0.4 }}
+                />
+                <div
+                  className="grid items-baseline gap-6 px-6 md:px-8 py-4"
+                  style={{ gridTemplateColumns: "1.4fr 1fr 1fr" }}
+                >
+                  <div
+                    className="text-[14px] font-semibold"
+                    style={{ color: tokens.headingText }}
+                  >
+                    <EditableNumber
+                      value={childCount}
+                      isEditor={isEditor}
+                      onChange={(n) => {
+                        updateClient({ children: n });
+                        updateSectionContent(section.id, { childCount: n });
+                      }}
+                      style={{ color: tokens.headingText, fontWeight: 600 }}
+                    />
+                    <span aria-hidden style={{ opacity: 0.55, margin: "0 4px" }}>
+                      ×
+                    </span>
+                    <EditableText
+                      value={childLabel}
+                      isEditor={isEditor}
+                      onChange={(v) =>
+                        updateSectionContent(section.id, {
+                          childLabel: v.trim() || "Child",
+                        })
+                      }
+                      style={{ color: tokens.headingText, fontWeight: 600 }}
+                    />
+                  </div>
+                  <div
+                    className="text-[13.5px] text-right"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    <span>{childCount}×&nbsp;</span>
+                    <span>{currencySymbol(currency)}</span>
+                    <EditableNumber
+                      value={childPriceNum}
+                      isEditor={isEditor}
+                      onChange={(n) =>
+                        updateSectionContent(section.id, {
+                          childPrice: n.toString(),
+                        })
+                      }
+                      decimals={2}
+                      style={{ color: tokens.mutedText }}
+                    />
+                  </div>
+                  <div
+                    className="text-[14px] text-right font-semibold"
+                    style={{ color: tokens.headingText }}
+                  >
+                    {fmtChildSubtotal}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Hairline divider */}
             <div
@@ -200,7 +288,7 @@ export function PricingSection({ section }: { section: Section }) {
                 className="text-[15px] text-right font-bold"
                 style={{ color: tokens.headingText }}
               >
-                {fmtSubtotal}
+                {fmtTotal}
               </div>
             </div>
           </div>

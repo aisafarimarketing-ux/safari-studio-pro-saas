@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AppHeader } from "./AppHeader";
 import { CSVImportDialog } from "./CSVImportDialog";
 import { PROPERTY_CLASSES, classLabel } from "@/lib/properties";
+import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 
 type LocationLite = { id: string; name: string; country: string | null };
 type TagLite = { id: string; name: string };
@@ -100,6 +101,7 @@ export function PropertyListPage() {
       <AppHeader />
 
       <main className="max-w-7xl mx-auto px-6 py-10">
+        <BackToDashboard className="mb-4" />
         {/* Title + new */}
         <div className="flex items-end justify-between mb-6 gap-4 flex-wrap">
           <div>
