@@ -58,7 +58,12 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
   // CSS grid template for each act's two-column row. flip=right puts the
   // image in the second column (visually on the right); flip=left in the
   // first. On narrow viewports both halves stack via the responsive grid.
-  const actCols = flip === "right" ? "1fr 1fr" : "1fr 1fr";
+  //
+  // Image side is wider (1.5fr vs 1fr text = roughly 60/40). Operator
+  // brief: the location photo IS the day's identity — it should
+  // dominate the spread, not share the row 50/50 with body copy. Same
+  // ratio applied to Act II so the property gallery scales with it.
+  const actCols = flip === "right" ? "1fr 1.5fr" : "1.5fr 1fr";
   const imageOrderClass = flip === "right" ? "md:order-2" : "md:order-1";
   const textOrderClass = flip === "right" ? "md:order-1" : "md:order-2";
 
@@ -183,11 +188,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
         style={{ gridTemplateColumns: undefined }}
       >
         <div
-          className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-center"
+          className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
           style={{ gridTemplateColumns: actCols }}
         >
-          {/* Image */}
-          <div className={`min-w-0 ${imageOrderClass}`}>
+          {/* Image — stretches to fill the row's height so it no longer
+              floats with cream around it. Aspect ratio bumped from 4:3
+              to 3:2 (wider / more cinematic landscape) to match the
+              wider grid column and to make the photo dominate the
+              spread visually. */}
+          <div className={`min-w-0 h-full ${imageOrderClass}`}>
             <ImageSlot
               url={data.destinationImageUrl}
               alt={data.destinationName}
@@ -197,7 +206,11 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
               onPickFromLibrary={onDestinationImagePickerOpen}
               placeholderLabel="Add a wildlife or location photo"
               placeholderHint="Pick something cinematic — the face of the day."
-              style={{ aspectRatio: "4 / 3", borderRadius: 8 }}
+              style={{
+                aspectRatio: "3 / 2",
+                borderRadius: 8,
+                minHeight: "100%",
+              }}
               position={data.destinationImagePosition ?? undefined}
               onPositionChange={onDestinationImagePositionChange}
             />
@@ -262,14 +275,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
           }}
         >
           <div
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-center"
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
             style={{ gridTemplateColumns: actCols }}
           >
-            {/* Property gallery — flip side opposite to the location
-                image creates a Z-shape inside the card. WAIT, no:
-                we agreed to keep the same flip across both acts within
-                a card. Same orderClass as Act I. */}
-            <div className={`min-w-0 ${imageOrderClass}`}>
+            {/* Property gallery — same wider image column as Act I so
+                the two halves of the card share a single visual rhythm.
+                items-stretch lets the gallery scale to match the
+                narrative column's natural height instead of floating
+                small in the middle. */}
+            <div className={`min-w-0 h-full ${imageOrderClass}`}>
               <PropertyGallery
                 property={data.property}
                 isEditor={isEditor}
@@ -375,9 +389,10 @@ function PropertyGallery({
         type="button"
         onClick={onPickProperty}
         disabled={!isEditor}
-        className="w-full flex items-center justify-center text-[11.5px] uppercase tracking-[0.22em] transition disabled:opacity-50"
+        className="w-full h-full flex items-center justify-center text-[11.5px] uppercase tracking-[0.22em] transition disabled:opacity-50"
         style={{
-          aspectRatio: "4 / 3",
+          aspectRatio: "3 / 2",
+          minHeight: "100%",
           background: tokens.cardBg,
           border: `1px dashed ${tokens.border}`,
           borderRadius: 8,
@@ -391,15 +406,18 @@ function PropertyGallery({
 
   return (
     <div
-      className="grid gap-2"
+      className="grid gap-2 h-full"
       style={{
         gridTemplateColumns: thumbs.length > 0 ? "2fr 1fr" : "1fr",
       }}
     >
       <div
-        className="relative overflow-hidden"
+        className="relative overflow-hidden h-full"
         style={{
-          aspectRatio: thumbs.length > 0 ? "1 / 1" : "4 / 3",
+          // Lead photo follows Act I's 3:2 cinematic ratio when there
+          // are no thumbs (single hero); when thumbs are present the
+          // lead is square (1:1) and the thumbs stack to its right.
+          aspectRatio: thumbs.length > 0 ? "1 / 1" : "3 / 2",
           background: tokens.cardBg,
           borderRadius: 8,
         }}
