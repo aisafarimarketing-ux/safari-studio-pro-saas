@@ -160,33 +160,16 @@ const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
   input_schema: {
     type: "object",
     required: ["days"],
+    // Property order matters here. Anthropic serialises tool_use input
+    // in declaration order, and we were running out of max_tokens
+    // mid-output on heavy proposals — the model wrote rich prose for
+    // cover/greeting/closing first, then never reached days[]. Forcing
+    // days to be FIRST in the schema means the model writes them
+    // before it can blow the budget on cosmetic prose. Lists with no
+    // length cap (inclusions, exclusions) follow days for the same
+    // reason. Cosmetic single-string fields go last — easy to truncate
+    // if budget gets tight.
     properties: {
-      cover: {
-        type: "object",
-        properties: { tagline: { type: "string" } },
-      },
-      greeting: {
-        type: "object",
-        properties: { body: { type: "string" } },
-      },
-      closing: {
-        type: "object",
-        properties: {
-          quote: { type: "string" },
-          signOff: { type: "string" },
-        },
-      },
-      map: {
-        type: "object",
-        properties: { caption: { type: "string" } },
-      },
-      quote: {
-        type: "object",
-        properties: {
-          quote: { type: "string" },
-          attribution: { type: "string" },
-        },
-      },
       days: {
         type: "array",
         // Force at least one day item — `required: ["days"]` only
@@ -271,6 +254,38 @@ const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
             body: { type: "string" },
             icon: { type: "string" },
           },
+        },
+      },
+      // Cosmetic single-string fields LAST — written after days,
+      // inclusions, exclusions, and practicalInfo. The model serialises
+      // tool_use input in property-declaration order; if max_tokens is
+      // hit while writing prose, the structural lists above are
+      // already complete and the proposal still works. Operator can
+      // refresh the prose blocks via the per-section AI Write button.
+      cover: {
+        type: "object",
+        properties: { tagline: { type: "string" } },
+      },
+      greeting: {
+        type: "object",
+        properties: { body: { type: "string" } },
+      },
+      closing: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          signOff: { type: "string" },
+        },
+      },
+      map: {
+        type: "object",
+        properties: { caption: { type: "string" } },
+      },
+      quote: {
+        type: "object",
+        properties: {
+          quote: { type: "string" },
+          attribution: { type: "string" },
         },
       },
       // Pricing intentionally OMITTED from the AI tool schema.
@@ -506,7 +521,8 @@ The JSON shape (all keys required unless marked optional):
 DAYS — THE SINGLE MOST IMPORTANT FIELD:
 - The "days" array MUST be non-empty. days.length MUST equal trip.nights exactly.
 - This is non-negotiable. A response with empty days[] fails validation and produces a useless proposal — operators have to start over. NEVER return an empty days[] array.
-- If you are running short on output budget, sacrifice cosmetic prose (cover.tagline, quote, closing.signOff length) BEFORE shortening days[]. days is the heart of the proposal.
+- The schema is ordered so days appears FIRST. Write it first, completely, before any cosmetic prose. Do not skip ahead to cover/greeting/closing — those come later in the schema for a reason.
+- If you are running short on output budget after days+lists, write SHORT cosmetic prose (one-sentence cover.tagline, two-sentence closing.signOff). It is fine for cosmetic prose to be terse — operators can refresh those via the per-section AI Write button.
 
 WHEN trip.schedule IS PROVIDED (array of {dayNumber, destination}):
 - The schedule LOCKS which destination goes on which day. It does NOT replace the days[] array — you still WRITE the full days[] yourself, you just match each day's destination to schedule[N-1].destination.
@@ -699,7 +715,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
         // full `days[]` array — at 8K we were truncating before days
         // started, returning `days: []` on heavy trips. Empirical: a
         // 14-night, 10-destination Mid-range trip uses ~9-12K out tokens.
-        max_tokens: 16000,
+        max_tokens: 32000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
@@ -1174,7 +1190,7 @@ function buildAutopilotStream(opts: {
         const stream = opts.anth.messages.stream(
           {
             model: opts.model,
-            max_tokens: 16000,
+            max_tokens: 32000,
             system: [
               { type: "text", text: opts.systemText, cache_control: { type: "ephemeral" } },
             ],
