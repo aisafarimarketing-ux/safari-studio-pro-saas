@@ -189,8 +189,18 @@ const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
       },
       days: {
         type: "array",
+        // Force at least one day item — `required: ["days"]` only
+        // enforces the key's presence, so the AI was satisfying it
+        // with `days: []` on heavy multi-constraint prompts (schedule
+        // + pace + interests + routines combined). minItems makes the
+        // tool validation reject empty arrays so the model must fill.
+        minItems: 1,
         items: {
           type: "object",
+          // Each day must at minimum carry a destination + description
+          // — those are the structural fields downstream code depends
+          // on (day card render, map labels, pricing nights count).
+          required: ["destination", "description"],
           properties: {
             destination: { type: "string" },
             country: { type: "string" },
@@ -493,10 +503,21 @@ The JSON shape (all keys required unless marked optional):
   }
 }
 
-DAYS:
-- Generate exactly the number of days the user asks for.
-- WHEN trip.schedule IS PROVIDED (an array of {dayNumber, destination}), it is the operator-locked schedule. You MUST set days[N-1].destination to schedule[N-1].destination exactly. You may NOT swap, reorder, or drop destinations. Your job is purely the narrative, highlights, optional activities, tier picks, and transfer captions for each day. The schedule is non-negotiable.
-- WHEN trip.schedule IS NOT PROVIDED, distribute destinations across days yourself (legacy mode): no single-night stops unless the trip demands it.
+DAYS — THE SINGLE MOST IMPORTANT FIELD:
+- The "days" array MUST be non-empty. days.length MUST equal trip.nights exactly.
+- This is non-negotiable. A response with empty days[] fails validation and produces a useless proposal — operators have to start over. NEVER return an empty days[] array.
+- If you are running short on output budget, sacrifice cosmetic prose (cover.tagline, quote, closing.signOff length) BEFORE shortening days[]. days is the heart of the proposal.
+
+WHEN trip.schedule IS PROVIDED (array of {dayNumber, destination}):
+- The schedule LOCKS which destination goes on which day. It does NOT replace the days[] array — you still WRITE the full days[] yourself, you just match each day's destination to schedule[N-1].destination.
+- Concretely: if schedule has 7 entries, you produce a days[] array of length 7, where days[0].destination = schedule[0].destination, days[1].destination = schedule[1].destination, etc.
+- You write the narrative, highlights, optional activities, tiers, transfer captions, and momentOfDay for EVERY day in the schedule. The schedule constrains destinations, not your prose.
+- You may NOT skip days, swap destinations, or return fewer days than the schedule has entries.
+
+WHEN trip.schedule IS NOT PROVIDED:
+- Distribute the destinations across the requested number of days yourself. No single-night stops unless the trip demands it.
+
+CAMP PICKS:
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
 
@@ -702,6 +723,11 @@ ${JSON.stringify(userPayload, null, 2)}`;
       );
     }
     parsed = toolUse.input as AutopilotResponse;
+    // Same diagnostic on the one-shot path so both modes log the
+    // shape of what the AI returned. Surfaces 0-days bugs early.
+    console.log(
+      `[AUTOPILOT] parsed shape · keys=${Object.keys(parsed).join(",")} · days.len=${Array.isArray(parsed.days) ? parsed.days.length : "not-array"} · greeting=${parsed.greeting?.body ? "set" : "empty"} · cover=${parsed.cover?.tagline ? "set" : "empty"}`,
+    );
   } catch (err) {
     const elapsedMs = Date.now() - startedAt;
     console.error(`[AUTOPILOT] anthropic failed after ${elapsedMs}ms · model=${MODEL}`);
@@ -1204,6 +1230,16 @@ function buildAutopilotStream(opts: {
         }
 
         const parsed = toolUse.input as AutopilotResponse;
+
+        // Diagnostic: log what the AI actually produced, with key
+        // metrics. When operators report "0 days" we need this to
+        // figure out whether the AI under-produced, the schema's
+        // minItems rejected the response, or the post-processing
+        // dropped them. The full input is too verbose for logs;
+        // surface just the shape.
+        console.log(
+          `[AUTOPILOT/stream] parsed shape · keys=${Object.keys(parsed).join(",")} · days.len=${Array.isArray(parsed.days) ? parsed.days.length : "not-array"} · greeting=${parsed.greeting?.body ? "set" : "empty"} · cover=${parsed.cover?.tagline ? "set" : "empty"}`,
+        );
 
         // Catch up — emit any final days we held back. The watch loop
         // above stops at length-2; if length is N, we still owe the
