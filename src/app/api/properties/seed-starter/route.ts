@@ -63,9 +63,19 @@ export async function POST() {
       locByName.set(loc.name.toLowerCase(), loc.id);
     }
 
-    // Create the property + its cover/gallery images in a single write.
-    // Nested `images.create` keeps PropertyImage rows in lockstep with
-    // the property lifecycle — delete cascades cover them.
+    // Build the image rows only for non-empty URLs. The starter library
+    // intentionally ships with empty leadImageUrl / galleryUrls so
+    // operators always upload their own — see the comment block in
+    // src/lib/starterLibrary.ts. Filtering here keeps the seed safe
+    // even if a future starter entry partially fills in URLs.
+    const imageRows: { url: string; order: number; isCover: boolean; caption: null }[] = [];
+    if (entry.leadImageUrl) {
+      imageRows.push({ url: entry.leadImageUrl, order: 0, isCover: true, caption: null });
+    }
+    entry.galleryUrls.filter(Boolean).forEach((url, i) => {
+      imageRows.push({ url, order: i + 1, isCover: false, caption: null });
+    });
+
     await prisma.property.create({
       data: {
         organizationId: orgId,
@@ -84,22 +94,7 @@ export async function POST() {
         totalRooms: entry.totalRooms,
         spokenLanguages: entry.spokenLanguages,
         specialInterests: entry.specialInterests,
-        images: {
-          create: [
-            {
-              url: entry.leadImageUrl,
-              order: 0,
-              isCover: true,
-              caption: null,
-            },
-            ...entry.galleryUrls.map((url, i) => ({
-              url,
-              order: i + 1,
-              isCover: false,
-              caption: null,
-            })),
-          ],
-        },
+        ...(imageRows.length > 0 ? { images: { create: imageRows } } : {}),
       },
     });
     created++;
