@@ -131,11 +131,35 @@ export function DayCard({
   };
 
   // ── Property picker ───────────────────────────────────────────────────
+  //
+  // When the operator re-picks a property that's already in the proposal
+  // (e.g. she edited the library after autopilot drafted, deleted some
+  // images, and is re-assigning to refresh), we MUST replace the
+  // existing snapshot with the freshly-fetched one — otherwise the day
+  // card keeps showing the stale autopilot-time copy of the property
+  // (including images she's since deleted from the library).
+  //
+  // Earlier behaviour: if the property name was already in
+  // proposal.properties[], we skipped addPropertyFromLibrary() and kept
+  // the old snapshot. That was the root cause of "I deleted these
+  // images but they keep coming back when I re-pick the property."
   const onAssignProperty = (snapshot: Partial<ProposalProperty>) => {
     if (!snapshot.name) return;
     const nameLc = snapshot.name.trim().toLowerCase();
-    const already = proposal.properties.some((p) => p.name.trim().toLowerCase() === nameLc);
-    if (!already) addPropertyFromLibrary(snapshot);
+    const existing = proposal.properties.find(
+      (p) => p.name.trim().toLowerCase() === nameLc,
+    );
+    if (existing) {
+      // Replace the stored snapshot — overwrite leadImageUrl, gallery,
+      // amenities, summary, all of it. We keep the existing id so any
+      // day already pointing at this property's id stays linked.
+      useProposalStore.getState().updateProperty(existing.id, {
+        ...snapshot,
+        id: existing.id,
+      });
+    } else {
+      addPropertyFromLibrary(snapshot);
+    }
     const tier = activeTier as TierKey;
     updateDay(day.id, {
       tiers: {
