@@ -55,7 +55,14 @@ interface SchematicNode {
 }
 
 const VIEWBOX_W = 1000;
-const PADDING_FRACTION = 0.18; // 18% breathing room around the route bbox
+const PADDING_FRACTION = 0.32; // generous breathing room around the route bbox
+
+/** Destinations rendered as standalone islands (drawn in the water
+ *  region, separated from the mainland by a wavy coastline). */
+const ISLAND_RE = /\bzanzibar\b|\bpemba\b|\bmafia\b|\bstone town\b/i;
+function isIslandStop(destination: string): boolean {
+  return ISLAND_RE.test(destination ?? "");
+}
 
 /** Hardcoded coordinates for the most common East-African safari
  *  stops. Mirrors the table in RouteMap.tsx; duplicated here so the
@@ -256,6 +263,26 @@ export function RouteSchematic({
     (n) => PARK_BOUNDARIES.find((p) => p.match.test(n.destination)) ?? null,
   );
 
+  // ── Land / water layout ──────────────────────────────────────────
+  //
+  // Detect island stops (Zanzibar, Pemba, Mafia, Stone Town) and
+  // compute a coastline x-coordinate as the eastern edge of all
+  // mainland stops + a small lng buffer. Land mass extends from
+  // x=0 to coastlineX; water occupies coastlineX → W. Each island
+  // stop renders as a small ellipse in the water region. Operator
+  // brief: "show islands as water away from the land".
+  const islandIndices = nodes
+    .map((n, i) => (isIslandStop(n.destination) ? i : -1))
+    .filter((i) => i >= 0);
+  const mainlandIndices = nodes
+    .map((_, i) => i)
+    .filter((i) => !islandIndices.includes(i));
+  const hasIslands = islandIndices.length > 0;
+  const mainlandEastLng = hasIslands && mainlandIndices.length > 0
+    ? Math.max(...mainlandIndices.map((i) => nodes[i].lng)) + 0.6
+    : null;
+  const coastlineX = mainlandEastLng != null ? project(0, mainlandEastLng).x : null;
+
   // Bezier legs between consecutive nodes — alternating perpendicular
   // bows produce a soft S-snake.
   const legPaths = positions.slice(0, -1).map((from, i) => {
@@ -317,10 +344,93 @@ export function RouteSchematic({
           <stop offset="60%" stopColor="rgba(0,0,0,0)" />
           <stop offset="100%" stopColor="rgba(60,40,20,0.08)" />
         </radialGradient>
+
+        {/* Topo-stipple — small dot pattern that fills the land area.
+            Adds the impression of terrain texture (vegetation, hills)
+            without competing for attention. */}
+        <pattern
+          id="topo-stipple"
+          patternUnits="userSpaceOnUse"
+          width="14"
+          height="14"
+          patternTransform="rotate(15)"
+        >
+          <circle cx="3" cy="3" r="0.6" fill="#8a7558" opacity="0.28" />
+          <circle cx="10" cy="9" r="0.5" fill="#8a7558" opacity="0.22" />
+          <circle cx="6" cy="11" r="0.4" fill="#a08060" opacity="0.18" />
+        </pattern>
+
+        {/* Mainland clip-path — used to confine the topo-stipple to
+            the land region only when a coastline is present. */}
+        {coastlineX != null && (
+          <clipPath id="mainland-clip">
+            <path d={buildMainlandPath(coastlineX, H)} />
+          </clipPath>
+        )}
       </defs>
 
-      {/* Parchment base */}
-      <rect width={W} height={H} fill={cardColor} />
+      {/* ── Backdrop layers (water / land / coastline / islands) ──
+          Order matters — water first as the full-frame base, then
+          mainland on top, then a wavy ink coastline at their
+          boundary, then island ellipses in the water region for
+          offshore stops. */}
+
+      {/* Water — light teal-blue covers the full frame. When there
+          are no offshore stops, the land layer below covers it
+          completely so it's invisible. */}
+      <rect width={W} height={H} fill="#cfdfe2" />
+
+      {/* Mainland — parchment. If there's a coastline (islands present)
+          the mainland covers x=0 to coastlineX with a wavy eastern
+          edge. Otherwise it covers the full frame. */}
+      {coastlineX != null ? (
+        <path
+          d={buildMainlandPath(coastlineX, H)}
+          fill={cardColor}
+          stroke={inkColor}
+          strokeOpacity={0.35}
+          strokeWidth={1.6}
+          filter="url(#hand-drawn)"
+        />
+      ) : (
+        <rect width={W} height={H} fill={cardColor} />
+      )}
+
+      {/* Topo-stipple ground texture on land — subtle dot pattern at
+          low opacity so the parchment reads as terrain, not blank. */}
+      <rect
+        width={W}
+        height={H}
+        fill="url(#topo-stipple)"
+        style={{ pointerEvents: "none" }}
+        clipPath={coastlineX != null ? "url(#mainland-clip)" : undefined}
+      />
+
+      {/* Islands — one ellipse per offshore stop, centred on its
+          projected position. Drawn with a hand-drawn wobble to look
+          inked, not stamped. */}
+      {islandIndices.map((i) => {
+        const pos = positions[i];
+        // Zanzibar is elongated north-south; use a vertical ellipse
+        // for that recognisable shape. Generic islands stay rounder.
+        const isZanzibar = /\bzanzibar\b|\bstone town\b/i.test(nodes[i].destination);
+        const rx = isZanzibar ? 22 : 18;
+        const ry = isZanzibar ? 36 : 22;
+        return (
+          <ellipse
+            key={`island-${i}`}
+            cx={pos.x}
+            cy={pos.y}
+            rx={rx}
+            ry={ry}
+            fill={cardColor}
+            stroke={inkColor}
+            strokeOpacity={0.45}
+            strokeWidth={1.4}
+            filter="url(#hand-drawn)"
+          />
+        );
+      })}
 
       {/* Park polygon halos — drawn at REAL geographic coords through
           the projection. Sage wash + dark olive ink, slight wobble
@@ -475,6 +585,33 @@ export function RouteSchematic({
       />
     </svg>
   );
+}
+
+// ─── Mainland path with wavy coastline ───────────────────────────────────
+//
+// Builds the SVG path for the land mass when there are island stops.
+// Land covers x=0 to coastlineX; the eastern edge of the land is
+// drawn as a wavy line (small alternating quadratic bezier wobbles)
+// rather than a straight rectangle edge — that's what makes it read
+// as a coastline, not a column.
+
+function buildMainlandPath(coastlineX: number, height: number): string {
+  let d = "M 0 0";
+  d += ` L ${coastlineX.toFixed(1)} 0`;
+  // Wavy eastern edge from top to bottom — alternating wobble.
+  const segLen = 28;
+  const amp = 7;
+  const segments = Math.max(1, Math.ceil(height / segLen));
+  for (let i = 1; i <= segments; i++) {
+    const yPrev = (i - 1) * segLen;
+    const yNext = Math.min(i * segLen, height);
+    const ctrlY = (yPrev + yNext) / 2;
+    const ctrlX = coastlineX + (i % 2 === 0 ? -amp : amp);
+    d += ` Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${coastlineX.toFixed(1)} ${yNext.toFixed(1)}`;
+  }
+  d += ` L 0 ${height}`;
+  d += " Z";
+  return d;
 }
 
 // ─── Park polygon at real coords ─────────────────────────────────────────
