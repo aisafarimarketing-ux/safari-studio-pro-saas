@@ -41,6 +41,23 @@ const isOrgAgnosticRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, req) => {
   const isApi = req.nextUrl.pathname.startsWith("/api/");
 
+  // Detect Next.js React Server Component prefetch requests. The browser
+  // fires these on Link hover / viewport-entry to warm the route. When
+  // the session is expired AND the prefetched route is protected,
+  // Clerk's auth.protect() redirects to a cross-origin sign-in URL —
+  // and the browser blocks the redirect with a CORS error
+  // ("Response to preflight request doesn't pass access control check"),
+  // flooding the operator's console with red.
+  //
+  // Identify these by the RSC header Next.js sends OR the ?_rsc=...
+  // query param it appends. For these requests we'd rather return a
+  // clean 401 (which the prefetcher silently discards) than fire a
+  // cross-origin redirect.
+  const isRscPrefetch =
+    req.headers.get("RSC") === "1" ||
+    req.headers.get("Next-Router-Prefetch") === "1" ||
+    req.nextUrl.searchParams.has("_rsc");
+
   // Only run auth.protect() on page routes. Clerk's protect() returns a
   // 404 (not 401) for protected API routes when the session can't be
   // verified — which is opaque to the client and eats the real error.
@@ -48,13 +65,31 @@ export default clerkMiddleware(async (auth, req) => {
   // proper 401/402/403/409, so letting them self-protect gives us
   // debuggable errors and matches what the client autosave / fetch
   // helpers already handle.
-  if (!isApi && isProtectedRoute(req)) await auth.protect();
+  if (!isApi && isProtectedRoute(req)) {
+    if (isRscPrefetch) {
+      // Short-circuit prefetches with a plain 401. The Next.js
+      // prefetcher swallows non-2xx silently — the user's actual
+      // navigation will then hit Clerk's redirect normally.
+      const { userId } = await auth();
+      if (!userId) {
+        return new NextResponse(null, { status: 401 });
+      }
+    } else {
+      await auth.protect();
+    }
+  }
 
   const { userId, orgId } = await auth();
   // Signed-in but no active organization → force them through the picker
   // before they can reach any app surface that depends on tenant scope.
   // API routes don't redirect — they return 409 (handled by the route).
+  // RSC prefetches also short-circuit with 401 here so the prefetcher
+  // silently fails instead of triggering a cross-origin redirect to
+  // /select-organization that the browser would mishandle the same way.
   if (!isApi && userId && !orgId && !isOrgAgnosticRoute(req)) {
+    if (isRscPrefetch) {
+      return new NextResponse(null, { status: 401 });
+    }
     const url = new URL("/select-organization", req.url);
     return NextResponse.redirect(url);
   }
