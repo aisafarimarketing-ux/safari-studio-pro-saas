@@ -6,7 +6,9 @@ import { applyIdentityToOperator } from "@/lib/consultantIdentity";
 import {
   applyBrandDefaultsToTheme,
   applyBrandDefaultsToSections,
+  pickBrandImageForDestination,
   type BrandColor,
+  type BrandImage,
   type BrandSectionStyles,
 } from "@/lib/brandDNA";
 
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
       headingFont: true,
       bodyFont: true,
       sectionStyles: true,
+      imageLibrary: true,
     },
   });
   if (brand) {
@@ -91,6 +94,20 @@ export async function POST(req: Request) {
       proposal.sections,
       (brand.sectionStyles as BrandSectionStyles | null) ?? null,
     );
+    // Day hero images — for any day whose destination matches a
+    // location-tagged brand image, set heroImageUrl to that image.
+    // Template-supplied heroes (rare on clone) win.
+    const library = (brand.imageLibrary as BrandImage[] | null) ?? null;
+    if (library && library.length > 0) {
+      proposal.days = proposal.days.map((day) => {
+        if (day.heroImageUrl) return day;
+        const dest = day.destination?.trim() ?? "";
+        if (!dest) return day;
+        const match = pickBrandImageForDestination(library, dest);
+        if (!match) return day;
+        return { ...day, heroImageUrl: match.url };
+      });
+    }
     // Also seed operator brand colours so closing / footer chrome
     // that references operator.brandColors picks them up.
     const primary =

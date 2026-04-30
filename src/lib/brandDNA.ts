@@ -72,7 +72,16 @@ import type {
 } from "@/lib/types";
 
 export type BrandColor = { hex: string; role?: string };
-export type BrandImage = { url: string; caption?: string; tags?: string[] };
+export type BrandImage = {
+  url: string;
+  caption?: string;
+  tags?: string[];
+  /** Free-form location names this image represents — "Tarangire",
+   *  "Serengeti", "Zanzibar", etc. Used at proposal-clone time so
+   *  day cards auto-pick a matching org-curated hero image when the
+   *  day's destination is tagged. Case-insensitive matching. */
+  locations?: string[];
+};
 
 // ─── Brand defaults → proposal theme ────────────────────────────────────
 //
@@ -133,6 +142,28 @@ export function applyBrandDefaultsToTheme(
 export type BrandSectionStyles = Partial<
   Record<SectionType, Partial<StyleOverrides>>
 >;
+
+// ─── Per-destination image lookup ────────────────────────────────────────
+//
+// Find the first image in the org's library tagged with a given
+// destination name. Case-insensitive match. Returns null when no
+// image is tagged for the destination.
+
+export function pickBrandImageForDestination(
+  library: BrandImage[] | null | undefined,
+  destination: string,
+): BrandImage | null {
+  if (!library || library.length === 0) return null;
+  const target = destination.trim().toLowerCase();
+  if (!target) return null;
+  for (const img of library) {
+    if (!img.url || !img.locations) continue;
+    for (const loc of img.locations) {
+      if (loc.trim().toLowerCase() === target) return img;
+    }
+  }
+  return null;
+}
 
 /** Returns a NEW sections array with per-section brand overrides
  *  applied. Sections retain their template-supplied overrides

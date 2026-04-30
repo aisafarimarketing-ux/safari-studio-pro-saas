@@ -282,6 +282,14 @@ function ImageLibrarySection({
     update({ imageLibrary: form.imageLibrary.filter((_, idx) => idx !== i) });
   };
 
+  const setLocations = (i: number, locations: string[]) => {
+    update({
+      imageLibrary: form.imageLibrary.map((img, idx) =>
+        idx === i ? { ...img, locations } : img,
+      ),
+    });
+  };
+
   return (
     <section>
       <SectionHeading
@@ -290,30 +298,19 @@ function ImageLibrarySection({
         Image library
       </SectionHeading>
       <p className="text-[13px] text-black/50 mb-3 -mt-2 max-w-xl">
-        Drop in your best photography — camps, wildlife, people. The AI will prefer
-        these over stock for destinations they fit.
+        Drop in your best photography — camps, wildlife, people. Tag each
+        with the destinations it represents (Tarangire, Serengeti, Zanzibar
+        …) and the app will auto-pick it as the day&apos;s hero on every
+        new proposal that visits that destination.
       </p>
-      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {form.imageLibrary.map((img, i) => (
-          <div
+          <ImageCard
             key={i}
-            className="relative aspect-[4/3] rounded-lg overflow-hidden bg-black/5 group"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img.url}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/55 text-white text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-              aria-label="Remove image"
-            >
-              ×
-            </button>
-          </div>
+            image={img}
+            onRemove={() => remove(i)}
+            onLocationsChange={(locs) => setLocations(i, locs)}
+          />
         ))}
         {form.imageLibrary.length < MAX_IMAGES && (
           <button
@@ -336,6 +333,116 @@ function ImageLibrarySection({
         onChange={(e) => handleFiles(e.target.files)}
       />
     </section>
+  );
+}
+
+// ─── Image card with location tagging ──────────────────────────────────────
+
+function ImageCard({
+  image,
+  onRemove,
+  onLocationsChange,
+}: {
+  image: BrandImage;
+  onRemove: () => void;
+  onLocationsChange: (locations: string[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(
+    (image.locations ?? []).join(", "),
+  );
+
+  const saveDraft = () => {
+    const locs = draft
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    onLocationsChange(locs);
+    setEditing(false);
+  };
+
+  return (
+    <div className="rounded-lg overflow-hidden bg-black/5 group flex flex-col">
+      <div className="relative aspect-[4/3] bg-black/5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={image.url}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/55 text-white text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+          aria-label="Remove image"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Location tags row */}
+      <div className="px-2 py-2 bg-white border-t border-black/5">
+        {editing ? (
+          <div className="flex items-stretch gap-1.5">
+            <input
+              type="text"
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveDraft();
+                }
+                if (e.key === "Escape") {
+                  setDraft((image.locations ?? []).join(", "));
+                  setEditing(false);
+                }
+              }}
+              placeholder="Tarangire, Serengeti…"
+              className="flex-1 min-w-0 px-2 py-1 rounded-md border border-black/10 text-[11.5px] outline-none focus:border-[#1b3a2d]"
+            />
+            <button
+              type="button"
+              onClick={saveDraft}
+              className="px-2 py-1 rounded-md bg-[#1b3a2d] text-white text-[11px] font-semibold"
+            >
+              Save
+            </button>
+          </div>
+        ) : (image.locations && image.locations.length > 0) ? (
+          <div className="flex items-center gap-1 flex-wrap">
+            {image.locations.map((loc) => (
+              <span
+                key={loc}
+                className="px-1.5 py-0.5 rounded text-[10.5px] font-medium"
+                style={{
+                  background: "rgba(27,58,45,0.08)",
+                  color: "#1b3a2d",
+                }}
+              >
+                {loc}
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-[10.5px] text-black/45 hover:text-black/75 transition ml-1"
+            >
+              edit
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-[11px] text-black/45 hover:text-black/75 transition"
+          >
+            + Tag locations
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
