@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { buildBlankProposal } from "@/lib/defaults";
 import { AutomatingOverlay } from "./AutomatingOverlay";
 import { TripStopsEditor, type LibraryProperty } from "./TripStopsEditor";
+import { nanoid } from "@/lib/nanoid";
+import {
+  BUILT_IN_PRESETS,
+  loadSavedTemplates,
+  saveTemplate,
+  deleteTemplate,
+  type TripPreset,
+} from "@/lib/tripPresets";
 import type { BrandImage } from "@/lib/brandDNA";
 import type { Proposal, TripStop } from "@/lib/types";
 
@@ -102,11 +110,81 @@ export function TripSetupDialog({
   // broken.
   error?: string | null;
 }) {
-  // Lazy initial state — Date.now() only runs on mount.
-  const [form, setForm] = useState<FormShape>(() => buildDefaultForm());
+  // Lazy initial state — Date.now() only runs on mount. Restores
+  // operator preferences (origin / style / pace / interests / arrival
+  // + departure routines) from the last submitted setup so the
+  // operator doesn't retype the same values every time. Guest-specific
+  // fields (names, dates, adults, children, stops, notes) reset every
+  // time so an old client's plan never bleeds into a new one.
+  const [form, setForm] = useState<FormShape>(() => withRememberedDefaults(buildDefaultForm()));
   const [autopilot, setAutopilot] = useState(true);
   const [brandImageLibrary, setBrandImageLibrary] = useState<BrandImage[]>([]);
   const [properties, setProperties] = useState<LibraryProperty[]>([]);
+  // Operator-saved templates — synchronously loaded from localStorage
+  // on mount. Wrapped in a function-init so server-side render doesn't
+  // touch window; on client mount the value is correct from the first
+  // paint (no useEffect needed). Refreshed by saveCurrentAsTemplate
+  // and removeSavedTemplate via setSavedTemplates.
+  const [savedTemplates, setSavedTemplates] = useState<TripPreset[]>(() =>
+    typeof window === "undefined" ? [] : loadSavedTemplates(),
+  );
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false);
+
+  const applyPreset = (preset: TripPreset) => {
+    setForm((f) => ({
+      ...f,
+      stops: preset.stops.map((s) => ({
+        id: nanoid(),
+        destination: s.destination,
+        nights: s.nights,
+      })),
+      style: preset.style,
+      pace: preset.pace,
+      interests: preset.interests,
+    }));
+    // Reset arrival/departure dates to match the preset's total
+    // nights — operator just wants to type guest names + dates next.
+    const totalNights = preset.stops.reduce((sum, s) => sum + s.nights, 0);
+    setForm((f) => {
+      const arrivalDate = f.arrivalDate;
+      const a = new Date(arrivalDate);
+      if (!isNaN(a.getTime())) {
+        const d = new Date(a.getTime() + totalNights * 86400000);
+        return { ...f, departureDate: isoDate(d) };
+      }
+      return f;
+    });
+    setPresetPickerOpen(false);
+  };
+
+  const saveCurrentAsTemplate = () => {
+    const name = window.prompt("Template name?", form.title.trim() || "My itinerary");
+    if (!name?.trim()) return;
+    const preset: TripPreset = {
+      id: `saved-${nanoid()}`,
+      name: name.trim(),
+      description:
+        form.stops
+          .map((s) => s.destination)
+          .filter(Boolean)
+          .slice(0, 4)
+          .join(" → ") || "—",
+      region: "Multi-country",
+      stops: form.stops
+        .filter((s) => s.destination.trim() && s.nights > 0)
+        .map((s) => ({ destination: s.destination, nights: s.nights })),
+      style: (form.style === "luxury" || form.style === "classic" ? form.style : "mid_range"),
+      pace: form.pace,
+      interests: form.interests,
+    };
+    saveTemplate(preset);
+    setSavedTemplates(loadSavedTemplates());
+  };
+
+  const removeSavedTemplate = (id: string) => {
+    deleteTemplate(id);
+    setSavedTemplates(loadSavedTemplates());
+  };
 
   // Load brand-DNA imageLibrary + properties once when the dialog
   // mounts. The TripStopsEditor uses these to (a) preview which stops
@@ -165,6 +243,7 @@ export function TripSetupDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+    rememberDefaults(form);
     const proposal = buildProposalFromForm(form, nights);
     onSubmit({ proposal, autopilot });
   };
@@ -212,6 +291,19 @@ export function TripSetupDialog({
 
         {/* Body */}
         <div className="flex-1 overflow-auto px-7 py-6 space-y-6">
+          {/* Preset picker — built-in itineraries + operator-saved
+              templates. One-click seeds stops + style + pace +
+              interests. Skip it entirely if you'd rather build from
+              scratch. */}
+          <PresetPicker
+            open={presetPickerOpen}
+            onToggle={() => setPresetPickerOpen((v) => !v)}
+            builtIn={BUILT_IN_PRESETS}
+            saved={savedTemplates}
+            onApply={applyPreset}
+            onDelete={removeSavedTemplate}
+          />
+
           {/* Guest name(s) — required, drives personalisation everywhere */}
           <Field
             label="Guest name(s)"
@@ -320,6 +412,18 @@ export function TripSetupDialog({
               brandImageLibrary={brandImageLibrary}
               properties={properties}
             />
+            {form.stops.length > 0 && (
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={saveCurrentAsTemplate}
+                  className="text-label text-[#1b3a2d] underline hover:no-underline"
+                  style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
+                >
+                  ✦ Save as template
+                </button>
+              </div>
+            )}
           </Field>
 
           {/* Travel style */}
@@ -548,6 +652,128 @@ export function TripSetupDialog({
   );
 }
 
+// ─── Preset picker ──────────────────────────────────────────────────────
+
+function PresetPicker({
+  open,
+  onToggle,
+  builtIn,
+  saved,
+  onApply,
+  onDelete,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  builtIn: TripPreset[];
+  saved: TripPreset[];
+  onApply: (preset: TripPreset) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-black/8 bg-gradient-to-br from-[#f7f3eb] to-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full px-4 py-3 flex items-center justify-between text-left"
+      >
+        <div className="min-w-0">
+          <div className="text-small font-semibold text-[#1b3a2d]">
+            ✦ Start from a preset
+          </div>
+          <div
+            className="text-label text-black/55 mt-0.5"
+            style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+          >
+            {saved.length > 0
+              ? `${builtIn.length} built-in itineraries · ${saved.length} of yours`
+              : `${builtIn.length} built-in itineraries — Northern TZ Big 5, Mara Migration, Honeymoon, more`}
+          </div>
+        </div>
+        <span className="text-black/40 text-base shrink-0 ml-3" aria-hidden>
+          {open ? "▴" : "▾"}
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          {saved.length > 0 && (
+            <PresetGroup label="Your templates" presets={saved} onApply={onApply} onDelete={onDelete} />
+          )}
+          <PresetGroup label="Built-in" presets={builtIn} onApply={onApply} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PresetGroup({
+  label,
+  presets,
+  onApply,
+  onDelete,
+}: {
+  label: string;
+  presets: TripPreset[];
+  onApply: (preset: TripPreset) => void;
+  onDelete?: (id: string) => void;
+}) {
+  return (
+    <div>
+      <div
+        className="text-label font-semibold text-black/45 mb-1.5"
+        style={{ textTransform: "none", letterSpacing: 0 }}
+      >
+        {label}
+      </div>
+      <div className="space-y-1.5">
+        {presets.map((p) => {
+          const totalNights = p.stops.reduce((sum, s) => sum + s.nights, 0);
+          return (
+            <div
+              key={p.id}
+              className="flex items-center gap-2 rounded-lg border border-black/8 bg-white px-3 py-2 hover:border-[#1b3a2d]/30 transition"
+            >
+              <button
+                type="button"
+                onClick={() => onApply(p)}
+                className="flex-1 min-w-0 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-small font-semibold text-black/85 truncate">
+                    {p.name}
+                  </span>
+                  <span className="text-label text-black/40 shrink-0 tabular-nums">
+                    {totalNights}n
+                  </span>
+                </div>
+                <div
+                  className="text-label text-black/50 truncate"
+                  style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+                >
+                  {p.description}
+                </div>
+              </button>
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete "${p.name}"?`)) onDelete(p.id);
+                  }}
+                  className="w-7 h-7 rounded text-black/30 hover:bg-red-50 hover:text-red-600 transition flex items-center justify-center text-base shrink-0"
+                  aria-label={`Delete ${p.name}`}
+                  title="Delete template"
+                >
+                  🗑
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Form bits ──────────────────────────────────────────────────────────────
 
 const inputCls =
@@ -771,6 +997,72 @@ function styleLabel(id: string): string {
 
 // Defaults: trip from ~30 days out, 7 nights, 2 adults. Function (not a
 // constant) so each dialog open refreshes the relative dates.
+// ─── Smart defaults (localStorage-backed) ──────────────────────────────
+//
+// Operator preferences that travel from one proposal to the next:
+// origin (where their typical clients come from), style, pace,
+// interests, and arrival/departure routines. Saved on every successful
+// submit; restored on every dialog open. Guest-specific fields reset.
+//
+// Why localStorage and not the DB: per-operator (not per-org) and
+// totally non-critical — losing it is fine, the operator just retypes
+// once. No round trip needed before the dialog renders.
+
+const DEFAULTS_KEY = "ss-trip-setup-defaults-v1";
+
+type RememberedDefaults = {
+  origin?: string;
+  style?: string;
+  pace?: "relaxed" | "balanced" | "packed";
+  interests?: string[];
+  arrivalRoutine?: string;
+  departureRoutine?: string;
+};
+
+function loadRememberedDefaults(): RememberedDefaults | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DEFAULTS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as RememberedDefaults;
+  } catch {
+    return null;
+  }
+}
+
+function rememberDefaults(form: FormShape): void {
+  if (typeof window === "undefined") return;
+  try {
+    const next: RememberedDefaults = {
+      origin: form.origin || undefined,
+      style: form.style,
+      pace: form.pace,
+      interests: form.interests.length > 0 ? form.interests : undefined,
+      arrivalRoutine: form.arrivalRoutine || undefined,
+      departureRoutine: form.departureRoutine || undefined,
+    };
+    window.localStorage.setItem(DEFAULTS_KEY, JSON.stringify(next));
+  } catch {
+    // ignore quota / privacy-mode failures
+  }
+}
+
+function withRememberedDefaults(base: FormShape): FormShape {
+  const remembered = loadRememberedDefaults();
+  if (!remembered) return base;
+  return {
+    ...base,
+    origin: remembered.origin ?? base.origin,
+    style: remembered.style ?? base.style,
+    pace: remembered.pace ?? base.pace,
+    interests: remembered.interests ?? base.interests,
+    arrivalRoutine: remembered.arrivalRoutine ?? base.arrivalRoutine,
+    departureRoutine: remembered.departureRoutine ?? base.departureRoutine,
+  };
+}
+
 function buildDefaultForm(): FormShape {
   const arrival = new Date(Date.now() + 30 * 86400000);
   const departure = new Date(arrival.getTime() + 7 * 86400000);
