@@ -53,6 +53,18 @@ type RequestRow = {
   status: string;
   source: string | null;
   receivedAt: string;
+  // Most-recent mutation timestamp (assignment, status change, note,
+  // quote sent). Drives the "Xm ago" chip in the inbox so the owner
+  // sees who's actively moving the deal vs sitting on it.
+  lastActivityAt?: string | null;
+  // Assignee surfaced in the inbox so the owner can see at a glance
+  // "who's working on what". null = unassigned (which is itself a
+  // signal worth surfacing in red).
+  assignedTo?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
   client: {
     name: string | null;
     email: string | null;
@@ -1017,20 +1029,75 @@ function ActiveProposalTile({
 function InboxTile({ requests }: { requests: RequestRow[] | null }) {
   const { tokens } = useDashboardTheme();
   const loaded = requests !== null;
-  const top = (requests ?? []).slice(0, 3);
-  const openCount = (requests ?? []).length;
+  const all = requests ?? [];
+
+  // Counts the owner cares about at a glance:
+  //   open       — total active requests in the inbox
+  //   unassigned — sitting in the inbox with nobody working on them
+  //   hot        — high-priority by status (`hot`) OR no-touch in 48h+
+  // The hot heuristic mirrors the Action Center's hot-deals filter so
+  // the dashboard tells one coherent story.
+  //
+  // Date.now() lives in useState's lazy initialiser — that's the
+  // sanctioned escape hatch for impure-call-in-render, and the value
+  // is locked to mount time which is exactly what we want for the
+  // 48h staleness comparison.
+  const [now] = useState(() => Date.now());
+  const HOT_STALE_MS = 48 * 60 * 60 * 1000;
+  const isHot = (r: RequestRow) =>
+    r.status === "hot" ||
+    (now - new Date(r.lastActivityAt ?? r.receivedAt).getTime() > HOT_STALE_MS &&
+      r.status !== "booked" &&
+      r.status !== "completed" &&
+      r.status !== "not_booked");
+  const openCount = all.length;
+  const unassignedCount = all.filter((r) => !r.assignedTo).length;
+  const hotCount = all.filter(isHot).length;
+
+  // Sort hot deals to the top of the visible list so the owner sees
+  // the things that need attention first. Within each group, newest
+  // activity first.
+  const sorted = [...all].sort((a, b) => {
+    const aHot = isHot(a) ? 1 : 0;
+    const bHot = isHot(b) ? 1 : 0;
+    if (aHot !== bHot) return bHot - aHot;
+    const aT = new Date(a.lastActivityAt ?? a.receivedAt).getTime();
+    const bT = new Date(b.lastActivityAt ?? b.receivedAt).getTime();
+    return bT - aT;
+  });
+  const top = sorted.slice(0, 4);
 
   return (
     <Tile href="/requests">
       <div className="flex items-baseline justify-between gap-2 mb-3">
         <Eyebrow>Inbox</Eyebrow>
         {loaded && openCount > 0 && (
-          <span
-            className="text-[10.5px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
-            style={{ background: tokens.primarySoft, color: tokens.primary }}
-          >
-            {openCount} open
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="text-[10.5px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+              style={{ background: tokens.primarySoft, color: tokens.primary }}
+            >
+              {openCount} open
+            </span>
+            {hotCount > 0 && (
+              <span
+                className="text-[10.5px] font-semibold tabular-nums px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                style={{ background: "rgba(217,122,110,0.14)", color: "#b34334" }}
+              >
+                <span aria-hidden>🔥</span>
+                {hotCount}
+              </span>
+            )}
+            {unassignedCount > 0 && (
+              <span
+                className="text-[10.5px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+                style={{ background: tokens.ring, color: tokens.muted }}
+                title={`${unassignedCount} request${unassignedCount === 1 ? "" : "s"} with no owner`}
+              >
+                {unassignedCount} unassigned
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -1051,28 +1118,64 @@ function InboxTile({ requests }: { requests: RequestRow[] | null }) {
         </div>
       ) : (
         <ul className="space-y-2.5">
-          {top.map((r) => (
-            <li key={r.id} className="flex items-baseline gap-2">
-              <div
-                className="text-[10px] font-mono shrink-0 tabular-nums"
-                style={{ color: tokens.muted }}
-              >
-                {r.referenceNumber ?? "—"}
-              </div>
-              <div className="flex-1 min-w-0">
+          {top.map((r) => {
+            const hot = isHot(r);
+            const activityTs = r.lastActivityAt ?? r.receivedAt;
+            const ownerLabel = r.assignedTo
+              ? r.assignedTo.name?.split(" ")[0] || r.assignedTo.email?.split("@")[0] || "Owner"
+              : null;
+            return (
+              <li key={r.id} className="flex items-start gap-2">
                 <div
-                  className="text-[12.5px] font-medium truncate"
-                  style={{ color: tokens.heading }}
+                  className="text-[10px] font-mono shrink-0 tabular-nums pt-0.5"
+                  style={{ color: tokens.muted }}
                 >
-                  {r.client?.name || r.client?.email || "Unknown"}
+                  {r.referenceNumber ?? "—"}
                 </div>
-                <div className="text-[10.5px] truncate" style={{ color: tokens.muted }}>
-                  {r.source ? `${r.source} · ` : ""}
-                  {formatRelative(r.receivedAt)}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-1.5">
+                    {hot && <span className="text-[12px] shrink-0" aria-hidden>🔥</span>}
+                    <div
+                      className="text-[12.5px] font-medium truncate"
+                      style={{ color: tokens.heading }}
+                    >
+                      {r.client?.name || r.client?.email || "Unknown"}
+                    </div>
+                  </div>
+                  <div
+                    className="text-[10.5px] truncate flex items-center gap-1.5 mt-0.5"
+                    style={{ color: tokens.muted }}
+                  >
+                    {ownerLabel ? (
+                      <span
+                        className="px-1.5 py-px rounded font-semibold"
+                        style={{
+                          background: tokens.primarySoft,
+                          color: tokens.primary,
+                          fontSize: "10px",
+                        }}
+                      >
+                        {ownerLabel}
+                      </span>
+                    ) : (
+                      <span
+                        className="px-1.5 py-px rounded font-semibold"
+                        style={{
+                          background: "rgba(217,122,110,0.12)",
+                          color: "#b34334",
+                          fontSize: "10px",
+                        }}
+                      >
+                        Unassigned
+                      </span>
+                    )}
+                    <span>{formatRelative(activityTs)}</span>
+                    {r.source && <span>· {r.source}</span>}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

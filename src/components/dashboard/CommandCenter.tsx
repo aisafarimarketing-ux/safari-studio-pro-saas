@@ -474,6 +474,16 @@ function CommandSidebar({
           <SidebarItem href="/reservations" label="Reservations" badge={sidebarCounts?.reservations} />
         </SidebarGroup>
 
+        {/* WORKSPACE — org-level config the operator manages occasionally
+            but needs visible from any page. Brand DNA + Team are the
+            two settings sections operators visit often enough to deserve
+            top-level entries (Brand DNA drives every AI draft + every
+            new proposal's defaults; Team is owner / admin work). */}
+        <SidebarGroup label="Workspace">
+          <SidebarItem href="/settings/brand" label="Brand DNA" />
+          <SidebarItem href="/settings/team" label="Team" />
+        </SidebarGroup>
+
         {/* ACTION CENTER */}
         <SidebarGroup label="Action Center">
           <ActionCenterRow
