@@ -42,12 +42,38 @@ const SECTION_TO_TAB: Record<SectionKey, Tab> = {
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
+const VALID_TABS: readonly Tab[] = [
+  "overview",
+  "brandCore",
+  "voiceTone",
+  "visualStyle",
+  "sections",
+  "propertyPreferences",
+  "aiInstructions",
+] as const;
+
+function tabFromHash(): Tab {
+  if (typeof window === "undefined") return "overview";
+  const raw = window.location.hash.replace(/^#/, "") as Tab;
+  return VALID_TABS.includes(raw) ? raw : "overview";
+}
+
 export function BrandDNAPage() {
   const [form, setForm] = useState<BrandDNAForm>(EMPTY_FORM);
   const [propertyPrefs, setPropertyPrefs] = useState<PropertyPrefRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Initial tab honours the URL hash so deep-links from the
+  // sidebar (#visualStyle) open the right tab. Listen for hash
+  // changes too so navigation between hashes within the page
+  // updates state without a full reload.
   const [tab, setTab] = useState<Tab>("overview");
+  useEffect(() => {
+    setTab(tabFromHash());
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
