@@ -148,28 +148,28 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "closing",
     label: "Closing",
     icon: "◐",
-    description: "Elegant sign-off from the consultant",
-    variants: [
-      "decision-card",
-      "conversion-card",
-      "closing-farewell",
-      "booking-recap",
-      "quote-led",
-      "letter-style",
-      "centered-minimal",
-      "cta-card",
-    ],
-    defaultVariant: "decision-card",
+    description: "Image rail · letter · Secure-This-Safari CTA · share / download / changes / website",
+    // Three layouts share the same four pillars: destination image
+    // rail, editable letter, primary WhatsApp "Secure" CTA, secondary
+    // action row. Old variant names ("decision-card" etc.) on legacy
+    // proposals fall through to split-card via the dispatcher.
+    variants: ["split-card", "gallery-row", "stack"],
+    defaultVariant: "split-card",
     defaultContent: {
+      headline: "Your journey is ready",
+      letter:
+        "Now please review every section and let me know what needs adjusting — lodge choices, pace, optional activities, anything. I'll hold these camp dates for seven days while you confirm. Once you're ready, we'll move to booking and I'll send the detailed pre-trip briefing and packing list.",
+      availability:
+        "Availability at selected camps is limited and subject to confirmation.",
+      ctaLabel: "Secure This Safari",
+      // Legacy fields kept so old saved proposals don't lose data:
       quote: "Africa changes you.",
       signOff:
-        "We've secured the camps, mapped every route, and prepared everything for your journey. This is your moment to lock it in.",
-      urgency:
-        "Availability is limited — we recommend confirming within 48 hours.",
-      ctaLabel: "Secure Your Safari →",
-      ctaSubtext: "Secure booking · No payment today",
-      proofTitle: "Your safari, personally managed",
-      proofBody: "We're with you from planning to arrival.",
+        "We've secured the camps, mapped every route, and prepared everything for your journey.",
+      urgency: "",
+      ctaSubtext: "",
+      proofTitle: "",
+      proofBody: "",
     },
   },
   footer: {
