@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import { RouteMap, type RouteCoord } from "./RouteMap";
+// RouteMap (Leaflet-based geographic map) is no longer rendered — the
+// InteractiveMap variant now uses RouteSchematic, a pure-SVG itinerary
+// diagram. The legacy file is kept untouched for reference / future
+// reuse but isn't imported anywhere in the active render path.
+import { RouteSchematic, computeSchematicAspect } from "./RouteSchematic";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import { countryOf } from "@/lib/destinationOrdering";
 
@@ -107,14 +111,12 @@ export function MapSection({ section }: { section: Section }) {
   // appear in older proposals' `layoutVariant` field but they render
   // identically here; the SectionChrome variant switcher is hidden
   // because the registry now lists only `interactive`.
-  const cachedCoords = (section.content.coords as RouteCoord[] | undefined) ?? undefined;
   return (
     <InteractiveMap
       section={section}
       days={days}
       activeTier={activeTier as TierKey}
       properties={proposal.properties}
-      cachedCoords={cachedCoords}
       theme={theme}
       tokens={tokens}
       countryName={countryName}
@@ -129,9 +131,6 @@ export function MapSection({ section }: { section: Section }) {
       onStartPointChange={(next) => updateSectionContent(section.id, { startPoint: next })}
       onEndPointChange={(next) => updateSectionContent(section.id, { endPoint: next })}
       onCountryNameChange={(next) => updateSectionContent(section.id, { countryName: next })}
-      onCoordsResolved={(coords) => {
-        if (isEditor) updateSectionContent(section.id, { coords });
-      }}
     />
   );
 }
@@ -192,7 +191,6 @@ function InteractiveMap({
   days,
   activeTier,
   properties,
-  cachedCoords,
   theme,
   tokens,
   countryName,
@@ -207,13 +205,11 @@ function InteractiveMap({
   onStartPointChange,
   onEndPointChange,
   onCountryNameChange,
-  onCoordsResolved,
 }: {
   section: Section;
   days: Day[];
   activeTier: TierKey;
   properties: import("@/lib/types").Property[];
-  cachedCoords?: RouteCoord[];
   theme: import("@/lib/types").ProposalTheme;
   tokens: import("@/lib/types").ThemeTokens;
   countryName: string;
@@ -228,13 +224,13 @@ function InteractiveMap({
   onStartPointChange: (next: string) => void;
   onEndPointChange: (next: string) => void;
   onCountryNameChange: (next: string) => void;
-  onCoordsResolved: (coords: RouteCoord[]) => void;
 }) {
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const groupedRows = groupDayRows(days, activeTier);
 
   // Map row.startDay → the first day.id in that group so card selection
-  // can drive RouteMap.selectedDayId.
+  // can drive the rail's highlight (the schematic itself doesn't
+  // animate to a stop — pure SVG static layout).
   const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
 
   const findDayIdForRow = (startDay: number): string | undefined =>
@@ -246,24 +242,13 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  // Route bbox aspect — drives the map column's CSS aspect-ratio so
-  // the route fills the frame exactly, without empty Lake Victoria /
-  // Indian Ocean / Kenya around it. Operator brief: "make it occupy
-  // the billboard". Computed from cached coords; falls back to a
-  // gentle default before coords resolve.
-  const mapAspect = (() => {
-    if (!cachedCoords || cachedCoords.length < 2) return 1.2;
-    const lats = cachedCoords.map((c) => c.lat);
-    const lngs = cachedCoords.map((c) => c.lng);
-    const latSpan = Math.max(...lats) - Math.min(...lats);
-    const lngSpan = Math.max(...lngs) - Math.min(...lngs);
-    if (latSpan < 0.001 || lngSpan < 0.001) return 1.2;
-    // Clamp so very-narrow trips (single park) don't produce extreme
-    // aspect ratios. Range 0.7 (slightly portrait) to 1.8 (modest
-    // landscape) covers every practical East African itinerary.
-    const raw = lngSpan / latSpan;
-    return Math.min(1.8, Math.max(0.7, raw));
-  })();
+  // Map column's CSS aspect-ratio, sourced from the schematic itself
+  // — RouteSchematic computes a fixed viewBox per day count, and
+  // computeSchematicAspect returns its W:H. The container matches
+  // exactly so the SVG fills the cell without distortion. No
+  // dependency on async-resolved coords any more — the schematic
+  // doesn't use real lat/lng for layout.
+  const mapAspect = computeSchematicAspect(days);
 
   return (
     <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
@@ -476,39 +461,21 @@ function InteractiveMap({
               parent grid + height="100%" on RouteMap is what couples
               the two. ─────────────────────────── */}
           <div className="min-w-0">
-            {days.length > 0 ? (
-              <div
-                className="overflow-hidden relative w-full"
-                style={{
-                  aspectRatio: mapAspect,
-                  borderRadius: 10,
-                  border: `1px solid ${tokens.border}`,
-                }}
-              >
-                <RouteMap
-                  days={days}
-                  tokens={tokens}
-                  cachedCoords={cachedCoords}
-                  onCoordsResolved={onCoordsResolved}
-                  height="100%"
-                  selectedDayId={selectedDayId}
-                  presentationMode={!isEditor}
-                />
-              </div>
-            ) : (
-              <div
-                className="flex items-center justify-center text-[13px] w-full"
-                style={{
-                  aspectRatio: mapAspect,
-                  background: tokens.cardBg,
-                  color: tokens.mutedText,
-                  borderRadius: 10,
-                  border: `1px solid ${tokens.border}`,
-                }}
-              >
-                {isEditor ? "Add days with destinations to draw the route." : "Route coming soon."}
-              </div>
-            )}
+            <div
+              className="overflow-hidden relative w-full"
+              style={{
+                aspectRatio: mapAspect,
+                borderRadius: 10,
+                border: `1px solid ${tokens.border}`,
+              }}
+            >
+              <RouteSchematic
+                days={days}
+                tokens={tokens}
+                theme={theme}
+                isEditor={isEditor}
+              />
+            </div>
           </div>
         </div>
       </div>
