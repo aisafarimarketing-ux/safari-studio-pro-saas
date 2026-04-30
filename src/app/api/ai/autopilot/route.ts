@@ -524,13 +524,14 @@ DAYS — THE SINGLE MOST IMPORTANT FIELD:
 - The schema is ordered so days appears FIRST. Write it first, completely, before any cosmetic prose. Do not skip ahead to cover/greeting/closing — those come later in the schema for a reason.
 - If you are running short on output budget after days+lists, write SHORT cosmetic prose (one-sentence cover.tagline, two-sentence closing.signOff). It is fine for cosmetic prose to be terse — operators can refresh those via the per-section AI Write button.
 
-WHEN trip.schedule IS PROVIDED (array of {dayNumber, destination}):
-- The schedule LOCKS which destination goes on which day. It does NOT replace the days[] array — you still WRITE the full days[] yourself, you just match each day's destination to schedule[N-1].destination.
-- Concretely: if schedule has 7 entries, you produce a days[] array of length 7, where days[0].destination = schedule[0].destination, days[1].destination = schedule[1].destination, etc.
-- You write the narrative, highlights, optional activities, tiers, transfer captions, and momentOfDay for EVERY day in the schedule. The schedule constrains destinations, not your prose.
-- You may NOT skip days, swap destinations, or return fewer days than the schedule has entries.
+WHEN trip.writingPlan IS PROVIDED (array of {night, destination}):
+- writingPlan tells you which destination to write about for each night. It's a writing guide, NOT the days output.
+- You MUST produce one entry in days[] for each entry in writingPlan. days.length === writingPlan.length.
+- Concretely: writingPlan has 7 entries → you write a days[] array with 7 entries. days[0].destination = writingPlan[0].destination ("Arusha"), days[0].description = your narrative for night 1 in Arusha, etc.
+- For every night in writingPlan, fill: destination, country, description, momentOfDay, board, highlights, optionalActivities, tiers, driveTimeBefore.
+- Do NOT confuse writingPlan with the output. writingPlan is the input outline. days[] is what you WRITE.
 
-WHEN trip.schedule IS NOT PROVIDED:
+WHEN trip.writingPlan IS NOT PROVIDED:
 - Distribute the destinations across the requested number of days yourself. No single-night stops unless the trip demands it.
 
 CAMP PICKS:
@@ -611,23 +612,27 @@ PRACTICAL INFO:
     }
   }
 
-  // The AI prompt sees only a thin schedule projection — destination
-  // per day. Per-stop pre-picked properties become a separate hint
-  // ("for these tiers/days, use these specific properties") so the
-  // AI fills surrounding tiers from the library but doesn't fight
-  // the operator's explicit pick.
-  const aiSchedule = schedule.map(({ dayNumber, destination }) => ({ dayNumber, destination }));
+  // Build a per-night itinerary outline the AI uses as its writing
+  // guide. Renamed from "schedule" because the model was reading
+  // "schedule provided" as "days are already defined, no need to
+  // populate days[]" and returning empty arrays. The new framing —
+  // "writingPlan" — is unambiguous: this is a list of nights the AI
+  // must write narrative for.
+  const writingPlan = schedule.map(({ dayNumber, destination }) => ({
+    night: dayNumber,
+    destination,
+  }));
 
   const userPayload = {
     trip: {
       title: proposal.metadata?.title || proposal.trip?.title || "Safari",
       nights,
       destinations,
-      // Schedule is the operator-supplied truth — when present, the
-      // AI must fill day N's narrative for the destination listed at
-      // schedule[N]. Empty schedule means legacy mode (AI distributes
-      // destinations across days itself).
-      schedule: aiSchedule.length > 0 ? aiSchedule : undefined,
+      // Per-night writing guide — when present, days[N-1] MUST exist
+      // and have destination matching writingPlan[N-1].destination.
+      // Field renamed from "schedule" to avoid the AI mis-reading
+      // it as "days are already done".
+      writingPlan: writingPlan.length > 0 ? writingPlan : undefined,
       tripStyle,
       pace,
       interests: interests.length > 0 ? interests : undefined,
