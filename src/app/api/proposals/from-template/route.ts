@@ -5,7 +5,9 @@ import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
 import { applyIdentityToOperator } from "@/lib/consultantIdentity";
 import {
   applyBrandDefaultsToTheme,
+  applyBrandDefaultsToSections,
   type BrandColor,
+  type BrandSectionStyles,
 } from "@/lib/brandDNA";
 
 // ─── POST /api/proposals/from-template ─────────────────────────────────────
@@ -70,7 +72,12 @@ export async function POST(req: Request) {
   // still override per-proposal via SectionChrome.
   const brand = await prisma.brandDNAProfile.findUnique({
     where: { organizationId: ctx.organization.id },
-    select: { brandColors: true, headingFont: true, bodyFont: true },
+    select: {
+      brandColors: true,
+      headingFont: true,
+      bodyFont: true,
+      sectionStyles: true,
+    },
   });
   if (brand) {
     proposal.theme = applyBrandDefaultsToTheme(proposal.theme, {
@@ -78,6 +85,12 @@ export async function POST(req: Request) {
       headingFont: brand.headingFont,
       bodyFont: brand.bodyFont,
     });
+    // Per-section overrides — brand defaults fill in section
+    // styleOverrides where the template doesn't already set them.
+    proposal.sections = applyBrandDefaultsToSections(
+      proposal.sections,
+      (brand.sectionStyles as BrandSectionStyles | null) ?? null,
+    );
     // Also seed operator brand colours so closing / footer chrome
     // that references operator.brandColors picks them up.
     const primary =

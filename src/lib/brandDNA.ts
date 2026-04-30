@@ -63,7 +63,13 @@ export type VoiceAxisKey = (typeof VOICE_AXES)[number]["key"];
 
 // ─── Shared Value Types ─────────────────────────────────────────────────────
 
-import type { ProposalTheme, ThemeTokens } from "@/lib/types";
+import type {
+  ProposalTheme,
+  Section,
+  SectionType,
+  StyleOverrides,
+  ThemeTokens,
+} from "@/lib/types";
 
 export type BrandColor = { hex: string; role?: string };
 export type BrandImage = { url: string; caption?: string; tags?: string[] };
@@ -113,6 +119,41 @@ export function applyBrandDefaultsToTheme(
     bodyFont: defaults.bodyFont || theme.bodyFont,
     tokens,
   };
+}
+
+// ─── Per-section overrides ───────────────────────────────────────────────
+//
+// BrandDNAProfile.sectionStyles stores a Record<SectionType, partial
+// style block> — the org's preferred fonts + colours per section
+// kind. At proposal-clone time this layer merges underneath any
+// overrides the template already carries (template wins) and over
+// the global theme tokens, giving each section the right starting
+// look without manual SectionChrome editing.
+
+export type BrandSectionStyles = Partial<
+  Record<SectionType, Partial<StyleOverrides>>
+>;
+
+/** Returns a NEW sections array with per-section brand overrides
+ *  applied. Sections retain their template-supplied overrides
+ *  (those win); brand defaults fill any unset keys for that
+ *  section type. */
+export function applyBrandDefaultsToSections(
+  sections: Section[],
+  styles: BrandSectionStyles | null,
+): Section[] {
+  if (!styles || Object.keys(styles).length === 0) return sections;
+  return sections.map((section) => {
+    const brandForType = styles[section.type];
+    if (!brandForType) return section;
+    return {
+      ...section,
+      styleOverrides: {
+        ...brandForType, // brand fills first
+        ...section.styleOverrides, // template overrides override brand
+      },
+    };
+  });
 }
 
 // ─── Completion ─────────────────────────────────────────────────────────────

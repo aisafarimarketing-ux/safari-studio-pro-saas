@@ -12,6 +12,7 @@ import { computeBrandDNACompletion, type BrandDNACompletion, type SectionKey } f
 import { BrandCoreTab } from "./BrandCoreTab";
 import { VoiceToneTab } from "./VoiceToneTab";
 import { VisualStyleTab } from "./VisualStyleTab";
+import { SectionsTab } from "./SectionsTab";
 import { PropertyPreferencesTab } from "./PropertyPreferencesTab";
 import { AIInstructionsTab } from "./AIInstructionsTab";
 import { OverviewTab } from "./OverviewTab";
@@ -19,13 +20,14 @@ import { CompletionRing } from "./CompletionRing";
 import type { BrandDNAForm, PropertyPrefRow } from "./types";
 import { EMPTY_FORM } from "./types";
 
-type Tab = "overview" | "brandCore" | "voiceTone" | "visualStyle" | "propertyPreferences" | "aiInstructions";
+type Tab = "overview" | "brandCore" | "voiceTone" | "visualStyle" | "sections" | "propertyPreferences" | "aiInstructions";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "brandCore", label: "Brand Core" },
   { id: "voiceTone", label: "Voice & Tone" },
   { id: "visualStyle", label: "Visual Style" },
+  { id: "sections", label: "Sections" },
   { id: "propertyPreferences", label: "Property Preferences" },
   { id: "aiInstructions", label: "AI Instructions" },
 ];
@@ -161,6 +163,7 @@ export function BrandDNAPage() {
               {tab === "brandCore" && <BrandCoreTab form={form} update={update} />}
               {tab === "voiceTone" && <VoiceToneTab form={form} update={update} />}
               {tab === "visualStyle" && <VisualStyleTab form={form} update={update} />}
+              {tab === "sections" && <SectionsTab form={form} update={update} />}
               {tab === "propertyPreferences" && (
                 <PropertyPreferencesTab
                   form={form}
@@ -389,6 +392,10 @@ function hydrateForm(profile: LoadedProfile | null): BrandDNAForm {
     imageLibrary: Array.isArray(profile.imageLibrary)
       ? (profile.imageLibrary as BrandDNAForm["imageLibrary"])
       : [],
+    sectionStyles:
+      profile.sectionStyles && typeof profile.sectionStyles === "object"
+        ? (profile.sectionStyles as BrandDNAForm["sectionStyles"])
+        : {},
 
     tierBias: (profile.tierBias as string | null) ?? "",
     styleBias: Array.isArray(profile.styleBias) ? (profile.styleBias as string[]) : [],

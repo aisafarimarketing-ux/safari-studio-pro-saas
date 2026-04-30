@@ -122,6 +122,10 @@ function sanitize(body: Record<string, unknown>) {
   setIf("customFontUrl", str(body.customFontUrl));
   setIf("preferredImageStyles", stringArray(body.preferredImageStyles));
   setIf("imageLibrary", jsonValue(body.imageLibrary));
+  // Per-section style overrides (sanitised on the client before this
+  // call; we accept the JSON shape verbatim and trust the client to
+  // emit only sectionType keys we recognise).
+  setIf("sectionStyles", jsonValue(body.sectionStyles));
 
   // Property preferences
   setIf("tierBias", str(body.tierBias));

@@ -204,6 +204,12 @@ model BrandDNAProfile {
   customFontUrl        String?
   preferredImageStyles String[] // e.g. "wildlife_closeup", "landscape", "lodge_interior", "guest_experience", "beach", "cultural"
   imageLibrary         Json? // [{ url: string, caption?: string, tags?: string[] }]
+  // Per-section style overrides — keyed by SectionType. Each value
+  // is a partial StyleOverrides record (sectionSurface, cardBg,
+  // accent, headingText, dayHeadBg, displayFont, bodyFont, etc.).
+  // Applied at proposal-clone time; per-proposal SectionChrome
+  // edits still win.
+  sectionStyles        Json? // Record<SectionType, Partial<StyleOverrides & { displayFont, bodyFont }>>
 
   // Property preferences — global biases (per-property rows live in
   // BrandDNAPropertyPreference).

@@ -1,7 +1,7 @@
 // Client-side types mirror the server-side BrandDNAProfile. We use our own
 // type so we don't leak DB-only fields (ids, timestamps) into the form state.
 
-import type { BrandColor, BrandImage } from "@/lib/brandDNA";
+import type { BrandColor, BrandImage, BrandSectionStyles } from "@/lib/brandDNA";
 
 export interface BrandDNAForm {
   // Brand Core
@@ -26,6 +26,8 @@ export interface BrandDNAForm {
   customFontUrl: string;
   preferredImageStyles: string[];
   imageLibrary: BrandImage[];
+  // Per-section style overrides — keyed by SectionType.
+  sectionStyles: BrandSectionStyles;
 
   // Property Preferences
   tierBias: string;
@@ -61,6 +63,7 @@ export const EMPTY_FORM: BrandDNAForm = {
   customFontUrl: "",
   preferredImageStyles: [],
   imageLibrary: [],
+  sectionStyles: {},
   tierBias: "",
   styleBias: [],
   aiInstructions: "",
