@@ -8,7 +8,7 @@ import { resolveTokens } from "@/lib/theme";
 // InteractiveMap variant now uses RouteSchematic, a pure-SVG itinerary
 // diagram. The legacy file is kept untouched for reference / future
 // reuse but isn't imported anywhere in the active render path.
-import { RouteSchematic, computeSchematicAspect } from "./RouteSchematic";
+import { RouteSchematic } from "./RouteSchematic";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import { countryOf } from "@/lib/destinationOrdering";
 
@@ -242,13 +242,13 @@ function InteractiveMap({
     return properties.find((p) => p.name.trim().toLowerCase() === lc) ?? null;
   };
 
-  // Map column's CSS aspect-ratio, sourced from the schematic itself
-  // — RouteSchematic computes a fixed viewBox per day count, and
-  // computeSchematicAspect returns its W:H. The container matches
-  // exactly so the SVG fills the cell without distortion. No
-  // dependency on async-resolved coords any more — the schematic
-  // doesn't use real lat/lng for layout.
-  const mapAspect = computeSchematicAspect(days);
+  // Equal heights for rail + map: the grid uses items-stretch so
+  // both cells share the row's height (driven by the rail's natural
+  // content). The SVG inside the map cell uses preserveAspectRatio
+  // "xMidYMid meet" — content stays undistorted, any slack inside
+  // the cell is absorbed by the SVG's own parchment / land fill.
+  // computeSchematicAspect retained as a no-op shim for backwards
+  // compat; aspect is no longer applied as CSS.
 
   return (
     <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
@@ -325,13 +325,12 @@ function InteractiveMap({
           </div>
         </header>
 
-        {/* Rail (day cards + END) ‖ map. items-start so the rail and
-            map can have INDEPENDENT natural heights. The map column
-            uses CSS aspect-ratio to size itself to the route's bbox
-            aspect — that's how it "fills the billboard" with no empty
-            geography around the route. The shorter column's empty
-            cell space shows through to the section's bg. */}
-        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-start">
+        {/* Rail (day cards + END) ‖ map. items-stretch so both
+            columns share the SAME height — rail-driven (whichever
+            content is taller drives the row). The SVG inside the
+            map cell scales to fill via preserveAspectRatio meet,
+            with parchment land fill absorbing any aspect slack. */}
+        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
           {/* Sidebar */}
           <div className="flex flex-col pr-1">
             {/* Day cards — clickable, fly the map to the selected pin.
@@ -460,11 +459,10 @@ function InteractiveMap({
               rail's natural content height. items-stretch on the
               parent grid + height="100%" on RouteMap is what couples
               the two. ─────────────────────────── */}
-          <div className="min-w-0">
+          <div className="min-w-0 flex">
             <div
-              className="overflow-hidden relative w-full"
+              className="overflow-hidden relative flex-1 min-h-0"
               style={{
-                aspectRatio: mapAspect,
                 borderRadius: 10,
                 border: `1px solid ${tokens.border}`,
               }}
