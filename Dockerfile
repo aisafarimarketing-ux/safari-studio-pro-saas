@@ -47,4 +47,11 @@ RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+# Run `prisma db push` on every container start so the database
+# schema stays in sync with prisma/schema.prisma without an explicit
+# manual migration step. Without --accept-data-loss the push refuses
+# any destructive change (column / table drop), so it's safe for
+# additive evolutions; if a destructive change ever lands, the
+# container will fail loudly instead of silently dropping data.
+# Falls back to next start when push succeeds.
+CMD ["sh", "-c", "npx prisma db push && npm run start"]
