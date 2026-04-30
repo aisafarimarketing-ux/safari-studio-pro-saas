@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { ExpandingCards, type CardItem } from "@/components/ui/ExpandingCards";
 import { getGlyphForDestination } from "@/lib/wildlifeGlyphs";
+import { IntelligentColorPicker } from "@/components/ui/IntelligentColorPicker";
 import type {
   Section,
   Day,
@@ -253,6 +255,8 @@ export function ClosingSection({ section }: { section: Section }) {
     "Availability at selected camps is limited and subject to confirmation.";
   const ctaLabel =
     (section.content.ctaLabel as string) || PRIMARY_CTA_DEFAULT;
+  const ctaBg = section.content.ctaBg as string | undefined;
+  const ctaTextColor = section.content.ctaTextColor as string | undefined;
   const imageOverrides =
     (section.content.imageOverrides as Record<string, string> | undefined) ?? undefined;
 
@@ -345,6 +349,8 @@ export function ClosingSection({ section }: { section: Section }) {
     updateSectionContent(section.id, { availability: v });
   const onCtaLabelChange = (v: string) =>
     updateSectionContent(section.id, { ctaLabel: v });
+  const onCtaBgChange = (next: { bg: string; textColor: string }) =>
+    updateSectionContent(section.id, { ctaBg: next.bg, ctaTextColor: next.textColor });
 
   // Image-swap handler used by ExpandingCards (id maps directly to
   // the destination key we use for overrides).
@@ -359,6 +365,8 @@ export function ClosingSection({ section }: { section: Section }) {
     letter,
     availability,
     ctaLabel,
+    ctaBg,
+    ctaTextColor,
     operator,
     accentColor: tokens.accent,
     cardColor: tokens.cardBg,
@@ -374,6 +382,7 @@ export function ClosingSection({ section }: { section: Section }) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
+    onCtaBgChange,
     onChangeCardImage,
   };
 
@@ -391,6 +400,8 @@ interface VariantProps {
   letter: string;
   availability: string;
   ctaLabel: string;
+  ctaBg?: string;
+  ctaTextColor?: string;
   operator: OperatorProfile;
   accentColor: string;
   cardColor: string;
@@ -406,6 +417,7 @@ interface VariantProps {
   onLetterChange: (v: string) => void;
   onAvailabilityChange: (v: string) => void;
   onCtaLabelChange: (v: string) => void;
+  onCtaBgChange: (next: { bg: string; textColor: string }) => void;
   onChangeCardImage: (id: string | number, file: File) => void;
 }
 
@@ -439,7 +451,10 @@ function SplitCardLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
+    onCtaBgChange,
     onChangeCardImage,
+    ctaBg,
+    ctaTextColor,
   } = p;
   return (
     <div
@@ -508,6 +523,9 @@ function SplitCardLayout(p: VariantProps) {
               tokens={tokens}
               onClick={onSecure}
               onLabelChange={onCtaLabelChange}
+              ctaBg={ctaBg}
+              ctaTextColor={ctaTextColor}
+              onCtaBgChange={onCtaBgChange}
             />
           </div>
           <SecondaryActions
@@ -552,7 +570,10 @@ function GalleryRowLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
+    onCtaBgChange,
     onChangeCardImage,
+    ctaBg,
+    ctaTextColor,
   } = p;
   return (
     <div
@@ -619,6 +640,9 @@ function GalleryRowLayout(p: VariantProps) {
               tokens={tokens}
               onClick={onSecure}
               onLabelChange={onCtaLabelChange}
+              ctaBg={ctaBg}
+              ctaTextColor={ctaTextColor}
+              onCtaBgChange={onCtaBgChange}
             />
           </div>
           <SecondaryActions
@@ -663,7 +687,10 @@ function StackLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
+    onCtaBgChange,
     onChangeCardImage,
+    ctaBg,
+    ctaTextColor,
   } = p;
   return (
     <div
@@ -735,6 +762,9 @@ function StackLayout(p: VariantProps) {
                 tokens={tokens}
                 onClick={onSecure}
                 onLabelChange={onCtaLabelChange}
+                ctaBg={ctaBg}
+                ctaTextColor={ctaTextColor}
+                onCtaBgChange={onCtaBgChange}
               />
             </div>
             <SecondaryActions
@@ -764,38 +794,130 @@ function PrimaryCta({
   tokens,
   onClick,
   onLabelChange,
+  ctaBg,
+  ctaTextColor,
+  onCtaBgChange,
 }: {
   label: string;
   isEditor: boolean;
   tokens: ThemeTokens;
   onClick: () => void;
   onLabelChange: (v: string) => void;
+  ctaBg?: string;
+  ctaTextColor?: string;
+  onCtaBgChange?: (next: { bg: string; textColor: string }) => void;
 }) {
+  // Per-section overrides for the "Secure This Safari" button. Operators
+  // asked for full control of this colour (it's the most clicked thing
+  // in the proposal). Falls back to the theme accent + white text when
+  // unset, so existing proposals keep their look.
+  const bg = ctaBg || tokens.accent;
+  const text = ctaTextColor || autoTextOn(bg);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   return (
-    <button
-      type="button"
-      onClick={isEditor ? undefined : onClick}
-      className="w-full flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-[15px] font-semibold transition shadow-md hover:shadow-lg active:scale-[0.99]"
-      style={{
-        background: tokens.accent,
-        color: "#ffffff",
-        border: "1px solid rgba(0,0,0,0.05)",
-      }}
-    >
-      <span
-        contentEditable={isEditor}
-        suppressContentEditableWarning
-        onBlur={(e) => onLabelChange(e.currentTarget.textContent ?? "")}
-        onClick={(e) => isEditor && e.stopPropagation()}
-        style={{ outline: "none" }}
+    <div className="relative w-full">
+      <button
+        type="button"
+        onClick={isEditor ? undefined : onClick}
+        className="w-full flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-[15px] font-semibold transition shadow-md hover:shadow-lg active:scale-[0.99]"
+        style={{
+          background: bg,
+          color: text,
+          border: "1px solid rgba(0,0,0,0.05)",
+        }}
       >
-        {label}
-      </span>
-      <span aria-hidden style={{ opacity: 0.85, fontSize: 18 }}>
-        →
-      </span>
-    </button>
+        <span
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => onLabelChange(e.currentTarget.textContent ?? "")}
+          onClick={(e) => isEditor && e.stopPropagation()}
+          style={{ outline: "none" }}
+        >
+          {label}
+        </span>
+        <span aria-hidden style={{ opacity: 0.85, fontSize: 18 }}>
+          →
+        </span>
+      </button>
+      {isEditor && onCtaBgChange && (
+        <button
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          title="Change button colour"
+          className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center text-[12px] hover:scale-110 transition border"
+          style={{ borderColor: "rgba(0,0,0,0.1)" }}
+        >
+          <span
+            className="w-4 h-4 rounded-full"
+            style={{
+              background: bg,
+              border: "1px solid rgba(0,0,0,0.15)",
+            }}
+            aria-hidden
+          />
+        </button>
+      )}
+      {pickerOpen && onCtaBgChange && (
+        <div
+          className="absolute z-50 right-0 top-[calc(100%+8px)] bg-[#1a1a1a] rounded-xl shadow-2xl p-3 border border-white/10"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <IntelligentColorPicker
+            value={bg}
+            onChange={(hex) => onCtaBgChange({ bg: hex, textColor: autoTextOn(hex) })}
+            presets={CTA_PRESETS}
+          />
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="text-[11px] text-white/60 hover:text-white px-2 py-1"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
+}
+
+const CTA_PRESETS = [
+  { value: "#1b3a2d", label: "Forest" },
+  { value: "#2d5a40", label: "Sage" },
+  { value: "#c9a84c", label: "Gold" },
+  { value: "#b06a3b", label: "Copper" },
+  { value: "#b34334", label: "Brick" },
+  { value: "#3a6ea5", label: "Indigo" },
+  { value: "#101828", label: "Charcoal" },
+  { value: "#6c4d8a", label: "Plum" },
+  { value: "#0f7a5a", label: "Emerald" },
+];
+
+// Pick black or white text based on the bg's relative luminance — same
+// formula the IntelligentColorPicker uses for its AAA / AA badge.
+function autoTextOn(bg: string): string {
+  const rgb = bg.startsWith("#") ? hexToRgb(bg) : null;
+  if (!rgb) return "#ffffff";
+  const { r, g, b } = rgb;
+  const channel = (n: number) => {
+    const v = n / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const lum = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  return lum > 0.55 ? "#101828" : "#ffffff";
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const cleaned = hex.replace(/^#/, "");
+  const full = cleaned.length === 3 ? cleaned.split("").map((c) => c + c).join("") : cleaned.slice(0, 6);
+  if (full.length !== 6) return null;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+  return { r, g, b };
 }
 
 function SecondaryActions({

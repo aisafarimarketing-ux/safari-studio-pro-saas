@@ -9,8 +9,14 @@ import type { Proposal, Section } from "./types";
 // parallel canvas decodes thrash memory on low-end devices and a typical
 // proposal has ≤ 40 images.
 
-const TARGET_MAX_DIMENSION = 1200;
-const TARGET_QUALITY = 0.78;
+// Re-compression target — only kicks in when an autosaved proposal is
+// over the size guard. Bumped from 1200/0.78 to 1800/0.85: even after
+// the size-guard recompression pass, images stay sharp on retina +
+// print. Operators were calling out "pictures look soft" — this was
+// a major contributor on proposals that had been autosaved past the
+// guard threshold.
+const TARGET_MAX_DIMENSION = 1800;
+const TARGET_QUALITY = 0.85;
 const TARGET_ENCODED_BYTES = 700 * 1024;
 
 export type RecompressResult = {
