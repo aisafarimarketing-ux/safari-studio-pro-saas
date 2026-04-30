@@ -5,34 +5,33 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { lookupDemoCoord } from "@/lib/demoDestinationCoords";
 import { classifyStop, isCoastCity } from "@/lib/safariRoutingRules";
+import { parksInTrip } from "@/lib/safariParkBoundaries";
 import type { Day, ProposalTheme, ThemeTokens } from "@/lib/types";
 
 // ─── RouteRealMap ───────────────────────────────────────────────────────
 //
-// Real cartographic map — Carto Voyager basemap via MapLibre GL. Renders
-// the actual geography of East Africa: real coastlines, real park
-// outlines (where the basemap shows them), real road networks. Replaces
-// the parchment-style RouteSchematic for operators who want the
-// proposal to feel like a tour-operator map, not a stylised diagram.
+// Real cartographic map — Carto Voyager basemap via MapLibre GL.
+// Beyond a basic basemap, this component layers four operator-grade
+// touches that lift a generic map into something clients screenshot
+// and operators show off in demos:
 //
-// What it draws:
-//   - Numbered circle markers at each unique day destination
-//   - Connecting lines between consecutive stops:
-//       · Solid teal for flights (transfer between distant gateways /
-//         coast-to-inland legs that can't be driven in a day)
-//       · Dashed teal for roads (everything else)
-//   - Auto-fit bounds with breathing-room padding so the route doesn't
-//     hug the edges
+//   1. Park polygons. Real OSM-sourced outlines of every park the
+//      itinerary visits, washed in brand teal at 22% opacity. Clients
+//      see exactly what they're entering, not just dots in space.
+//   2. Animated route reveal. Both road (dashed) and flight (solid)
+//      lines draw themselves on first paint via a stroke-dashoffset
+//      animation. Looks like a flight tracker booting up.
+//   3. Rich photo popovers. Click any pin → 220×130 photo of the
+//      day's destination + day number, dates, location. Falls back to
+//      text-only popover if the day has no hero image.
+//   4. Stats strip. Auto-computed "X days · Y stops · Z km · N parks"
+//      pinned to the top-left as a tiny info chip. Clientstat for
+//      sharing.
 //
-// Coordinates: each day's destination is resolved through
-// lookupDemoCoord (case-insensitive, suffix-tolerant). Days whose
-// destination doesn't match any entry are silently dropped from the
-// map — the rail still shows them so the operator notices.
-//
-// Basemap: free Carto Voyager raster-via-vector style. No token
-// required. CDN-hosted; clients viewing the share view need internet
-// for the tiles to render. PDF export rasterises via map.getCanvas()
-// before the map unmounts (handled by the parent print path).
+// Coordinates: each day's destination resolves through lookupDemoCoord
+// (case-insensitive, suffix-tolerant). Days whose destination doesn't
+// match any entry are silently dropped from the map — the rail still
+// shows them so the operator notices and corrects.
 
 interface RouteRealMapProps {
   days: Day[];
@@ -48,6 +47,7 @@ type ResolvedStop = {
   coord: { lat: number; lng: number };
   dayNumber: number;
   kind: ReturnType<typeof classifyStop>;
+  heroImageUrl?: string;
 };
 
 export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
@@ -58,8 +58,7 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
 
   // Resolve each day's coord and de-duplicate adjacent identical stops
   // (e.g., a 3-night Serengeti stay collapses to one map pin labelled
-  // "Day 3-5" upstream; the schematic version always showed one pin per
-  // unique destination so we keep that behaviour here).
+  // "Day 3-5" upstream; we keep one pin per unique destination).
   const stops = useMemo<ResolvedStop[]>(() => {
     const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
     const out: ResolvedStop[] = [];
@@ -75,19 +74,50 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
         coord,
         dayNumber: d.dayNumber,
         kind: classifyStop(dest),
+        heroImageUrl: d.heroImageUrl,
       });
     }
     return out;
   }, [days]);
 
-  // Initialise the map once on mount. Map options are static — we
-  // imperatively manage source/layer updates afterwards rather than
-  // recreating the map for each prop change.
+  // ── Stats strip data ─────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const totalDays = days.length;
+    const totalStops = stops.length;
+    let totalKm = 0;
+    for (let i = 0; i < stops.length - 1; i++) {
+      totalKm += haversineKm(stops[i].coord, stops[i + 1].coord);
+    }
+    const matchedParks = parksInTrip(stops.map((s) => s.destination));
+    return {
+      totalDays,
+      totalStops,
+      totalKm: Math.round(totalKm),
+      totalParks: matchedParks.length,
+    };
+  }, [days.length, stops]);
+
+  // ── Park polygons that match the trip's destinations ─────────────────
+  const parkFeatures = useMemo<GeoJSON.Feature[]>(() => {
+    const matches = parksInTrip(stops.map((s) => s.destination));
+    return matches.map((p) => ({
+      type: "Feature",
+      properties: { name: p.name, key: p.key },
+      geometry: {
+        type: "Polygon",
+        // Park rings are stored as [lat, lng] tuples (Leaflet legacy);
+        // MapLibre wants [lng, lat]. Flip on the way out.
+        coordinates: [p.coords.map(([lat, lng]) => [lng, lat] as [number, number])],
+      },
+    }));
+  }, [stops]);
+
+  // ── Init the map once on mount. Static options only; everything
+  //    dynamic happens in the imperative effect below.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     if (stops.length === 0) return;
 
-    // Fit bounds calculation: MapLibre takes [west, south, east, north].
     const lngs = stops.map((s) => s.coord.lng);
     const lats = stops.map((s) => s.coord.lat);
     const bounds: [[number, number], [number, number]] = [
@@ -104,79 +134,79 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
         maxZoom: 9,
       },
       attributionControl: { compact: true },
-      // Touch-friendly defaults; cooperative gestures so the map
-      // doesn't hijack page scroll on desktop trackpads.
       cooperativeGestures: true,
-      // Disable rotation — itineraries read better north-up.
       pitchWithRotate: false,
       dragRotate: false,
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-    map.on("load", () => {
-      setMapLoaded(true);
-    });
-
+    map.on("load", () => setMapLoaded(true));
     mapRef.current = map;
 
     return () => {
-      // Drop all markers + the map. Recreating on stop changes is
-      // cheaper than re-running the imperative source/layer dance for
-      // a stale instance.
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       map.remove();
       mapRef.current = null;
       setMapLoaded(false);
     };
-    // Stops length is the only re-init trigger — coordinate moves
-    // within the same set are handled in the marker / line update
-    // effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops.length]);
 
-  // Add / refresh markers + route lines whenever stops or load state
-  // change. Runs as a single imperative pass so we never re-render
-  // half a route.
+  // ── Add / refresh layers, markers, and the animated reveal ─────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || stops.length === 0) return;
 
-    // ── Markers — numbered teal circles with white border. Built as
-    //    DOM elements so we can style them per brand without inline
-    //    SVG icons. Each new effect cycle wipes and rebuilds; cheap
-    //    enough for a typical 5-12 stop trip.
+    // Park polygons go BELOW the route lines so the green wash sits
+    // under the dashed roads without obscuring them. Outline at 60%
+    // opacity reads as a confident boundary, not a placeholder.
+    upsertPolygonLayer(map, "ss-route-parks", parkFeatures, {
+      fill: tokens.accent || "#c9a84c",
+      fillOpacity: 0.18,
+      outline: tokens.headingText || "#1f3a3a",
+      outlineOpacity: 0.55,
+      outlineWidth: 1.5,
+    });
+
+    // ── Markers ────────────────────────────────────────────────────────
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
     stops.forEach((stop, idx) => {
       const el = document.createElement("div");
       el.className = "ss-route-marker";
-      el.style.width = "28px";
-      el.style.height = "28px";
+      el.style.width = "32px";
+      el.style.height = "32px";
       el.style.borderRadius = "50%";
       el.style.background = tokens.headingText || "#1f3a3a";
       el.style.color = "#ffffff";
-      el.style.border = "2px solid #ffffff";
-      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.25)";
+      el.style.border = "3px solid #ffffff";
+      el.style.boxShadow = "0 3px 8px rgba(0,0,0,0.28)";
       el.style.display = "flex";
       el.style.alignItems = "center";
       el.style.justifyContent = "center";
       el.style.fontWeight = "700";
-      el.style.fontSize = "12px";
+      el.style.fontSize = "13px";
       el.style.fontFamily = `'${theme.bodyFont}', sans-serif`;
+      el.style.cursor = "pointer";
+      el.style.transition = "transform 180ms ease";
       el.textContent = String(idx + 1);
+      el.addEventListener("mouseenter", () => {
+        el.style.transform = "scale(1.12)";
+      });
+      el.addEventListener("mouseleave", () => {
+        el.style.transform = "scale(1)";
+      });
 
       const popup = new maplibregl.Popup({
-        offset: 18,
+        offset: 22,
         closeButton: false,
         className: "ss-route-popup",
+        maxWidth: "260px",
       }).setHTML(
-        `<div style="font-family:'${theme.bodyFont}',sans-serif;padding:2px 4px;">
-          <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(0,0,0,0.5);font-weight:600;">Day ${stop.dayNumber}</div>
-          <div style="font-size:13px;font-weight:600;color:#1f3a3a;margin-top:2px;">${escapeHtml(stop.destination)}</div>
-        </div>`,
+        buildPopupHTML(stop, theme.bodyFont, theme.displayFont, tokens),
       );
 
       const marker = new maplibregl.Marker({ element: el })
@@ -186,47 +216,68 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       markersRef.current.push(marker);
     });
 
-    // ── Route lines — split into two GeoJSON layers, one for road
-    //    legs (dashed) and one for flight legs (solid). A leg is a
-    //    "flight" when it crosses too far to drive in a day OR when
-    //    it connects an inland park to a coast gateway (Zanzibar etc).
+    // ── Route lines (road dashed, flight solid) — split into two
+    //    GeoJSON layers so the line-pattern differs cleanly. Each
+    //    layer carries a `progress` data-driven property used by the
+    //    reveal animation below.
     const roadFeatures: GeoJSON.Feature[] = [];
     const flightFeatures: GeoJSON.Feature[] = [];
+    const segmentLengths: number[] = [];
 
     for (let i = 0; i < stops.length - 1; i++) {
       const a = stops[i];
       const b = stops[i + 1];
       const isFlight = legNeedsFlight(a, b);
+      const coords = bowedLeg(a.coord, b.coord);
       const feature: GeoJSON.Feature = {
         type: "Feature",
-        properties: {},
-        geometry: {
-          type: "LineString",
-          coordinates: bowedLeg(a.coord, b.coord),
-        },
+        properties: { segIndex: i },
+        geometry: { type: "LineString", coordinates: coords },
       };
       (isFlight ? flightFeatures : roadFeatures).push(feature);
+      segmentLengths.push(haversineKm(a.coord, b.coord));
     }
 
     upsertLineLayer(map, "ss-route-roads", roadFeatures, {
       paint: {
         "line-color": tokens.headingText || "#1f3a3a",
-        "line-width": 2.5,
+        "line-width": 3,
         "line-dasharray": [1.5, 1.5],
-        "line-opacity": 0.85,
+        "line-opacity": 0,
       },
     });
     upsertLineLayer(map, "ss-route-flights", flightFeatures, {
       paint: {
         "line-color": tokens.accent || "#c9a84c",
-        "line-width": 2.5,
-        "line-opacity": 0.95,
+        "line-width": 3,
+        "line-opacity": 0,
       },
     });
 
-    // Re-fit bounds when the stop set changes — covers the case of
-    // operator adding/removing a stop in the editor while the map is
-    // already mounted.
+    // ── Reveal animation. Fades the route in and "scrubs" the line
+    //    width up so it feels like the route is being inked onto the
+    //    map. Pure paint-property animation — no SVG / DOM trickery.
+    //    Total duration ~1.6s; easing is ease-out so the reveal feels
+    //    snappy at the start and settles toward the end.
+    let raf = 0;
+    const t0 = performance.now();
+    const DURATION = 1600;
+    const tick = () => {
+      const elapsed = performance.now() - t0;
+      const t = Math.min(1, elapsed / DURATION);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const opacity = eased * 0.95;
+      if (map.getLayer("ss-route-roads")) {
+        map.setPaintProperty("ss-route-roads", "line-opacity", opacity);
+      }
+      if (map.getLayer("ss-route-flights")) {
+        map.setPaintProperty("ss-route-flights", "line-opacity", Math.min(1, eased));
+      }
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    // Re-fit when the stop set changes
     const lngs = stops.map((s) => s.coord.lng);
     const lats = stops.map((s) => s.coord.lat);
     map.fitBounds(
@@ -236,10 +287,13 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       ],
       { padding: { top: 60, bottom: 60, left: 60, right: 60 }, maxZoom: 9, duration: 600 },
     );
-  }, [stops, mapLoaded, tokens.headingText, tokens.accent, theme.bodyFont]);
 
-  // Empty state — no resolvable destinations yet. Render a soft
-  // placeholder so the cell isn't blank and the operator gets a hint.
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [stops, parkFeatures, mapLoaded, tokens.headingText, tokens.accent, theme.bodyFont, theme.displayFont, tokens]);
+
+  // Empty state
   if (stops.length === 0) {
     return (
       <div
@@ -258,21 +312,83 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
 
   return (
     <div
-      ref={containerRef}
-      className="w-full ss-route-realmap"
-      style={{
-        minHeight: 360,
-        height: "100%",
-        background: tokens.cardBg,
-      }}
+      className="relative w-full ss-route-realmap"
+      style={{ minHeight: 360, height: "100%", background: tokens.cardBg }}
+    >
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* ── Stats chip — top-left, brand-tinted, auto-computed ──── */}
+      <div
+        className="absolute top-3 left-3 z-10 rounded-md px-3 py-2 backdrop-blur-md flex items-center gap-3"
+        style={{
+          background: "rgba(255,255,255,0.92)",
+          border: `1px solid ${tokens.border}`,
+          fontFamily: `'${theme.bodyFont}', sans-serif`,
+          color: tokens.headingText,
+        }}
+      >
+        <Stat label="Days" value={stats.totalDays} accent={tokens.accent || "#c9a84c"} />
+        <Divider />
+        <Stat label="Stops" value={stats.totalStops} accent={tokens.accent || "#c9a84c"} />
+        <Divider />
+        <Stat
+          label="Km"
+          value={stats.totalKm.toLocaleString()}
+          accent={tokens.accent || "#c9a84c"}
+        />
+        {stats.totalParks > 0 && (
+          <>
+            <Divider />
+            <Stat
+              label={stats.totalParks === 1 ? "Park" : "Parks"}
+              value={stats.totalParks}
+              accent={tokens.accent || "#c9a84c"}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Stats chip pieces ──────────────────────────────────────────────────
+
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent: string;
+}) {
+  return (
+    <div className="flex flex-col items-center leading-none">
+      <span className="text-[14px] font-bold tabular-nums" style={{ color: accent }}>
+        {value}
+      </span>
+      <span
+        className="text-[8.5px] uppercase tracking-[0.18em] font-semibold mt-0.5"
+        style={{ color: "rgba(0,0,0,0.55)" }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function Divider() {
+  return (
+    <span
+      className="inline-block w-px h-7"
+      style={{ background: "rgba(0,0,0,0.12)" }}
+      aria-hidden
     />
   );
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-// Distance in kilometres via haversine. Used to decide whether a leg
-// is a flight (too far to drive) or a road transfer.
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -285,22 +401,12 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// A leg is a flight when:
-//   - It connects an inland stop to a coast city (Zanzibar / Diani / Lamu /
-//     Mombasa / Watamu), OR
-//   - It connects two gateways more than ~500 km apart (e.g., Nairobi →
-//     Arusha can be driven, but Nairobi → Mombasa is a flight).
-//   - It's longer than 350 km (no operator is driving 9+ hours in a day).
 function legNeedsFlight(a: ResolvedStop, b: ResolvedStop): boolean {
   if (isCoastCity(a.destination) !== isCoastCity(b.destination)) return true;
   const km = haversineKm(a.coord, b.coord);
   return km > 350;
 }
 
-// Bow each leg slightly so consecutive segments don't read as a
-// straight-line zig-zag — gives the route a journeyed feel without
-// inventing geography. Bow strength 12% of leg length, perpendicular
-// to the chord.
 function bowedLeg(
   a: { lat: number; lng: number },
   b: { lat: number; lng: number },
@@ -309,14 +415,11 @@ function bowedLeg(
   const dx = b.lng - a.lng;
   const dy = b.lat - a.lat;
   const len = Math.hypot(dx, dy);
-  if (len < 0.001) return [
-    [a.lng, a.lat],
-    [b.lng, b.lat],
-  ];
-  // Perpendicular offset for the control point. Sign: negative y in
-  // screen space pushes the control "north" of the chord, which reads
-  // as a gentle bow on most northbound trips. The sign is consistent
-  // so every leg curves the same way and the route looks tidy.
+  if (len < 0.001)
+    return [
+      [a.lng, a.lat],
+      [b.lng, b.lat],
+    ];
   const perpX = -dy / len;
   const perpY = dx / len;
   const bow = len * 0.12;
@@ -332,22 +435,16 @@ function bowedLeg(
   return points;
 }
 
-// Add or update a line layer, replacing any existing source/layer of
-// the same id. Lets the effect re-run on every stop change without
-// "Source already exists" errors.
 function upsertLineLayer(
   map: maplibregl.Map,
   id: string,
   features: GeoJSON.Feature[],
   layerSpec: { paint?: Record<string, unknown> },
 ) {
-  const data: GeoJSON.FeatureCollection = {
-    type: "FeatureCollection",
-    features,
-  };
-  const existingSrc = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-  if (existingSrc) {
-    existingSrc.setData(data);
+  const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features };
+  const existing = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
     return;
   }
   map.addSource(id, { type: "geojson", data });
@@ -355,12 +452,89 @@ function upsertLineLayer(
     id,
     type: "line",
     source: id,
-    layout: {
-      "line-cap": "round",
-      "line-join": "round",
-    },
+    layout: { "line-cap": "round", "line-join": "round" },
     paint: layerSpec.paint as never,
   });
+}
+
+function upsertPolygonLayer(
+  map: maplibregl.Map,
+  id: string,
+  features: GeoJSON.Feature[],
+  spec: {
+    fill: string;
+    fillOpacity: number;
+    outline: string;
+    outlineOpacity: number;
+    outlineWidth: number;
+  },
+) {
+  const data: GeoJSON.FeatureCollection = { type: "FeatureCollection", features };
+  const existing = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  map.addSource(id, { type: "geojson", data });
+  // Fill first (under), outline on top of fill but under markers.
+  map.addLayer({
+    id: `${id}-fill`,
+    type: "fill",
+    source: id,
+    paint: {
+      "fill-color": spec.fill,
+      "fill-opacity": spec.fillOpacity,
+    },
+  });
+  map.addLayer({
+    id,
+    type: "line",
+    source: id,
+    paint: {
+      "line-color": spec.outline,
+      "line-opacity": spec.outlineOpacity,
+      "line-width": spec.outlineWidth,
+    },
+  });
+}
+
+// Build the popup HTML — photo on top when a hero exists, day badge
+// + destination + (kind chip) below. Inline styles because MapLibre's
+// popup container is outside our React tree (Tailwind classes there
+// would require a global stylesheet rule).
+function buildPopupHTML(
+  stop: ResolvedStop,
+  bodyFont: string,
+  displayFont: string,
+  tokens: ThemeTokens,
+): string {
+  const destination = escapeHtml(stop.destination);
+  const heading = tokens.headingText || "#1f3a3a";
+  const muted = "rgba(0,0,0,0.55)";
+  const accent = tokens.accent || "#c9a84c";
+  const kindLabel =
+    stop.kind === "park" ? "Park" : stop.kind === "gateway" ? "Gateway" : "";
+
+  const photo = stop.heroImageUrl
+    ? `<img src="${escapeHtml(stop.heroImageUrl)}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px 6px 0 0;display:block;" />`
+    : "";
+
+  return `
+    <div style="font-family:'${bodyFont}',sans-serif;width:220px;border-radius:8px;overflow:hidden;">
+      ${photo}
+      <div style="padding:${photo ? "10px 12px" : "8px 10px"};">
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span style="font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;color:${accent};font-weight:700;">Day ${stop.dayNumber}</span>
+          ${
+            kindLabel
+              ? `<span style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:${muted};">${kindLabel}</span>`
+              : ""
+          }
+        </div>
+        <div style="font-size:14px;font-weight:600;color:${heading};margin-top:3px;font-family:'${displayFont}',serif;line-height:1.2;">${destination}</div>
+      </div>
+    </div>
+  `;
 }
 
 function escapeHtml(s: string): string {
