@@ -6,6 +6,7 @@ import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
 import { nanoid } from "@/lib/nanoid";
 import { orderDestinations, countryOf } from "@/lib/destinationOrdering";
 import { classifyStop } from "@/lib/safariRoutingRules";
+import { pickBrandImageForDestination, type BrandImage } from "@/lib/brandDNA";
 import type { Day, TierKey } from "@/lib/types";
 
 // AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
@@ -123,12 +124,11 @@ type AutopilotPracticalCard = {
   icon?: string;
 };
 
-type AutopilotPricingTier = {
-  label?: string;
-  pricePerPerson?: string;
-  currency?: string;
-  highlighted?: boolean;
-};
+// Pricing tier types removed — the AI no longer produces pricing.
+// See zeroedPricing() near the bottom of this file: pricing is built
+// server-side from the tripStyle (for the highlighted-tier flag) with
+// empty pricePerPerson values. Operator types real numbers in the
+// editor after the draft lands.
 
 type AutopilotResponse = {
   cover?: { tagline?: string };
@@ -140,12 +140,6 @@ type AutopilotResponse = {
   inclusions?: string[];
   exclusions?: string[];
   practicalInfo?: AutopilotPracticalCard[];
-  pricing?: {
-    classic?: AutopilotPricingTier;
-    premier?: AutopilotPricingTier;
-    signature?: AutopilotPricingTier;
-    notes?: string;
-  };
 };
 
 // ─── submit_proposal tool ────────────────────────────────────────────────
@@ -269,39 +263,14 @@ const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
           },
         },
       },
-      pricing: {
-        type: "object",
-        properties: {
-          classic: {
-            type: "object",
-            properties: {
-              label: { type: "string" },
-              pricePerPerson: { type: "string" },
-              currency: { type: "string" },
-              highlighted: { type: "boolean" },
-            },
-          },
-          premier: {
-            type: "object",
-            properties: {
-              label: { type: "string" },
-              pricePerPerson: { type: "string" },
-              currency: { type: "string" },
-              highlighted: { type: "boolean" },
-            },
-          },
-          signature: {
-            type: "object",
-            properties: {
-              label: { type: "string" },
-              pricePerPerson: { type: "string" },
-              currency: { type: "string" },
-              highlighted: { type: "boolean" },
-            },
-          },
-          notes: { type: "string" },
-        },
-      },
+      // Pricing intentionally OMITTED from the AI tool schema.
+      // Operator brief: pricing is filled in by hand after generation —
+      // the AI's $/night × nights × markup guess was always wrong and
+      // operators overrode 100% of the time. Removing the field saves
+      // ~300 output tokens per call and stops anchoring the operator
+      // on a fictional number. Server returns zeroed price tiers
+      // instead so the proposal still has a valid pricing block; see
+      // zeroedPricing() in the merge step.
     },
   },
 };
@@ -407,12 +376,23 @@ async function handleAutopilot(req: Request): Promise<Response> {
   }));
 
   // ── Brand DNA ───────────────────────────────────────────────────────────
+  // Loaded once for two purposes:
+  //   1. buildBrandDNAPromptSection — voice/tone/banned-words guidance
+  //      injected into the system prompt.
+  //   2. imageLibrary — used after generation to auto-pick a hero image
+  //      per day from the operator's tagged location library, mirroring
+  //      the behaviour of /api/proposals/from-template (clone path).
+  //      Without this the autopilot path produced day cards with empty
+  //      heroes; from-template clones came in fully wired. Now both
+  //      paths behave identically.
   let brandDNASection = "";
+  let brandImageLibrary: BrandImage[] = [];
   try {
     const profile = await prisma.brandDNAProfile.findUnique({
       where: { organizationId: ctx.organization.id },
     });
     brandDNASection = buildBrandDNAPromptSection(profile);
+    brandImageLibrary = (profile?.imageLibrary as BrandImage[] | null) ?? [];
   } catch (err) {
     console.warn("[AUTOPILOT] Brand DNA load failed:", err);
   }
@@ -473,12 +453,6 @@ The JSON shape (all keys required unless marked optional):
     { "title": "Climate & season", "body": "…", "icon": "☀" },
     { "title": "Currency & tipping", "body": "…", "icon": "💳" }
   ],
-  "pricing": {
-    "classic":   { "label": "Classic",   "pricePerPerson": "4,500", "currency": "USD", "highlighted": false },
-    "premier":   { "label": "Premier",   "pricePerPerson": "6,800", "currency": "USD", "highlighted": true  },
-    "signature": { "label": "Signature", "pricePerPerson": "9,200", "currency": "USD", "highlighted": false },
-    "notes": "Short 1-2 sentence note about validity, deposit, or what affects price. No exclamation marks."
-  },
   "closing": {
     "quote": "One short, grounded line — not a cliché, not a flourish. ≤ 14 words.",
     "signOff": "3-4 sentences, personal. Addresses the guests by name. Invites their notes / feedback. Ends on a next step (e.g., 'tell me what to adjust' / 'I'll hold these dates for 7 days')."
@@ -489,14 +463,6 @@ The JSON shape (all keys required unless marked optional):
     "attribution": "Guide, camp, or destination the line is rooted in — e.g. 'Angama Mara' or 'A Kenyan proverb'. Short."
   }
 }
-
-PRICING ESTIMATION:
-- Estimate per-person prices in whole hundreds (USD). Base it on the trip style and the typical rack rate of the picked camps:
-  - classic (value): roughly $300-$500/night base range × nights × 1.35
-  - mid-range / premier: roughly $550-$900/night × nights × 1.4
-  - luxury / signature: roughly $1,000-$2,000/night × nights × 1.4
-- Format as "4,500" with a comma — no currency symbol in the string.
-- Mark "highlighted": true on the tier that matches the trip style the operator asked for.
 
 DAYS:
 - Generate exactly the number of days the user asks for.
@@ -708,6 +674,22 @@ ${JSON.stringify(userPayload, null, 2)}`;
     last.country = countryOf(departureGateway) || last.country;
   }
 
+  // Day hero auto-pick — for any day whose destination matches a
+  // location-tagged image in the operator's Brand DNA library, set
+  // heroImageUrl to that image. Mirrors the from-template clone path
+  // so autopilot proposals arrive in the editor with hero images
+  // already wired instead of empty grey placeholders. Operator can
+  // still override per day inside the editor.
+  if (brandImageLibrary.length > 0) {
+    for (const day of days) {
+      if (day.heroImageUrl) continue;
+      const dest = day.destination?.trim() ?? "";
+      if (!dest) continue;
+      const match = pickBrandImageForDestination(brandImageLibrary, dest);
+      if (match) day.heroImageUrl = match.url;
+    }
+  }
+
   const inclusions = stringArray(parsed.inclusions, 12);
   const exclusions = stringArray(parsed.exclusions, 12);
 
@@ -723,7 +705,12 @@ ${JSON.stringify(userPayload, null, 2)}`;
         .filter((c) => c.body.length > 0)
     : [];
 
-  const pricing = normalisePricing(parsed.pricing, tripStyle);
+  // Zeroed pricing — operator types real numbers in the editor after
+  // the AI draft lands. The shape stays so PricingSection renders the
+  // tier scaffolding; pricePerPerson is left empty for the operator
+  // to fill. The trip-style match still drives which tier is the
+  // "highlighted" one so the visual hierarchy is right by default.
+  const pricing = zeroedPricing(tripStyle);
 
   const cover = { tagline: stringOr(parsed.cover?.tagline, "").slice(0, 160) };
   const greeting = { body: stringOr(parsed.greeting?.body, "").slice(0, 1200) };
@@ -807,13 +794,26 @@ ${JSON.stringify(userPayload, null, 2)}`;
     fullProps.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
 
     // How many nights per property — sum across days where that
-    // property appears in any tier. Conservative: counts the day for
-    // every tier-match, but typical proposals have only one tier
-    // chosen per day so this matches reality.
+    // property appears in the active (style-matched) tier, falling
+    // back to whatever tier has a camp picked. The active tier comes
+    // from tripStyle (luxury → signature, classic → classic, else
+    // premier). Previous version derived it from parsed.pricing which
+    // is no longer in the AI output — the tripStyle path is what we
+    // use everywhere else now.
+    const styleLower = tripStyle.toLowerCase();
+    const activeTier: TierKey = styleLower.includes("luxury")
+      ? "signature"
+      : styleLower.includes("classic")
+        ? "classic"
+        : "premier";
     const nightsByName = new Map<string, number>();
     for (const d of days) {
-      const name = d.tiers?.[(parsed.pricing && Object.keys(parsed.pricing).find((k) => k !== "notes")) as "classic" | "premier" | "signature" || "premier"]?.camp
-        ?? d.tiers?.classic?.camp ?? d.tiers?.premier?.camp ?? d.tiers?.signature?.camp ?? "";
+      const name =
+        d.tiers?.[activeTier]?.camp ??
+        d.tiers?.classic?.camp ??
+        d.tiers?.premier?.camp ??
+        d.tiers?.signature?.camp ??
+        "";
       if (!name) continue;
       nightsByName.set(name, (nightsByName.get(name) ?? 0) + 1);
     }
@@ -963,10 +963,12 @@ function pickTier(
   };
 }
 
-function normalisePricing(
-  raw: AutopilotResponse["pricing"] | undefined,
-  tripStyle: string,
-): {
+// Zeroed pricing scaffold — see comment at the call site. Returns the
+// same shape the editor's PricingSection consumes (three tiers + notes)
+// but with empty pricePerPerson strings for the operator to fill in.
+// The highlighted tier is derived from tripStyle so the section's
+// visual emphasis matches the operator's chosen tier from day one.
+function zeroedPricing(tripStyle: string): {
   classic: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
   premier: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
   signature: { label: string; pricePerPerson: string; currency: string; highlighted: boolean };
@@ -978,33 +980,15 @@ function normalisePricing(
     : styleLower.includes("classic")
       ? "classic"
       : "premier";
-  const tiers: TierKey[] = ["classic", "premier", "signature"];
-  const defaults: Record<TierKey, string> = { classic: "Classic", premier: "Premier", signature: "Signature" };
-
-  const built = {
-    classic: normaliseTier(raw?.classic, defaults.classic, highlightedTier === "classic"),
-    premier: normaliseTier(raw?.premier, defaults.premier, highlightedTier === "premier"),
-    signature: normaliseTier(raw?.signature, defaults.signature, highlightedTier === "signature"),
-  };
-
-  // Enforce exactly one highlighted tier — the style-matched one.
-  for (const t of tiers) built[t].highlighted = t === highlightedTier;
-
-  return {
-    ...built,
-    notes: stringOr(raw?.notes, "").slice(0, 500) || undefined,
-  };
-}
-
-function normaliseTier(
-  raw: AutopilotPricingTier | undefined,
-  defaultLabel: string,
-  highlighted: boolean,
-): { label: string; pricePerPerson: string; currency: string; highlighted: boolean } {
-  return {
-    label: stringOr(raw?.label, defaultLabel).slice(0, 40),
-    pricePerPerson: stringOr(raw?.pricePerPerson, "").slice(0, 20),
-    currency: stringOr(raw?.currency, "USD").slice(0, 6),
+  const empty = (label: string, highlighted: boolean) => ({
+    label,
+    pricePerPerson: "",
+    currency: "USD",
     highlighted,
+  });
+  return {
+    classic: empty("Classic", highlightedTier === "classic"),
+    premier: empty("Premier", highlightedTier === "premier"),
+    signature: empty("Signature", highlightedTier === "signature"),
   };
 }
