@@ -7,58 +7,132 @@ import { PARK_BOUNDARIES } from "@/lib/safariParkBoundaries";
 
 // ─── RouteSchematic ──────────────────────────────────────────────────────
 //
-// A pure-SVG itinerary diagram. NOT a geographic map — node positions
-// are placed for clarity (vertical zigzag spine) regardless of real
-// lat/lng. Park polygon SHAPES are drawn at each node's anchor with
-// relative-size scaling preserved (Serengeti remains visibly bigger
-// than Tarangire and Lake Manyara), but their WORLD POSITION is
-// discarded — the polygon centroid lands on the node.
+// A pure-SVG illustrated map. REAL geographic positions (each stop's
+// lat/lng drives where the pin lands and where the park polygon is
+// drawn), but rendered with the look of a hand-drawn explorer's
+// chart: parchment background, sketchy ink lines, italic serif
+// labels, compass rose, paper grain.
 //
-// Why this design: every iteration of the geographic map fought a
-// crowding / aspect / empty-region problem. The schematic sidesteps
-// all of them — labels never collide, the frame fills exactly, no
-// aspect war. The price: clients can't cross-reference Google Maps
-// for routes or distances. That trade was made deliberately.
+// Why this design:
 //
-// Layout:
+//   • Geographic truth is preserved — the spatial relationships
+//     between Arusha, Serengeti, Zanzibar etc. are real, not invented.
+//   • Breathing room is BUILT IN via generous bbox padding (~18% on
+//     each side) so the route never sits flush against the frame.
+//   • Park outlines render at their actual scale — Serengeti reads as
+//     big, Lake Manyara as small, because they are.
+//   • Crowding is mitigated by per-pin nudges baked into the known
+//     coords table (see safariCoords below): Tarangire's pin is
+//     anchored deep in the polygon's southern third so it doesn't
+//     overlap Manyara.
 //
-//   ┌─────────────────────────────────────────────┐
-//   │  ●  Day 1                                    │
-//   │  Arusha                                      │
-//   │       \                                      │
-//   │        ●  Day 2                              │
-//   │        Tarangire (with park polygon halo)    │
-//   │       /                                      │
-//   │  ●  Day 3                                    │
-//   │  Lake Manyara (with park polygon halo)       │
-//   │      …                                       │
-//   └─────────────────────────────────────────────┘
+// What it's NOT:
 //
-// Node positions alternate left / right of centre; bezier connectors
-// curve smoothly between them. Park polygons render under the pins
-// with a translucent green wash. Day pills + place names render on
-// top.
+//   • Not a Leaflet map — no tile basemap, no street labels, no
+//     pan/zoom. The artistic SVG is the whole map.
+//   • Not strict cartographic projection — uses linear lat/lng → x/y
+//     mapping rather than Mercator (web-Mercator distortion is
+//     irrelevant at East-Africa scale and adds complexity for no
+//     visible win).
+//
+// Layered like a vintage illustration:
+//
+//   1. Parchment base (theme cardBg)
+//   2. Park polygon haloes (sage wash + olive ink, hand-drawn filter)
+//   3. Route bezier legs (terra-cotta dotted trail, hand-drawn filter)
+//   4. Pin dots + day pills + place names (italic serif on top)
+//   5. Compass rose + "not to scale" note (decorative)
+//   6. Paper-grain noise overlay (warm-brown turbulence at low opacity)
+//   7. Soft vignette at the corners
 
 interface SchematicNode {
   dayLabel: string;
   destination: string;
   firstDay: number;
   lastDay: number;
+  lat: number;
+  lng: number;
 }
 
 const VIEWBOX_W = 1000;
-const PADDING_Y = 90;
-const ROW_HEIGHT = 110;
-const SPINE_AMPLITUDE = 220; // px from centre
-const PX_PER_DEGREE = 95; // park polygon scale; preserves relative size
+const PADDING_FRACTION = 0.18; // 18% breathing room around the route bbox
 
-/** Group consecutive same-destination days into single nodes. */
+/** Hardcoded coordinates for the most common East-African safari
+ *  stops. Mirrors the table in RouteMap.tsx; duplicated here so the
+ *  schematic doesn't require Leaflet at all. Tarangire's pin is
+ *  deliberately anchored at the polygon's southern third (-4.25,
+ *  36.15) so it has visible separation from Lake Manyara. */
+const SAFARI_COORDS: Array<{ match: RegExp; lat: number; lng: number }> = [
+  // Tanzania
+  { match: /^arusha\b/i, lat: -3.3869, lng: 36.6829 },
+  { match: /^moshi\b/i, lat: -3.3494, lng: 37.3408 },
+  { match: /^kilimanjaro\b/i, lat: -3.0674, lng: 37.3556 },
+  { match: /^tarangire\b/i, lat: -4.25, lng: 36.15 },
+  { match: /^lake manyara\b|^manyara\b/i, lat: -3.5833, lng: 35.8333 },
+  { match: /^ngorongoro\b/i, lat: -3.2, lng: 35.5 },
+  { match: /^serengeti\b/i, lat: -2.3333, lng: 34.8333 },
+  { match: /^ruaha\b/i, lat: -7.45, lng: 34.65 },
+  { match: /^selous\b|^nyerere\b/i, lat: -8.5, lng: 37.5 },
+  { match: /^mahale\b/i, lat: -6.1167, lng: 29.85 },
+  { match: /^katavi\b/i, lat: -6.7833, lng: 31.15 },
+  { match: /^zanzibar\b|^stone town\b/i, lat: -6.1659, lng: 39.2026 },
+  { match: /^pemba\b/i, lat: -5.05, lng: 39.7833 },
+  { match: /^mafia\b/i, lat: -7.9, lng: 39.75 },
+  { match: /^dar es salaam\b|^dar\b/i, lat: -6.7924, lng: 39.2083 },
+  // Kenya
+  { match: /^nairobi\b/i, lat: -1.2864, lng: 36.8172 },
+  {
+    match: /^masai mara\b|^maasai mara\b|^the mara\b/i,
+    lat: -1.5,
+    lng: 35.15,
+  },
+  { match: /^amboseli\b/i, lat: -2.65, lng: 37.2667 },
+  { match: /^tsavo east\b/i, lat: -2.75, lng: 38.75 },
+  { match: /^tsavo west\b/i, lat: -3.0, lng: 38.0 },
+  { match: /^samburu\b/i, lat: 0.55, lng: 37.5333 },
+  { match: /^laikipia\b/i, lat: 0.4, lng: 36.9 },
+  { match: /^lake nakuru\b|^nakuru\b/i, lat: -0.3667, lng: 36.0833 },
+  { match: /^lake naivasha\b|^naivasha\b/i, lat: -0.7167, lng: 36.4333 },
+  { match: /^ol pejeta\b/i, lat: 0.0, lng: 36.9 },
+  { match: /^meru\b/i, lat: 0.15, lng: 38.2 },
+  { match: /^mount kenya\b/i, lat: -0.1521, lng: 37.3083 },
+  { match: /^diani\b/i, lat: -4.3, lng: 39.5833 },
+  { match: /^lamu\b/i, lat: -2.2717, lng: 40.902 },
+  { match: /^mombasa\b/i, lat: -4.0435, lng: 39.6682 },
+  // Rwanda / Uganda
+  { match: /^volcanoes\b|^musanze\b/i, lat: -1.4833, lng: 29.55 },
+  { match: /^kigali\b/i, lat: -1.9441, lng: 30.0619 },
+  { match: /^bwindi\b/i, lat: -1.05, lng: 29.7 },
+  { match: /^queen elizabeth\b|^kasese\b/i, lat: -0.2, lng: 30.05 },
+  {
+    match: /^murchison falls\b|^murchison\b/i,
+    lat: 2.27,
+    lng: 31.69,
+  },
+  { match: /^entebbe\b/i, lat: 0.047, lng: 32.463 },
+  { match: /^kampala\b/i, lat: 0.3476, lng: 32.5825 },
+];
+
+function lookupCoord(destination: string): { lat: number; lng: number } | null {
+  const name = (destination ?? "").trim();
+  if (!name) return null;
+  for (const entry of SAFARI_COORDS) {
+    if (entry.match.test(name)) return { lat: entry.lat, lng: entry.lng };
+  }
+  return null;
+}
+
+/** Group consecutive same-destination days into single nodes, and
+ *  attach the destination's lat/lng. Days whose destination doesn't
+ *  resolve to a known coord are dropped (they have nowhere to render). */
 function buildNodes(days: Day[]): SchematicNode[] {
   const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
   const out: SchematicNode[] = [];
   for (const day of sorted) {
     const dest = day.destination?.trim() || "";
     if (!dest) continue;
+    const coord = lookupCoord(dest);
+    if (!coord) continue;
     const last = out[out.length - 1];
     if (last && last.destination.toLowerCase() === dest.toLowerCase()) {
       last.lastDay = day.dayNumber;
@@ -69,24 +143,38 @@ function buildNodes(days: Day[]): SchematicNode[] {
         destination: dest,
         firstDay: day.dayNumber,
         lastDay: day.dayNumber,
+        lat: coord.lat,
+        lng: coord.lng,
       });
     }
   }
   return out;
 }
 
-/** Schematic viewBox aspect (W:H). MapSection consumes this to set
- *  the map column's CSS aspect-ratio so the diagram fills the cell
- *  without distortion. */
+/** Compute bbox + viewBox aspect for a set of nodes. Used by
+ *  MapSection to set the map column's CSS aspect-ratio so the SVG
+ *  fills the cell without distortion. */
 export function computeSchematicAspect(days: Day[]): number {
   const nodes = buildNodes(days);
-  const H = nodeCountToHeight(nodes.length);
-  return VIEWBOX_W / H;
-}
-
-function nodeCountToHeight(n: number): number {
-  if (n <= 1) return 320;
-  return PADDING_Y * 2 + (n - 1) * ROW_HEIGHT;
+  if (nodes.length < 2) return 1.2; // fallback aspect for empty/single
+  const lats = nodes.map((n) => n.lat);
+  const lngs = nodes.map((n) => n.lng);
+  let north = Math.max(...lats);
+  let south = Math.min(...lats);
+  let east = Math.max(...lngs);
+  let west = Math.min(...lngs);
+  const latSpan = north - south;
+  const lngSpan = east - west;
+  north += latSpan * PADDING_FRACTION;
+  south -= latSpan * PADDING_FRACTION;
+  east += lngSpan * PADDING_FRACTION;
+  west -= lngSpan * PADDING_FRACTION;
+  const finalLat = north - south;
+  const finalLng = east - west;
+  if (finalLat < 0.001 || finalLng < 0.001) return 1.2;
+  // Clamp so single-region trips don't produce extreme aspects.
+  const raw = finalLng / finalLat;
+  return Math.min(1.6, Math.max(0.65, raw));
 }
 
 export function RouteSchematic({
@@ -107,8 +195,8 @@ export function RouteSchematic({
       <div
         className="flex items-center justify-center text-[13px] w-full h-full"
         style={{
-          background: tokens.cardBg ?? "#f7f5f0",
-          color: tokens.mutedText ?? "#6b6b6b",
+          background: tokens.cardBg ?? "#f5e8c8",
+          color: tokens.mutedText ?? "#8a7a62",
         }}
       >
         {isEditor
@@ -118,18 +206,50 @@ export function RouteSchematic({
     );
   }
 
-  const H = nodeCountToHeight(nodes.length);
-  const CENTER_X = VIEWBOX_W / 2;
+  // ── Hand-drawn / explorer-map palette ────────────────────────────
+  const inkColor = tokens.headingText || "#3a2f24";
+  const accentColor = tokens.accent || "#a85230";
+  const cardColor = tokens.cardBg || "#f5e8c8";
+  const mutedColor = tokens.mutedText || "#8a7a62";
+  const sageFill = "#8aa370";
+  const sageStroke = "#4a5d3a";
 
-  // Node positions — vertical zigzag along the spine.
-  const positions = nodes.map((_, i) => {
-    if (nodes.length === 1) {
-      return { x: CENTER_X, y: H / 2 };
-    }
-    const y = PADDING_Y + i * ROW_HEIGHT;
-    const x = i % 2 === 0 ? CENTER_X - SPINE_AMPLITUDE : CENTER_X + SPINE_AMPLITUDE;
-    return { x, y };
+  // ── Bbox + projection ────────────────────────────────────────────
+  const lats = nodes.map((n) => n.lat);
+  const lngs = nodes.map((n) => n.lng);
+  let north = Math.max(...lats);
+  let south = Math.min(...lats);
+  let east = Math.max(...lngs);
+  let west = Math.min(...lngs);
+  // For single-stop trips, give the camera ~1° of visual context.
+  if (nodes.length === 1) {
+    north += 0.5;
+    south -= 0.5;
+    east += 0.5;
+    west -= 0.5;
+  } else {
+    // Generous padding for breathing room.
+    const latSpan = north - south;
+    const lngSpan = east - west;
+    north += latSpan * PADDING_FRACTION;
+    south -= latSpan * PADDING_FRACTION;
+    east += lngSpan * PADDING_FRACTION;
+    west -= lngSpan * PADDING_FRACTION;
+  }
+  const finalLat = north - south;
+  const finalLng = east - west;
+
+  // ViewBox H derived from bbox aspect so the projection isn't
+  // distorted (1° lat ≈ 1° lng at East-African latitudes).
+  const W = VIEWBOX_W;
+  const H = Math.max(400, Math.round(W * (finalLat / finalLng)));
+
+  const project = (lat: number, lng: number): { x: number; y: number } => ({
+    x: ((lng - west) / finalLng) * W,
+    y: ((north - lat) / finalLat) * H,
   });
+
+  const positions = nodes.map((n) => project(n.lat, n.lng));
 
   // Match each node to a real park polygon (regex match on destination).
   const nodeParks = nodes.map(
@@ -137,35 +257,27 @@ export function RouteSchematic({
   );
 
   // Bezier legs between consecutive nodes — alternating perpendicular
-  // bows along the spine produce a smooth S-snake.
+  // bows produce a soft S-snake.
   const legPaths = positions.slice(0, -1).map((from, i) => {
     const to = positions[i + 1];
     const midX = (from.x + to.x) / 2;
     const midY = (from.y + to.y) / 2;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Perpendicular unit vector
+    const px = -dy / len;
+    const py = dx / len;
     const sign = i % 2 === 0 ? 1 : -1;
-    const ctrlX = midX + sign * 90;
-    const ctrlY = midY;
-    return `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`;
+    const bowAmount = Math.min(60, len * 0.18);
+    const ctrlX = midX + px * sign * bowAmount;
+    const ctrlY = midY + py * sign * bowAmount;
+    return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
   });
-
-  // ── Hand-drawn / explorer-map palette ────────────────────────────
-  //
-  // Earth-toned ink palette — terra-cotta route, sage-wash parks,
-  // dark-olive strokes, parchment background. tokens.accent /
-  // headingText / cardBg still feed the configurable parts (route
-  // line, pills, page bg) so operators can recolour from
-  // SectionChrome; the artistic ink colours are hardcoded because
-  // they ARE the look.
-  const inkColor = tokens.headingText || "#3a2f24"; // deep brown ink
-  const accentColor = tokens.accent || "#a85230"; // terra-cotta
-  const cardColor = tokens.cardBg || "#f5e8c8"; // parchment
-  const mutedColor = tokens.mutedText || "#8a7a62";
-  const sageFill = "#8aa370"; // muted sage wash
-  const sageStroke = "#4a5d3a"; // dark olive ink
 
   return (
     <svg
-      viewBox={`0 0 ${VIEWBOX_W} ${H}`}
+      viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid meet"
       style={{ width: "100%", height: "100%", display: "block" }}
       role="img"
@@ -173,8 +285,7 @@ export function RouteSchematic({
     >
       <defs>
         {/* "Hand-drawn" filter — turbulence-driven displacement gives
-            crisp paths a slight ink-on-paper wobble. Applied to park
-            polygons and the route line. */}
+            crisp paths a slight ink-on-paper wobble. */}
         <filter id="hand-drawn" x="-5%" y="-5%" width="110%" height="110%">
           <feTurbulence
             type="fractalNoise"
@@ -183,16 +294,10 @@ export function RouteSchematic({
             seed="7"
             result="turbulence"
           />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="turbulence"
-            scale="2.4"
-          />
+          <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="2.4" />
         </filter>
 
-        {/* Paper-grain overlay — a subtle warm-brown noise texture
-            applied as a final layer at low opacity so the whole map
-            reads as printed-on-parchment instead of digital-flat. */}
+        {/* Paper-grain overlay — subtle warm-brown noise. */}
         <filter id="paper-grain" x="0" y="0" width="100%" height="100%">
           <feTurbulence
             type="fractalNoise"
@@ -207,28 +312,24 @@ export function RouteSchematic({
           />
         </filter>
 
-        {/* Vignette gradient — softens the corners so the rectangular
-            edge feels less stamped, more illustrated. */}
+        {/* Vignette gradient — softens the corners. */}
         <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
           <stop offset="60%" stopColor="rgba(0,0,0,0)" />
           <stop offset="100%" stopColor="rgba(60,40,20,0.08)" />
         </radialGradient>
       </defs>
 
-      {/* Parchment base — soft warm cream. Theme bg drives the colour
-          so an operator who picks a different cardBg still gets a
-          map that fits their proposal. */}
-      <rect width={VIEWBOX_W} height={H} fill={cardColor} />
+      {/* Parchment base */}
+      <rect width={W} height={H} fill={cardColor} />
 
-      {/* Park polygon halos — translated to each node, relative size
-          preserved (PX_PER_DEGREE fixed). The hand-drawn filter gives
-          the strokes a slight wobble so they read as inked, not
-          plotted. */}
+      {/* Park polygon halos — drawn at REAL geographic coords through
+          the projection. Sage wash + dark olive ink, slight wobble
+          from the hand-drawn filter. Big parks render big; small
+          parks render small. */}
       <g filter="url(#hand-drawn)">
-        {positions.map((pos, i) => {
-          const park = nodeParks[i];
+        {nodeParks.map((park, i) => {
           if (!park) return null;
-          const d = polygonToPath(park.coords, pos, PX_PER_DEGREE);
+          const d = parkPolygonPath(park.coords, project);
           if (!d) return null;
           return (
             <path
@@ -245,9 +346,8 @@ export function RouteSchematic({
         })}
       </g>
 
-      {/* Connecting bezier legs — terra-cotta ink with the hand-drawn
-          wobble. Sparse short dashes evoke the dotted travel-trail
-          you'd find on a vintage explorer's map. */}
+      {/* Connecting bezier legs — terra-cotta dotted trail with the
+          hand-drawn wobble. */}
       <g filter="url(#hand-drawn)">
         {legPaths.map((d, i) => (
           <path
@@ -263,18 +363,10 @@ export function RouteSchematic({
         ))}
       </g>
 
-      {/* Compass rose — top-right corner. A small decorative cardinal
-          marker. Pure ornament; helps the map read as a map. */}
-      <CompassRose
-        cx={VIEWBOX_W - 70}
-        cy={70}
-        r={32}
-        ink={inkColor}
-        accent={accentColor}
-      />
+      {/* Compass rose — top-right corner. */}
+      <CompassRose cx={W - 70} cy={70} r={32} ink={inkColor} accent={accentColor} />
 
-      {/* Day nodes — pill above pin, place name below. Drawn last
-          so they sit on top of the polygon halo. */}
+      {/* Day nodes — pin + pill above + place name below. */}
       {positions.map((pos, i) => {
         const node = nodes[i];
         const pillW = Math.max(72, node.dayLabel.length * 7.6 + 22);
@@ -292,8 +384,7 @@ export function RouteSchematic({
             />
             <circle cx={pos.x} cy={pos.y} r={5.5} fill={accentColor} />
 
-            {/* Day pill above the pin — warm ink fill, hand-lettered
-                feel via tracked-out italic */}
+            {/* Day pill above the pin */}
             <g>
               <rect
                 x={pos.x - pillW / 2}
@@ -318,8 +409,7 @@ export function RouteSchematic({
               </text>
             </g>
 
-            {/* Place name below the pin — italic serif evokes a
-                hand-lettered mid-century travel-map caption. */}
+            {/* Place name below the pin — italic serif */}
             <text
               x={pos.x}
               y={pos.y + 32}
@@ -353,9 +443,7 @@ export function RouteSchematic({
         );
       })}
 
-      {/* "Not to scale" — vintage map convention, italic serif at
-          the bottom-left margin. Reinforces the schematic-as-art
-          framing so clients don't measure distances off it. */}
+      {/* "Not to scale" — vintage map convention. */}
       <text
         x={32}
         y={H - 24}
@@ -368,12 +456,9 @@ export function RouteSchematic({
         not to scale
       </text>
 
-      {/* Paper-grain overlay — subtle warm-brown noise across the
-          entire frame at low opacity. Last layer so it sits above
-          everything; pointer-events disabled so it never blocks
-          interactions (when we add them later). */}
+      {/* Paper-grain overlay — sits on top of everything. */}
       <rect
-        width={VIEWBOX_W}
+        width={W}
         height={H}
         fill="#3a2f24"
         filter="url(#paper-grain)"
@@ -381,10 +466,9 @@ export function RouteSchematic({
         style={{ pointerEvents: "none", mixBlendMode: "multiply" }}
       />
 
-      {/* Vignette — soft brown tint at the corners only, deepens the
-          parchment feel. */}
+      {/* Vignette */}
       <rect
-        width={VIEWBOX_W}
+        width={W}
         height={H}
         fill="url(#vignette)"
         style={{ pointerEvents: "none" }}
@@ -393,12 +477,28 @@ export function RouteSchematic({
   );
 }
 
-// ─── Compass rose ────────────────────────────────────────────────────────
+// ─── Park polygon at real coords ─────────────────────────────────────────
 //
-// A small decorative cardinal marker drawn in the same ink palette
-// as the rest of the map. North pointer slightly longer to anchor
-// orientation; the four cardinal letters sit at the rose's tips. Pure
-// ornament — helps the schematic read as a MAP rather than a chart.
+// Each polygon vertex projected via the same lat/lng → x/y function the
+// pins use. Big parks render big, small parks render small — the size
+// relationship is automatically truthful because we're using real
+// coordinates.
+
+function parkPolygonPath(
+  coords: LatLngTuple[],
+  project: (lat: number, lng: number) => { x: number; y: number },
+): string {
+  if (coords.length < 3) return "";
+  const points = coords.map(([lat, lng]) => project(lat, lng));
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (const p of points.slice(1)) {
+    d += ` L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  }
+  d += " Z";
+  return d;
+}
+
+// ─── Compass rose ────────────────────────────────────────────────────────
 
 function CompassRose({
   cx,
@@ -419,7 +519,6 @@ function CompassRose({
   const armSize = 4;
   return (
     <g aria-hidden>
-      {/* Outer ring */}
       <circle
         cx={cx}
         cy={cy}
@@ -438,7 +537,6 @@ function CompassRose({
         strokeWidth={0.8}
         strokeOpacity={0.4}
       />
-      {/* North arm — solid accent so it reads as the primary direction */}
       <polygon
         points={`${cx},${cy - armN} ${cx - armSize},${cy} ${cx + armSize},${cy}`}
         fill={accent}
@@ -460,7 +558,6 @@ function CompassRose({
         fill={ink}
         opacity={0.6}
       />
-      {/* Cardinal letters — italic serif */}
       <text
         x={cx}
         y={cy - r - 4}
@@ -511,40 +608,4 @@ function CompassRose({
       </text>
     </g>
   );
-}
-
-// ─── Polygon transform ───────────────────────────────────────────────────
-//
-// Translate a park polygon (real OSM lat/lng vertices) so its centroid
-// lands on the given anchor point in viewBox coordinates, then scale
-// uniformly so 1° = pxPerDegree. Output is an SVG path string. Same
-// pxPerDegree across all parks preserves relative size — Serengeti's
-// span is ~5× Tarangire's so it draws ~5× bigger.
-
-function polygonToPath(
-  coords: LatLngTuple[],
-  anchor: { x: number; y: number },
-  pxPerDegree: number,
-): string {
-  if (coords.length < 3) return "";
-  let sumLat = 0;
-  let sumLng = 0;
-  for (const [lat, lng] of coords) {
-    sumLat += lat;
-    sumLng += lng;
-  }
-  const centerLat = sumLat / coords.length;
-  const centerLng = sumLng / coords.length;
-  const points: Array<[number, number]> = coords.map(([lat, lng]) => {
-    const dx = (lng - centerLng) * pxPerDegree;
-    // Flip Y because SVG y-axis grows downward but lat grows upward.
-    const dy = -(lat - centerLat) * pxPerDegree;
-    return [anchor.x + dx, anchor.y + dy];
-  });
-  let d = `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
-  for (const [x, y] of points.slice(1)) {
-    d += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }
-  d += " Z";
-  return d;
 }
