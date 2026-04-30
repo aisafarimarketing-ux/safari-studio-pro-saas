@@ -174,7 +174,21 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
+    // Per-pin offsets (screen pixels) to break apart close pairs like
+    // Tarangire ↔ Manyara (~30km apart, overlap badly at zoom 8-9).
+    // Computed in a single pass: any two pins within COLLISION_KM get
+    // pushed apart along their connecting axis by ~16px each.
+    const pinOffsets = computePinOffsets(stops);
+
     stops.forEach((stop, idx) => {
+      // Outer element is what MapLibre sets transform: translate(...) on
+      // — we MUST NOT overwrite its transform. Hover scale lives on an
+      // INNER element so the position never glitches. (Earlier bug:
+      // hover scale was on the outer element, the next mouseleave
+      // wiped MapLibre's translate and the pin jumped to 0,0.)
+      const wrapper = document.createElement("div");
+      wrapper.style.cursor = "pointer";
+
       const el = document.createElement("div");
       el.className = "ss-route-marker";
       el.style.width = "32px";
@@ -190,13 +204,14 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       el.style.fontWeight = "700";
       el.style.fontSize = "13px";
       el.style.fontFamily = `'${theme.bodyFont}', sans-serif`;
-      el.style.cursor = "pointer";
       el.style.transition = "transform 180ms ease";
       el.textContent = String(idx + 1);
-      el.addEventListener("mouseenter", () => {
+      wrapper.appendChild(el);
+
+      wrapper.addEventListener("mouseenter", () => {
         el.style.transform = "scale(1.12)";
       });
-      el.addEventListener("mouseleave", () => {
+      wrapper.addEventListener("mouseleave", () => {
         el.style.transform = "scale(1)";
       });
 
@@ -209,7 +224,10 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
         buildPopupHTML(stop, theme.bodyFont, theme.displayFont, tokens),
       );
 
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new maplibregl.Marker({
+        element: wrapper,
+        offset: pinOffsets[idx] ?? [0, 0],
+      })
         .setLngLat([stop.coord.lng, stop.coord.lat])
         .setPopup(popup)
         .addTo(map);
@@ -228,7 +246,13 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       const a = stops[i];
       const b = stops[i + 1];
       const isFlight = legNeedsFlight(a, b);
-      const coords = bowedLeg(a.coord, b.coord);
+      // Flights arc HIGH (0.20) so they read as long-haul air routes;
+      // roads arc gently (0.07) so they hug the inland terrain. The
+      // contrast also gives visible breathing space when a flight
+      // and a road cross the same general airspace — the two never
+      // visually merge into one fat smudge.
+      const bow = isFlight ? 0.2 : 0.07;
+      const coords = bowedLeg(a.coord, b.coord, bow);
       const feature: GeoJSON.Feature = {
         type: "Feature",
         properties: { segIndex: i },
@@ -317,9 +341,12 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
     >
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* ── Stats chip — top-left, brand-tinted, auto-computed ──── */}
+      {/* ── Stats chip — bottom-left, sits clear of the nav controls
+          (top-right) and the basemap attribution (bottom-right). The
+          original top-left placement was blocking the parks around
+          Arusha. ── */}
       <div
-        className="absolute top-3 left-3 z-10 rounded-md px-3 py-2 backdrop-blur-md flex items-center gap-3"
+        className="absolute bottom-3 left-3 z-10 rounded-md px-3 py-2 backdrop-blur-md flex items-center gap-3"
         style={{
           background: "rgba(255,255,255,0.92)",
           border: `1px solid ${tokens.border}`,
@@ -407,9 +434,13 @@ function legNeedsFlight(a: ResolvedStop, b: ResolvedStop): boolean {
   return km > 350;
 }
 
+// Bow factor: roads bow gently, flights bow more dramatically. Different
+// bow strengths give visible breathing space between the two line styles
+// even when they pass through the same airspace.
 function bowedLeg(
   a: { lat: number; lng: number },
   b: { lat: number; lng: number },
+  bowFactor = 0.12,
 ): [number, number][] {
   const steps = 32;
   const dx = b.lng - a.lng;
@@ -422,7 +453,7 @@ function bowedLeg(
     ];
   const perpX = -dy / len;
   const perpY = dx / len;
-  const bow = len * 0.12;
+  const bow = len * bowFactor;
   const cx = (a.lng + b.lng) / 2 + perpX * bow;
   const cy = (a.lat + b.lat) / 2 + perpY * bow;
   const points: [number, number][] = [];
@@ -433,6 +464,41 @@ function bowedLeg(
     points.push([x, y]);
   }
   return points;
+}
+
+// Pin de-cluster: any pair of stops within COLLISION_KM gets shifted
+// in opposite directions along their connecting axis so neither pin
+// covers the other. Returns one [x, y] pixel offset per stop, indexed
+// to match `stops`. Stops with no nearby neighbour stay at [0, 0].
+function computePinOffsets(
+  stops: Array<{ coord: { lat: number; lng: number } }>,
+): Array<[number, number]> {
+  const COLLISION_KM = 60;
+  const PUSH_PX = 18;
+  const offsets: Array<[number, number]> = stops.map(() => [0, 0]);
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = i + 1; j < stops.length; j++) {
+      const a = stops[i].coord;
+      const b = stops[j].coord;
+      const km = haversineKm(a, b);
+      if (km > COLLISION_KM) continue;
+      // Direction from a → b in screen-y-positive-down. Lat decreases
+      // northward on screen (north is up in MapLibre default), so we
+      // flip the y component.
+      const dx = b.lng - a.lng;
+      const dy = -(b.lat - a.lat);
+      const len = Math.hypot(dx, dy);
+      if (len < 0.0001) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      // Push i in -direction, j in +direction
+      offsets[i][0] -= ux * PUSH_PX;
+      offsets[i][1] -= uy * PUSH_PX;
+      offsets[j][0] += ux * PUSH_PX;
+      offsets[j][1] += uy * PUSH_PX;
+    }
+  }
+  return offsets;
 }
 
 function upsertLineLayer(
