@@ -139,12 +139,48 @@ function buildFallbackBookLink(operator: OperatorProfile): string | null {
   return null;
 }
 
-// ─── Action handlers ─────────────────────────────────────────────────────
+// ─── HTML → plain text ──────────────────────────────────────────────────
+//
+// Day narratives can carry inline HTML (color / font-size spans from
+// the rich-text toolbar). For small UI surfaces like the
+// ExpandingCards description we want plain text — strip every tag
+// and decode the few HTML entities that show up commonly.
 
-async function handleShare() {
-  const url = typeof window !== "undefined" ? window.location.href : "";
-  if (!url) return;
-  const shareData = { title: "Safari Proposal", url };
+function stripHtmlToText(input: string): string {
+  if (!input) return "";
+  if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+    try {
+      const doc = new DOMParser().parseFromString(input, "text/html");
+      return (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+    } catch {
+      /* fall through to regex stripper */
+    }
+  }
+  // Server-side / fallback regex stripper.
+  return input
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ─── Action handlers ─────────────────────────────────────────────────────
+//
+// Both Share and Download must point at the public SHARE-VIEW URL
+// (/p/[proposalId]), not the editor URL (/studio/...). Otherwise an
+// operator who hits Share from the editor would send the recipient
+// a sign-in-gated edit page. Both handlers take the resolved share
+// URL as an argument so the caller (which knows proposal.id) is the
+// single source of truth.
+
+async function handleShare(shareUrl: string) {
+  if (!shareUrl) return;
+  const shareData = { title: "Safari Proposal", url: shareUrl };
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
       await navigator.share(shareData);
@@ -154,19 +190,20 @@ async function handleShare() {
     }
   }
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(shareUrl);
     alert("Proposal link copied to clipboard");
   } catch {
     /* swallow — environment without clipboard API */
   }
 }
 
-function handleDownload() {
+function handleDownload(shareUrl: string) {
   // Webview placeholder per operator brief — opens the share-view
-  // URL in a new tab so the operator / client can save / print from
-  // the browser. Real PDF export will replace this when ready.
+  // URL (/p/[id]) in a new tab so the operator / client can save /
+  // print from the browser. Real PDF export will replace this later.
+  if (!shareUrl) return;
   if (typeof window !== "undefined") {
-    window.open(window.location.href, "_blank");
+    window.open(shareUrl, "_blank");
   }
 }
 
@@ -234,17 +271,20 @@ export function ClosingSection({ section }: { section: Section }) {
 
   // Build CardItem[] for ExpandingCards. Each tile becomes a card —
   // description pulled from the matching day's narrative (truncated
-  // ~120 chars), icon from the wildlife glyph registry.
+  // ~120 chars), icon from the wildlife glyph registry. Day
+  // narratives now carry inline HTML (color / font-size spans from
+  // the rich-text toolbar), so we strip tags first to get plain
+  // text suitable for the small ExpandingCards description slot.
   const cardItems: CardItem[] = tiles.map((t) => {
     const day = days.find(
       (d) => d.destination?.trim().toLowerCase() === t.key,
     );
-    const narrative = (day?.description ?? "").trim();
+    const plain = stripHtmlToText(day?.description ?? "").trim();
     const description =
-      narrative.length > 0
-        ? narrative.length > 120
-          ? `${narrative.slice(0, 117)}…`
-          : narrative
+      plain.length > 0
+        ? plain.length > 120
+          ? `${plain.slice(0, 117)}…`
+          : plain
         : `Day ${day?.dayNumber ?? "?"} — explore ${t.destination}.`;
     const glyph = getGlyphForDestination(t.destination);
     return {
@@ -255,6 +295,12 @@ export function ClosingSection({ section }: { section: Section }) {
       icon: <CardGlyph glyph={glyph} />,
     };
   });
+
+  // Resolve the public share-view URL for Share / Download. Falls
+  // back to current window URL on first paint (SSR) before hydration.
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/p/${proposal.id}`
+    : "";
 
   // Per-tile image override → uploads to /api/upload-image and
   // persists onto section.content.imageOverrides keyed by lowercase
@@ -320,8 +366,8 @@ export function ClosingSection({ section }: { section: Section }) {
     tokens,
     theme,
     onSecure,
-    onShare: handleShare,
-    onDownload: handleDownload,
+    onShare: () => handleShare(shareUrl),
+    onDownload: () => handleDownload(shareUrl),
     onRequestChanges: () => handleRequestChanges(operator, client),
     onVisitWebsite: () => handleVisitWebsite(operator),
     onHeadlineChange,
