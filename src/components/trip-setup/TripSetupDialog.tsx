@@ -27,6 +27,37 @@ const STYLE_OPTIONS = [
   { id: "classic", label: "Classic", hint: "Value-led, no-frills, experience-first." },
 ] as const;
 
+// Pace is independent of style — a "Luxury" trip can still be Packed
+// (lots of game drives + activities) or Relaxed (camp-focused, slow
+// mornings). Drives optional-activity volume and the AI's transfer
+// scheduling. Operators reported same-style same-destinations
+// proposals reading wildly different in pacing without a knob to
+// match the client's brief.
+const PACE_OPTIONS = [
+  { id: "relaxed", label: "Relaxed", hint: "Slow mornings, fewer transfers, camp-focused." },
+  { id: "balanced", label: "Balanced", hint: "Game drives + downtime; the default." },
+  { id: "packed", label: "Packed", hint: "Two activities a day; high-energy itinerary." },
+] as const;
+
+// Interest chips — drive optional-activity selection and the AI's
+// lodge bias (e.g., birding → birding-friendly camps; photography →
+// camps with hide / vehicle access). Multiple-select; empty = AI
+// stays neutral.
+const INTERESTS = [
+  "Big 5",
+  "Birding",
+  "Cultural",
+  "Beach",
+  "Honeymoon",
+  "Hiking",
+  "Photography",
+  "Family",
+  "Conservation",
+  "Walking safari",
+  "Hot air balloon",
+  "Self-drive",
+] as const;
+
 // Common destination chips moved into TripStopsEditor — operator now
 // adds destinations as ordered "stops" rows with per-stop nights and
 // optional photo / property pre-picks.
@@ -317,6 +348,101 @@ export function TripSetupDialog({
             </div>
           </Field>
 
+          {/* Pace — independent of style. Drives optional-activity
+              volume and transfer scheduling. */}
+          <Field label="Pace" hint="How busy do they want each day?">
+            <div className="grid grid-cols-3 gap-2">
+              {PACE_OPTIONS.map((p) => {
+                const active = form.pace === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => update("pace", p.id)}
+                    className={`text-left px-4 py-3 rounded-xl border transition active:scale-[0.99] ${
+                      active
+                        ? "bg-[#1b3a2d] text-white border-[#1b3a2d]"
+                        : "bg-white text-black/70 border-black/12 hover:border-black/25"
+                    }`}
+                  >
+                    <div className="font-semibold text-small">{p.label}</div>
+                    <div
+                      className={`text-label mt-0.5 ${active ? "text-white/70" : "text-black/45"}`}
+                      style={{ textTransform: "none", letterSpacing: "0", fontWeight: 400 }}
+                    >
+                      {p.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {/* Client interests — drives optional-activity bias and
+              lodge selection. Multi-select, optional. */}
+          <Field
+            label="Client interests"
+            hint="Optional — pick anything they've mentioned"
+          >
+            <div className="flex flex-wrap gap-1.5">
+              {INTERESTS.map((label) => {
+                const active = form.interests.includes(label);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() =>
+                      update(
+                        "interests",
+                        active
+                          ? form.interests.filter((x) => x !== label)
+                          : [...form.interests, label],
+                      )
+                    }
+                    className={`px-3 py-1 rounded-full text-small font-medium transition active:scale-95 border ${
+                      active
+                        ? "bg-[#1b3a2d] text-white border-[#1b3a2d]"
+                        : "bg-white text-black/65 border-black/12 hover:bg-black/5"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {/* Pinned arrival / departure routines — both optional,
+              both single-line. When set, the AI is forbidden from
+              writing a different Day 1 / last-day routine. Stops the
+              "5pm landing → game drive" hallucination cold. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field
+              label="Arrival routine"
+              hint="Optional — pinned for Day 1"
+            >
+              <input
+                type="text"
+                value={form.arrivalRoutine}
+                onChange={(e) => update("arrivalRoutine", e.target.value)}
+                placeholder="e.g. Welcome dinner at Mount Meru Hotel"
+                className={inputCls}
+              />
+            </Field>
+            <Field
+              label="Departure routine"
+              hint="Optional — pinned for last day"
+            >
+              <input
+                type="text"
+                value={form.departureRoutine}
+                onChange={(e) => update("departureRoutine", e.target.value)}
+                placeholder="e.g. Breakfast then transfer to KIA for evening flight"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+
           {/* Notes */}
           <Field label="Notes" hint="Optional — anything you want to remember about this trip">
             <textarea
@@ -532,6 +658,10 @@ type FormShape = {
   origin: string;
   stops: TripStop[];
   style: string;
+  pace: "relaxed" | "balanced" | "packed";
+  interests: string[];
+  arrivalRoutine: string;
+  departureRoutine: string;
   notes: string;
 };
 
@@ -578,6 +708,16 @@ function buildProposalFromForm(form: FormShape, nights: number): Proposal {
   ].filter(Boolean).join(" · ");
   if (form.notes.trim()) {
     base.trip.operatorNote = form.notes.trim();
+  }
+  base.trip.pace = form.pace;
+  if (form.interests.length > 0) {
+    base.trip.interests = form.interests;
+  }
+  if (form.arrivalRoutine.trim()) {
+    base.trip.arrivalRoutine = form.arrivalRoutine.trim();
+  }
+  if (form.departureRoutine.trim()) {
+    base.trip.departureRoutine = form.departureRoutine.trim();
   }
 
   // Client
@@ -644,6 +784,10 @@ function buildDefaultForm(): FormShape {
     origin: "",
     stops: [],
     style: "mid_range",
+    pace: "balanced",
+    interests: [],
+    arrivalRoutine: "",
+    departureRoutine: "",
     notes: "",
   };
 }

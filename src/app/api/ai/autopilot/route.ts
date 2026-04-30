@@ -347,6 +347,22 @@ async function handleAutopilot(req: Request): Promise<Response> {
       );
   const tripStyle = proposal.trip?.tripStyle?.trim() || "Mid-range";
   const notes = proposal.trip?.operatorNote?.trim() || "";
+  // Pace knob — relaxed/balanced/packed. Passed to the AI to scale
+  // optional-activity volume + transfer density. Defaults to balanced
+  // for old proposals or proposals where the operator skipped the
+  // control.
+  const pace = ((): "relaxed" | "balanced" | "packed" => {
+    const raw = proposal.trip?.pace;
+    return raw === "relaxed" || raw === "balanced" || raw === "packed" ? raw : "balanced";
+  })();
+  // Client interests — multi-select chips. Empty array = AI stays
+  // neutral. Used to bias optional-activity selection and lodge picks
+  // (e.g., "Birding" → birding-focused camps).
+  const interests = Array.isArray(proposal.trip?.interests)
+    ? (proposal.trip.interests as string[]).filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    : [];
+  const arrivalRoutine = proposal.trip?.arrivalRoutine?.trim() || "";
+  const departureRoutine = proposal.trip?.departureRoutine?.trim() || "";
   const guestNames = proposal.client?.guestNames?.trim() || "";
   const adults = Number(proposal.client?.adults ?? 0) || 0;
   const children = Number(proposal.client?.children ?? 0) || 0;
@@ -484,6 +500,23 @@ DAYS:
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
 
+PACE (trip.pace):
+- "relaxed" — 1 optional activity per day on average, slower mornings, fewer transfers per day, lean narrative on rest + camp time.
+- "balanced" — 2 optionals on game-drive days, 1 on transfer / arrival days. Default.
+- "packed" — 3-4 optionals on full days, narratives reference back-to-back activities. Avoid suggesting downtime.
+
+INTERESTS (trip.interests):
+- When present, bias optional activities AND tier-pick notes toward the listed interests. Examples: "Birding" → birding hides, named species, walking guides; "Photography" → camp vehicles with bean bags / hides, golden-hour timing; "Family" → family-friendly camps, pool, kid programs; "Honeymoon" → private dinners, sunset moments, secluded settings; "Cultural" → village visits, named guides, craft cooperatives.
+- Don't shoehorn — only weave in interest cues that genuinely belong to that day's destination.
+
+ARRIVAL ROUTINE (trip.arrivalRoutine):
+- When set, the operator has prescribed Day 1's routine. You MUST mirror it in days[0].description (lead paragraph) and days[0].highlights. Don't invent a game drive on Day 1 if the operator says "welcome dinner". Don't swap the named hotel for a different one.
+- When not set, write Day 1 as a sensible arrival day for the gateway destination.
+
+DEPARTURE ROUTINE (trip.departureRoutine):
+- When set, the operator has prescribed the LAST day's routine. Apply the same constraint as arrivalRoutine — last day's narrative reflects the operator's scripted close.
+- When not set, write the last day as a sensible transfer + departure day.
+
 DAY MOMENT-OF-THE-DAY (momentOfDay):
 - For EVERY day, write ONE editorial pull-quote — 8 to 14 words, present tense, sensory specifics. This is the day's hook for skim-readers.
 - Examples of the right register: "Lions hunting at dawn — reserved seats at the Sunrise Hide." / "The crater rim at first light, before the trucks arrive." / "A walking safari with a Maasai guide, tracks fresh from last night."
@@ -562,6 +595,10 @@ PRACTICAL INFO:
       // destinations across days itself).
       schedule: aiSchedule.length > 0 ? aiSchedule : undefined,
       tripStyle,
+      pace,
+      interests: interests.length > 0 ? interests : undefined,
+      arrivalRoutine: arrivalRoutine || undefined,
+      departureRoutine: departureRoutine || undefined,
       operatorNote: notes,
       arrivalDate: proposal.trip?.arrivalDate,
       departureDate: proposal.trip?.departureDate,
@@ -985,6 +1022,10 @@ type ProposalInput = {
     operatorNote?: string;
     arrivalDate?: string;
     departureDate?: string;
+    pace?: string;
+    interests?: string[];
+    arrivalRoutine?: string;
+    departureRoutine?: string;
   };
   client?: {
     guestNames?: string;
