@@ -268,12 +268,14 @@ function PropertyBlock({
             </FactBlock>
 
             {/* At-a-glance amenities — small SVG icons rendered from
-                property.amenities. Visual rhythm in the data column
-                that prints cleanly in PDF (every glyph is vector).
-                Hidden when the property has no amenities AND we're in
-                preview; in editor we show a placeholder that links to
-                the INFORMATION tab where amenities are managed. */}
-            {(property.amenities.length > 0 || isEditor) && (
+                property.amenities. Operator brief: labels were
+                getting cut off by `truncate` in the 3-col grid, so
+                we now switch to a 2-col layout with wrapping text
+                so long labels (e.g. "Private plunge pool") show in
+                full across two lines. Defaults to [] when amenities
+                is missing (legacy property records imported without
+                the field). */}
+            {((property.amenities ?? []).length > 0 || isEditor) && (
               <div
                 className="mt-7 mb-1"
                 style={{ borderTop: `1px solid ${tokens.border}` }}
@@ -284,19 +286,25 @@ function PropertyBlock({
                 >
                   At a glance
                 </div>
-                {property.amenities.length > 0 ? (
+                {(property.amenities ?? []).length > 0 ? (
                   <div
-                    className="grid grid-cols-3 gap-x-3 gap-y-3"
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5"
                     style={{ color: tokens.headingText }}
                   >
-                    {property.amenities.slice(0, 6).map((label) => (
+                    {(property.amenities ?? []).slice(0, 6).map((label) => (
                       <div
                         key={label}
-                        className="flex items-center gap-2 text-[11.5px] leading-tight"
+                        className="flex items-start gap-2 text-[12px] leading-snug"
                         title={label}
                       >
-                        <AmenityIcon label={label} size={16} color={tokens.accent} />
-                        <span className="truncate">{label}</span>
+                        <span className="shrink-0 mt-0.5">
+                          <AmenityIcon
+                            label={label}
+                            size={16}
+                            color={tokens.accent}
+                          />
+                        </span>
+                        <span className="break-words">{label}</span>
                       </div>
                     ))}
                   </div>
@@ -906,7 +914,7 @@ function InformationTab({
           either there or here — but only rendered once. The amenity
           block stays inside the INFORMATION tab. */}
 
-      {(property.amenities.length > 0 || isEditor) && (
+      {((property.amenities ?? []).length > 0 || isEditor) && (
         <section>
           <div
             className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
@@ -928,8 +936,8 @@ function InformationTab({
               })
             }
           >
-            {property.amenities.length > 0
-              ? property.amenities.join(", ")
+            {(property.amenities ?? []).length > 0
+              ? (property.amenities ?? []).join(", ")
               : isEditor
                 ? "Comma-separated list — e.g. Pool, Spa, Private verandah, Kids club"
                 : ""}
