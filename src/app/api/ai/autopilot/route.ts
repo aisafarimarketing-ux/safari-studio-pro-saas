@@ -162,9 +162,10 @@ type AutopilotResponse = {
 const SUBMIT_PROPOSAL_TOOL: Anthropic.Tool = {
   name: "submit_proposal",
   description:
-    "Submit the personalised safari proposal data. Call this exactly once with all the proposal sections filled in.",
+    "Submit the personalised safari proposal data. Call this exactly once with all the proposal sections filled in. The `days` array is REQUIRED — it is the heart of the proposal, never return an empty array. If you are running short on output budget, prioritise filling `days[]` over the cosmetic prose blocks (cover/quote/closing).",
   input_schema: {
     type: "object",
+    required: ["days"],
     properties: {
       cover: {
         type: "object",
@@ -569,7 +570,12 @@ ${JSON.stringify(userPayload, null, 2)}`;
     const msg = await anth.messages.create(
       {
         model: MODEL,
-        max_tokens: 8000,
+        // Sonnet 4-5 supports 64K output. 16K gives complex multi-country
+        // itineraries (10+ destinations, 14+ nights) room to populate the
+        // full `days[]` array — at 8K we were truncating before days
+        // started, returning `days: []` on heavy trips. Empirical: a
+        // 14-night, 10-destination Mid-range trip uses ~9-12K out tokens.
+        max_tokens: 16000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
         ],
