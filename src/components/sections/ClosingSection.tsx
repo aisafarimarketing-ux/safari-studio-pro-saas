@@ -4,7 +4,8 @@ import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
-import { ImageSlot } from "./day-card/ImageSlot";
+import { ExpandingCards, type CardItem } from "@/components/ui/ExpandingCards";
+import { getGlyphForDestination } from "@/lib/wildlifeGlyphs";
 import type {
   Section,
   Day,
@@ -195,7 +196,7 @@ function handleVisitWebsite(operator: OperatorProfile) {
 // ─── Main component ──────────────────────────────────────────────────────
 
 export function ClosingSection({ section }: { section: Section }) {
-  const { proposal, updateSectionContent, updateDay } = useProposalStore();
+  const { proposal, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { theme, days, operator, client, trip, properties, activeTier } = proposal;
@@ -220,25 +221,40 @@ export function ClosingSection({ section }: { section: Section }) {
 
   const variant = section.layoutVariant;
 
-  // Decide tile count by variant. split-card uses 2 hero tiles;
-  // gallery-row uses up to 4; stack uses 1.
-  const maxTiles =
-    variant === "gallery-row" ? 4 : variant === "stack" ? 1 : 2;
+  // Tile count = number of unique destinations (no per-variant cap).
+  // Operator brief: "image variant to be the number of destinations."
   const tiles = curateTiles(
     days,
     properties,
     imageOverrides,
     activeTier as TierKey,
-    maxTiles,
-  );
-  // Full destinations list (deduped) — used by stack's caption.
-  const allStops = curateTiles(
-    days,
-    properties,
-    imageOverrides,
-    activeTier as TierKey,
     99,
-  ).map((t) => t.destination);
+  );
+  const allStops = tiles.map((t) => t.destination);
+
+  // Build CardItem[] for ExpandingCards. Each tile becomes a card —
+  // description pulled from the matching day's narrative (truncated
+  // ~120 chars), icon from the wildlife glyph registry.
+  const cardItems: CardItem[] = tiles.map((t) => {
+    const day = days.find(
+      (d) => d.destination?.trim().toLowerCase() === t.key,
+    );
+    const narrative = (day?.description ?? "").trim();
+    const description =
+      narrative.length > 0
+        ? narrative.length > 120
+          ? `${narrative.slice(0, 117)}…`
+          : narrative
+        : `Day ${day?.dayNumber ?? "?"} — explore ${t.destination}.`;
+    const glyph = getGlyphForDestination(t.destination);
+    return {
+      id: t.key,
+      title: t.destination,
+      description,
+      imgSrc: t.imageUrl,
+      icon: <CardGlyph glyph={glyph} />,
+    };
+  });
 
   // Per-tile image override → uploads to /api/upload-image and
   // persists onto section.content.imageOverrides keyed by lowercase
@@ -253,14 +269,10 @@ export function ClosingSection({ section }: { section: Section }) {
       alert(err instanceof Error ? err.message : "Image upload failed");
     }
   };
-  // Drag-to-reposition writes back to the matching day's
-  // heroImagePosition (since auto-picked images live on Day).
-  const setPositionForKey = (key: string, pos: string) => {
-    const day = days.find(
-      (d) => d.destination?.trim().toLowerCase() === key,
-    );
-    if (day) updateDay(day.id, { heroImagePosition: pos });
-  };
+  // (Drag-to-reposition was wired to the day's heroImagePosition
+  // when each tile used the ImageSlot component. ExpandingCards uses
+  // a plain <img> with object-cover, so per-tile reposition isn't
+  // surfaced here — operators tweak via the day card if needed.)
 
   // Action wiring bound with the proposal's operator/client/trip
   const onSecure = () => {
@@ -288,14 +300,22 @@ export function ClosingSection({ section }: { section: Section }) {
   const onCtaLabelChange = (v: string) =>
     updateSectionContent(section.id, { ctaLabel: v });
 
+  // Image-swap handler used by ExpandingCards (id maps directly to
+  // the destination key we use for overrides).
+  const onChangeCardImage = (id: string | number, file: File) => {
+    setImageForKey(String(id), file);
+  };
+
   const sharedProps: VariantProps = {
-    tiles,
+    cardItems,
     allStops,
     headline,
     letter,
     availability,
     ctaLabel,
     operator,
+    accentColor: tokens.accent,
+    cardColor: tokens.cardBg,
     isEditor,
     tokens,
     theme,
@@ -308,8 +328,7 @@ export function ClosingSection({ section }: { section: Section }) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
-    setImageForKey,
-    setPositionForKey,
+    onChangeCardImage,
   };
 
   if (variant === "gallery-row") return <GalleryRowLayout {...sharedProps} />;
@@ -320,13 +339,15 @@ export function ClosingSection({ section }: { section: Section }) {
 // ─── Shared variant props ────────────────────────────────────────────────
 
 interface VariantProps {
-  tiles: CuratedTile[];
+  cardItems: CardItem[];
   allStops: string[];
   headline: string;
   letter: string;
   availability: string;
   ctaLabel: string;
   operator: OperatorProfile;
+  accentColor: string;
+  cardColor: string;
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
@@ -339,25 +360,27 @@ interface VariantProps {
   onLetterChange: (v: string) => void;
   onAvailabilityChange: (v: string) => void;
   onCtaLabelChange: (v: string) => void;
-  setImageForKey: (key: string, file: File) => void;
-  setPositionForKey: (key: string, pos: string) => void;
+  onChangeCardImage: (id: string | number, file: File) => void;
 }
 
 // ─── Variant 1 · split-card (default) ────────────────────────────────────
 //
-// 2 hero image tiles up top with names overlaid bottom-left.
-// Below: 2-col card — left has consultant avatar + name + role +
-// email; right has headline + letter + availability footnote + CTAs.
-// Matches the operator's polished reference screenshot.
+// ExpandingCards row up top showing every destination. Below:
+// centred letter + primary CTA + secondary buttons spread across
+// the width. Consultant contact info has been moved to the Footer
+// per operator brief — this section is purely the closing letter
+// + booking actions.
 
 function SplitCardLayout(p: VariantProps) {
   const {
-    tiles,
+    cardItems,
     headline,
     letter,
     availability,
     ctaLabel,
     operator,
+    accentColor,
+    cardColor,
     isEditor,
     tokens,
     theme,
@@ -370,94 +393,85 @@ function SplitCardLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
-    setImageForKey,
-    setPositionForKey,
+    onChangeCardImage,
   } = p;
   return (
     <div
       className="py-6 md:py-10 px-6 md:px-12"
       style={{ background: tokens.sectionSurface }}
     >
-      <div className="max-w-5xl mx-auto">
-        {/* Image rail — 2 hero tiles with name overlay */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          {tiles.map((t) => (
-            <HeroTile
-              key={t.key}
-              tile={t}
-              isEditor={isEditor}
-              tokens={tokens}
-              theme={theme}
-              setImage={(file) => setImageForKey(t.key, file)}
-              setPosition={(pos) => setPositionForKey(t.key, pos)}
-              tall
-            />
-          ))}
-        </div>
+      <div className="max-w-5xl mx-auto flex flex-col items-center">
+        <ExpandingCards
+          items={cardItems}
+          isEditor={isEditor}
+          onChangeImage={onChangeCardImage}
+          accentColor={accentColor}
+          placeholderColor={cardColor}
+          className="mb-8 mx-auto"
+        />
 
-        {/* 2-col card — meta left, content right */}
+        {/* Centered letter card */}
         <div
-          className="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-6 md:gap-10 rounded-xl p-6 md:p-8"
+          className="w-full max-w-2xl rounded-xl p-6 md:p-8 text-center"
           style={{
             background: tokens.cardBg,
             border: `1px solid ${tokens.border}`,
           }}
         >
-          <ConsultantMeta operator={operator} tokens={tokens} theme={theme} />
+          <h2
+            className="font-bold leading-[1.15] outline-none"
+            style={{
+              color: tokens.headingText,
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(22px, 2.6vw, 28px)",
+            }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onHeadlineChange(e.currentTarget.textContent ?? "")}
+          >
+            {headline}
+          </h2>
+          <p
+            className="mt-3 text-[14.5px] leading-[1.7] outline-none whitespace-pre-line"
+            style={{ color: tokens.bodyText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onLetterChange(e.currentTarget.textContent ?? "")}
+          >
+            {letter}
+          </p>
+          <p
+            className="mt-3 text-[12px] italic outline-none"
+            style={{ color: tokens.mutedText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              onAvailabilityChange(e.currentTarget.textContent ?? "")
+            }
+          >
+            {availability}
+          </p>
+        </div>
 
-          <div className="min-w-0">
-            <h2
-              className="font-bold leading-[1.15] outline-none"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(20px, 2.4vw, 26px)",
-              }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => onHeadlineChange(e.currentTarget.textContent ?? "")}
-            >
-              {headline}
-            </h2>
-            <p
-              className="mt-3 text-[14.5px] leading-[1.7] outline-none whitespace-pre-line"
-              style={{ color: tokens.bodyText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) => onLetterChange(e.currentTarget.textContent ?? "")}
-            >
-              {letter}
-            </p>
-            <p
-              className="mt-3 text-[12px] italic outline-none"
-              style={{ color: tokens.mutedText }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                onAvailabilityChange(e.currentTarget.textContent ?? "")
-              }
-            >
-              {availability}
-            </p>
-
-            <div className="mt-6">
-              <PrimaryCta
-                label={ctaLabel}
-                isEditor={isEditor}
-                tokens={tokens}
-                onClick={onSecure}
-                onLabelChange={onCtaLabelChange}
-              />
-              <SecondaryActions
-                tokens={tokens}
-                operator={operator}
-                onShare={onShare}
-                onDownload={onDownload}
-                onRequestChanges={onRequestChanges}
-                onVisitWebsite={onVisitWebsite}
-              />
-            </div>
+        {/* Centered primary CTA + spread secondary actions */}
+        <div className="w-full max-w-3xl mt-6 flex flex-col items-center">
+          <div className="w-full max-w-md">
+            <PrimaryCta
+              label={ctaLabel}
+              isEditor={isEditor}
+              tokens={tokens}
+              onClick={onSecure}
+              onLabelChange={onCtaLabelChange}
+            />
           </div>
+          <SecondaryActions
+            tokens={tokens}
+            operator={operator}
+            onShare={onShare}
+            onDownload={onDownload}
+            onRequestChanges={onRequestChanges}
+            onVisitWebsite={onVisitWebsite}
+          />
         </div>
       </div>
     </div>
@@ -472,12 +486,14 @@ function SplitCardLayout(p: VariantProps) {
 
 function GalleryRowLayout(p: VariantProps) {
   const {
-    tiles,
+    cardItems,
     headline,
     letter,
     availability,
     ctaLabel,
     operator,
+    accentColor,
+    cardColor,
     isEditor,
     tokens,
     theme,
@@ -490,51 +506,25 @@ function GalleryRowLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
-    setImageForKey,
-    setPositionForKey,
+    onChangeCardImage,
   } = p;
-  const cols =
-    tiles.length >= 4
-      ? "grid-cols-2 sm:grid-cols-4"
-      : tiles.length === 3
-        ? "grid-cols-3"
-        : tiles.length === 2
-          ? "grid-cols-2"
-          : "grid-cols-1";
   return (
     <div
       className="py-6 md:py-10 px-6 md:px-12"
       style={{ background: tokens.sectionSurface }}
     >
-      <div className="max-w-5xl mx-auto">
-        <div className={`grid ${cols} gap-3 md:gap-4 mb-8`}>
-          {tiles.map((t) => (
-            <div key={t.key} className="flex flex-col">
-              <HeroTile
-                tile={t}
-                isEditor={isEditor}
-                tokens={tokens}
-                theme={theme}
-                setImage={(file) => setImageForKey(t.key, file)}
-                setPosition={(pos) => setPositionForKey(t.key, pos)}
-                hideOverlay
-              />
-              <div
-                className="mt-2 text-center text-[12.5px] uppercase font-semibold"
-                style={{
-                  color: tokens.headingText,
-                  letterSpacing: "0.18em",
-                  fontFamily: `'${theme.bodyFont}', sans-serif`,
-                }}
-              >
-                {t.destination}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="max-w-5xl mx-auto flex flex-col items-center">
+        <ExpandingCards
+          items={cardItems}
+          isEditor={isEditor}
+          onChangeImage={onChangeCardImage}
+          accentColor={accentColor}
+          placeholderColor={cardColor}
+          className="mb-8 mx-auto"
+        />
 
         <div
-          className="max-w-2xl mx-auto text-center rounded-xl p-6 md:p-8"
+          className="w-full max-w-2xl text-center rounded-xl p-6 md:p-8"
           style={{
             background: tokens.cardBg,
             border: `1px solid ${tokens.border}`,
@@ -575,7 +565,7 @@ function GalleryRowLayout(p: VariantProps) {
           </p>
         </div>
 
-        <div className="mt-8 flex flex-col items-center">
+        <div className="w-full max-w-3xl mt-6 flex flex-col items-center">
           <div className="w-full max-w-md">
             <PrimaryCta
               label={ctaLabel}
@@ -585,17 +575,14 @@ function GalleryRowLayout(p: VariantProps) {
               onLabelChange={onCtaLabelChange}
             />
           </div>
-          <div className="w-full max-w-3xl mt-3">
-            <SecondaryActions
-              tokens={tokens}
-              operator={operator}
-              onShare={onShare}
-              onDownload={onDownload}
-              onRequestChanges={onRequestChanges}
-              onVisitWebsite={onVisitWebsite}
-              centered
-            />
-          </div>
+          <SecondaryActions
+            tokens={tokens}
+            operator={operator}
+            onShare={onShare}
+            onDownload={onDownload}
+            onRequestChanges={onRequestChanges}
+            onVisitWebsite={onVisitWebsite}
+          />
         </div>
       </div>
     </div>
@@ -609,13 +596,15 @@ function GalleryRowLayout(p: VariantProps) {
 
 function StackLayout(p: VariantProps) {
   const {
-    tiles,
+    cardItems,
     allStops,
     headline,
     letter,
     availability,
     ctaLabel,
     operator,
+    accentColor,
+    cardColor,
     isEditor,
     tokens,
     theme,
@@ -628,28 +617,22 @@ function StackLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
-    setImageForKey,
-    setPositionForKey,
+    onChangeCardImage,
   } = p;
-  const hero = tiles[0];
   return (
     <div
       className="py-6 md:py-10 px-6 md:px-12"
       style={{ background: tokens.sectionSurface }}
     >
-      <div className="max-w-3xl mx-auto">
-        {hero && (
-          <HeroTile
-            tile={hero}
-            isEditor={isEditor}
-            tokens={tokens}
-            theme={theme}
-            setImage={(file) => setImageForKey(hero.key, file)}
-            setPosition={(pos) => setPositionForKey(hero.key, pos)}
-            hideOverlay
-            tall
-          />
-        )}
+      <div className="max-w-3xl mx-auto flex flex-col items-center">
+        <ExpandingCards
+          items={cardItems}
+          isEditor={isEditor}
+          onChangeImage={onChangeCardImage}
+          accentColor={accentColor}
+          placeholderColor={cardColor}
+          className="mx-auto"
+        />
         {allStops.length > 0 && (
           <div
             className="mt-4 text-center text-[10.5px] uppercase font-semibold"
@@ -663,7 +646,7 @@ function StackLayout(p: VariantProps) {
           </div>
         )}
 
-        <div className="mt-8 text-center">
+        <div className="mt-8 text-center w-full">
           <h2
             className="font-bold leading-[1.1] outline-none"
             style={{
@@ -708,17 +691,14 @@ function StackLayout(p: VariantProps) {
                 onLabelChange={onCtaLabelChange}
               />
             </div>
-            <div className="w-full max-w-3xl mt-3">
-              <SecondaryActions
-                tokens={tokens}
-                operator={operator}
-                onShare={onShare}
-                onDownload={onDownload}
-                onRequestChanges={onRequestChanges}
-                onVisitWebsite={onVisitWebsite}
-                centered
-              />
-            </div>
+            <SecondaryActions
+              tokens={tokens}
+              operator={operator}
+              onShare={onShare}
+              onDownload={onDownload}
+              onRequestChanges={onRequestChanges}
+              onVisitWebsite={onVisitWebsite}
+            />
           </div>
         </div>
       </div>
@@ -727,123 +707,10 @@ function StackLayout(p: VariantProps) {
 }
 
 // ─── Subcomponents ───────────────────────────────────────────────────────
-
-function HeroTile({
-  tile,
-  isEditor,
-  tokens,
-  theme,
-  setImage,
-  setPosition,
-  tall,
-  hideOverlay,
-}: {
-  tile: CuratedTile;
-  isEditor: boolean;
-  tokens: ThemeTokens;
-  theme: ProposalTheme;
-  setImage: (file: File) => void;
-  setPosition: (pos: string) => void;
-  tall?: boolean;
-  hideOverlay?: boolean;
-}) {
-  return (
-    <div
-      className="relative overflow-hidden rounded-xl"
-      style={{
-        aspectRatio: tall ? "4 / 3" : "1 / 1",
-        background: tokens.cardBg,
-      }}
-    >
-      <ImageSlot
-        url={tile.imageUrl}
-        alt={tile.destination}
-        isEditor={isEditor}
-        tokens={tokens}
-        onUpload={setImage}
-        position={tile.position}
-        onPositionChange={setPosition}
-        placeholderLabel={`Add a photo of ${tile.destination}`}
-        className="w-full h-full"
-      >
-        {!hideOverlay && (
-          <div
-            aria-hidden
-            className="absolute inset-x-0 bottom-0 px-4 py-3"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)",
-              color: "#ffffff",
-              fontFamily: `'${theme.displayFont}', serif`,
-              fontWeight: 700,
-              fontSize: 16,
-              letterSpacing: "0.01em",
-            }}
-          >
-            {tile.destination}
-          </div>
-        )}
-      </ImageSlot>
-    </div>
-  );
-}
-
-function ConsultantMeta({
-  operator,
-  tokens,
-  theme,
-}: {
-  operator: OperatorProfile;
-  tokens: ThemeTokens;
-  theme: ProposalTheme;
-}) {
-  const initial = (
-    operator.consultantName?.[0] ||
-    operator.companyName?.[0] ||
-    "•"
-  ).toUpperCase();
-  return (
-    <div className="flex items-start gap-3">
-      <div
-        className="shrink-0 inline-flex items-center justify-center rounded-full overflow-hidden"
-        style={{
-          width: 44,
-          height: 44,
-          background: `${tokens.accent}24`,
-          color: tokens.accent,
-          fontWeight: 700,
-          fontSize: 17,
-          fontFamily: `'${theme.displayFont}', serif`,
-        }}
-      >
-        {operator.consultantPhoto ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={operator.consultantPhoto}
-            alt={operator.consultantName}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <span aria-hidden>{initial}</span>
-        )}
-      </div>
-      <div className="min-w-0">
-        <div
-          className="text-[13.5px] font-semibold truncate"
-          style={{ color: tokens.headingText }}
-        >
-          {operator.email || operator.consultantName || ""}
-        </div>
-        <div
-          className="text-[11.5px] mt-0.5"
-          style={{ color: tokens.mutedText }}
-        >
-          {operator.consultantRole || "Your Safari Expert"}
-        </div>
-      </div>
-    </div>
-  );
-}
+//
+// HeroTile + ConsultantMeta removed — image rail is now ExpandingCards
+// for every variant, and the consultant contact block lives in the
+// Footer's contact-cards variant per operator brief.
 
 function PrimaryCta({
   label,
@@ -892,7 +759,6 @@ function SecondaryActions({
   onDownload,
   onRequestChanges,
   onVisitWebsite,
-  centered,
 }: {
   tokens: ThemeTokens;
   operator: OperatorProfile;
@@ -900,19 +766,13 @@ function SecondaryActions({
   onDownload: () => void;
   onRequestChanges: () => void;
   onVisitWebsite: () => void;
-  centered?: boolean;
 }) {
   const hasWebsite = !!operator.website?.trim();
+  // Spread the buttons across the row with flex-1 so each gets equal
+  // horizontal real estate. Wraps to multiple rows on narrow widths.
   return (
-    <div
-      className={`mt-3 flex flex-wrap gap-2 ${centered ? "justify-center" : ""}`}
-    >
-      <SecondaryBtn
-        label="Share"
-        tokens={tokens}
-        onClick={onShare}
-        icon={<ShareIcon />}
-      />
+    <div className="mt-3 w-full flex flex-wrap gap-2">
+      <SecondaryBtn label="Share" tokens={tokens} onClick={onShare} icon={<ShareIcon />} />
       <SecondaryBtn
         label="Download"
         tokens={tokens}
@@ -952,7 +812,7 @@ function SecondaryBtn({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12.5px] font-medium transition hover:opacity-85 active:scale-[0.98]"
+      className="flex-1 min-w-[120px] inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-[12.5px] font-medium transition hover:opacity-85 active:scale-[0.98]"
       style={{
         background: "transparent",
         color: tokens.headingText,
@@ -964,6 +824,36 @@ function SecondaryBtn({
       </span>
       <span>{label}</span>
     </button>
+  );
+}
+
+// CardGlyph renders a wildlife glyph from wildlifeGlyphs at a small
+// size suitable for ExpandingCards' icon slot.
+function CardGlyph({
+  glyph,
+}: {
+  glyph: { paths: string[]; strokeWidth?: number; filled?: boolean };
+}) {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      aria-hidden
+      style={{ display: "inline-block" }}
+    >
+      {glyph.paths.map((d, i) => (
+        <path
+          key={i}
+          d={d}
+          fill={glyph.filled ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth={glyph.strokeWidth ?? 1.4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
   );
 }
 
