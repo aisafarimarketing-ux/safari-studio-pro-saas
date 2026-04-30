@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEditorStore } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
+import { IntelligentColorPicker } from "./IntelligentColorPicker";
 
 // ─── InlineTextToolbar ───────────────────────────────────────────────────
 //
@@ -457,37 +458,15 @@ export function InlineTextToolbar() {
 
             {openMenu === "color" && (
               <PopoverPanel key="color-panel" align="center" direction={popoverDir}>
-                <div className="text-[10px] uppercase tracking-wider text-white/40 px-1.5 mb-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-white/40 px-0.5 mb-1.5">
                   Text colour
                 </div>
-                <div className="grid grid-cols-9 gap-1 px-1">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      title={c.label}
-                      onClick={() => setColor(c.value)}
-                      className="w-6 h-6 rounded-md border border-white/10 hover:scale-110 transition-transform"
-                      style={{ background: c.value }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 flex items-center gap-2 px-1">
-                  <span className="text-[10px] uppercase tracking-wider text-white/40">
-                    Hex
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="#000000"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const v = (e.currentTarget.value || "").trim();
-                        if (/^#[0-9a-f]{3,8}$/i.test(v)) setColor(v);
-                      }
-                    }}
-                    className="flex-1 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[11.5px] text-white outline-none focus:border-white/30 font-mono"
-                  />
-                </div>
+                <IntelligentColorPicker
+                  value={undefined}
+                  onChange={(hex) => setColor(hex)}
+                  brandColors={proposal.operator?.brandColors}
+                  presets={PRESET_COLORS}
+                />
               </PopoverPanel>
             )}
 
