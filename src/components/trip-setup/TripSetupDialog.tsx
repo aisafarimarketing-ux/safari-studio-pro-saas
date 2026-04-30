@@ -317,6 +317,8 @@ export function TripSetupDialog({
             hint="Used in the greeting, closing, and throughout"
           >
             <TextInput
+              name="guestNames"
+              autoComplete="name"
               value={form.guestNames}
               onChange={(v) => update("guestNames", v)}
               placeholder="e.g. The Anderson Family · Sarah & Michael · Priya"
@@ -326,6 +328,7 @@ export function TripSetupDialog({
           {/* Trip name — optional; defaults to '<Guest> Safari' */}
           <Field label="Trip name" hint="Optional — defaults to '{guests} Safari'">
             <TextInput
+              name="tripName"
               value={form.title}
               onChange={(v) => update("title", v)}
               placeholder={form.guestNames ? `${form.guestNames} Safari` : "e.g. Anderson Family Safari"}
@@ -338,6 +341,9 @@ export function TripSetupDialog({
               <Field label="Arrival">
                 <input
                   type="date"
+                  name="arrivalDate"
+                  id="ts-arrival-date"
+                  autoComplete="off"
                   value={form.arrivalDate}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -353,6 +359,9 @@ export function TripSetupDialog({
               <Field label="Departure">
                 <input
                   type="date"
+                  name="departureDate"
+                  id="ts-departure-date"
+                  autoComplete="off"
                   value={form.departureDate}
                   min={form.arrivalDate}
                   onChange={(e) => update("departureDate", e.target.value)}
@@ -370,6 +379,7 @@ export function TripSetupDialog({
             <div className="grid grid-cols-2 gap-4">
               <Field label="Adults">
                 <NumberInput
+                  name="adults"
                   value={form.adults}
                   onChange={(v) => update("adults", v)}
                   min={1}
@@ -378,6 +388,7 @@ export function TripSetupDialog({
               </Field>
               <Field label="Children">
                 <NumberInput
+                  name="children"
                   value={form.children}
                   onChange={(v) => update("children", v)}
                   min={0}
@@ -394,6 +405,9 @@ export function TripSetupDialog({
           <Field label="Origin country" hint="Where the travellers are coming from">
             <input
               type="text"
+              name="originCountry"
+              id="ts-origin-country"
+              autoComplete="country-name"
               list="ts-origin-suggestions"
               value={form.origin}
               onChange={(e) => update("origin", e.target.value)}
@@ -534,6 +548,9 @@ export function TripSetupDialog({
             >
               <input
                 type="text"
+                name="arrivalRoutine"
+                id="ts-arrival-routine"
+                autoComplete="off"
                 value={form.arrivalRoutine}
                 onChange={(e) => update("arrivalRoutine", e.target.value)}
                 placeholder="e.g. Welcome dinner at Mount Meru Hotel"
@@ -546,6 +563,9 @@ export function TripSetupDialog({
             >
               <input
                 type="text"
+                name="departureRoutine"
+                id="ts-departure-routine"
+                autoComplete="off"
                 value={form.departureRoutine}
                 onChange={(e) => update("departureRoutine", e.target.value)}
                 placeholder="e.g. Breakfast then transfer to KIA for evening flight"
@@ -557,6 +577,9 @@ export function TripSetupDialog({
           {/* Notes */}
           <Field label="Notes" hint="Optional — anything you want to remember about this trip">
             <textarea
+              name="notes"
+              id="ts-notes"
+              autoComplete="off"
               value={form.notes}
               onChange={(e) => update("notes", e.target.value)}
               rows={3}
@@ -816,14 +839,21 @@ function TextInput({
   value,
   onChange,
   placeholder,
+  name,
+  autoComplete,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  name?: string;
+  autoComplete?: string;
 }) {
   return (
     <input
       type="text"
+      name={name}
+      id={name ? `ts-${name}` : undefined}
+      autoComplete={autoComplete ?? "off"}
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
@@ -837,11 +867,13 @@ function NumberInput({
   onChange,
   min,
   max,
+  name,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
+  name?: string;
 }) {
   const clamp = (v: number) => {
     if (typeof min === "number" && v < min) return min;
@@ -860,6 +892,9 @@ function NumberInput({
       </button>
       <input
         type="number"
+        name={name}
+        id={name ? `ts-num-${name}` : undefined}
+        autoComplete="off"
         value={value}
         min={min}
         max={max}

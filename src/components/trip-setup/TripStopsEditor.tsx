@@ -229,6 +229,9 @@ function StopRow({
 
         <input
           type="text"
+          name={`stop-destination-${stop.id}`}
+          id={`ts-stop-destination-${stop.id}`}
+          autoComplete="off"
           list="ts-destination-suggestions"
           value={stop.destination}
           onChange={(e) => onChange({ destination: e.target.value })}
@@ -667,6 +670,9 @@ function QuickAddPicker({
       <div className="flex items-center gap-2">
         <input
           type="text"
+          name="quick-add-destination"
+          id="ts-quick-add-destination"
+          autoComplete="off"
           list="ts-destination-suggestions"
           value={custom}
           onChange={(e) => setCustom(e.target.value)}

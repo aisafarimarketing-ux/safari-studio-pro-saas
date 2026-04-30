@@ -241,6 +241,9 @@ export function IntelligentColorPicker({
         <span className="text-[10px] uppercase tracking-wider text-white/40">Hex</span>
         <input
           type="text"
+          name="colorPickerHex"
+          id="color-picker-hex"
+          autoComplete="off"
           value={hexInput}
           onChange={(e) => setHexInput(e.target.value)}
           onKeyDown={(e) => {
