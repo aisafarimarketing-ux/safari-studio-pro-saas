@@ -701,20 +701,32 @@ ${JSON.stringify(userPayload, null, 2)}`;
     });
   }
 
-  // ── One-shot path (existing behaviour) ─────────────────────────────────
+  // ── One-shot path (returns one JSON response) ─────────────────────────
+  //
+  // Implementation note: even though the caller wants a single JSON
+  // payload, we use anth.messages.stream() under the hood instead of
+  // .create(). At max_tokens = 32K the SDK refuses .create() with
+  // "Streaming is required for operations that may take longer than
+  // 10 minutes" — Anthropic's safeguard against hung connections. The
+  // stream API has no such cap; we just await its finalMessage() and
+  // return synchronously to the caller. From the caller's perspective
+  // nothing changed — they still get one JSON body.
+  //
+  // The actual SSE streaming branch (when the client passes
+  // Accept: text/event-stream) is handled above and emits per-day
+  // events as the model writes; this branch is for anyone who wants
+  // the raw aggregated output (editor's Regenerate, sample import).
 
   let parsed: AutopilotResponse;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
   try {
-    const msg = await anth.messages.create(
+    const stream = anth.messages.stream(
       {
         model: MODEL,
-        // Sonnet 4-5 supports 64K output. 16K gives complex multi-country
-        // itineraries (10+ destinations, 14+ nights) room to populate the
-        // full `days[]` array — at 8K we were truncating before days
-        // started, returning `days: []` on heavy trips. Empirical: a
-        // 14-night, 10-destination Mid-range trip uses ~9-12K out tokens.
+        // Sonnet 4-5 supports 64K output. 32K gives complex multi-
+        // country itineraries (10+ destinations, 14+ nights) plenty of
+        // room to fill days, lists, and prose without truncation.
         max_tokens: 32000,
         system: [
           { type: "text", text: systemText, cache_control: { type: "ephemeral" } },
@@ -723,24 +735,26 @@ ${JSON.stringify(userPayload, null, 2)}`;
         tools: [SUBMIT_PROPOSAL_TOOL],
         tool_choice: { type: "tool", name: "submit_proposal" },
       },
-      { timeout: 90_000 },
+      { timeout: 600_000 },
     );
-    const elapsedMs = Date.now() - startedAt;
-    console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${msg.usage?.input_tokens ?? "?"} · out_tokens=${msg.usage?.output_tokens ?? "?"} · stop_reason=${msg.stop_reason ?? "?"}`);
 
-    const toolUse = msg.content.find(
+    const finalMessage = await stream.finalMessage();
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`[AUTOPILOT] anthropic done in ${elapsedMs}ms · in_tokens=${finalMessage.usage?.input_tokens ?? "?"} · out_tokens=${finalMessage.usage?.output_tokens ?? "?"} · stop_reason=${finalMessage.stop_reason ?? "?"}`);
+
+    const toolUse = finalMessage.content.find(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_proposal",
     );
     if (!toolUse) {
-      console.error("[AUTOPILOT] no tool_use block in response. content kinds:", msg.content.map((b) => b.type));
+      console.error("[AUTOPILOT] no tool_use block in response. content kinds:", finalMessage.content.map((b) => b.type));
       return NextResponse.json(
         { error: "AI didn't return structured output. Try again." },
         { status: 502 },
       );
     }
     parsed = toolUse.input as AutopilotResponse;
-    // Same diagnostic on the one-shot path so both modes log the
-    // shape of what the AI returned. Surfaces 0-days bugs early.
+    // Diagnostic: log the parsed-output shape. Surfaces 0-days bugs
+    // and over-budget truncation early.
     console.log(
       `[AUTOPILOT] parsed shape · keys=${Object.keys(parsed).join(",")} · days.len=${Array.isArray(parsed.days) ? parsed.days.length : "not-array"} · greeting=${parsed.greeting?.body ? "set" : "empty"} · cover=${parsed.cover?.tagline ? "set" : "empty"}`,
     );
