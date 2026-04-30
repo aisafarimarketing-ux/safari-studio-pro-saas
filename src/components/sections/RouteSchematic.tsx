@@ -147,6 +147,15 @@ function detectLakes(
   return LAKE_LABELS.filter((l) => out.has(l.key));
 }
 
+// Offshore stops — render as separate hand-drawn island shapes in
+// the water region so they READ as islands, not pins floating on
+// open ocean. Zanzibar gets its elongated north-south silhouette;
+// other islands stay rounder.
+const ISLAND_RE = /\bzanzibar\b|\bpemba\b|\bmafia\b|\bstone town\b/i;
+function isIslandStop(destination: string): boolean {
+  return ISLAND_RE.test(destination ?? "");
+}
+
 function buildNodes(days: Day[]): SchematicNode[] {
   const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
   const out: SchematicNode[] = [];
@@ -314,6 +323,33 @@ export function RouteSchematic({
             strokeLinejoin="round"
           />
         ))}
+      </g>
+
+      {/* Layer 2b: offshore islands — same parchment fill + ink
+          stroke as the mainland, drawn at each offshore stop's
+          projected position. Zanzibar gets the elongated vertical
+          shape; other islands stay rounder. */}
+      <g filter="url(#ink-wobble)">
+        {nodes.map((n, i) => {
+          if (!isIslandStop(n.destination)) return null;
+          const pos = positions[i];
+          const isZanzibar = /\bzanzibar\b|\bstone town\b/i.test(n.destination);
+          const rx = isZanzibar ? 18 : 14;
+          const ry = isZanzibar ? 30 : 16;
+          return (
+            <ellipse
+              key={`island-${i}`}
+              cx={pos.x}
+              cy={pos.y}
+              rx={rx}
+              ry={ry}
+              fill={cardColor}
+              stroke={inkColor}
+              strokeWidth={1.4}
+              strokeOpacity={0.7}
+            />
+          );
+        })}
       </g>
 
       {/* Layer 3: lakes */}

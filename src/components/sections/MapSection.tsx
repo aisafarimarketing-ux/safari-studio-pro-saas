@@ -325,18 +325,29 @@ function InteractiveMap({
           </div>
         </header>
 
-        {/* Rail (day cards + END) ‖ map. items-stretch so both
-            columns share the SAME height — rail-driven (whichever
-            content is taller drives the row). The SVG inside the
-            map cell scales to fill via preserveAspectRatio meet,
-            with parchment land fill absorbing any aspect slack. */}
-        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] gap-4 md:gap-5 items-stretch">
-          {/* Sidebar */}
-          <div className="flex flex-col pr-1">
-            {/* Day cards — clickable, fly the map to the selected pin.
-                Wrapped in a flex-1 container so the rail's End block
-                can flex to the bottom of the column. */}
-            <div className="space-y-1.5 flex-1">
+        {/* Rail ‖ map — a single outer card with a vertical divider
+            between the two columns and horizontal dividers between
+            rail rows. Matches the operator's hand-drawn reference:
+            one frame, two columns, table-like rail. items-stretch
+            keeps both columns the same height. */}
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{
+            border: `1px solid ${tokens.border}`,
+            background: tokens.cardBg,
+          }}
+        >
+        <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] items-stretch">
+          {/* Sidebar — stacked table of day rows with horizontal
+              dividers, vertical divider on the right edge separating
+              from the map. */}
+          <div
+            className="flex flex-col"
+            style={{ borderRight: `1px solid ${tokens.border}` }}
+          >
+            {/* Day cards — clickable; the rail's END block + caption
+                stack at the bottom via flex-1 on the card list. */}
+            <div className="flex-1 flex flex-col">
               {groupedRows.map((row, idx) => {
                 const rowDayId = findDayIdForRow(row.startDay);
                 const isSelected = rowDayId && rowDayId === selectedDayId;
@@ -348,11 +359,10 @@ function InteractiveMap({
                     key={idx}
                     type="button"
                     onClick={() => setSelectedDayId(rowDayId ?? null)}
-                    className="w-full text-left flex items-center gap-2.5 p-2 rounded-md transition"
+                    className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 transition"
                     style={{
-                      background: isSelected ? `${tokens.accent}18` : tokens.cardBg,
-                      border: `1px solid ${isSelected ? tokens.accent : tokens.border}`,
-                      boxShadow: isSelected ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                      background: isSelected ? `${tokens.accent}18` : "transparent",
+                      borderBottom: `1px solid ${tokens.border}`,
                     }}
                   >
                     <div
@@ -405,10 +415,10 @@ function InteractiveMap({
               })}
             </div>
 
-            {/* End point */}
+            {/* End point — sits in the rail's footer */}
             <div
-              className="pt-2.5 mt-2.5"
-              style={{ borderTop: `1px solid ${tokens.border}` }}
+              className="px-3 py-2.5"
+              style={{ borderBottom: `1px solid ${tokens.border}` }}
             >
               <div
                 className="text-[9px] uppercase tracking-[0.22em] font-semibold mb-0.5"
@@ -427,14 +437,12 @@ function InteractiveMap({
               </div>
             </div>
 
-            {/* Caption + attribution at the bottom of the rail */}
             {(caption || isEditor) && (
               <div
-                className="mt-3 pt-3 text-[11px] italic outline-none"
+                className="px-3 py-2.5 text-[11px] italic outline-none"
                 style={{
                   color: tokens.mutedText,
                   fontFamily: `'${theme.displayFont}', serif`,
-                  borderTop: `1px solid ${tokens.border}`,
                 }}
                 contentEditable={isEditor}
                 suppressContentEditableWarning
@@ -443,38 +451,21 @@ function InteractiveMap({
                 {caption || (isEditor ? "Add a caption…" : "")}
               </div>
             )}
-            <div
-              className="mt-2 text-[9px] tracking-wide"
-              style={{
-                color: tokens.mutedText,
-                fontFamily: `'${theme.bodyFont}', sans-serif`,
-                opacity: 0.5,
-              }}
-            >
-              Map data © OpenStreetMap contributors
-            </div>
           </div>
 
-          {/* ── Map — fills the grid cell so its height matches the
-              rail's natural content height. items-stretch on the
-              parent grid + height="100%" on RouteMap is what couples
-              the two. ─────────────────────────── */}
-          <div className="min-w-0 flex">
-            <div
-              className="overflow-hidden relative flex-1 min-h-0"
-              style={{
-                borderRadius: 10,
-                border: `1px solid ${tokens.border}`,
-              }}
-            >
-              <RouteSchematic
-                days={days}
-                tokens={tokens}
-                theme={theme}
-                isEditor={isEditor}
-              />
-            </div>
+          {/* ── Map column — fills the grid cell. The schematic's
+              own SVG renders at preserveAspectRatio="xMidYMid meet"
+              so its content stays undistorted; the cell shape is
+              parchment to absorb any aspect slack. ── */}
+          <div className="min-w-0 relative" style={{ background: tokens.cardBg }}>
+            <RouteSchematic
+              days={days}
+              tokens={tokens}
+              theme={theme}
+              isEditor={isEditor}
+            />
           </div>
+        </div>
         </div>
       </div>
     </div>
