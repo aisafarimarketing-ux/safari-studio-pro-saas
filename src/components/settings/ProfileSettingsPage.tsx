@@ -21,6 +21,7 @@ type Member = {
   roleTitle: string | null;
   profilePhotoUrl: string | null;
   signatureUrl?: string | null;
+  whatsapp?: string | null;
   notificationPrefs?: { newRequest?: boolean; requestAssigned?: boolean } | null;
 };
 
@@ -32,6 +33,7 @@ export function ProfileSettingsPage() {
   const [roleTitle, setRoleTitle] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [whatsapp, setWhatsapp] = useState("");
   const [prefs, setPrefs] = useState<NotificationPrefs>({ newRequest: true, requestAssigned: true });
 
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export function ProfileSettingsPage() {
           roleTitle: string | null;
           profilePhotoUrl: string | null;
           signatureUrl: string | null;
+          whatsapp: string | null;
           notificationPrefs: { newRequest?: boolean; requestAssigned?: boolean } | null;
         } | null;
         role: "owner" | "admin" | "member";
@@ -65,12 +68,14 @@ export function ProfileSettingsPage() {
         roleTitle: data.membership?.roleTitle ?? null,
         profilePhotoUrl: data.membership?.profilePhotoUrl ?? null,
         signatureUrl: data.membership?.signatureUrl ?? null,
+        whatsapp: data.membership?.whatsapp ?? null,
         notificationPrefs: data.membership?.notificationPrefs ?? null,
       };
       setMe(m);
       setRoleTitle(m.roleTitle ?? "");
       setPhotoUrl(m.profilePhotoUrl ?? null);
       setSignatureUrl(m.signatureUrl ?? null);
+      setWhatsapp(m.whatsapp ?? "");
       const n = m.notificationPrefs ?? null;
       setPrefs({
         newRequest: n?.newRequest ?? true,
@@ -222,6 +227,23 @@ export function ProfileSettingsPage() {
                 className="flex-1 px-3 py-2 rounded border border-black/10 text-[14px] outline-none focus:border-[#1b3a2d]"
               />
             </div>
+          </div>
+
+          <div className="mt-5">
+            <Label>WhatsApp number</Label>
+            <div className="flex items-center gap-2">
+              <input
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                onBlur={() => patch({ whatsapp })}
+                placeholder="+255 712 345 678"
+                inputMode="tel"
+                className="flex-1 px-3 py-2 rounded border border-black/10 text-[14px] outline-none focus:border-[#1b3a2d]"
+              />
+            </div>
+            <p className="mt-1 text-[11.5px] text-black/45">
+              Used for the &ldquo;Secure This Safari&rdquo; WhatsApp deep link on every proposal you generate.
+            </p>
           </div>
         </section>
 

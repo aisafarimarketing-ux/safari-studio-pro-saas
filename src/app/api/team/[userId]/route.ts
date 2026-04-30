@@ -75,8 +75,14 @@ export async function PATCH(
   if (typeof body.roleTitle === "string") updates.roleTitle = body.roleTitle.trim() || null;
   if (typeof body.profilePhotoUrl === "string") updates.profilePhotoUrl = body.profilePhotoUrl.trim() || null;
   if (typeof body.signatureUrl === "string") updates.signatureUrl = body.signatureUrl.trim() || null;
+  if (typeof body.whatsapp === "string") updates.whatsapp = body.whatsapp.trim() || null;
   if (body.notificationPrefs !== undefined) {
     updates.notificationPrefs = body.notificationPrefs ?? Prisma.DbNull;
+  }
+  // The onboarding intake form sets this so the middleware stops
+  // gating dashboard access. Self only — no admin overriding.
+  if (body.markOnboarded === true && target.userId === ctx.user.id) {
+    updates.onboardedAt = new Date();
   }
 
   const membership = await prisma.orgMembership.update({
@@ -128,5 +134,9 @@ type PatchBody = {
   roleTitle?: string;
   profilePhotoUrl?: string;
   signatureUrl?: string;
+  whatsapp?: string;
   notificationPrefs?: Record<string, unknown> | null;
+  /** Self-only flag set by the onboarding intake form to mark
+   *  the membership onboarded and lift the middleware gate. */
+  markOnboarded?: boolean;
 };

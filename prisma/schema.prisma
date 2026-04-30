@@ -59,7 +59,12 @@ model OrgMembership {
   profilePhotoUrl   String?
   signatureUrl      String?
   roleTitle         String? // free-text "Founder / Safari Specialist"
+  whatsapp          String? // E.164-ish or display number; used in proposals
   notificationPrefs Json? // { newRequest: bool, requestAssigned: bool }
+  /** Set once the member has completed the /onboarding intake form.
+   *  Middleware reads this to decide whether to gate dashboard access
+   *  for new members. Existing members are migrated as completed. */
+  onboardedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

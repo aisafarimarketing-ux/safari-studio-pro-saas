@@ -12,9 +12,11 @@ import type { OperatorProfile } from "@/lib/types";
 
 export type ConsultantIdentity = {
   name: string;
+  email: string | null;
   roleTitle: string | null;
   photoUrl: string | null;
   signatureUrl: string | null;
+  whatsapp: string | null;
 };
 
 /**
@@ -22,18 +24,21 @@ export type ConsultantIdentity = {
  * relaxed shape the endpoint returns (nullable everywhere).
  */
 export function identityFromMe(me: {
-  user: { name: string | null };
+  user: { name: string | null; email?: string | null };
   membership: {
     roleTitle: string | null;
     profilePhotoUrl: string | null;
     signatureUrl: string | null;
+    whatsapp?: string | null;
   } | null;
 }): ConsultantIdentity {
   return {
     name: me.user.name?.trim() ?? "",
+    email: me.user.email?.trim() || null,
     roleTitle: me.membership?.roleTitle?.trim() || null,
     photoUrl: me.membership?.profilePhotoUrl?.trim() || null,
     signatureUrl: me.membership?.signatureUrl?.trim() || null,
+    whatsapp: me.membership?.whatsapp?.trim() || null,
   };
 }
 
@@ -52,5 +57,7 @@ export function applyIdentityToOperator(
     consultantPhoto: operator.consultantPhoto || identity.photoUrl || undefined,
     consultantRole: operator.consultantRole || identity.roleTitle || undefined,
     signatureUrl: operator.signatureUrl || identity.signatureUrl || undefined,
+    email: operator.email || identity.email || operator.email,
+    whatsapp: operator.whatsapp || identity.whatsapp || operator.whatsapp,
   };
 }

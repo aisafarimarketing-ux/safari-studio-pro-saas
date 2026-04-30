@@ -53,9 +53,11 @@ export async function POST(req: Request) {
 
   proposal.operator = applyIdentityToOperator(proposal.operator, {
     name: ctx.user.name ?? "",
+    email: ctx.user.email ?? null,
     roleTitle: ctx.membership?.roleTitle ?? null,
     photoUrl: ctx.membership?.profilePhotoUrl ?? null,
     signatureUrl: ctx.membership?.signatureUrl ?? null,
+    whatsapp: ctx.membership?.whatsapp ?? null,
   });
 
   // Persist via Prisma directly (same shape the existing /api/proposals

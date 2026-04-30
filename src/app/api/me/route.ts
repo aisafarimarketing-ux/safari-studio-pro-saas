@@ -31,7 +31,9 @@ export async function GET() {
           roleTitle: ctx.membership.roleTitle,
           profilePhotoUrl: ctx.membership.profilePhotoUrl,
           signatureUrl: ctx.membership.signatureUrl,
+          whatsapp: ctx.membership.whatsapp,
           notificationPrefs: ctx.membership.notificationPrefs,
+          onboardedAt: ctx.membership.onboardedAt,
         }
       : null,
     role: ctx.role,
