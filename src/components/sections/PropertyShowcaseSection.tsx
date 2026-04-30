@@ -6,7 +6,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
-import { InlineSectionColors } from "@/components/editor/InlineSectionColors";
+import { SectionHeaderStrip, autoTextOnHex } from "@/components/editor/SectionHeaderStrip";
 import type {
   Section,
   Property,
@@ -73,45 +73,33 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   return (
     <div className="relative" style={{ background: tokens.sectionSurface }}>
-      {/* Outer bg = sectionSurface (cream) so it BLENDS with the
-          PropertyBlock cards below. Previously this used pageBg
-          (green) which created a visible green stripe between the
-          "Your Accommodations" header and the first property card.
-          Now header + cards share the same background — single
-          continuous accommodation block. */}
-      {/* Inline section-colour editor — visible top-right in editor
-          mode. Lets the operator recolour the showcase's section bg,
-          card body, and accent without touching the property images. */}
-      {isEditor && <InlineSectionColors section={section} variant="property" />}
-      <header className="px-8 md:px-12 pt-2 pb-1">
-        <div
-          className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1.5"
-          style={{ color: tokens.mutedText }}
-        >
-          The lodges
-        </div>
-        <h2
-          className="font-bold leading-[1.05]"
-          style={{
-            color: tokens.headingText,
-            fontFamily: `'${theme.displayFont}', serif`,
-            fontSize: "clamp(1.6rem, 2.8vw, 2.2rem)",
-            letterSpacing: "-0.015em",
-          }}
-        >
-          Your accommodations
-        </h2>
-      </header>
+      {/* Section's own coloured header strip — replaces the previous
+          "The lodges / Your accommodations" header. Carries the 🎨
+          editor inline so the operator can recolour the strip + the
+          section bg in one place. */}
+      <SectionHeaderStrip
+        section={section}
+        title="Your accommodations"
+        subtitle={`${properties.length} ${properties.length === 1 ? "lodge" : "lodges"}`}
+      />
       {properties.map((property, idx) => (
         <PropertyBlock
           key={property.id}
           property={property}
-          isFirst={idx === 0}
           isLast={idx === properties.length - 1}
           isEditor={isEditor}
           proposal={proposal}
           theme={theme}
           tokens={tokens}
+          // Per-property header band uses the section's strip colour
+          // by default so the lodges read as one visual family. The
+          // section's 🎨 editor recolours all property headers in
+          // lockstep with the section header.
+          headerBg={
+            (section.styleOverrides?.headerBg as string | undefined) ||
+            (section.content.color as string | undefined) ||
+            "#c9a84c"
+          }
         />
       ))}
     </div>
@@ -122,20 +110,23 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
 function PropertyBlock({
   property,
-  isFirst,
   isLast,
   isEditor,
   proposal,
   theme,
   tokens,
+  headerBg,
 }: {
   property: Property;
-  isFirst: boolean;
   isLast: boolean;
   isEditor: boolean;
   proposal: Proposal;
   theme: ProposalTheme;
   tokens: ThemeTokens;
+  /** Coloured-strip background for this property's header band. Set
+   *  by the parent showcase from section.styleOverrides.headerBg so
+   *  every lodge under one section shares the same colour rhythm. */
+  headerBg: string;
 }) {
   const {
     updateProperty,
@@ -159,15 +150,39 @@ function PropertyBlock({
   const goNext = () =>
     setCarouselIndex((i) => (i >= carouselImages.length - 1 ? 0 : i + 1));
 
+  // Per-property header band — same visual register as the section's
+  // own top strip, just with the property name. Auto-picks readable
+  // text colour against the band so it works on cream / charcoal /
+  // gold without per-property tuning.
+  const propertyHeaderText = autoTextOnHex(headerBg);
+
   return (
     <div
       className="py-4 md:py-6"
       data-property-block
       style={{
         background: tokens.sectionSurface,
-        borderTop: isFirst ? "none" : `1px solid ${tokens.border}`,
       }}
     >
+      <div
+        className="w-full flex items-center gap-3 px-8 md:px-12 mb-4 md:mb-6"
+        style={{ background: headerBg, height: 40, color: propertyHeaderText }}
+      >
+        <span
+          className="font-bold uppercase tracking-[0.24em] truncate"
+          style={{ fontSize: 11.5 }}
+        >
+          {property.name || "Property"}
+        </span>
+        {property.location && (
+          <span
+            className="uppercase tracking-[0.2em] truncate opacity-80"
+            style={{ fontSize: 9.5 }}
+          >
+            · {property.location}
+          </span>
+        )}
+      </div>
       <div className="max-w-6xl mx-auto px-8 md:px-12">
         {/* Editorial standfirst — promotes whyWeChoseThis from the
             INFORMATION tab to a magazine-quality pull-quote above the

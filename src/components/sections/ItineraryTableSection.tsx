@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { SectionHeaderStrip } from "@/components/editor/SectionHeaderStrip";
 import { isCoastCity } from "@/lib/safariRoutingRules";
 import type { Day, Section } from "@/lib/types";
 
@@ -31,35 +32,63 @@ export function ItineraryTableSection({ section }: { section: Section }) {
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
 
+  // Subtitle for the section's top header strip — read first because
+  // it's used across all variants. "Arusha → Zanzibar" reads as the
+  // trip's geographic arc; falls back to the first destination if only
+  // one stop is set, or em-dash if nothing's filled in yet.
+  const orderedDayDestinationsForHeader = [...new Set(days.map((d) => d.destination))];
+  const headerDestinations =
+    orderedDayDestinationsForHeader.length > 0
+      ? orderedDayDestinationsForHeader
+      : trip.destinations;
+  const headerRoute =
+    headerDestinations.length > 1
+      ? `${headerDestinations[0]} → ${headerDestinations[headerDestinations.length - 1]}`
+      : headerDestinations[0] || "";
+
   if (variant === "horizontal-rows") {
     return (
-      <HorizontalRowsLayout
-        days={days}
-        arrivalDateISO={trip.arrivalDate}
-        tokens={tokens}
-        theme={theme}
-      />
+      <div style={{ background: tokens.sectionSurface }}>
+        <SectionHeaderStrip
+          section={section}
+          title="Itinerary at a glance"
+          subtitle={headerRoute}
+        />
+        <HorizontalRowsLayout
+          days={days}
+          arrivalDateISO={trip.arrivalDate}
+          tokens={tokens}
+          theme={theme}
+        />
+      </div>
     );
   }
 
   if (variant === "editorial-timeline") {
     return (
-      <EditorialTimelineLayout
-        days={days}
-        activeTier={activeTier}
-        arrivalDateISO={trip.arrivalDate}
-        tokens={tokens}
-        theme={theme}
-        isEditor={isEditor}
-        activityColor={section.content.timelineActivityColor as string | undefined}
-        accommodationColor={section.content.timelineAccommodationColor as string | undefined}
-        onStyleChange={(next) =>
-          updateSectionContent(section.id, {
-            timelineActivityColor: next.activityColor,
-            timelineAccommodationColor: next.accommodationColor,
-          })
-        }
-      />
+      <div style={{ background: tokens.sectionSurface }}>
+        <SectionHeaderStrip
+          section={section}
+          title="Itinerary at a glance"
+          subtitle={headerRoute}
+        />
+        <EditorialTimelineLayout
+          days={days}
+          activeTier={activeTier}
+          arrivalDateISO={trip.arrivalDate}
+          tokens={tokens}
+          theme={theme}
+          isEditor={isEditor}
+          activityColor={section.content.timelineActivityColor as string | undefined}
+          accommodationColor={section.content.timelineAccommodationColor as string | undefined}
+          onStyleChange={(next) =>
+            updateSectionContent(section.id, {
+              timelineActivityColor: next.activityColor,
+              timelineAccommodationColor: next.accommodationColor,
+            })
+          }
+        />
+      </div>
     );
   }
 
@@ -90,20 +119,18 @@ export function ItineraryTableSection({ section }: { section: Section }) {
   ];
 
   return (
+    <div style={{ background: tokens.sectionSurface }}>
+    <SectionHeaderStrip
+      section={section}
+      title="Itinerary at a glance"
+      subtitle={route}
+    />
     <div
       className={`${compact ? "py-2" : "py-2 md:py-3"} px-8 md:px-20`}
-      style={{ background: tokens.sectionSurface }}
     >
       <div className="max-w-5xl mx-auto">
         <div
-          className="text-[10px] uppercase tracking-[0.3em] mb-10"
-          style={{ color: tokens.mutedText }}
-        >
-          At a glance
-        </div>
-
-        <div
-          className="grid grid-cols-2 md:grid-cols-4 gap-x-10 gap-y-8 pb-10"
+          className="grid grid-cols-2 md:grid-cols-4 gap-x-10 gap-y-8 pt-8 pb-10"
           style={{ borderBottom: `1px solid ${tokens.border}` }}
         >
           {stats.map((stat) => (
@@ -191,6 +218,7 @@ export function ItineraryTableSection({ section }: { section: Section }) {
           </div>
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -214,15 +242,8 @@ function HorizontalRowsLayout({
   const stripeBg = blendForStripe(tokens.sectionSurface, tokens.border);
 
   return (
-    <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
+    <div className="py-6 md:py-8 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-6xl mx-auto">
-        <div
-          className="text-[10px] uppercase tracking-[0.3em] mb-8"
-          style={{ color: tokens.mutedText }}
-        >
-          Trip at a glance
-        </div>
-
         <div className="overflow-x-auto">
           <table className="w-full" style={{ borderCollapse: "collapse" }}>
             <thead>
@@ -520,15 +541,8 @@ function EditorialTimelineLayout({
   const accColor = accommodationColor || DEFAULT_ACCOMMODATION_COLOR;
 
   return (
-    <div className="py-12 md:py-16 px-6 md:px-12" style={{ background: tokens.sectionSurface }}>
+    <div className="py-10 md:py-14 px-6 md:px-12" style={{ background: tokens.sectionSurface }}>
       <div className="relative group max-w-3xl mx-auto">
-        <div
-          className="text-[10px] uppercase tracking-[0.3em] mb-10"
-          style={{ color: tokens.mutedText }}
-        >
-          Itinerary at a glance
-        </div>
-
         {days.length === 0 ? (
           <div className="text-center py-14 text-[13px]" style={{ color: tokens.mutedText }}>
             Add days in the Day-by-Day section to populate this timeline.

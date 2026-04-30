@@ -311,6 +311,11 @@ export type StyleOverrides = Partial<ThemeTokens> & {
    *  header) independently from the body card and the section gutter.
    *  Only consumed by EditorialStackCard / FlipCard. */
   dayHeadBg?: string;
+  /** Top-of-section header strip colour (the gold band at the top of
+   *  Itinerary / Accommodations / Pricing / etc). Independent of
+   *  sectionSurface so the strip can carry its own colour without
+   *  dragging the section body with it. Consumed by SectionHeaderStrip. */
+  headerBg?: string;
 };
 
 export interface Section {
