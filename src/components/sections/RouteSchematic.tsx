@@ -34,7 +34,37 @@ interface SchematicNode {
 }
 
 const VIEWBOX_W = 1000;
-const PADDING_FRACTION = 0.30;
+const PADDING_FRACTION = 0.45;
+
+// Per-country eastern-coast longitude limit. Tanzania's OSM polygon
+// loops out to Zanzibar / Pemba / Mafia archipelago vertices when
+// fetched as a single boundary, which pulls the country's drawn
+// eastern edge well east of the actual mainland coast. Trimming
+// vertices east of this limit gives a clean coastline. Add entries
+// per country as needed.
+const COUNTRY_TRIM_MAX_LNG: Record<string, number> = {
+  tanzania: 39.55, // mainland coast at most; Zanzibar et al. excluded
+};
+
+function trimCountryRing(
+  key: string,
+  ring: LatLngTuple[],
+): LatLngTuple[] {
+  const cap = COUNTRY_TRIM_MAX_LNG[key];
+  if (cap == null) return ring;
+  // Drop vertices east of the cap. Vertices form a sequential
+  // offshore chunk in the data, so dropping them connects the last
+  // mainland point directly to the first mainland point on the
+  // other side — a near-straight ink line along the coast.
+  return ring.filter(([, lng]) => lng <= cap);
+}
+
+// Offshore stops are pulled visually closer to the mainland so the
+// inland cluster (Arusha / Tarangire / Manyara / Ngorongoro /
+// Serengeti) gets more pixels to spread across. Without this, the
+// long jump to Zanzibar dominates the bbox and the inland pins
+// crowd. Compression factor: 0 = sit on coast; 1 = real position.
+const ISLAND_COMPRESSION = 0.55;
 
 // Hardcoded coords for known safari stops (mirror of RouteMap's table).
 const SAFARI_COORDS: Array<{ match: RegExp; lat: number; lng: number }> = [
@@ -222,9 +252,23 @@ export function RouteSchematic({
   const waterColor = "#cde0e3"; // very soft teal water
   const lakeStroke = "#5a8590";
 
-  // Bbox + projection
+  // Mainland east — used by the island-compression heuristic so
+  // offshore stops (Zanzibar) get pulled visually closer to the
+  // coast, leaving more of the bbox for the inland cluster.
+  const inlandStops = nodes.filter((n) => !isIslandStop(n.destination));
+  const mainlandEastLng =
+    inlandStops.length > 0
+      ? Math.max(...inlandStops.map((n) => n.lng))
+      : 39;
+  const visualLng = (n: { destination: string; lng: number }) =>
+    isIslandStop(n.destination)
+      ? mainlandEastLng + (n.lng - mainlandEastLng) * ISLAND_COMPRESSION
+      : n.lng;
+
+  // Bbox + projection driven by the COMPRESSED visual lngs so
+  // offshore stops don't blow the eastern edge wide open.
   const lats = nodes.map((n) => n.lat);
-  const lngs = nodes.map((n) => n.lng);
+  const lngs = nodes.map((n) => visualLng(n));
   let north = Math.max(...lats);
   let south = Math.min(...lats);
   let east = Math.max(...lngs);
@@ -253,7 +297,7 @@ export function RouteSchematic({
     y: ((north - lat) / finalLat) * H,
   });
 
-  const positions = nodes.map((n) => project(n.lat, n.lng));
+  const positions = nodes.map((n) => project(n.lat, visualLng(n)));
 
   const tripCountries = detectTripCountries(
     nodes.map((n) => ({ lat: n.lat, lng: n.lng })),
@@ -263,7 +307,9 @@ export function RouteSchematic({
     .filter((c) => c.ring && c.ring.length >= 3)
     .map((c) => ({
       key: c.key,
-      d: ringToPath(c.ring, project),
+      // Trim offshore vertices that pull the country path east of
+      // the actual mainland coast.
+      d: ringToPath(trimCountryRing(c.key, c.ring), project),
     }));
 
   const lakes = detectLakes(
