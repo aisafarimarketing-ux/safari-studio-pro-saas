@@ -98,9 +98,53 @@ export interface TripDetails {
   arrivalDate?: string;
   departureDate?: string;
   tripStyle?: string;
+  /** Flat list of destination names — kept as the back-compat surface
+   *  for older proposals + summaries (subtitle, header chips). The
+   *  source of truth for itinerary structure is `stops` (below); when
+   *  it's set we derive `destinations` from `stops.map(s => s.destination)`.
+   *  Older proposals authored before stops existed continue to work
+   *  via this flat list. */
   destinations: string[];
+  /** Ordered per-destination plan — one row per stop, with explicit
+   *  nights, optional pre-picked hero image (Brand DNA library URL or
+   *  a sample-data URL), and optional pre-picked property per tier.
+   *  When present, the autopilot route uses this list to allocate
+   *  days deterministically — no AI guessing on order or pacing. */
+  stops?: TripStop[];
+  /** Trip pace knob — Relaxed / Balanced / Packed. Drives drive-time
+   *  intensity and optional-activity volume on each day. Independent
+   *  of tripStyle (luxury/mid-range/classic), which drives lodge tier. */
+  pace?: TripPace;
+  /** Operator-curated client-interest tags — Big 5, Birding, Cultural,
+   *  Beach, Honeymoon, Hiking, Photography, Family. Drives optional
+   *  activities and lodge selection bias. */
+  interests?: string[];
+  /** Optional pinned arrival routine (Day 1) — operator-saved standard
+   *  flow ("land → transfer → welcome dinner") that the AI shouldn't
+   *  override with a game-drive Day 1 on a 5pm landing. */
+  arrivalRoutine?: string;
+  /** Optional pinned departure routine (last day) — same idea. */
+  departureRoutine?: string;
   highlights?: string;
   operatorNote?: string;
+}
+
+export type TripPace = "relaxed" | "balanced" | "packed";
+
+export interface TripStop {
+  /** Stable id so React row keys + drag-reorder work without
+   *  re-keying on every keystroke. */
+  id: string;
+  destination: string;
+  nights: number;
+  /** Operator-picked hero image URL — Brand DNA library URL when
+   *  matched by location tag, otherwise a sample-data URL, otherwise
+   *  empty (operator hadn't set one in setup). */
+  heroImageUrl?: string;
+  /** Optional pre-picked property per tier. Property id (matches
+   *  Property.id from the org's library). When set, autopilot uses
+   *  this directly and skips its slot-pick step for that day's tier. */
+  propertyByTier?: Partial<Record<TierKey, string>>;
 }
 
 // ─── Accommodation ───────────────────────────────────────────────────────────

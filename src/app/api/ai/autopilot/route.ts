@@ -324,14 +324,27 @@ async function handleAutopilot(req: Request): Promise<Response> {
   }
 
   const nights = Math.max(1, Math.min(60, Number(proposal.trip?.nights ?? 0) || 7));
-  // Reorder destinations into the typical safari sequence before drafting.
-  // Operators often type stops in any order ("Serengeti, Tarangire, Arusha");
-  // we route them through gateway → inner → coast so Day 1 lands at a
-  // sensible arrival city and the journey makes geographic sense. The
-  // editor can still override day-by-day after generation.
-  const destinations = orderDestinations(
-    (proposal.trip?.destinations ?? []).filter((d): d is string => !!d?.trim()),
-  );
+
+  // ── Stops vs destinations ──────────────────────────────────────────────
+  // New trip-setup flow ships an explicit per-stop schedule on
+  // proposal.trip.stops: ordered destinations with explicit nights,
+  // optional per-tier pre-picked properties, and optional pre-picked
+  // hero images. When stops is present we honour the operator's
+  // ordering exactly — no orderDestinations() reshuffle. The flat
+  // destinations[] is derived from stops for back-compat.
+  //
+  // Older proposals (and the in-editor "Regenerate" flow) still pass
+  // a flat destinations[] — that path falls back to the legacy
+  // orderDestinations() reshuffle so the AI's day allocation stays
+  // sensible without the operator-supplied schedule.
+  const inputStops = Array.isArray(proposal.trip?.stops)
+    ? (proposal.trip.stops as InputStop[]).filter((s) => !!s?.destination?.trim() && (s.nights ?? 0) > 0)
+    : [];
+  const destinations = inputStops.length > 0
+    ? inputStops.map((s) => s.destination.trim())
+    : orderDestinations(
+        (proposal.trip?.destinations ?? []).filter((d): d is string => !!d?.trim()),
+      );
   const tripStyle = proposal.trip?.tripStyle?.trim() || "Mid-range";
   const notes = proposal.trip?.operatorNote?.trim() || "";
   const guestNames = proposal.client?.guestNames?.trim() || "";
@@ -466,7 +479,8 @@ The JSON shape (all keys required unless marked optional):
 
 DAYS:
 - Generate exactly the number of days the user asks for.
-- Spread the destinations across the days sensibly (no single-night stops unless the trip demands it).
+- WHEN trip.schedule IS PROVIDED (an array of {dayNumber, destination}), it is the operator-locked schedule. You MUST set days[N-1].destination to schedule[N-1].destination exactly. You may NOT swap, reorder, or drop destinations. Your job is purely the narrative, highlights, optional activities, tier picks, and transfer captions for each day. The schedule is non-negotiable.
+- WHEN trip.schedule IS NOT PROVIDED, distribute destinations across days yourself (legacy mode): no single-night stops unless the trip demands it.
 - Pick different camps across nights when the library supports it.
 - Match the trip style: luxury → favour higher propertyClass, mid-range → balanced, classic → no-frills.
 
@@ -500,11 +514,53 @@ PRACTICAL INFO:
 - Use real facts: Kenya and Tanzania e-visa, yellow-fever certificate rules, typical Nairobi/Dar flights from the guest's origin when known, season-specific packing.
 - Short, specific. 2-3 sentences each. No filler.`;
 
+  // ── Day schedule ───────────────────────────────────────────────────────
+  // When operator-supplied stops are present, build a deterministic
+  // day → destination schedule from them. We give this to the AI as
+  // an explicit constraint so the model only writes the narrative —
+  // it can't reorder destinations or change which day stops where.
+  // Also captures the operator's per-stop pre-pick property ids and
+  // hero image URLs so we can apply those after the AI returns.
+  type ScheduleEntry = {
+    dayNumber: number;
+    destination: string;
+    propertyByTier?: Partial<Record<TierKey, string>>;
+    heroImageUrl?: string;
+  };
+  const schedule: ScheduleEntry[] = [];
+  if (inputStops.length > 0) {
+    let day = 1;
+    for (const stop of inputStops) {
+      const stopNights = Math.max(0, Math.floor(stop.nights));
+      for (let i = 0; i < stopNights && day <= nights; i++) {
+        schedule.push({
+          dayNumber: day,
+          destination: stop.destination.trim(),
+          propertyByTier: stop.propertyByTier,
+          heroImageUrl: stop.heroImageUrl,
+        });
+        day++;
+      }
+    }
+  }
+
+  // The AI prompt sees only a thin schedule projection — destination
+  // per day. Per-stop pre-picked properties become a separate hint
+  // ("for these tiers/days, use these specific properties") so the
+  // AI fills surrounding tiers from the library but doesn't fight
+  // the operator's explicit pick.
+  const aiSchedule = schedule.map(({ dayNumber, destination }) => ({ dayNumber, destination }));
+
   const userPayload = {
     trip: {
       title: proposal.metadata?.title || proposal.trip?.title || "Safari",
       nights,
       destinations,
+      // Schedule is the operator-supplied truth — when present, the
+      // AI must fill day N's narrative for the destination listed at
+      // schedule[N]. Empty schedule means legacy mode (AI distributes
+      // destinations across days itself).
+      schedule: aiSchedule.length > 0 ? aiSchedule : undefined,
       tripStyle,
       operatorNote: notes,
       arrivalDate: proposal.trip?.arrivalDate,
@@ -642,25 +698,54 @@ ${JSON.stringify(userPayload, null, 2)}`;
     };
   });
 
+  // ── Apply operator schedule (when stops were provided) ────────────
+  // The schedule is the source of truth — override AI-picked
+  // destinations with the operator's locked plan. Country re-derives
+  // from the destination so a swap from "Lake Manyara" to "Maasai
+  // Mara" updates both fields atomically.
+  if (schedule.length > 0) {
+    for (const entry of schedule) {
+      const idx = entry.dayNumber - 1;
+      if (idx < 0 || idx >= days.length) continue;
+      const day = days[idx];
+      day.destination = entry.destination;
+      day.country = countryOf(entry.destination) || day.country;
+      // Per-stop hero image — applied here so it wins over the
+      // brand-DNA auto-pick further down. Operator's explicit choice
+      // beats any inferred default.
+      if (entry.heroImageUrl) {
+        day.heroImageUrl = entry.heroImageUrl;
+      }
+      // Per-stop pre-picked properties — override the AI's slot
+      // pick for any tier the operator pinned. Tiers the operator
+      // didn't pin keep whatever the AI chose.
+      if (entry.propertyByTier) {
+        for (const tier of ["classic", "premier", "signature"] as const) {
+          const propertyId = entry.propertyByTier[tier];
+          if (!propertyId) continue;
+          const libEntry = library.find((p) => p.id === propertyId);
+          if (!libEntry) continue;
+          day.tiers[tier] = {
+            camp: libEntry.name,
+            location: libEntry.location || libEntry.country || "",
+            note: day.tiers[tier]?.note ?? "",
+          };
+        }
+      }
+    }
+  }
+
   // Clamp Day 1 + last day to the operator's intended ARRIVAL and
   // DEPARTURE points. Real safaris fly in and out of *gateway* cities
   // (Arusha, Nairobi, Zanzibar, Stone Town, Kilimanjaro, Entebbe,
-  // Kigali, Mombasa, Diani) — never national parks. So even though
-  // an operator typed the destinations as "Arusha, Tarangire, Lake
-  // Manyara, Serengeti", the trip's drop-off is still Arusha (the
-  // only gateway in the list), not the Serengeti or Lake Manyara.
+  // Kigali, Mombasa, Diani) — never national parks.
   //
-  // Logic:
-  //   arrivalGateway   = first gateway in the destinations list
-  //   departureGateway = last  gateway in the destinations list
-  //
-  // If the operator listed no gateways at all (just park names), we
-  // fall back to destinations[0] — best we can do without inventing
-  // a city the operator didn't name. They can fix it in the editor.
-  // If only one gateway exists (a typical loop trip from Arusha), we
-  // use it for both endpoints — the safari flies in and out of the
-  // same airport.
-  if (destinations.length > 0 && days.length > 0) {
+  // SKIPPED when an operator schedule is present: the schedule is the
+  // source of truth and the operator may legitimately want a non-
+  // gateway endpoint (e.g., a beach extension ending at Diani isn't
+  // a gateway by safari rules but is intentional). Legacy flat-list
+  // proposals still get the gateway clamp.
+  if (schedule.length === 0 && destinations.length > 0 && days.length > 0) {
     const arrivalGateway =
       destinations.find((d) => classifyStop(d) === "gateway") || destinations[0];
     const departureGateway =
@@ -895,6 +980,7 @@ type ProposalInput = {
     title?: string;
     nights?: number;
     destinations?: string[];
+    stops?: InputStop[];
     tripStyle?: string;
     operatorNote?: string;
     arrivalDate?: string;
@@ -910,6 +996,14 @@ type ProposalInput = {
     consultantName?: string;
     companyName?: string;
   };
+};
+
+type InputStop = {
+  id?: string;
+  destination: string;
+  nights: number;
+  heroImageUrl?: string;
+  propertyByTier?: Partial<Record<TierKey, string>>;
 };
 
 function stringOr(v: unknown, fallback: string): string {

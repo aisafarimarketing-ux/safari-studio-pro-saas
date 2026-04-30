@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { buildBlankProposal } from "@/lib/defaults";
 import { AutomatingOverlay } from "./AutomatingOverlay";
-import type { Proposal } from "@/lib/types";
+import { TripStopsEditor, type LibraryProperty } from "./TripStopsEditor";
+import type { BrandImage } from "@/lib/brandDNA";
+import type { Proposal, TripStop } from "@/lib/types";
 
 // ─── Trip Setup ─────────────────────────────────────────────────────────────
 //
@@ -25,13 +27,9 @@ const STYLE_OPTIONS = [
   { id: "classic", label: "Classic", hint: "Value-led, no-frills, experience-first." },
 ] as const;
 
-const COMMON_DESTINATIONS = [
-  "Arusha", "Masai Mara", "Amboseli", "Serengeti", "Ngorongoro",
-  "Tarangire", "Lake Manyara", "Lake Nakuru", "Lake Naivasha", "Samburu",
-  "Laikipia", "Ol Pejeta", "Meru", "Mount Kenya", "Nairobi",
-  "Zanzibar", "Lamu", "Diani", "Tsavo East", "Tsavo West",
-  "Ruaha", "Selous / Nyerere", "Bwindi", "Murchison Falls", "Volcanoes (Rwanda)",
-];
+// Common destination chips moved into TripStopsEditor — operator now
+// adds destinations as ordered "stops" rows with per-stop nights and
+// optional photo / property pre-picks.
 
 const COMMON_ORIGINS = [
   "United Kingdom", "United States", "Germany", "France", "Italy",
@@ -75,8 +73,47 @@ export function TripSetupDialog({
 }) {
   // Lazy initial state — Date.now() only runs on mount.
   const [form, setForm] = useState<FormShape>(() => buildDefaultForm());
-  const [customDestination, setCustomDestination] = useState("");
   const [autopilot, setAutopilot] = useState(true);
+  const [brandImageLibrary, setBrandImageLibrary] = useState<BrandImage[]>([]);
+  const [properties, setProperties] = useState<LibraryProperty[]>([]);
+
+  // Load brand-DNA imageLibrary + properties once when the dialog
+  // mounts. The TripStopsEditor uses these to (a) preview which stops
+  // already have a tagged hero image and which need sample data, and
+  // (b) populate the per-tier property pickers with the operator's
+  // own library scoped to each stop's destination. Both fetches are
+  // best-effort — failure leaves the editor in a fully usable state
+  // with auto-everything; the operator can still ship a proposal.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [bd, props] = await Promise.all([
+          fetch("/api/brand-dna").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/properties").then((r) => (r.ok ? r.json() : null)),
+        ]);
+        if (cancelled) return;
+        if (bd?.profile?.imageLibrary && Array.isArray(bd.profile.imageLibrary)) {
+          setBrandImageLibrary(bd.profile.imageLibrary as BrandImage[]);
+        }
+        if (props?.properties && Array.isArray(props.properties)) {
+          setProperties(
+            (props.properties as LibraryPropertyApi[]).map((p) => ({
+              id: p.id,
+              name: p.name,
+              propertyClass: p.propertyClass ?? null,
+              location: p.location ?? null,
+            })),
+          );
+        }
+      } catch {
+        // Ignore — editor still works with empty library.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const nights = useMemo(() => {
     const a = new Date(form.arrivalDate);
@@ -89,23 +126,10 @@ export function TripSetupDialog({
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const toggleDestination = (d: string) => {
-    setForm((f) => ({
-      ...f,
-      destinations: f.destinations.includes(d)
-        ? f.destinations.filter((x) => x !== d)
-        : [...f.destinations, d],
-    }));
-  };
-
-  const addCustomDestination = () => {
-    const v = customDestination.trim();
-    if (!v) return;
-    if (!form.destinations.includes(v)) {
-      update("destinations", [...form.destinations, v]);
-    }
-    setCustomDestination("");
-  };
+  const totalAllocated = useMemo(
+    () => form.stops.reduce((sum, s) => sum + (s.nights || 0), 0),
+    [form.stops],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,72 +275,20 @@ export function TripSetupDialog({
             </datalist>
           </Field>
 
-          {/* Destinations */}
-          <Field label="Destinations" hint="Pick from common or add your own">
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {COMMON_DESTINATIONS.map((d) => {
-                const active = form.destinations.includes(d);
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => toggleDestination(d)}
-                    className={`px-3 py-1 rounded-full text-small font-medium transition active:scale-95 border ${
-                      active
-                        ? "bg-[#1b3a2d] text-white border-[#1b3a2d]"
-                        : "bg-white text-black/65 border-black/12 hover:bg-black/5"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={customDestination}
-                onChange={(e) => setCustomDestination(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
-                    e.preventDefault();
-                    addCustomDestination();
-                  }
-                }}
-                placeholder="Add another destination…"
-                className={`${inputCls} flex-1`}
-              />
-              <button
-                type="button"
-                onClick={addCustomDestination}
-                disabled={!customDestination.trim()}
-                className="px-3 py-2 rounded-lg text-small font-medium bg-black/5 text-black/70 hover:bg-black/10 transition disabled:opacity-40"
-              >
-                Add
-              </button>
-            </div>
-            {form.destinations.filter((d) => !COMMON_DESTINATIONS.includes(d)).length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {form.destinations
-                  .filter((d) => !COMMON_DESTINATIONS.includes(d))
-                  .map((d) => (
-                    <span
-                      key={d}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-small font-medium bg-[#1b3a2d] text-white"
-                    >
-                      {d}
-                      <button
-                        type="button"
-                        onClick={() => toggleDestination(d)}
-                        className="text-white/70 hover:text-white text-base leading-none -mr-1"
-                        aria-label={`Remove ${d}`}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-              </div>
-            )}
+          {/* Stops — ordered per-destination plan with nights, hero
+              image, and per-tier property pre-picks. Replaces the old
+              flat-chip list so the AI gets a deterministic schedule. */}
+          <Field
+            label="Trip stops"
+            hint="In order — destination, nights at each, optional photo / property pre-picks"
+          >
+            <TripStopsEditor
+              stops={form.stops}
+              onChange={(next) => update("stops", next)}
+              totalNightsRequired={nights}
+              brandImageLibrary={brandImageLibrary}
+              properties={properties}
+            />
           </Field>
 
           {/* Travel style */}
@@ -371,7 +343,7 @@ export function TripSetupDialog({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] font-semibold text-[#b34334] mb-0.5">
-                  Last attempt didn't complete
+                  Last attempt didn&apos;t complete
                 </div>
                 <div className="text-[12.5px] text-[#7a2f25] break-words leading-relaxed">
                   {error}
@@ -422,14 +394,21 @@ export function TripSetupDialog({
             </button>
             <button
               type="submit"
-              disabled={submitting || !form.guestNames.trim() || form.destinations.length === 0}
+              disabled={
+                submitting ||
+                !form.guestNames.trim() ||
+                form.stops.length === 0 ||
+                totalAllocated !== nights
+              }
               className="px-5 py-2 text-small rounded-lg bg-[#1b3a2d] text-white font-semibold hover:bg-[#2d5a40] active:scale-95 transition disabled:opacity-60"
               title={
                 !form.guestNames.trim()
                   ? "Add guest name(s) first"
-                  : form.destinations.length === 0
-                    ? "Pick at least one destination"
-                    : undefined
+                  : form.stops.length === 0
+                    ? "Add at least one stop"
+                    : totalAllocated !== nights
+                      ? `Stops total ${totalAllocated} nights — must match ${nights} (the trip dates)`
+                      : undefined
               }
             >
               {submitting
@@ -551,9 +530,18 @@ type FormShape = {
   adults: number;
   children: number;
   origin: string;
-  destinations: string[];
+  stops: TripStop[];
   style: string;
   notes: string;
+};
+
+// Shape returned by GET /api/properties — narrow to just what
+// TripStopsEditor needs (id, name, class, location).
+type LibraryPropertyApi = {
+  id: string;
+  name: string;
+  propertyClass?: string | null;
+  location?: { name: string; country: string | null } | null;
 };
 
 function buildProposalFromForm(form: FormShape, nights: number): Proposal {
@@ -570,10 +558,22 @@ function buildProposalFromForm(form: FormShape, nights: number): Proposal {
   base.trip.nights = nights;
   base.trip.dates = formatDateRange(form.arrivalDate, form.departureDate);
   base.trip.tripStyle = styleLabel(form.style);
-  base.trip.destinations = form.destinations;
+  // Stops carry the deterministic per-destination plan; the flat
+  // destinations[] is derived from stops for back-compat with code
+  // that still reads it (map markers, summary chips, search).
+  const cleanStops: TripStop[] = form.stops
+    .map((s) => ({
+      ...s,
+      destination: s.destination.trim(),
+      nights: Math.max(0, Math.floor(s.nights || 0)),
+    }))
+    .filter((s) => s.destination.length > 0 && s.nights > 0);
+  base.trip.stops = cleanStops;
+  const destinations = cleanStops.map((s) => s.destination);
+  base.trip.destinations = destinations;
   base.trip.subtitle = [
     `${nights} night${nights === 1 ? "" : "s"}`,
-    form.destinations.slice(0, 3).join(" · "),
+    destinations.slice(0, 3).join(" · "),
     form.arrivalDate ? formatMonthYear(form.arrivalDate) : null,
   ].filter(Boolean).join(" · ");
   if (form.notes.trim()) {
@@ -642,7 +642,7 @@ function buildDefaultForm(): FormShape {
     adults: 2,
     children: 0,
     origin: "",
-    destinations: [],
+    stops: [],
     style: "mid_range",
     notes: "",
   };
