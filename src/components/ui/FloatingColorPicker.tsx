@@ -72,31 +72,33 @@ export function FloatingColorPicker() {
     };
   }, [floatingPicker, handleClose, handleRevert]);
 
+  // Mutual exclusion with the inline text toolbar's popovers — only
+  // one floating colour editor at a time. We dispatch a custom
+  // event on mount so the InlineTextToolbar's open menu collapses
+  // immediately when this picker takes the stage.
+  useEffect(() => {
+    if (!floatingPicker) return;
+    document.dispatchEvent(new CustomEvent("ss:close-text-popovers"));
+  }, [floatingPicker]);
+
   if (!floatingPicker || typeof window === "undefined") return null;
 
-  const { x, y, color, token, sectionId } = floatingPicker;
+  const { y, color, token, sectionId } = floatingPicker;
 
-  // ── Smart repositioning: never overflow screen ──
+  // ── Right-anchored placement ─────────────────────────────────────
+  // Operator brief: when the inline text toolbar is also visible,
+  // its popovers open on the LEFT of the selection — so this picker
+  // gets the RIGHT lane, pinned to the viewport's right edge. Click
+  // X to scroll vertically based on where the click happened, but
+  // never crosses the centre line. Two editors can never overlap.
   const pickerW = 232;
   const pickerH = 420;
   const margin = 12;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // Prefer to open below-right of click point
-  let posX = x;
-  let posY = y;
-
-  // If too close to right edge → open left
-  if (posX + pickerW + margin > vw) {
-    posX = Math.max(margin, x - pickerW - 8);
-  }
-  // If too close to bottom → open upward
-  if (posY + pickerH + margin > vh) {
-    posY = Math.max(margin, y - pickerH - 8);
-  }
-  // Final clamp
-  posX = Math.min(Math.max(posX, margin), vw - pickerW - margin);
+  const posX = vw - pickerW - margin;
+  let posY = y - pickerH / 2;
   posY = Math.min(Math.max(posY, margin), vh - pickerH - margin);
 
   // ── Live preview: apply immediately on change ──

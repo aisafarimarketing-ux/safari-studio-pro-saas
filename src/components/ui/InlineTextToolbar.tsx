@@ -17,13 +17,30 @@ import { IntelligentColorPicker } from "./IntelligentColorPicker";
 //
 // Controls (compact horizontal pill):
 //
-//   B  I  U  S    |  Aa Font ▾    |  ⓢ Size   |  ● Color  |  ▢ Highlight  |  ⌫ Clear
+//   B  I  U  S  |  L C R J  |  Aa Font ▾  |  Size  |  ● Color  |  ▢ Hi  |  ⌫  ✕
 //
-// All formatting applies via Range manipulation, wrapping the selected
-// nodes in a fresh <span style="…"> (with extractContents fallback).
-// Toggle commands (B / I / U / S) check the surrounding context for
-// existing inline tags and patch them in-place; non-toggle commands
-// always wrap.
+// Range manipulation strategy:
+//   • Toggle tags (B / I / U / S) — wrap or unwrap the selection.
+//   • Style tags (color / highlight / font / size) — when the
+//     selection is the entire contents of a same-host span, PATCH
+//     that span's style. Otherwise wrap a fresh <span data-ss-fmt="1"
+//     style="…">. This is what fixes the historical "color only
+//     changes once / size compounds" bugs: repeated applies update
+//     one span instead of nesting wrappers.
+//   • Alignment (L C R J) — uses document.execCommand("justify…")
+//     because text-align only takes effect on a block ancestor.
+//
+// Popover discipline:
+//   • Open on click, stay open until the operator clicks the X,
+//     clicks outside the toolbar, or presses Escape. Style picks
+//     do NOT auto-close — operators sample colours / fonts / sizes
+//     and watch the live result.
+//   • Mutual exclusion with FloatingColorPicker: opening either
+//     dispatches/listens-for `ss:close-text-popovers`.
+//   • Two lanes: this toolbar lives on the LEFT half of the
+//     viewport; FloatingColorPicker pins to the RIGHT edge.
+//   • Direction (up / down) recomputes on scroll/resize so a long
+//     font menu never falls off the bottom.
 //
 // Save path: the section's contentEditable owns the saved HTML. When
 // converted to RichEditable, the onBlur fires sanitizeRichText and
@@ -93,6 +110,7 @@ const FONT_FAMILY_OPTIONS = [
 
 export function InlineTextToolbar() {
   const mode = useEditorStore((s) => s.mode);
+  const closeFloatingPicker = useEditorStore((s) => s.closeFloatingPicker);
   const { proposal } = useProposalStore();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   // Direction the popover panels open: "down" anchors them under the
@@ -104,9 +122,58 @@ export function InlineTextToolbar() {
   const hostRef = useRef<HTMLElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [sizeInput, setSizeInput] = useState<string>("");
+  // Track the most-recently-applied size so we can skip a redundant
+  // re-apply on input blur. Without this guard, typing 18 + Enter
+  // wraps the selection once; tabbing out of the field then triggers
+  // onBlur which wraps it AGAIN, nesting spans and compounding
+  // visual jitter the operator reads as a "glitch".
+  const lastAppliedSizeRef = useRef<string>("");
   const [openMenu, setOpenMenu] = useState<
-    null | "color" | "highlight" | "font"
+    null | "color" | "highlight" | "font" | "align"
   >(null);
+  // Mirror of openMenu in a ref so the document-level selectionchange
+  // listener (registered once on mount) can read the latest value
+  // without being torn down on every state change.
+  const openMenuRef = useRef<typeof openMenu>(null);
+  useEffect(() => {
+    openMenuRef.current = openMenu;
+  }, [openMenu]);
+
+  // ── Mutual exclusion with the FloatingColorPicker ──────────────────
+  // Two simultaneous colour editors stacking on top of each other was
+  // the operator's #1 complaint. Whenever either one opens, it tells
+  // the other to close. The text toolbar lives in the LEFT lane (it
+  // floats over the selection); FloatingColorPicker pins itself to
+  // the RIGHT edge of the viewport. Single-source-of-truth rule.
+  useEffect(() => {
+    const onClose = () => setOpenMenu(null);
+    document.addEventListener("ss:close-text-popovers", onClose);
+    return () => document.removeEventListener("ss:close-text-popovers", onClose);
+  }, []);
+  useEffect(() => {
+    if (openMenu) closeFloatingPicker();
+  }, [openMenu, closeFloatingPicker]);
+
+  // Click-outside closes the OPEN popover (color / highlight / font),
+  // but the toolbar itself stays put — only X dismisses the toolbar.
+  // Escape also collapses the popover.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (t && toolbarRef.current?.contains(t)) return;
+      setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenu]);
 
   // Theme fonts surfaced as the first two custom-named entries in the
   // font menu so operators can pick "the proposal's heading font" by
@@ -131,6 +198,12 @@ export function InlineTextToolbar() {
       // the toolbar in that case — the operator is mid-interaction.
       const active = document.activeElement as HTMLElement | null;
       if (active && toolbarRef.current?.contains(active)) return;
+      // If a popover is open, the operator is sampling colours / fonts /
+      // sizes — every apply re-selects the wrapped span, which fires
+      // selectionchange. Repositioning the toolbar on each tick would
+      // make the popover dance under the cursor. Lock the position
+      // until the popover closes.
+      if (openMenuRef.current) return;
 
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
@@ -160,34 +233,55 @@ export function InlineTextToolbar() {
       }
 
       // Real text highlight inside an editable region — save the
-      // range, host, and (re)position the toolbar above the
-      // selection. If the toolbar is in the lower half of the
-      // viewport, popover panels open UP instead of DOWN so the
-      // long font list doesn't run off-screen.
+      // range, host, and (re)position the toolbar. The toolbar lives
+      // in the LEFT lane: clamped to the left half of the viewport
+      // so it never collides with the FloatingColorPicker on the
+      // right. Popover direction recomputes whenever the toolbar
+      // moves so a long font list never runs off-screen.
       const rect = range.getBoundingClientRect();
-      const W = 520;
+      const W = 560;
       const TOOLBAR_H = 52;
       const margin = 12;
-      let left = rect.left + rect.width / 2 - W / 2;
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      let left = rect.left + rect.width / 2 - W / 2;
+      // Hard left-lane clamp: never extend past 56% of the viewport
+      // so the right lane stays free for FloatingColorPicker.
+      const leftLaneMax = Math.max(margin, vw * 0.56 - W);
       if (left < margin) left = margin;
-      if (left + W > vw - margin) left = vw - W - margin;
-      let top = rect.top - 88;
+      if (left > leftLaneMax) left = leftLaneMax;
+      let top = rect.top - TOOLBAR_H - 16;
       if (top < margin) top = rect.bottom + 12;
-      if (top + TOOLBAR_H > vh - margin) {
-        top = Math.max(margin, vh - TOOLBAR_H - margin);
-      }
-      // Popover direction: if toolbar's bottom is past 60% of the
-      // viewport, flip popovers up. Otherwise default down.
+      if (top + TOOLBAR_H > vh - margin) top = Math.max(margin, vh - TOOLBAR_H - margin);
+
+      // Smarter direction:
+      //   • toolbar bottom past 60% of viewport → open popovers UP
+      //   • toolbar top in upper 25% of viewport → force DOWN
+      //   • otherwise prefer DOWN (default)
       const toolbarBottom = top + TOOLBAR_H;
-      setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
+      const dir =
+        toolbarBottom > vh * 0.6 ? "up" : top < vh * 0.25 ? "down" : "down";
+      setPopoverDir(dir);
       setPos({ top, left });
       rangeRef.current = range.cloneRange();
       hostRef.current = host;
     };
     document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
+    // Reposition on scroll / resize so the toolbar tracks the
+    // selection as the canvas moves and the popover direction stays
+    // correct.
+    const onViewport = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      onSelectionChange();
+    };
+    window.addEventListener("scroll", onViewport, true);
+    window.addEventListener("resize", onViewport);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("scroll", onViewport, true);
+      window.removeEventListener("resize", onViewport);
+    };
   }, [mode]);
 
   // Explicit close — only path that hides the toolbar. Resets
@@ -221,13 +315,47 @@ export function InlineTextToolbar() {
     rangeRef.current = r.cloneRange();
   };
 
+  // Find a same-host span the selection sits ENTIRELY inside, so we
+  // can patch its style instead of nesting another wrapper. Returns
+  // null when the selection straddles multiple parents — those need
+  // a fresh wrap. This is what fixes the "size compounds / colour
+  // only changes once" bugs: repeat applies update one span instead
+  // of stacking wrappers that React + sanitiseRichText eventually
+  // collapse unpredictably.
+  const findEnclosingSpan = (range: Range): HTMLElement | null => {
+    const start = range.startContainer;
+    const end = range.endContainer;
+    const startSpan = closestSpan(start);
+    const endSpan = closestSpan(end);
+    if (!startSpan || startSpan !== endSpan) return null;
+    // Selection must equal the span's full text content for a clean
+    // patch. Anything narrower wraps fresh so we don't re-style
+    // text outside the user's highlight.
+    if (range.toString() !== (startSpan.textContent ?? "")) return null;
+    return startSpan;
+  };
+
   const wrapInSpan = (
     style: Partial<CSSStyleDeclaration>,
   ): HTMLElement | null => {
     const ctx = restoreRange();
     if (!ctx) return null;
     const { range } = ctx;
+    // Patch path — selection is already inside one span and covers
+    // its entire text. Just update its style; no new DOM nodes.
+    const existing = findEnclosingSpan(range);
+    if (existing) {
+      Object.assign(existing.style, style);
+      reselectSpan(existing);
+      hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+      return existing;
+    }
+    // Fresh wrap path — make a new span. Mark it with data-ss-fmt
+    // so post-render re-binds can resolve it back from a stale
+    // range if React replaces the DOM (e.g. RichEditable resets
+    // innerHTML on save).
     const span = document.createElement("span");
+    span.setAttribute("data-ss-fmt", "1");
     Object.assign(span.style, style);
     try {
       range.surroundContents(span);
@@ -278,25 +406,54 @@ export function InlineTextToolbar() {
     hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
+  // Style appliers do NOT close the popover. The operator's brief:
+  // "having the colour stay long enough without disappearing so we
+  // can be able to change and be able and see the changes". The
+  // popover stays open until X / outside-click; meanwhile the
+  // operator can sample as many colours / fonts / sizes as they
+  // want and watch the live result.
   const setColor = (color: string) => {
     wrapInSpan({ color });
-    setOpenMenu(null);
   };
 
   const setHighlight = (bg: string) => {
     wrapInSpan({ backgroundColor: bg === "transparent" ? "" : bg });
-    setOpenMenu(null);
   };
 
   const setFontFamily = (family: string) => {
     wrapInSpan({ fontFamily: family });
-    setOpenMenu(null);
   };
 
   const applySize = (raw: string) => {
     const n = parseInt(raw, 10);
     if (!isFinite(n) || n < 6 || n > 200) return;
-    wrapInSpan({ fontSize: `${n}px` });
+    const px = `${n}px`;
+    if (lastAppliedSizeRef.current === px) return; // dedupe blur after Enter
+    wrapInSpan({ fontSize: px });
+    lastAppliedSizeRef.current = px;
+  };
+
+  // ── Alignment ──────────────────────────────────────────────────────
+  // text-align is a BLOCK-level property; applied to a span it does
+  // nothing. Browsers' built-in justifyLeft/Center/Right/Full
+  // commands traverse the selection and set text-align on the
+  // closest block ancestor for us — exactly the right behaviour for
+  // a contentEditable. execCommand is deprecated on paper but every
+  // current browser still ships these alignment commands (Notion,
+  // Google Docs, Slack all rely on them). No removal date in sight.
+  const setAlign = (align: "left" | "center" | "right" | "justify") => {
+    const ctx = restoreRange();
+    if (!ctx) return;
+    const cmd =
+      align === "left"
+        ? "justifyLeft"
+        : align === "center"
+          ? "justifyCenter"
+          : align === "right"
+            ? "justifyRight"
+            : "justifyFull";
+    document.execCommand(cmd);
+    hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
   // Strip every inline span/tag wrapping the selection — restores to
@@ -326,7 +483,7 @@ export function InlineTextToolbar() {
           exit={{ opacity: 0, y: 8, scale: 0.96 }}
           transition={{ type: "spring", damping: 22, stiffness: 360 }}
           className="fixed z-[10000]"
-          style={{ top: pos.top, left: pos.left, width: 520 }}
+          style={{ top: pos.top, left: pos.left, width: 560 }}
           // NOTE: no onMouseDown=preventDefault on the wrapper. We
           // need clicks on the size / hex inputs to focus them
           // normally so the operator can type. Buttons that should
@@ -359,6 +516,24 @@ export function InlineTextToolbar() {
 
             <Divider />
 
+            {/* Alignment — applies text-align to the closest block
+                ancestor of the selection (paragraph / heading / list
+                item). On a span it would do nothing. */}
+            <ToolbarBtn title="Align left" onClick={() => setAlign("left")}>
+              <AlignLeftIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Align centre" onClick={() => setAlign("center")}>
+              <AlignCenterIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Align right" onClick={() => setAlign("right")}>
+              <AlignRightIcon />
+            </ToolbarBtn>
+            <ToolbarBtn title="Justify" onClick={() => setAlign("justify")}>
+              <AlignJustifyIcon />
+            </ToolbarBtn>
+
+            <Divider />
+
             {/* Font family */}
             <PopoverBtn
               title="Font"
@@ -382,7 +557,12 @@ export function InlineTextToolbar() {
                 max={200}
                 placeholder="--"
                 value={sizeInput}
-                onChange={(e) => setSizeInput(e.target.value)}
+                onChange={(e) => {
+                  setSizeInput(e.target.value);
+                  // New value typed — clear the dedupe so the next
+                  // commit (Enter or blur) is allowed to apply.
+                  lastAppliedSizeRef.current = "";
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -706,6 +886,65 @@ function ClearIcon() {
       <path d="M2 12.5h7" />
     </svg>
   );
+}
+
+function AlignLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <line x1="2" y1="3" x2="12" y2="3" />
+      <line x1="2" y1="6" x2="9" y2="6" />
+      <line x1="2" y1="9" x2="12" y2="9" />
+      <line x1="2" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+function AlignCenterIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <line x1="2" y1="3" x2="12" y2="3" />
+      <line x1="4" y1="6" x2="10" y2="6" />
+      <line x1="2" y1="9" x2="12" y2="9" />
+      <line x1="4" y1="12" x2="10" y2="12" />
+    </svg>
+  );
+}
+
+function AlignRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <line x1="2" y1="3" x2="12" y2="3" />
+      <line x1="5" y1="6" x2="12" y2="6" />
+      <line x1="2" y1="9" x2="12" y2="9" />
+      <line x1="5" y1="12" x2="12" y2="12" />
+    </svg>
+  );
+}
+
+function AlignJustifyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+      <line x1="2" y1="3" x2="12" y2="3" />
+      <line x1="2" y1="6" x2="12" y2="6" />
+      <line x1="2" y1="9" x2="12" y2="9" />
+      <line x1="2" y1="12" x2="12" y2="12" />
+    </svg>
+  );
+}
+
+// closestSpan walks up from a Text/Element node to the nearest
+// ancestor that is a <span> inside a contentEditable. Used by
+// findEnclosingSpan to detect the patch-vs-wrap path.
+function closestSpan(node: Node | null): HTMLElement | null {
+  let n: Node | null = node;
+  while (n && n.nodeType !== Node.ELEMENT_NODE) n = n.parentNode;
+  let el = n as HTMLElement | null;
+  while (el) {
+    if (el.tagName === "SPAN" && el.isContentEditable !== false) return el;
+    if (el.getAttribute?.("contenteditable") === "true") return null;
+    el = el.parentElement;
+  }
+  return null;
 }
 
 function CloseIcon() {
