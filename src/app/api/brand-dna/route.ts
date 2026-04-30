@@ -27,12 +27,20 @@ export async function GET() {
 }
 
 // PUT /api/brand-dna — upsert any subset of fields on the profile.
-// Body may contain any of the editable fields; unknown fields are ignored.
+// Owner-only per operator brief: brand defaults are an org-level
+// commitment that drives every member's proposals, so non-owners
+// can VIEW the profile (GET) but not edit it (PUT).
 export async function PUT(req: Request) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!ctx.organization) {
     return NextResponse.json({ error: "No active organization" }, { status: 409 });
+  }
+  if (ctx.role !== "owner") {
+    return NextResponse.json(
+      { error: "Brand DNA is owner-only. Ask your organization owner to update it." },
+      { status: 403 },
+    );
   }
 
   let body: Record<string, unknown>;

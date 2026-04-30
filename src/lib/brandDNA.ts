@@ -63,8 +63,57 @@ export type VoiceAxisKey = (typeof VOICE_AXES)[number]["key"];
 
 // ─── Shared Value Types ─────────────────────────────────────────────────────
 
+import type { ProposalTheme, ThemeTokens } from "@/lib/types";
+
 export type BrandColor = { hex: string; role?: string };
 export type BrandImage = { url: string; caption?: string; tags?: string[] };
+
+// ─── Brand defaults → proposal theme ────────────────────────────────────
+//
+// Apply the org's Brand DNA visual settings (brandColors, headingFont,
+// bodyFont) onto a proposal's theme tokens at clone time. Operator
+// brief: "the app will use these every time when generating proposal
+// to color sections, and fonts for that section." Fill-gap semantics
+// — only seeds when the theme field hasn't already been set by the
+// template; never overwrites operator customisation.
+
+export interface BrandVisualDefaults {
+  brandColors: BrandColor[] | null;
+  headingFont: string | null;
+  bodyFont: string | null;
+}
+
+/** Pick a colour from the brandColors array by role, falling back to
+ *  positional order when role isn't tagged. */
+function pickBrandColor(
+  colors: BrandColor[] | null,
+  role: string,
+  fallbackIndex: number,
+): string | null {
+  if (!colors || colors.length === 0) return null;
+  const byRole = colors.find((c) => c.role?.toLowerCase() === role);
+  if (byRole?.hex) return byRole.hex;
+  return colors[fallbackIndex]?.hex ?? null;
+}
+
+/** Returns a NEW ProposalTheme with brand defaults applied. Fill-gap
+ *  semantics — only seeds when the input field is empty / null. */
+export function applyBrandDefaultsToTheme(
+  theme: ProposalTheme,
+  defaults: BrandVisualDefaults,
+): ProposalTheme {
+  const accent = pickBrandColor(defaults.brandColors, "primary", 0);
+  const secondary = pickBrandColor(defaults.brandColors, "secondary", 1);
+  const tokens: ThemeTokens = { ...theme.tokens };
+  if (accent) tokens.accent = accent;
+  if (secondary) tokens.secondaryAccent = secondary;
+  return {
+    ...theme,
+    displayFont: defaults.headingFont || theme.displayFont,
+    bodyFont: defaults.bodyFont || theme.bodyFont,
+    tokens,
+  };
+}
 
 // ─── Completion ─────────────────────────────────────────────────────────────
 

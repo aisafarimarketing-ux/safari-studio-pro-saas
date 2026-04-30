@@ -10,6 +10,12 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (!auth.organization) {
     return NextResponse.json({ error: "No active organization" }, { status: 409 });
   }
+  if (auth.role !== "owner") {
+    return NextResponse.json(
+      { error: "Brand DNA is owner-only." },
+      { status: 403 },
+    );
+  }
 
   const { id } = await ctx.params;
   const profile = await prisma.brandDNAProfile.findUnique({

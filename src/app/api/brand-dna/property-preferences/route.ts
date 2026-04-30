@@ -10,6 +10,12 @@ export async function POST(req: Request) {
   if (!ctx.organization) {
     return NextResponse.json({ error: "No active organization" }, { status: 409 });
   }
+  if (ctx.role !== "owner") {
+    return NextResponse.json(
+      { error: "Brand DNA is owner-only." },
+      { status: 403 },
+    );
+  }
 
   let body: Record<string, unknown>;
   try {

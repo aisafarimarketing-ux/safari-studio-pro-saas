@@ -3,6 +3,10 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
 import { applyIdentityToOperator } from "@/lib/consultantIdentity";
+import {
+  applyBrandDefaultsToTheme,
+  type BrandColor,
+} from "@/lib/brandDNA";
 
 // ─── POST /api/proposals/from-template ─────────────────────────────────────
 //
@@ -59,6 +63,37 @@ export async function POST(req: Request) {
     signatureUrl: ctx.membership?.signatureUrl ?? null,
     whatsapp: ctx.membership?.whatsapp ?? null,
   });
+
+  // Apply the org's Brand DNA visual defaults (colours, fonts) on top
+  // of the template's theme. Operator brief: every new proposal uses
+  // the org's brand palette + typography by default. Operator can
+  // still override per-proposal via SectionChrome.
+  const brand = await prisma.brandDNAProfile.findUnique({
+    where: { organizationId: ctx.organization.id },
+    select: { brandColors: true, headingFont: true, bodyFont: true },
+  });
+  if (brand) {
+    proposal.theme = applyBrandDefaultsToTheme(proposal.theme, {
+      brandColors: (brand.brandColors as BrandColor[] | null) ?? null,
+      headingFont: brand.headingFont,
+      bodyFont: brand.bodyFont,
+    });
+    // Also seed operator brand colours so closing / footer chrome
+    // that references operator.brandColors picks them up.
+    const primary =
+      (brand.brandColors as BrandColor[] | null)?.[0]?.hex ??
+      proposal.operator.brandColors?.primary;
+    const secondary =
+      (brand.brandColors as BrandColor[] | null)?.[1]?.hex ??
+      proposal.operator.brandColors?.secondary;
+    if (primary || secondary) {
+      proposal.operator.brandColors = {
+        primary: primary ?? proposal.operator.brandColors?.primary ?? "#1b3a2d",
+        secondary:
+          secondary ?? proposal.operator.brandColors?.secondary ?? "#c9a84c",
+      };
+    }
+  }
 
   // Persist via Prisma directly (same shape the existing /api/proposals
   // POST uses internally). Keeping this endpoint self-contained so the
