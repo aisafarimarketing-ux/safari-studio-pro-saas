@@ -212,30 +212,39 @@ function buildDefaultSections(): Section[] {
       signOffLead: "Thanks again and I remain at your full disposal!",
       signOff: "Best regards,",
     }),
-    makeSection("itineraryTable", 2, "default"),
-    makeSection("map", 3, "route", { coords: [] }),
+    // Divider — coloured band between Personal Note and Itinerary at
+    // a glance. All dividers in the default flow seed with the same
+    // gold colour; operators recolour each independently.
+    makeSection("divider", 2, "band", { color: "#c9a84c" }),
+    makeSection("itineraryTable", 3, "default"),
+    makeSection("map", 4, "route", { coords: [] }),
+    makeSection("divider", 5, "band", { color: "#c9a84c" }),
     // Day-by-day — left-flip: image on the left of every day card,
     // narrative on the right. Operator-default per request. Magazine
     // rhythm without alternation; trip-flip and right-flip remain
     // available as overrides per-section.
-    makeSection("dayJourney", 4, "left-flip"),
-    makeSection("propertyShowcase", 5, "editorial-carousel"),
+    makeSection("dayJourney", 6, "left-flip"),
+    makeSection("divider", 7, "band", { color: "#c9a84c" }),
+    makeSection("propertyShowcase", 8, "editorial-carousel"),
+    makeSection("divider", 9, "band", { color: "#c9a84c" }),
     // Pricing now carries inclusions/exclusions + payment schedule,
     // cancellation, insurance, and T&Cs. No standalone inclusions section
     // in the default flow — still available in the registry for legacy.
-    makeSection("pricing", 6, "editorial"),
-    makeSection("practicalInfo", 7, "two-column-notes"),
+    makeSection("pricing", 10, "editorial"),
+    makeSection("divider", 11, "band", { color: "#c9a84c" }),
+    makeSection("practicalInfo", 12, "two-column-notes"),
+    makeSection("divider", 13, "band", { color: "#c9a84c" }),
     // Closing — stack: vertical layout (image rail on top, letter +
     // CTA below). Operator-default per request. Other variants
     // (split-card, gallery-row) remain available as per-section
     // overrides via SectionChrome.
-    makeSection("closing", 8, "stack", {
+    makeSection("closing", 14, "stack", {
       quote: "Take only memories, leave only footprints.",
       attribution: "— Chief Seattle",
       signOff:
         "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
-    makeSection("footer", 9, "default"),
+    makeSection("footer", 15, "default"),
   ];
 }
 

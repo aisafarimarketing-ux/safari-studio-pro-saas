@@ -6,6 +6,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
+import { InlineSectionColors } from "@/components/editor/InlineSectionColors";
 import type {
   Section,
   Property,
@@ -71,13 +72,17 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
   }
 
   return (
-    <div style={{ background: tokens.sectionSurface }}>
+    <div className="relative" style={{ background: tokens.sectionSurface }}>
       {/* Outer bg = sectionSurface (cream) so it BLENDS with the
           PropertyBlock cards below. Previously this used pageBg
           (green) which created a visible green stripe between the
           "Your Accommodations" header and the first property card.
           Now header + cards share the same background — single
           continuous accommodation block. */}
+      {/* Inline section-colour editor — visible top-right in editor
+          mode. Lets the operator recolour the showcase's section bg,
+          card body, and accent without touching the property images. */}
+      {isEditor && <InlineSectionColors section={section} variant="property" />}
       <header className="px-8 md:px-12 pt-2 pb-1">
         <div
           className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-1.5"

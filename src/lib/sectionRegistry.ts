@@ -215,12 +215,16 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
   },
   divider: {
     type: "divider",
-    label: "Divider",
-    icon: "─",
-    description: "Horizontal rule",
-    variants: ["line", "ornamental", "spacious"],
-    defaultVariant: "line",
-    defaultContent: {},
+    label: "Section divider",
+    icon: "▬",
+    description: "Coloured separator band between sections — recolour by clicking it",
+    // band: thick coloured strip (~52px), the new default. Used between
+    // every adjacent content-section pair to give the proposal visible
+    // rhythm. The other three variants (line / ornamental / spacious)
+    // are kept for back-compat with old proposals only.
+    variants: ["band", "line", "ornamental", "spacious"],
+    defaultVariant: "band",
+    defaultContent: { color: "#c9a84c" },
   },
   spacer: {
     type: "spacer",

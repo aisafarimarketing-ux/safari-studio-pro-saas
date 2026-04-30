@@ -262,28 +262,36 @@ function InteractiveMap({
             with separate headers. */}
         <header className="mb-3 md:mb-4">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <div
-              className="text-[9.5px] uppercase tracking-[0.28em] font-semibold"
-              style={{ color: tokens.mutedText }}
+            {/* Title moved to the LEFT (operator brief). Slightly smaller
+                font (clamp 16-19px instead of 18-22) so the eyebrow on
+                the right reads as the secondary item. */}
+            <h2
+              className="font-bold leading-[1.15]"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(16px, 1.5vw, 19px)",
+                letterSpacing: "-0.005em",
+              }}
             >
-              Itinerary at a glance
-            </div>
+              {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
+            </h2>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
               {countryFlags.length > 1 ? (
                 countryFlags.map((f, i) => (
-                  <span key={i} className="text-[16px] leading-none" aria-hidden>
+                  <span key={i} className="text-[15px] leading-none" aria-hidden>
                     {f}
                   </span>
                 ))
               ) : (
                 countryFlag && (
-                  <span className="text-[16px] leading-none" aria-hidden>
+                  <span className="text-[15px] leading-none" aria-hidden>
                     {countryFlag}
                   </span>
                 )
               )}
               <span
-                className="text-[11.5px] uppercase tracking-[0.18em] font-semibold outline-none"
+                className="text-[10.5px] uppercase tracking-[0.18em] font-semibold outline-none"
                 style={{ color: tokens.mutedText }}
                 contentEditable={isEditor}
                 suppressContentEditableWarning
@@ -291,17 +299,12 @@ function InteractiveMap({
               >
                 {countryName}
               </span>
-              <h2
-                className="font-bold leading-[1.15]"
-                style={{
-                  color: tokens.headingText,
-                  fontFamily: `'${theme.displayFont}', serif`,
-                  fontSize: "clamp(18px, 1.8vw, 22px)",
-                  letterSpacing: "-0.005em",
-                }}
+              <span
+                className="text-[9.5px] uppercase tracking-[0.28em] font-semibold"
+                style={{ color: tokens.mutedText }}
               >
-                {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
-              </h2>
+                · Itinerary at a glance
+              </span>
             </div>
           </div>
           <div

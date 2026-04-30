@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
+import { InlineSectionColors } from "@/components/editor/InlineSectionColors";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
@@ -246,6 +247,13 @@ export function DayCard({
           onDelete={() => removeDay(day.id)}
         />
       )}
+      {/* Inline section-colour editor — visible at the top-right of
+          every day card in editor mode. Operator brief: each card
+          should have an editor at the top that changes the section's
+          colours but not the image area backgrounds. Writes to
+          section.styleOverrides; the day-head, body, and accent all
+          re-tint, photos stay as-is. */}
+      {isEditor && <InlineSectionColors section={section} variant="day" />}
 
       <DestinationImagePicker
         open={imagePickerOpen}
