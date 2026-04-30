@@ -176,9 +176,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "footer",
     label: "Footer",
     icon: "—",
-    description: "Consultant contact details and branding",
-    variants: ["contact-cards", "default", "minimal"],
-    defaultVariant: "contact-cards",
+    description: "Consultant identity + contact pills + website link",
+    // Single-layout footer per operator request — the variant switcher
+    // is hidden by SectionChrome when only one variant is registered.
+    // Legacy proposals on "contact-cards" / "minimal" / "default" all
+    // fall through to the unified layout in FooterSection (no migration
+    // needed; the dispatcher there ignores the saved variant string).
+    variants: ["default"],
+    defaultVariant: "default",
     defaultContent: {},
   },
   customText: {
