@@ -23,6 +23,7 @@ import { PerformanceSection } from "./PerformanceSection";
 import { TripSetupDialog, type TripSetupResult } from "@/components/trip-setup/TripSetupDialog";
 import { mergeAutopilotIntoProposal, type AutopilotResult } from "@/lib/autopilotMerge";
 import { applyIdentityToOperator, identityFromMe, type ConsultantIdentity } from "@/lib/consultantIdentity";
+import { streamAutopilot, type StreamedDayProgress } from "@/lib/sseClient";
 
 // ─── Workspace dashboard ────────────────────────────────────────────────────
 //
@@ -115,6 +116,10 @@ export function DashboardWorkspace() {
   const [importing, setImporting] = useState(false);
   const [tripSetupOpen, setTripSetupOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-day streaming progress fed to AutomatingOverlay so the operator
+  // sees days appear as the AI writes them. Reset every time a new
+  // generation kicks off; cleared when streaming completes / aborts.
+  const [streamedDays, setStreamedDays] = useState<StreamedDayProgress[]>([]);
   // We track raw counts for the onboarding checklist but no longer surface
   // the "Workspace" library tiles on the dashboard — Properties and Brand
   // DNA each have their own pages reachable from the sidebar.
@@ -192,72 +197,75 @@ export function DashboardWorkspace() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       if (autopilot) {
+        // Streaming autopilot — server emits per-day SSE events as
+        // Claude writes them. setStreamedDays accumulates, the overlay
+        // shows the cards live. On `done`, the full draft is merged
+        // into the proposal and saved (same as the old one-shot flow).
+        setStreamedDays([]);
         try {
-          const ai = await fetch("/api/ai/autopilot", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ proposal }),
+          const draft = await streamAutopilot<AutopilotResult>({
+            body: { proposal },
             signal: controller.signal,
+            onDayProgress: (entry) => {
+              setStreamedDays((prev) => {
+                // De-dupe by dayNumber so retries / re-emissions don't
+                // double-render. Replace existing entry if same day.
+                const without = prev.filter((p) => p.dayNumber !== entry.dayNumber);
+                return [...without, entry].sort((a, b) => a.dayNumber - b.dayNumber);
+              });
+            },
           });
-          if (ai.ok) {
-            const draft = (await ai.json()) as AutopilotResult;
-            if (!draft.days || draft.days.length === 0) {
-              console.warn("[autopilot] returned 0 days · response:", draft);
-              setError(
-                "Autopilot returned 0 days for this trip. This usually means the AI request timed out or hit a rate limit. Click Generate again — or open the editor with the empty proposal and fill it in manually.",
-              );
-              return;
-            } else {
-              const merged = mergeAutopilotIntoProposal(proposal, draft);
-              const saveBody = JSON.stringify({ proposal: merged });
-              const postSave = () =>
-                fetch("/api/proposals", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: saveBody,
-                  signal: controller.signal,
-                });
-              // Retry once on 401 — Clerk token can rotate during the
-              // long autopilot call. See proposals/page.tsx for full
-              // commentary on the same pattern.
-              let save = await postSave();
-              if (save.status === 401) {
-                console.warn("[autopilot] merge save 401 — retrying after 1.5s for Clerk token refresh");
-                await new Promise((r) => setTimeout(r, 1500));
-                save = await postSave();
-              }
-              if (!save.ok) {
-                const detail = await save.json().catch(() => ({}));
-                console.error(
-                  "[autopilot] merge save failed:",
-                  save.status,
-                  detail?.error,
-                  "· payload bytes:",
-                  saveBody.length,
-                );
-                setError(
-                  `AI drafted the proposal but couldn't save it (${detail?.error || `HTTP ${save.status}`}). ${
-                    saveBody.length > 3_000_000
-                      ? "The payload is unusually large — likely inline base64 images on properties. Re-uploading them through Supabase Storage will fix this."
-                      : "Open the editor and use Regenerate to retry."
-                  }`,
-                );
-                return;
-              }
-            }
-          } else {
-            const detail = await ai.json().catch(() => ({}));
-            console.error("[autopilot] AI request failed:", ai.status, detail?.error);
+
+          if (!draft.days || draft.days.length === 0) {
+            console.warn("[autopilot] returned 0 days · response:", draft);
             setError(
-              `Autopilot couldn't draft this proposal: ${detail?.error || `HTTP ${ai.status}`}. Click Generate again to retry — your inputs are preserved.`,
+              "Autopilot returned 0 days for this trip. This usually means the AI request timed out or hit a rate limit. Click Generate again — or open the editor with the empty proposal and fill it in manually.",
+            );
+            return;
+          }
+
+          const merged = mergeAutopilotIntoProposal(proposal, draft);
+          const saveBody = JSON.stringify({ proposal: merged });
+          const postSave = () =>
+            fetch("/api/proposals", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: saveBody,
+              signal: controller.signal,
+            });
+          // Retry once on 401 — Clerk token can rotate during the
+          // long autopilot call. See proposals/page.tsx for full
+          // commentary on the same pattern.
+          let save = await postSave();
+          if (save.status === 401) {
+            console.warn("[autopilot] merge save 401 — retrying after 1.5s for Clerk token refresh");
+            await new Promise((r) => setTimeout(r, 1500));
+            save = await postSave();
+          }
+          if (!save.ok) {
+            const detail = await save.json().catch(() => ({}));
+            console.error(
+              "[autopilot] merge save failed:",
+              save.status,
+              detail?.error,
+              "· payload bytes:",
+              saveBody.length,
+            );
+            setError(
+              `AI drafted the proposal but couldn't save it (${detail?.error || `HTTP ${save.status}`}). ${
+                saveBody.length > 3_000_000
+                  ? "The payload is unusually large — likely inline base64 images on properties. Re-uploading them through Supabase Storage will fix this."
+                  : "Open the editor and use Regenerate to retry."
+              }`,
             );
             return;
           }
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
-          console.error("[autopilot] network failure:", err);
+          if (err instanceof Error && err.name === "AbortError") return;
+          console.error("[autopilot] stream failure:", err);
           setError(
-            `Autopilot request failed: ${err instanceof Error ? err.message : "network error"}. Check your connection and click Generate again.`,
+            `Autopilot request failed: ${err instanceof Error ? err.message : "network error"}. Click Generate again to retry — your inputs are preserved.`,
           );
           return;
         }
@@ -337,11 +345,16 @@ export function DashboardWorkspace() {
       />
       {tripSetupOpen && (
         <TripSetupDialog
-          onClose={() => { if (!creating) setTripSetupOpen(false); }}
+          onClose={() => {
+            if (creating) return;
+            setTripSetupOpen(false);
+            setStreamedDays([]);
+          }}
           onCancel={handleCancelSubmit}
           onSubmit={handleTripSetupSubmit}
           submitting={creating}
           error={error}
+          streamedDays={streamedDays}
         />
       )}
     </DashboardThemeProvider>

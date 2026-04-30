@@ -554,12 +554,9 @@ PRACTICAL INFO:
   // it can't reorder destinations or change which day stops where.
   // Also captures the operator's per-stop pre-pick property ids and
   // hero image URLs so we can apply those after the AI returns.
-  type ScheduleEntry = {
-    dayNumber: number;
-    destination: string;
-    propertyByTier?: Partial<Record<TierKey, string>>;
-    heroImageUrl?: string;
-  };
+  // ScheduleEntry type is defined once at module scope (see bottom)
+  // because it's also part of the ProcessContext bundle threaded
+  // through processParsedResponse() and buildAutopilotStream().
   const schedule: ScheduleEntry[] = [];
   if (inputStops.length > 0) {
     let day = 1;
@@ -622,6 +619,53 @@ ${JSON.stringify(userPayload, null, 2)}`;
   // the entire "AI returned malformed output" failure mode.
   // submit_proposal_tool defined at module scope; see proposalToolSchema().
 
+  // ── AI call — streaming or one-shot ────────────────────────────────────
+  // Detect Accept: text/event-stream on the request to pick which mode
+  // to use. Streaming returns Server-Sent Events with per-day progress
+  // so the operator's loading screen renders days as they arrive
+  // instead of staring at a 30-90s spinner. One-shot returns a single
+  // JSON response — used by the editor's in-page Regenerate flow and
+  // any caller that doesn't want streaming.
+  const wantsStream = req.headers.get("accept")?.includes("text/event-stream") ?? false;
+
+  // Context bundle threaded through processParsedResponse() — both the
+  // streaming and one-shot paths share the post-processing code.
+  const processCtx: ProcessContext = {
+    nights,
+    destinations,
+    schedule,
+    brandImageLibrary,
+    library,
+    organizationId: ctx.organization.id,
+    tripStyle,
+  };
+
+  // Streaming path — wraps the same Anthropic call in a ReadableStream
+  // and emits per-day events as the model writes them.
+  if (wantsStream) {
+    const sseStream = buildAutopilotStream({
+      anth,
+      model: MODEL,
+      systemText,
+      userText,
+      tool: SUBMIT_PROPOSAL_TOOL,
+      processCtx,
+    });
+    return new Response(sseStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        // Disable Nginx / Vercel buffering so chunks reach the client
+        // immediately. Without this, SSE chunks pile up in the proxy
+        // until the connection ends and the streaming UI is silent.
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }
+
+  // ── One-shot path (existing behaviour) ─────────────────────────────────
+
   let parsed: AutopilotResponse;
   const startedAt = Date.now();
   console.log(`[AUTOPILOT] start · model=${MODEL} · destinations=${destinations.length} · libraryProps=${library.length} · nights=${nights}`);
@@ -672,6 +716,55 @@ ${JSON.stringify(userPayload, null, 2)}`;
     console.error("[AUTOPILOT] Unexpected error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
+
+  const result = await processParsedResponse(parsed, processCtx);
+  return NextResponse.json(result);
+}
+
+// ─── Streaming + post-processing helpers ─────────────────────────────────
+
+// Bundled context that travels from the request handler down into the
+// stream callback and the post-processing helper. Avoids passing a
+// dozen positional args.
+type ProcessContext = {
+  nights: number;
+  destinations: string[];
+  schedule: ScheduleEntry[];
+  brandImageLibrary: BrandImage[];
+  library: LibraryProperty[];
+  organizationId: string;
+  tripStyle: string;
+};
+
+type ScheduleEntry = {
+  dayNumber: number;
+  destination: string;
+  propertyByTier?: Partial<Record<TierKey, string>>;
+  heroImageUrl?: string;
+};
+
+// Turn the Anthropic-parsed AI output into the full response object
+// the client merges into the proposal store. Identical post-processing
+// for the streaming and one-shot paths — both call this once the AI's
+// final tool_use input is in hand.
+async function processParsedResponse(
+  parsed: AutopilotResponse,
+  pctx: ProcessContext,
+): Promise<{
+  cover: { tagline: string };
+  greeting: { body: string };
+  closing: { quote: string; signOff: string };
+  map: { caption: string };
+  quote: { quote: string; attribution: string };
+  trip: { destinations: string[] };
+  days: Day[];
+  inclusions: string[];
+  exclusions: string[];
+  practicalInfo: Array<{ id: string; title: string; body: string; icon: string }>;
+  pricing: ReturnType<typeof zeroedPricing>;
+  properties: Array<Record<string, unknown>>;
+}> {
+  const { nights, destinations, schedule, brandImageLibrary, library, organizationId, tripStyle } = pctx;
 
   // ── Map Claude's draft → concrete shapes the proposal store consumes ────
   // Take the first `nights` items the AI gave us and trust those. Don't
@@ -876,7 +969,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     // images and rooms at the SQL level so the query always returns
     // in well under a second regardless of property complexity.
     const fullProps = await prisma.property.findMany({
-      where: { id: { in: pickedIds }, organizationId: ctx.organization.id },
+      where: { id: { in: pickedIds }, organizationId },
       select: {
         id: true,
         name: true,
@@ -993,7 +1086,7 @@ ${JSON.stringify(userPayload, null, 2)}`;
     });
   }
 
-  return NextResponse.json({
+  return {
     cover,
     greeting,
     closing,
@@ -1006,6 +1099,149 @@ ${JSON.stringify(userPayload, null, 2)}`;
     practicalInfo,
     pricing,
     properties: propertySnapshots,
+  };
+}
+
+// ─── Streaming response builder ───────────────────────────────────────────
+//
+// Wraps anth.messages.stream() in a Server-Sent Events ReadableStream.
+// As Claude writes the tool_use input, the SDK emits `inputJson` events
+// with the partial parsed JSON — we watch jsonSnapshot.days.length and
+// emit a `day-progress` SSE event for each completed day. After
+// stream.finalMessage() resolves, we run the same post-processing as
+// the one-shot path and emit a final `done` event with the full result.
+//
+// SSE event types this stream emits:
+//   day-progress  — one per day as it appears in the AI's tool_use input.
+//                   Payload: { dayNumber, destination, country, description? }
+//   done          — terminal event with the complete response object that
+//                   one-shot mode would have returned.
+//   error         — terminal event when something fails. Payload: { error }
+//
+// The client must parse SSE chunks (CRLF-separated `event:` / `data:` lines).
+// On `done` it saves + redirects; on `error` it surfaces the message in the
+// dialog; on `day-progress` it appends to the in-flight day-cards display.
+function buildAutopilotStream(opts: {
+  anth: Anthropic;
+  model: string;
+  systemText: string;
+  userText: string;
+  tool: Anthropic.Tool;
+  processCtx: ProcessContext;
+}): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(encoder.encode(payload));
+      };
+
+      const startedAt = Date.now();
+      console.log(
+        `[AUTOPILOT/stream] start · model=${opts.model} · destinations=${opts.processCtx.destinations.length} · libraryProps=${opts.processCtx.library.length} · nights=${opts.processCtx.nights}`,
+      );
+
+      try {
+        // Open the streaming Anthropic call. The SDK accumulates JSON
+        // deltas into a parsed snapshot we can read on each chunk.
+        const stream = opts.anth.messages.stream(
+          {
+            model: opts.model,
+            max_tokens: 16000,
+            system: [
+              { type: "text", text: opts.systemText, cache_control: { type: "ephemeral" } },
+            ],
+            messages: [{ role: "user", content: opts.userText }],
+            tools: [opts.tool],
+            tool_choice: { type: "tool", name: "submit_proposal" },
+          },
+          { timeout: 90_000 },
+        );
+
+        // Track which days we've already announced so we don't re-emit
+        // the same day on every delta. The SDK gives us the FULL parsed
+        // snapshot on each delta; we diff against the last emitted
+        // length and emit only the newly-appeared days.
+        //
+        // Important: the LAST item in days[] is being actively written
+        // and may be incomplete. We hold it back until the next day
+        // appears (proving the previous one is done) or the stream
+        // closes. This avoids streaming a half-written description.
+        let lastEmittedIndex = -1;
+        stream.on("inputJson", (_partial, snapshot) => {
+          if (typeof snapshot !== "object" || snapshot === null) return;
+          const snap = snapshot as { days?: AutopilotDayOut[] };
+          const days = Array.isArray(snap.days) ? snap.days : [];
+          // Emit each day up to days.length - 2 (last is still being
+          // written). Index 0..len-2 inclusive.
+          while (lastEmittedIndex < days.length - 2) {
+            lastEmittedIndex++;
+            const d = days[lastEmittedIndex];
+            if (!d) continue;
+            send("day-progress", {
+              dayNumber: lastEmittedIndex + 1,
+              destination: typeof d.destination === "string" ? d.destination : "",
+              country: typeof d.country === "string" ? d.country : "",
+              description: typeof d.description === "string" ? d.description.slice(0, 240) : "",
+            });
+          }
+        });
+
+        const finalMessage = await stream.finalMessage();
+        const elapsedMs = Date.now() - startedAt;
+        console.log(
+          `[AUTOPILOT/stream] anthropic done in ${elapsedMs}ms · in_tokens=${finalMessage.usage?.input_tokens ?? "?"} · out_tokens=${finalMessage.usage?.output_tokens ?? "?"} · stop_reason=${finalMessage.stop_reason ?? "?"}`,
+        );
+
+        const toolUse = finalMessage.content.find(
+          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_proposal",
+        );
+        if (!toolUse) {
+          send("error", { error: "AI didn't return structured output. Try again." });
+          controller.close();
+          return;
+        }
+
+        const parsed = toolUse.input as AutopilotResponse;
+
+        // Catch up — emit any final days we held back. The watch loop
+        // above stops at length-2; if length is N, we still owe the
+        // operator the (N-1)th index.
+        const finalDays = Array.isArray(parsed.days) ? parsed.days : [];
+        while (lastEmittedIndex < finalDays.length - 1) {
+          lastEmittedIndex++;
+          const d = finalDays[lastEmittedIndex];
+          if (!d) continue;
+          send("day-progress", {
+            dayNumber: lastEmittedIndex + 1,
+            destination: typeof d.destination === "string" ? d.destination : "",
+            country: typeof d.country === "string" ? d.country : "",
+            description: typeof d.description === "string" ? d.description.slice(0, 240) : "",
+          });
+        }
+
+        // Run the same post-processing as the one-shot path — applies
+        // operator schedule, gateway clamp, brand-DNA hero pick, builds
+        // property snapshots from Prisma.
+        const result = await processParsedResponse(parsed, opts.processCtx);
+        send("done", result);
+        controller.close();
+      } catch (err) {
+        const elapsedMs = Date.now() - startedAt;
+        console.error(`[AUTOPILOT/stream] failed after ${elapsedMs}ms · model=${opts.model}`);
+        const message =
+          err instanceof Anthropic.RateLimitError
+            ? "AI is rate-limited; please retry."
+            : err instanceof Anthropic.APIError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : String(err);
+        send("error", { error: message });
+        controller.close();
+      }
+    },
   });
 }
 

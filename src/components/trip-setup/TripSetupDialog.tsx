@@ -13,6 +13,7 @@ import {
   type TripPreset,
 } from "@/lib/tripPresets";
 import type { BrandImage } from "@/lib/brandDNA";
+import type { StreamedDayProgress } from "@/lib/sseClient";
 import type { Proposal, TripStop } from "@/lib/types";
 
 // ─── Trip Setup ─────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ export function TripSetupDialog({
   onSubmit,
   submitting = false,
   error,
+  streamedDays = [],
 }: {
   onClose: () => void;
   // onCancel — optional, distinct from onClose. Fires while submitting
@@ -103,6 +105,10 @@ export function TripSetupDialog({
   onCancel?: () => void;
   onSubmit: (result: TripSetupResult) => void;
   submitting?: boolean;
+  // Live streamed days from the parent's SSE consumer. Threaded
+  // straight through to AutomatingOverlay so the loading screen can
+  // render day cards as they arrive.
+  streamedDays?: StreamedDayProgress[];
   // Surface autopilot/save errors back inside the dialog so the user
   // actually sees why a Generate attempt didn't redirect to the editor.
   // Without this the error state lived only on the list page (hidden
@@ -265,6 +271,7 @@ export function TripSetupDialog({
       <AutomatingOverlay
         active={Boolean(submitting && autopilot)}
         onCancel={onCancel}
+        streamedDays={streamedDays}
       />
       <form
         onSubmit={handleSubmit}
