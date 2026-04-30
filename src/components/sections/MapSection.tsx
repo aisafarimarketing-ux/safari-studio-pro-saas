@@ -252,14 +252,12 @@ function InteractiveMap({
   // compat; aspect is no longer applied as CSS.
 
   return (
-    <div className="py-2 md:py-3" style={{ background: tokens.sectionSurface }}>
-      <div className="mx-auto px-4 md:px-6" style={{ maxWidth: 1280 }}>
-        {/* ── Header band — full width across both columns ────────────
-            Row 1: "Itinerary at a glance" eyebrow on the left, country
-            flag(s) and the dynamic A→B title on the right. Row 2:
-            START · place. Both rows live above the rail+map grid so
-            the section reads as one editorial block, not two columns
-            with separate headers. */}
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* ── Header band — padded so it sits clear of the section
+          edges, but the rail+map below goes flush to the full
+          section width. Operator brief: no gray section surface
+          should bleed around the map. */}
+      <div className="px-4 md:px-6 pt-3 md:pt-4">
         <header className="mb-3 md:mb-4">
           <div className="flex items-baseline gap-3 flex-wrap">
             {/* Title moved to the LEFT (operator brief). Slightly smaller
@@ -328,19 +326,20 @@ function InteractiveMap({
             </div>
           </div>
         </header>
+      </div>
 
-        {/* Rail ‖ map — a single outer card with a vertical divider
-            between the two columns and horizontal dividers between
-            rail rows. Matches the operator's hand-drawn reference:
-            one frame, two columns, table-like rail. items-stretch
-            keeps both columns the same height. */}
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            border: `1px solid ${tokens.border}`,
-            background: tokens.cardBg,
-          }}
-        >
+      {/* Rail ‖ map — full-bleed under the header band. Vertical
+          divider between rail and map, horizontal dividers between
+          rail rows. items-stretch keeps both columns the same height.
+          No outer rounded card any more — the section's own surface
+          carries to the edges so the gold strip on top sits flush
+          against the map below. */}
+      <div
+        style={{
+          borderTop: `1px solid ${tokens.border}`,
+          background: tokens.cardBg,
+        }}
+      >
         <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] items-stretch">
           {/* Sidebar — stacked table of day rows with horizontal
               dividers, vertical divider on the right edge separating
@@ -457,22 +456,23 @@ function InteractiveMap({
             )}
           </div>
 
-          {/* ── Map column — fills the grid cell with a real
-              MapLibre-rendered basemap. The map fits its bounds to
-              the route on first paint and re-fits when stops change.
-              Cooperative gestures so it doesn't hijack scroll. ── */}
+          {/* ── Map column — fills the grid cell flush. No rounded
+              corners so the basemap covers every pixel of the
+              section width and the section surface never bleeds
+              through. The map fits its bounds to the route on
+              first paint and re-fits when stops change. */}
           <div
-            className="min-w-0 relative overflow-hidden rounded-lg"
+            className="min-w-0 relative overflow-hidden"
             style={{ background: tokens.cardBg, minHeight: 360 }}
           >
             <RouteRealMap
               days={days}
+              activeTier={activeTier}
               tokens={tokens}
               theme={theme}
               isEditor={isEditor}
             />
           </div>
-        </div>
         </div>
       </div>
     </div>

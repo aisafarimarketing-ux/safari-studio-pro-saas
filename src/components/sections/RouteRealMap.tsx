@@ -6,7 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { lookupDemoCoord } from "@/lib/demoDestinationCoords";
 import { classifyStop, isCoastCity } from "@/lib/safariRoutingRules";
 import { parksInTrip } from "@/lib/safariParkBoundaries";
-import type { Day, ProposalTheme, ThemeTokens } from "@/lib/types";
+import type { Day, ProposalTheme, ThemeTokens, TierKey } from "@/lib/types";
 
 // ─── RouteRealMap ───────────────────────────────────────────────────────
 //
@@ -35,6 +35,10 @@ import type { Day, ProposalTheme, ThemeTokens } from "@/lib/types";
 
 interface RouteRealMapProps {
   days: Day[];
+  /** Active tier — used to count unique lodges in the stats chip
+   *  ("4 LODGES"). Operators asked us to drop the raw KM total
+   *  clients see and replace it with something less negotiable. */
+  activeTier: TierKey;
   tokens: ThemeTokens;
   theme: ProposalTheme;
   isEditor: boolean;
@@ -45,20 +49,26 @@ const BASEMAP_STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.j
 type ResolvedStop = {
   destination: string;
   coord: { lat: number; lng: number };
+  /** First day in the consecutive-day run that landed at this stop. */
   dayNumber: number;
+  /** Last day in the run. Equals dayNumber when the run is one night. */
+  endDay: number;
   kind: ReturnType<typeof classifyStop>;
   heroImageUrl?: string;
 };
 
-export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
+export function RouteRealMap({ days, activeTier, tokens, theme }: RouteRealMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Resolve each day's coord and de-duplicate adjacent identical stops
-  // (e.g., a 3-night Serengeti stay collapses to one map pin labelled
-  // "Day 3-5" upstream; we keep one pin per unique destination).
+  // Resolve each day's coord and collapse consecutive-day stays at
+  // the same destination into one stop with a day RANGE. The pin
+  // ends up labelled "2-3" so the trip arc on the map mirrors the
+  // rail's "Day 2-3 · Tarangire" grouping. Operators asked for this
+  // because pin labels of "1, 2, 3, 4, 5" on a 9-day trip read like
+  // a 5-day trip — the day numbers tell the real story.
   const stops = useMemo<ResolvedStop[]>(() => {
     const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
     const out: ResolvedStop[] = [];
@@ -68,11 +78,15 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       const coord = lookupDemoCoord(dest);
       if (!coord) continue;
       const last = out[out.length - 1];
-      if (last && last.destination.toLowerCase() === dest.toLowerCase()) continue;
+      if (last && last.destination.toLowerCase() === dest.toLowerCase()) {
+        last.endDay = d.dayNumber;
+        continue;
+      }
       out.push({
         destination: dest,
         coord,
         dayNumber: d.dayNumber,
+        endDay: d.dayNumber,
         kind: classifyStop(dest),
         heroImageUrl: d.heroImageUrl,
       });
@@ -81,21 +95,27 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
   }, [days]);
 
   // ── Stats strip data ─────────────────────────────────────────────────
+  // Lodges replaces the old km total. Operators didn't want a hard
+  // distance number on a client-facing card (it invites haggling and
+  // implies "value per km"); a unique-lodges count is a better
+  // signal of the trip's substance. Counts every distinct camp name
+  // at the active tier, case-insensitive.
   const stats = useMemo(() => {
     const totalDays = days.length;
     const totalStops = stops.length;
-    let totalKm = 0;
-    for (let i = 0; i < stops.length - 1; i++) {
-      totalKm += haversineKm(stops[i].coord, stops[i + 1].coord);
+    const camps = new Set<string>();
+    for (const d of days) {
+      const camp = d.tiers?.[activeTier]?.camp?.trim().toLowerCase();
+      if (camp) camps.add(camp);
     }
     const matchedParks = parksInTrip(stops.map((s) => s.destination));
     return {
       totalDays,
       totalStops,
-      totalKm: Math.round(totalKm),
+      totalLodges: camps.size,
       totalParks: matchedParks.length,
     };
-  }, [days.length, stops]);
+  }, [days, activeTier, stops]);
 
   // ── Park polygons that match the trip's destinations ─────────────────
   const parkFeatures = useMemo<GeoJSON.Feature[]>(() => {
@@ -189,11 +209,20 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       const wrapper = document.createElement("div");
       wrapper.style.cursor = "pointer";
 
+      // Day-range label: "1" for one-night stops, "2-3" for runs.
+      // border-radius:999px keeps single-day pins circular and lets
+      // multi-day pins flow into a pill without changing visual
+      // language. min-width = height keeps the circle for the
+      // common case.
+      const isRange = stop.endDay > stop.dayNumber;
+      const label = isRange ? `${stop.dayNumber}-${stop.endDay}` : `${stop.dayNumber}`;
+
       const el = document.createElement("div");
       el.className = "ss-route-marker";
-      el.style.width = "32px";
+      el.style.minWidth = "32px";
       el.style.height = "32px";
-      el.style.borderRadius = "50%";
+      el.style.padding = isRange ? "0 9px" : "0";
+      el.style.borderRadius = "999px";
       el.style.background = tokens.headingText || "#1f3a3a";
       el.style.color = "#ffffff";
       el.style.border = "3px solid #ffffff";
@@ -202,10 +231,12 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
       el.style.alignItems = "center";
       el.style.justifyContent = "center";
       el.style.fontWeight = "700";
-      el.style.fontSize = "13px";
+      el.style.fontSize = isRange ? "12px" : "13px";
+      el.style.lineHeight = "1";
       el.style.fontFamily = `'${theme.bodyFont}', sans-serif`;
       el.style.transition = "transform 180ms ease";
-      el.textContent = String(idx + 1);
+      el.style.whiteSpace = "nowrap";
+      el.textContent = label;
       wrapper.appendChild(el);
 
       wrapper.addEventListener("mouseenter", () => {
@@ -357,12 +388,16 @@ export function RouteRealMap({ days, tokens, theme }: RouteRealMapProps) {
         <Stat label="Days" value={stats.totalDays} accent={tokens.accent || "#c9a84c"} />
         <Divider />
         <Stat label="Stops" value={stats.totalStops} accent={tokens.accent || "#c9a84c"} />
-        <Divider />
-        <Stat
-          label="Km"
-          value={stats.totalKm.toLocaleString()}
-          accent={tokens.accent || "#c9a84c"}
-        />
+        {stats.totalLodges > 0 && (
+          <>
+            <Divider />
+            <Stat
+              label={stats.totalLodges === 1 ? "Lodge" : "Lodges"}
+              value={stats.totalLodges}
+              accent={tokens.accent || "#c9a84c"}
+            />
+          </>
+        )}
         {stats.totalParks > 0 && (
           <>
             <Divider />
@@ -585,12 +620,15 @@ function buildPopupHTML(
     ? `<img src="${escapeHtml(stop.heroImageUrl)}" alt="" style="width:100%;height:130px;object-fit:cover;border-radius:6px 6px 0 0;display:block;" />`
     : "";
 
+  const dayLabel =
+    stop.endDay > stop.dayNumber ? `Day ${stop.dayNumber}-${stop.endDay}` : `Day ${stop.dayNumber}`;
+
   return `
     <div style="font-family:'${bodyFont}',sans-serif;width:220px;border-radius:8px;overflow:hidden;">
       ${photo}
       <div style="padding:${photo ? "10px 12px" : "8px 10px"};">
         <div style="display:flex;align-items:baseline;gap:6px;">
-          <span style="font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;color:${accent};font-weight:700;">Day ${stop.dayNumber}</span>
+          <span style="font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;color:${accent};font-weight:700;">${dayLabel}</span>
           ${
             kindLabel
               ? `<span style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:${muted};">${kindLabel}</span>`
