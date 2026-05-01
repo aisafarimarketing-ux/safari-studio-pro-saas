@@ -50,6 +50,13 @@ export function OperatorLogoTile({
    *  editor still wraps this via EditableOperatorLogoTile and the
    *  brightness detection still drives the wordmark fallback colour. */
   bare = false,
+  /** Minimum width of the tile, in pixels. The cover uses ~160 so
+   *  the tile reads as a horizontal rectangle even when the
+   *  operator's logo is a square monogram or a tight icon — the
+   *  pill is wider than the natural logo, with the logo centred.
+   *  Other sections leave this undefined so the tile hugs its
+   *  contents. Ignored when bare=true (no tile to size). */
+  minTileWidth,
 }: {
   logoUrl?: string;
   companyName?: string;
@@ -58,6 +65,7 @@ export function OperatorLogoTile({
   toneOverride?: Tone;
   tileBgOverride?: string;
   bare?: boolean;
+  minTileWidth?: number;
 }) {
   const [autoTone, setAutoTone] = useState<Tone>("light");
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -95,7 +103,9 @@ export function OperatorLogoTile({
         backdropFilter: "blur(6px)",
         WebkitBackdropFilter: "blur(6px)",
         borderRadius: 8,
-        padding: "10px 14px",
+        padding: "10px 18px",
+        minWidth: minTileWidth,
+        justifyContent: "center",
         boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
         border:
           effectiveTone === "dark"

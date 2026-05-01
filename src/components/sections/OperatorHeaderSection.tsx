@@ -7,16 +7,18 @@ import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLog
 import type { Section } from "@/lib/types";
 
 export function OperatorHeaderSection({ section }: { section: Section }) {
-  const { proposal, updateOperator, updateSectionContent } = useProposalStore();
+  const { proposal, updateOperator } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
-  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
-  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
+  const effectiveLogoUrl = operator.logoUrl;
+  // Logo writes flow into the proposal-operator so every section
+  // that renders a logo (cover, header, personal note, footer)
+  // updates from a single upload.
   const handleLogoChange = (url: string | undefined) =>
-    updateSectionContent(section.id, { logoOverrideUrl: url });
+    updateOperator({ logoUrl: url });
 
   // Bound version of LogoBlock — closes over the section/operator
   // state above so the JSX call sites stay terse. Defined as a JSX
@@ -30,7 +32,6 @@ export function OperatorHeaderSection({ section }: { section: Section }) {
       isEditor={isEditor}
       logoUrl={effectiveLogoUrl}
       companyName={operator.companyName}
-      isOverridden={!!logoOverrideUrl}
       onLogoChange={handleLogoChange}
     />
   );
@@ -154,7 +155,6 @@ function LogoBlock({
   isEditor,
   logoUrl,
   companyName,
-  isOverridden,
   onLogoChange,
 }: {
   logoHeight: number;
@@ -162,7 +162,6 @@ function LogoBlock({
   isEditor: boolean;
   logoUrl: string | undefined;
   companyName: string;
-  isOverridden: boolean;
   onLogoChange: (url: string | undefined) => void;
 }) {
   return (
@@ -173,7 +172,6 @@ function LogoBlock({
         logoUrl={logoUrl}
         companyName={companyName}
         logoHeight={logoHeight}
-        isOverridden={isOverridden}
         onLogoChange={onLogoChange}
       />
     </div>

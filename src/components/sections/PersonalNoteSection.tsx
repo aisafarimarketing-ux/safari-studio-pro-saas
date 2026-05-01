@@ -361,16 +361,10 @@ export function PersonalNoteSection({ section }: { section: Section }) {
             <EditableOperatorLogoTile
               bare
               isEditor={isEditor}
-              logoUrl={
-                (section.content.logoOverrideUrl as string | undefined) ||
-                operator.logoUrl
-              }
+              logoUrl={operator.logoUrl}
               companyName={operator.companyName}
               logoHeight={68}
-              isOverridden={!!section.content.logoOverrideUrl}
-              onLogoChange={(url) =>
-                updateSectionContent(section.id, { logoOverrideUrl: url })
-              }
+              onLogoChange={(url) => updateOperator({ logoUrl: url })}
             />
           </div>
         </div>

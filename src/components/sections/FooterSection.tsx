@@ -41,8 +41,7 @@ export function FooterSection({ section }: { section: Section }) {
   const isEditor = mode === "editor";
   const { operator, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
-  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
-  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
+  const effectiveLogoUrl = operator.logoUrl;
 
   const websiteHref = (() => {
     const w = (operator.website ?? "").trim();
@@ -73,10 +72,7 @@ export function FooterSection({ section }: { section: Section }) {
                   logoUrl={effectiveLogoUrl}
                   companyName={operator.companyName}
                   logoHeight={52}
-                  isOverridden={!!logoOverrideUrl}
-                  onLogoChange={(url) =>
-                    updateSectionContent(section.id, { logoOverrideUrl: url })
-                  }
+                  onLogoChange={(url) => updateOperator({ logoUrl: url })}
                 />
               </div>
             )}

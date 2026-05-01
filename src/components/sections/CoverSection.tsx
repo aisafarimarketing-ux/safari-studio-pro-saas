@@ -116,28 +116,33 @@ export function CoverSection({ section }: { section: Section }) {
   const onHeroPositionChange = (next: string) =>
     updateSectionContent(section.id, { heroImagePosition: next });
 
-  // ─── Per-proposal logo controls ─────────────────────────────────────────
-  // The cover lets operators tweak the brand logo for *this* proposal
-  // without touching their global Brand DNA settings. Two overrides:
-  //   - logoOverrideUrl: a cleaned/replaced PNG (e.g. background removed)
-  //   - logoTileColor:   the colour of the rounded tile behind the logo
-  // Either falsey → fall back to the global operator.logoUrl + auto tone.
-  const logoOverrideUrl = section.content.logoOverrideUrl as string | undefined;
+  // ─── Logo: one source of truth ──────────────────────────────────────────
+  // Logo URL lives at the proposal-operator level. Uploading on any
+  // logo tile (cover, header, personal note, footer) writes to
+  // proposal.operator.logoUrl, and every section re-renders together —
+  // operator brief: "if you upload on one logo, it populates all the
+  // other sections where a logo goes."
+  // Tile colour stays per-section because different sections can want
+  // different tiles (cover: cream, footer: charcoal, etc.).
   const logoTileColor = section.content.logoTileColor as string | undefined;
-  const effectiveLogoUrl = logoOverrideUrl || operator.logoUrl;
   const handleLogoChange = (url: string | undefined) =>
-    updateSectionContent(section.id, { logoOverrideUrl: url });
+    updateOperator({ logoUrl: url });
   const handleTileColorChange = (color: string | undefined) =>
     updateSectionContent(section.id, { logoTileColor: color });
+  // Cover wants the logo bigger and rectangular. logoHeight + minTileWidth
+  // give every tile a horizontal-pill silhouette regardless of the
+  // operator's logo aspect ratio (square monograms read as rectangular).
   const logoTileProps = {
-    logoUrl: effectiveLogoUrl,
+    logoUrl: operator.logoUrl,
     companyName: operator.companyName,
     tileBgOverride: logoTileColor,
     isEditor,
-    isOverridden: !!logoOverrideUrl,
+    minTileWidth: 160,
     onLogoChange: handleLogoChange,
     onTileColorChange: handleTileColorChange,
   };
+  // Local alias kept so the existing template strings still read well.
+  const effectiveLogoUrl = operator.logoUrl;
 
   // Always render destinations in geographic safari order, regardless of
   // the order the operator typed them in at Trip Setup. Old proposals
@@ -204,7 +209,7 @@ export function CoverSection({ section }: { section: Section }) {
                 regardless of background. */}
             {(effectiveLogoUrl || operator.companyName) && (
               <div className="absolute top-5 left-5 md:top-7 md:left-9 z-10">
-                <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
+                <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
               </div>
             )}
             {/* 1mm-ish taupe top border — kept as brand chrome but now
@@ -442,7 +447,7 @@ export function CoverSection({ section }: { section: Section }) {
             <EditableOperatorLogoTile
               {...logoTileProps}
               companyName={operator.companyName || "Safari Studio"}
-              logoHeight={40}
+              logoHeight={56}
             />
           </div>
 
@@ -556,7 +561,7 @@ export function CoverSection({ section }: { section: Section }) {
             <EditableOperatorLogoTile
               {...logoTileProps}
               companyName={operator.companyName || "Safari Studio"}
-              logoHeight={40}
+              logoHeight={56}
             />
           </div>
           {/* Edition / Issue line removed per operator spec.
@@ -694,7 +699,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Top bar — logo only. Consultant attribution removed
             per operator spec. */}
         <div className="relative z-10 flex items-center justify-between px-10 pt-10">
-          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
         </div>
 
         {/* Centre — title + destinations (label + list).
@@ -782,7 +787,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Operator top-left */}
         <div className="absolute top-8 left-10">
-          <EditableOperatorLogoTile {...logoTileProps} logoHeight={36} />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={48} />
         </div>
 
         <div className="max-w-3xl">
@@ -893,7 +898,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Top — logo only. Consultant attribution removed per
             operator spec. */}
         <div className="relative z-10 flex items-start justify-between px-10 md:px-14 pt-10">
-          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
         </div>
 
         {/* Bottom: title + destinations + meta strip on vignette. */}
@@ -1000,7 +1005,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Right: text column */}
         <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
           <div className="flex items-center justify-end gap-3">
-            <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
+            <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
           </div>
 
           <div className="space-y-6 text-right">
@@ -1114,7 +1119,7 @@ export function CoverSection({ section }: { section: Section }) {
       <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
-          <EditableOperatorLogoTile {...logoTileProps} logoHeight={40} />
+          <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
         </div>
 
         {/* Middle — title + destinations (label + list).

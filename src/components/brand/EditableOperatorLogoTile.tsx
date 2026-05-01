@@ -11,15 +11,16 @@ import { uploadImage } from "@/lib/uploadImage";
 // Editor-only wrapper around OperatorLogoTile. Shows a small "Edit logo"
 // affordance on hover; clicking it opens a dropdown with two actions:
 //
-//   1. Remove background — runs the same browser ML model used in the
-//      Brand DNA settings. Saves the cleaned PNG to a *proposal-level*
-//      override (section.content.logoOverrideUrl) — the operator's
-//      global brand logo is left untouched.
+//   1. Replace / Remove background — both write back through onLogoChange
+//      so the parent persists the new URL. Sections route this callback
+//      to updateOperator({ logoUrl }) so a single upload propagates to
+//      every section that renders a logo (cover, header, personal note,
+//      footer). Brand DNA at the user level is unaffected.
 //
-//   2. Tile colour       — picks the colour of the rounded tile behind
-//      the logo. Default "Auto" lets brightness detection choose between
-//      cream and charcoal; the swatches override that choice for this
-//      proposal only (section.content.logoTileColor).
+//   2. Tile colour — picks the colour of the rounded tile behind the
+//      logo. Default "Auto" lets brightness detection choose between
+//      cream and charcoal. Tile colour stays per-section (cover may
+//      want cream, footer charcoal); only the logo URL is shared.
 //
 // The dropdown menu is portal'd to document.body so it escapes any
 // overflow:hidden parent (the cover variants frequently clip their
@@ -51,13 +52,17 @@ type Props = {
   bare?: boolean;
   /** Per-proposal tile colour override. */
   tileBgOverride?: string;
-  /** Called when the cleaned/replaced logo URL changes. */
+  /** Forward to OperatorLogoTile — see its prop docstring. The cover
+   *  uses ~160 so the tile reads as a horizontal rectangle even with
+   *  a square monogram. */
+  minTileWidth?: number;
+  /** Called when the cleaned/replaced logo URL changes. Operators
+   *  upload once on any logo tile and the proposal's
+   *  `operator.logoUrl` updates — every section that reads it
+   *  re-renders together. */
   onLogoChange?: (url: string | undefined) => void;
   /** Called when the tile colour changes (undefined = back to auto). */
   onTileColorChange?: (color: string | undefined) => void;
-  /** Whether the current logo is a proposal-level override (vs the
-   *  operator's global logo). Drives the "Reset to brand logo" action. */
-  isOverridden?: boolean;
 };
 
 export function EditableOperatorLogoTile(props: Props) {
@@ -69,9 +74,9 @@ export function EditableOperatorLogoTile(props: Props) {
     logoHeight,
     bare,
     tileBgOverride,
+    minTileWidth,
     onLogoChange,
     onTileColorChange,
-    isOverridden,
   } = props;
 
   // Pass-through in client / share view — no editor chrome.
@@ -84,6 +89,7 @@ export function EditableOperatorLogoTile(props: Props) {
         logoHeight={logoHeight}
         tileBgOverride={tileBgOverride}
         bare={bare}
+        minTileWidth={minTileWidth}
       />
     );
   }
@@ -96,9 +102,9 @@ export function EditableOperatorLogoTile(props: Props) {
       logoHeight={logoHeight}
       bare={bare}
       tileBgOverride={tileBgOverride}
+      minTileWidth={minTileWidth}
       onLogoChange={onLogoChange}
       onTileColorChange={onTileColorChange}
-      isOverridden={isOverridden}
     />
   );
 }
@@ -112,9 +118,9 @@ function EditableInner({
   logoHeight,
   bare,
   tileBgOverride,
+  minTileWidth,
   onLogoChange,
   onTileColorChange,
-  isOverridden,
 }: Omit<Props, "isEditor">) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState(false);
@@ -164,11 +170,6 @@ function EditableInner({
     }
   }
 
-  function handleResetLogo() {
-    onLogoChange?.(undefined);
-    setMenuOpen(false);
-  }
-
   function handlePickColor(color: string | undefined) {
     onTileColorChange?.(color);
   }
@@ -213,6 +214,7 @@ function EditableInner({
             logoHeight={logoHeight}
             tileBgOverride={tileBgOverride}
             bare={bare}
+            minTileWidth={minTileWidth}
           />
         ) : (
           // Empty state — operator has no global logo and no override.
@@ -256,10 +258,8 @@ function EditableInner({
             onMouseLeave={() => setHover(false)}
             onRemoveBackground={handleRemoveBackground}
             onReplaceLogo={handleReplaceLogo}
-            onResetLogo={handleResetLogo}
             onPickColor={handlePickColor}
             tileBgOverride={tileBgOverride}
-            isOverridden={!!isOverridden}
             removing={removing}
             error={error}
             hasLogo={!!logoUrl}
@@ -282,10 +282,8 @@ function FloatingChrome({
   onMouseLeave,
   onRemoveBackground,
   onReplaceLogo,
-  onResetLogo,
   onPickColor,
   tileBgOverride,
-  isOverridden,
   removing,
   error,
   hasLogo,
@@ -299,10 +297,8 @@ function FloatingChrome({
   onMouseLeave: () => void;
   onRemoveBackground: () => void;
   onReplaceLogo: () => void;
-  onResetLogo: () => void;
   onPickColor: (color: string | undefined) => void;
   tileBgOverride?: string;
-  isOverridden: boolean;
   removing: boolean;
   error: string | null;
   hasLogo: boolean;
@@ -385,16 +381,6 @@ function FloatingChrome({
                 <span className="text-[10px] uppercase tracking-wider text-black/35">
                   {removing ? "Working…" : "ML"}
                 </span>
-              </button>
-            )}
-
-            {isOverridden && (
-              <button
-                type="button"
-                onClick={onResetLogo}
-                className="w-full flex items-center px-3.5 py-2 text-[12px] text-black/55 hover:bg-black/4 transition border-t border-black/6"
-              >
-                ↶ Reset to brand logo
               </button>
             )}
 
