@@ -191,7 +191,8 @@ function buildDefaultSections(): Section[] {
   //  11  Practical info
   //  12  Divider
   //  13  Closing
-  //  14  Footer
+  //  14  Divider
+  //  15  Footer
   return [
     // Cover — split-60-40-left: 60% image on the left, 40% text panel on
     // the right. Operator-default per request — replaces the older
@@ -254,7 +255,8 @@ function buildDefaultSections(): Section[] {
       signOff:
         "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
-    makeSection("footer", 14, "default"),
+    makeSection("divider", 14, "band", { color: "#c9a84c" }),
+    makeSection("footer", 15, "default"),
   ];
 }
 
@@ -416,15 +418,24 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   let sections = [...proposal.sections];
   let changed = false;
 
-  // ── 0. Drop deprecated standalone tripSummary sections — the stats now
-  //    render at the top of itineraryTable. Only drop when an itineraryTable
-  //    is present so we don't accidentally strip the only summary a user has.
-  const hasItineraryTable = sections.some((s) => s.type === "itineraryTable");
-  if (hasItineraryTable) {
-    const before = sections.length;
-    sections = sections.filter((s) => s.type !== "tripSummary");
-    if (sections.length !== before) changed = true;
-  }
+  // ── 0. Drop deprecated standalone summary sections.
+  //
+  //    tripSummary used to render its stats at the top of an
+  //    itineraryTable; itineraryTable has since been removed from the
+  //    default flow because the map's header already reads "Itinerary
+  //    at a glance" and a standalone table duplicates the title.
+  //    Both are still in the section registry (so legacy proposals
+  //    don't crash) and operators can re-add either via the + icon.
+  //
+  //    Migration drops both tripSummary and itineraryTable so existing
+  //    proposals match the new default the moment they're opened. The
+  //    operator's data is never lost — these sections only carried
+  //    auto-derived stats (no per-section copy to preserve).
+  const beforeCleanup = sections.length;
+  sections = sections.filter(
+    (s) => s.type !== "tripSummary" && s.type !== "itineraryTable",
+  );
+  if (sections.length !== beforeCleanup) changed = true;
 
   // ── 0a. Add a standalone Footer section after Closing if one isn't
   //    already present. Earlier versions baked the contact block into
@@ -488,13 +499,14 @@ export function migrateLoadedProposal(proposal: Proposal): Proposal {
   // ── 1. Ensure a map section exists ──────────────────────────────────────
   const hasMap = sections.some((s) => s.type === "map");
   if (!hasMap) {
-    // Insert right after the itinerary table if present, else after the
-    // greeting, else append.
-    const anchor = sections.findIndex((s) => s.type === "itineraryTable");
-    const insertAt =
-      anchor >= 0
-        ? anchor + 1
-        : sections.findIndex((s) => s.type === "greeting") + 1 || sections.length;
+    // Insert right after the personalNote (or legacy greeting) if
+    // present, else append. itineraryTable was the previous anchor;
+    // it's now stripped above so we use the intro block as the anchor.
+    const anchor =
+      sections.findIndex((s) => s.type === "personalNote") + 1 ||
+      sections.findIndex((s) => s.type === "greeting") + 1 ||
+      sections.length;
+    const insertAt = anchor;
     const map = makeSection("map", insertAt, "route", { coords: [] });
     sections.splice(insertAt, 0, map);
     changed = true;
