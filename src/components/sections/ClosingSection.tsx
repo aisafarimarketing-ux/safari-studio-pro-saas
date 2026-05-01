@@ -22,31 +22,37 @@ import type {
 
 // ─── ClosingSection ──────────────────────────────────────────────────────
 //
-// Closing block — three layout variants, all built on the same four
-// pillars per operator brief:
+// Closing block — four pillars, four variants. All variants share the
+// same content + actions:
 //
-//   1. Image rail of trip destinations with names overlaid / captioned
-//   2. Editable closing letter (high-converting, editorial tone)
-//   3. Primary WhatsApp CTA — "Secure This Safari" — opens
+//   1. Editable closing letter (high-converting, editorial tone)
+//   2. Primary WhatsApp CTA — "Secure This Safari" — opens
 //      wa.me/<operator.whatsapp> with a prefilled "ready to book"
 //      message. Falls back to bookingUrl, then to mailto when no
 //      WhatsApp is configured.
-//   4. Secondary action row — Share, Download (current share-view
-//      URL for now), Request Changes (fires the existing
-//      ss:prefillComment event so the comments side panel opens
-//      with a note to the operator), Visit Our Website.
+//   3. Secondary action row — Share, Download, Request Changes
+//      (fires the existing ss:prefillComment event), Visit Our
+//      Website.
+//   4. An image (single hero or destination rail, depending on
+//      variant).
 //
 // Variants:
-//   • split-card  — 2 large image tiles + 2-col card with avatar +
-//     headline + letter + CTAs. The polished default.
-//   • gallery-row — up to 4 image tiles in a row with names below;
-//     centered headline + letter; primary CTA + secondary row.
-//   • stack       — single hero image + tracked-out caption of all
-//     stops; centered headline + letter + CTAs.
+//   • editorial-close (default) — ONE trip-theme photo with an
+//     editorial eyebrow ("MIGRATION SAFARI"), letter + CTAs below.
+//     Calmer than the rail-led variants; the operator picks one
+//     image that captures the trip's mood. Auto-falls-back to the
+//     cover's hero image so a brand-new proposal looks right with
+//     zero touches.
+//   • split-card — destination image rail + 2-col card with letter
+//     + CTAs.
+//   • gallery-row — up to 4 destination tiles + centred letter +
+//     CTAs.
+//   • stack — single hero rail + tracked-out caption of all stops
+//     + centred letter + CTAs. The legacy "single image" path.
 //
 // Old variant names on legacy proposals (decision-card / conversion-
 // card / closing-farewell / etc.) fall through to split-card via
-// the dispatcher.
+// the dispatcher so saved looks don't break.
 
 const PRIMARY_CTA_DEFAULT = "Secure This Safari";
 
@@ -260,6 +266,26 @@ export function ClosingSection({ section }: { section: Section }) {
   const imageOverrides =
     (section.content.imageOverrides as Record<string, string> | undefined) ?? undefined;
 
+  // ── editorial-close fields ────────────────────────────────────────────
+  // themeImageUrl — explicit per-section override. When unset, fall
+  // back to the cover's hero image (operators almost always want the
+  // closing theme photo to mirror the cover; this saves them a click
+  // on every new proposal). When the cover is also blank, leave it
+  // empty so the editor renders a click-to-upload slot.
+  const themeImageUrl =
+    (section.content.themeImageUrl as string | undefined) ||
+    findCoverHeroUrl(proposal.sections) ||
+    undefined;
+  const themeImagePosition = section.content.themeImagePosition as string | undefined;
+  // themeLabel — uppercase eyebrow on the photo. Defaults to the
+  // trip's tripStyle ("Migration", "Honeymoon", "Calving Season") —
+  // already set on the Cover's Style cell — so most proposals
+  // populate without operator effort.
+  const themeLabel =
+    (section.content.themeLabel as string) ||
+    trip.tripStyle ||
+    "";
+
   const variant = section.layoutVariant;
 
   // Tile count = number of unique destinations (no per-variant cap).
@@ -351,12 +377,28 @@ export function ClosingSection({ section }: { section: Section }) {
     updateSectionContent(section.id, { ctaLabel: v });
   const onCtaBgChange = (next: { bg: string; textColor: string }) =>
     updateSectionContent(section.id, { ctaBg: next.bg, ctaTextColor: next.textColor });
+  const onThemeLabelChange = (v: string) =>
+    updateSectionContent(section.id, { themeLabel: v });
 
   // Image-swap handler used by ExpandingCards (id maps directly to
   // the destination key we use for overrides).
   const onChangeCardImage = (id: string | number, file: File) => {
     setImageForKey(String(id), file);
   };
+
+  // Theme-image upload for editorial-close. Saves to
+  // section.content.themeImageUrl so the operator's pick wins over
+  // the cover-hero fallback.
+  const onChangeThemeImage = async (file: File) => {
+    try {
+      const dataUrl = await uploadImage(file);
+      updateSectionContent(section.id, { themeImageUrl: dataUrl });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    }
+  };
+  const onResetThemeImage = () =>
+    updateSectionContent(section.id, { themeImageUrl: undefined });
 
   const sharedProps: VariantProps = {
     cardItems,
@@ -373,6 +415,9 @@ export function ClosingSection({ section }: { section: Section }) {
     isEditor,
     tokens,
     theme,
+    themeImageUrl,
+    themeImagePosition,
+    themeLabel,
     onSecure,
     onShare: () => handleShare(shareUrl),
     onDownload: () => handleDownload(shareUrl),
@@ -384,11 +429,30 @@ export function ClosingSection({ section }: { section: Section }) {
     onCtaLabelChange,
     onCtaBgChange,
     onChangeCardImage,
+    onChangeThemeImage,
+    onResetThemeImage,
+    onThemeLabelChange,
   };
 
   if (variant === "gallery-row") return <GalleryRowLayout {...sharedProps} />;
   if (variant === "stack") return <StackLayout {...sharedProps} />;
-  return <SplitCardLayout {...sharedProps} />;
+  if (variant === "split-card") return <SplitCardLayout {...sharedProps} />;
+  // Default + new-name → editorial-close. Legacy proposals saved with
+  // unrecognised variant strings (decision-card, conversion-card, etc.)
+  // also land here, gaining the calmer one-photo close.
+  return <EditorialCloseLayout {...sharedProps} />;
+}
+
+// ─── Cover-hero lookup ───────────────────────────────────────────────────
+//
+// Walk the proposal's sections and grab the cover's hero image URL.
+// Used by editorial-close as a free default so a brand-new proposal
+// already has a sensible photo on the closing section without the
+// operator touching it.
+function findCoverHeroUrl(sections: Section[]): string | undefined {
+  const cover = sections.find((s) => s.type === "cover");
+  if (!cover) return undefined;
+  return (cover.content?.heroImageUrl as string | undefined) ?? undefined;
 }
 
 // ─── Shared variant props ────────────────────────────────────────────────
@@ -408,6 +472,11 @@ interface VariantProps {
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
+  /** editorial-close: trip-theme photo URL (resolved with cover-hero
+   *  fallback). undefined → empty slot in editor. */
+  themeImageUrl?: string;
+  themeImagePosition?: string;
+  themeLabel: string;
   onSecure: () => void;
   onShare: () => void;
   onDownload: () => void;
@@ -419,9 +488,202 @@ interface VariantProps {
   onCtaLabelChange: (v: string) => void;
   onCtaBgChange: (next: { bg: string; textColor: string }) => void;
   onChangeCardImage: (id: string | number, file: File) => void;
+  onChangeThemeImage: (file: File) => void;
+  onResetThemeImage: () => void;
+  onThemeLabelChange: (v: string) => void;
 }
 
-// ─── Variant 1 · split-card (default) ────────────────────────────────────
+// ─── Variant · editorial-close (default) ─────────────────────────────────
+//
+// ONE trip-theme photo at the top, full-width 16:9. A small uppercase
+// eyebrow ("MIGRATION SAFARI") sits at the bottom-left of the photo
+// over a soft gradient. Below: a calm centred copy block (headline +
+// letter + availability) and the primary CTA + secondary actions row.
+//
+// No image rail, no glyphs, no per-destination cards — the cover hero
+// already represents the trip; here we let it breathe and put the
+// booking actions front-and-centre.
+
+function EditorialCloseLayout(p: VariantProps) {
+  const {
+    headline,
+    letter,
+    availability,
+    ctaLabel,
+    operator,
+    isEditor,
+    tokens,
+    theme,
+    themeImageUrl,
+    themeImagePosition,
+    themeLabel,
+    onSecure,
+    onShare,
+    onDownload,
+    onRequestChanges,
+    onVisitWebsite,
+    onHeadlineChange,
+    onLetterChange,
+    onAvailabilityChange,
+    onCtaLabelChange,
+    onCtaBgChange,
+    onChangeThemeImage,
+    onResetThemeImage,
+    onThemeLabelChange,
+    ctaBg,
+    ctaTextColor,
+  } = p;
+
+  const handleThemeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onChangeThemeImage(file);
+  };
+
+  return (
+    <div style={{ background: tokens.sectionSurface }}>
+      {/* ── Hero photo — full-width 16:9. ── */}
+      <div
+        className="relative w-full overflow-hidden"
+        style={{ aspectRatio: "16 / 9", background: tokens.cardBg }}
+      >
+        {themeImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={themeImageUrl}
+            alt={themeLabel || headline}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: themeImagePosition || "50% 50%" }}
+          />
+        ) : isEditor ? (
+          <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
+            <input type="file" accept="image/*" className="hidden" onChange={handleThemeUpload} />
+            <div className="text-center" style={{ color: tokens.mutedText }}>
+              <div className="text-5xl mb-2 opacity-60">+</div>
+              <div className="text-[12px] font-semibold uppercase tracking-[0.22em]">
+                Click to upload theme photo
+              </div>
+              <div className="text-[10.5px] mt-1.5 opacity-70">
+                Defaults to your cover hero when blank
+              </div>
+            </div>
+          </label>
+        ) : null}
+
+        {/* Bottom gradient + eyebrow. Hidden when there's no image
+            and no label (avoids floating chrome on an empty slot). */}
+        {(themeImageUrl || themeLabel) && (
+          <div
+            className="absolute inset-x-0 bottom-0 px-6 md:px-12 pb-5 pt-16"
+            style={{
+              background:
+                "linear-gradient(to top, rgba(20,18,16,0.78) 0%, rgba(20,18,16,0.45) 45%, rgba(20,18,16,0) 100%)",
+            }}
+          >
+            {(themeLabel || isEditor) && (
+              <span
+                className="inline-block text-[10.5px] uppercase tracking-[0.32em] font-semibold outline-none"
+                style={{ color: "rgba(255,255,255,0.92)" }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onThemeLabelChange(e.currentTarget.textContent ?? "")}
+              >
+                {themeLabel || (isEditor ? "Trip theme — e.g. Migration Safari" : "")}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Editor pills: Change image (always visible when image set) +
+            Reset (only when an explicit per-section override exists). */}
+        {isEditor && themeImageUrl && (
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <label
+              className="cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold"
+              title="Replace the theme photo for this section"
+            >
+              <input type="file" accept="image/*" className="hidden" onChange={handleThemeUpload} />
+              Change image
+            </label>
+            <button
+              type="button"
+              onClick={onResetThemeImage}
+              className="bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold"
+              title="Use the cover's hero image"
+            >
+              Use cover image
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Centred copy + actions. ── */}
+      <div className="px-6 md:px-12 py-10 md:py-14">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2
+            className="font-bold leading-[1.1] outline-none"
+            style={{
+              color: tokens.headingText,
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(26px, 3.4vw, 36px)",
+              letterSpacing: "-0.01em",
+            }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onHeadlineChange(e.currentTarget.textContent ?? "")}
+          >
+            {headline}
+          </h2>
+          <p
+            className="mt-5 text-[15px] leading-[1.75] outline-none whitespace-pre-line"
+            style={{ color: tokens.bodyText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onLetterChange(e.currentTarget.textContent ?? "")}
+          >
+            {letter}
+          </p>
+          <p
+            className="mt-4 text-[12px] italic outline-none"
+            style={{ color: tokens.mutedText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onAvailabilityChange(e.currentTarget.textContent ?? "")}
+          >
+            {availability}
+          </p>
+
+          {/* Primary CTA + secondary actions */}
+          <div className="mt-8 flex flex-col items-center">
+            <div className="w-full max-w-md">
+              <PrimaryCta
+                label={ctaLabel}
+                isEditor={isEditor}
+                tokens={tokens}
+                onClick={onSecure}
+                onLabelChange={onCtaLabelChange}
+                ctaBg={ctaBg}
+                ctaTextColor={ctaTextColor}
+                onCtaBgChange={onCtaBgChange}
+              />
+            </div>
+            <div className="w-full max-w-2xl">
+              <SecondaryActions
+                tokens={tokens}
+                operator={operator}
+                onShare={onShare}
+                onDownload={onDownload}
+                onRequestChanges={onRequestChanges}
+                onVisitWebsite={onVisitWebsite}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Variant · split-card (legacy) ───────────────────────────────────────
 //
 // ExpandingCards row up top showing every destination. Below:
 // centred letter + primary CTA + secondary buttons spread across

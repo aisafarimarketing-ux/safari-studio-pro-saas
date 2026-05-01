@@ -148,13 +148,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "closing",
     label: "Closing",
     icon: "◐",
-    description: "Image rail · letter · Secure-This-Safari CTA · share / download / changes / website",
-    // Three layouts share the same four pillars: destination image
-    // rail, editable letter, primary WhatsApp "Secure" CTA, secondary
-    // action row. Old variant names ("decision-card" etc.) on legacy
-    // proposals fall through to split-card via the dispatcher.
-    variants: ["split-card", "gallery-row", "stack"],
-    defaultVariant: "split-card",
+    description: "Single trip-theme photo · letter · Secure-This-Safari CTA · share / download / changes / website",
+    // editorial-close is the new default — one trip-theme photo + the
+    // close, no image rail. Operators told us split-card felt
+    // image-heavy (every destination as a card before the letter).
+    // The three legacy variants (split-card / gallery-row / stack)
+    // stay registered so existing proposals keep their saved look.
+    variants: ["editorial-close", "split-card", "gallery-row", "stack"],
+    defaultVariant: "editorial-close",
     defaultContent: {
       headline: "Your journey is ready",
       letter:
