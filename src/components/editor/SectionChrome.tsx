@@ -187,19 +187,26 @@ export function SectionChrome({ section, children }: Props) {
             ⠿
           </button>
 
-          {pickerSpecs.map((spec) => (
-            <button
-              key={spec.token}
-              onClick={(e) => handlePickerClick(e, spec.token, spec.swatch)}
-              className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
-              title={spec.title}
-            >
-              <span
-                className="w-4 h-4 rounded-sm border border-black/15"
-                style={{ background: spec.swatch }}
-              />
-            </button>
-          ))}
+          {/* Divider sections store their colour in section.content.color
+              and have their own inline colour picker (click the band).
+              The default sectionSurface pill writes to styleOverrides
+              which the divider doesn't read — wiring it up was a
+              non-functional pill that also made "Reset to theme" appear
+              to do nothing on dividers. Hide it. */}
+          {section.type !== "divider" &&
+            pickerSpecs.map((spec) => (
+              <button
+                key={spec.token}
+                onClick={(e) => handlePickerClick(e, spec.token, spec.swatch)}
+                className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center shadow-sm transition-all duration-150 hover:border-black/20 active:scale-95"
+                title={spec.title}
+              >
+                <span
+                  className="w-4 h-4 rounded-sm border border-black/15"
+                  style={{ background: spec.swatch }}
+                />
+              </button>
+            ))}
 
           <button
             onClick={(e) => { e.stopPropagation(); duplicateSection(section.id); }}

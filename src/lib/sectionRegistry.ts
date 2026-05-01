@@ -220,11 +220,14 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Section divider",
     icon: "▬",
     description: "Coloured separator band between sections — recolour by clicking it",
-    // band: thick coloured strip (~52px), the new default. Used between
-    // every adjacent content-section pair to give the proposal visible
-    // rhythm. The other three variants (line / ornamental / spacious)
-    // are kept for back-compat with old proposals only.
-    variants: ["band", "line", "ornamental", "spacious"],
+    // Single variant exposed to operators: the thick coloured band
+    // (~52px). The legacy variants (line / ornamental / spacious)
+    // rendered as 1px hairlines and operators would flip into them
+    // by accident via the variant switcher, then read the result as
+    // "the divider disappeared". They're still rendered by
+    // DividerSection for back-compat with old saved proposals; they
+    // just aren't selectable from the chrome any more.
+    variants: ["band"],
     defaultVariant: "band",
     defaultContent: { color: "#c9a84c" },
   },
