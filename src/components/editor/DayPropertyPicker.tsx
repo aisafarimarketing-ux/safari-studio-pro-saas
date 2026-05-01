@@ -26,6 +26,7 @@ type LibraryProperty = {
   amenities?: string[];
   mealPlan?: string | null;
   suggestedNights?: number | null;
+  suitability?: string[];
   checkInTime?: string | null;
   checkOutTime?: string | null;
   totalRooms?: number | null;
@@ -37,6 +38,13 @@ type LibraryProperty = {
     bedConfig?: string | null;
     description?: string | null;
     imageUrls?: string[];
+  }[];
+  customSections?: {
+    id?: string;
+    title: string;
+    body?: string | null;
+    visible?: boolean;
+    order?: number;
   }[];
   location: LocationLite | null;
   images: { id: string; url: string; isCover?: boolean; order?: number }[];
@@ -170,6 +178,9 @@ export function DayPropertyPicker({
         : "";
 
       const snapshot: Partial<ProposalProperty> = {
+        // Library link — recorded so "Refresh from library" can re-pull
+        // latest fields onto this snapshot later.
+        libraryPropertyId: p.id,
         name: p.name,
         location,
         shortDesc: p.shortSummary ?? "",
@@ -180,6 +191,8 @@ export function DayPropertyPicker({
         nights: p.suggestedNights ?? 2,
         leadImageUrl: lead,
         galleryUrls: gallery,
+        propertyClass: p.propertyClass ?? undefined,
+        suitability: p.suitability ?? [],
         // Showcase facts prepped by the operator ahead of time.
         checkInTime: p.checkInTime ?? undefined,
         checkOutTime: p.checkOutTime ?? undefined,
@@ -193,6 +206,18 @@ export function DayPropertyPicker({
           description: r.description ?? "",
           imageUrls: r.imageUrls ?? [],
         })),
+        // Library-side custom sections honour their visibility flag
+        // at snapshot-time. Per-proposal hiding can be added later
+        // as a separate per-section toggle.
+        customSections: (p.customSections ?? [])
+          .filter((s) => s.visible !== false)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((s) => ({
+            id: s.id,
+            title: s.title,
+            body: s.body ?? "",
+            order: s.order ?? 0,
+          })),
       };
       void signals;
       onSelect(snapshot);

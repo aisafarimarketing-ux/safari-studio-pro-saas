@@ -245,6 +245,33 @@ export interface Property {
   spokenLanguages?: string[];
   specialInterests?: string[];
   rooms?: PropertyRoom[];
+  /** Link back to the source row in the operator's Property Library.
+   *  When present, the showcase exposes a "Refresh from library"
+   *  action that re-pulls the latest fields onto this snapshot
+   *  (preserving the proposal's property id so day-card references
+   *  keep working). undefined = legacy or hand-typed property with
+   *  no library origin; the refresh pill stays hidden. */
+  libraryPropertyId?: string;
+  /** Boutique / Lodge / Tented Camp / etc. — rendered as an
+   *  uppercase eyebrow above the property name. Sourced from the
+   *  library's `propertyClass` field. */
+  propertyClass?: string;
+  /** "Couples", "Family-friendly", "Adventure-seekers" — small chip
+   *  row in the showcase header. Sourced from library's `suitability`. */
+  suitability?: string[];
+  /** Free-form library blocks ("Sustainability", "Family policies",
+   *  "Dietary requirements") rendered in the INFORMATION tab below
+   *  the main description. The library's `visible` flag is honoured
+   *  at snapshot-time; per-proposal hiding is a separate flag if
+   *  added later. */
+  customSections?: PropertyCustomSection[];
+}
+
+export interface PropertyCustomSection {
+  id?: string;
+  title: string;
+  body: string;
+  order: number;
 }
 
 export interface PropertyRoom {

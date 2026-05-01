@@ -19,6 +19,7 @@ import { COLOR_PRESETS } from "@/lib/theme";
 import { SECTION_REGISTRY } from "@/lib/sectionRegistry";
 import { nanoid } from "@/lib/nanoid";
 import { countryOf } from "@/lib/destinationOrdering";
+import { MEAL_PLANS } from "@/lib/properties";
 
 // ─── Day mutation helpers ────────────────────────────────────────────────
 //
@@ -177,6 +178,16 @@ interface ProposalState {
   removeProperty: (id: string) => void;
   moveProperty: (fromIndex: number, toIndex: number) => void;
   updateProperty: (id: string, patch: Partial<Property>) => void;
+  /**
+   * Re-snapshot a proposal property from its source library record.
+   * Looks up the library record by the snapshot's `libraryPropertyId`,
+   * applies the same field mapping `DayPropertyPicker.pick()` uses,
+   * and patches the proposal property in place. The proposal's `id`
+   * stays the same so day-card references keep pointing at it.
+   * Returns true on success, false when the property has no library
+   * link or the fetch failed.
+   */
+  refreshPropertyFromLibrary: (propertyId: string) => Promise<boolean>;
 
   // ── Property rooms (STATS/ROOMS/INFORMATION tab content) ────────────────
   addPropertyRoom: (propertyId: string) => void;
@@ -194,7 +205,7 @@ interface ProposalState {
 }
 
 export const useProposalStore = create<ProposalState>()(
-  immer((set) => ({
+  immer((set, get) => ({
     proposal: buildDefaultProposal(),
 
     // ── Proposal-level ────────────────────────────────────────────────────────
@@ -633,6 +644,87 @@ export const useProposalStore = create<ProposalState>()(
         const p = state.proposal.properties.find((p) => p.id === id);
         if (p) Object.assign(p, patch);
       }),
+
+    refreshPropertyFromLibrary: async (propertyId: string) => {
+      // Mirror of DayPropertyPicker.pick()'s mapping. Two callers share
+      // this logic conceptually but copying the full body is preferable
+      // to a runtime import of a hook-bound module — Zustand actions
+      // run outside React's render tree.
+      const current = get().proposal.properties.find((p) => p.id === propertyId);
+      if (!current?.libraryPropertyId) return false;
+      const libraryId = current.libraryPropertyId;
+      try {
+        const cacheBuster = `t=${Date.now()}`;
+        const res = await fetch(`/api/properties/${libraryId}?${cacheBuster}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        const p = data?.property;
+        if (!p) return false;
+
+        const sortedImages = [...(p.images ?? [])].sort(
+          (a: { isCover?: boolean; order?: number }, b: { isCover?: boolean; order?: number }) =>
+            Number(!!b.isCover) - Number(!!a.isCover) || (a.order ?? 0) - (b.order ?? 0),
+        );
+        const lead = sortedImages[0]?.url;
+        const gallery = sortedImages.map((i: { url: string }) => i.url);
+        const location = p.location
+          ? p.location.country
+            ? `${p.location.name}, ${p.location.country}`
+            : p.location.name
+          : "";
+
+        const patch: Partial<Property> = {
+          libraryPropertyId: p.id,
+          name: p.name,
+          location,
+          shortDesc: p.shortSummary ?? "",
+          description: p.whatMakesSpecial ?? "",
+          whyWeChoseThis: p.whyWeChoose ?? "",
+          amenities: p.amenities ?? [],
+          mealPlan: p.mealPlan
+            ? MEAL_PLANS.find((m) => m.id === p.mealPlan)?.label ?? p.mealPlan
+            : current.mealPlan,
+          leadImageUrl: lead,
+          galleryUrls: gallery,
+          propertyClass: p.propertyClass ?? undefined,
+          suitability: p.suitability ?? [],
+          checkInTime: p.checkInTime ?? undefined,
+          checkOutTime: p.checkOutTime ?? undefined,
+          totalRooms: p.totalRooms ?? undefined,
+          spokenLanguages: p.spokenLanguages ?? [],
+          specialInterests: p.specialInterests ?? [],
+          rooms: (p.rooms ?? []).map(
+            (r: { id: string; name: string; bedConfig?: string | null; description?: string | null; imageUrls?: string[] }) => ({
+              id: r.id,
+              name: r.name,
+              bedConfig: r.bedConfig ?? "",
+              description: r.description ?? "",
+              imageUrls: r.imageUrls ?? [],
+            }),
+          ),
+          customSections: (p.customSections ?? [])
+            .filter((s: { visible?: boolean }) => s.visible !== false)
+            .sort((a: { order?: number }, b: { order?: number }) => (a.order ?? 0) - (b.order ?? 0))
+            .map((s: { id?: string; title: string; body?: string | null; order?: number }) => ({
+              id: s.id,
+              title: s.title,
+              body: s.body ?? "",
+              order: s.order ?? 0,
+            })),
+        };
+
+        set((state) => {
+          const target = state.proposal.properties.find((p) => p.id === propertyId);
+          if (target) Object.assign(target, patch);
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
 
     // ── Property rooms (STATS / ROOMS / INFORMATION tab content) ──────────
 
