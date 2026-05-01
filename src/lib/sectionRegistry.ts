@@ -29,7 +29,6 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     description: "Hero cover with image + text. Right-click an image to replace it.",
     variants: [
       "hero-letter",
-      "dossier",
       "split-50-50-right",
       "split-50-50-left",
       "split-60-40-right",
@@ -150,12 +149,13 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Closing",
     icon: "◐",
     description: "Single trip-theme photo · letter · Secure-This-Safari CTA · share / download / changes / website",
-    // editorial-close is the new default — one trip-theme photo + the
-    // close, no image rail. Operators told us split-card felt
-    // image-heavy (every destination as a card before the letter).
-    // The three legacy variants (split-card / gallery-row / stack)
-    // stay registered so existing proposals keep their saved look.
-    variants: ["editorial-close", "split-card", "gallery-row", "stack"],
+    // editorial-close is the default — one trip-theme photo + the
+    // close, no image rail. safari-ready follows the closing
+    // message with a kraft "SAFARI READY" folder card carrying the
+    // trip meta + Secure CTA, like a paper dossier confirming the
+    // booking. The three older variants (split-card / gallery-row /
+    // stack) stay registered so legacy proposals keep their look.
+    variants: ["editorial-close", "safari-ready", "split-card", "gallery-row", "stack"],
     defaultVariant: "editorial-close",
     defaultContent: {
       headline: "Your journey is ready",

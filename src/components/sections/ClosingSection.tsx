@@ -410,6 +410,8 @@ export function ClosingSection({ section }: { section: Section }) {
     ctaBg,
     ctaTextColor,
     operator,
+    client,
+    trip,
     accentColor: tokens.accent,
     cardColor: tokens.cardBg,
     isEditor,
@@ -437,6 +439,7 @@ export function ClosingSection({ section }: { section: Section }) {
   if (variant === "gallery-row") return <GalleryRowLayout {...sharedProps} />;
   if (variant === "stack") return <StackLayout {...sharedProps} />;
   if (variant === "split-card") return <SplitCardLayout {...sharedProps} />;
+  if (variant === "safari-ready") return <SafariReadyLayout {...sharedProps} />;
   // Default + new-name → editorial-close. Legacy proposals saved with
   // unrecognised variant strings (decision-card, conversion-card, etc.)
   // also land here, gaining the calmer one-photo close.
@@ -467,6 +470,8 @@ interface VariantProps {
   ctaBg?: string;
   ctaTextColor?: string;
   operator: OperatorProfile;
+  client: ClientDetails;
+  trip: TripDetails;
   accentColor: string;
   cardColor: string;
   isEditor: boolean;
@@ -491,6 +496,361 @@ interface VariantProps {
   onChangeThemeImage: (file: File) => void;
   onResetThemeImage: () => void;
   onThemeLabelChange: (v: string) => void;
+}
+
+// ─── Variant · safari-ready ──────────────────────────────────────────────
+//
+// The closing message stays at the top (headline + letter +
+// availability — exactly as in the other variants). Below it sits a
+// kraft-cream "SAFARI READY" folder card carrying the trip's photo
+// in a cardstock sleeve, a typewriter-style meta strip (For / Dates
+// / Duration / Party), and the Secure-Your-Trip CTA. The folder IS
+// the primary call-to-action for this variant — it absorbs what the
+// editorial-close variant renders as a standalone button. Secondary
+// actions row sits underneath as usual.
+//
+// Use case: operator wants the close to feel like a paper dossier
+// confirming "your safari is locked, sign here" — a tactile, more
+// emotional handoff than a pill button.
+
+function SafariReadyLayout(p: VariantProps) {
+  const {
+    headline,
+    letter,
+    availability,
+    ctaLabel,
+    operator,
+    client,
+    trip,
+    isEditor,
+    tokens,
+    theme,
+    themeImageUrl,
+    onSecure,
+    onShare,
+    onDownload,
+    onRequestChanges,
+    onVisitWebsite,
+    onHeadlineChange,
+    onLetterChange,
+    onAvailabilityChange,
+    onCtaLabelChange,
+  } = p;
+
+  // Keep the destination caption strip useful: prefer the trip's
+  // first destination, fall back to the title's first word so the
+  // strip never reads as "—".
+  const captionDestination =
+    trip.destinations?.[0]?.trim() || trip.title?.split(/\s+/)[0] || "";
+
+  return (
+    <div
+      style={{
+        // Soft cream "desk" — the folder reads as a physical object
+        // sitting on a neutral surface. Subtle radial vignette gives
+        // depth without competing with the section above.
+        background: `
+          radial-gradient(1200px 600px at 50% 40%, #efece6 0%, #e6e1d6 70%, #ddd6c7 100%)
+        `,
+        padding: "48px 24px 56px",
+        fontFamily: `'${theme.bodyFont}', sans-serif`,
+      }}
+    >
+      {/* ── Closing message — sits above the folder. ── */}
+      <div className="max-w-2xl mx-auto text-center mb-10">
+        <h2
+          className="font-bold leading-[1.1] outline-none"
+          style={{
+            color: "#2a1d08",
+            fontFamily: `'${theme.displayFont}', serif`,
+            fontSize: "clamp(24px, 3vw, 32px)",
+            letterSpacing: "-0.01em",
+          }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => onHeadlineChange(e.currentTarget.textContent ?? "")}
+        >
+          {headline}
+        </h2>
+        <p
+          className="mt-4 text-[14.5px] leading-[1.75] outline-none whitespace-pre-line"
+          style={{ color: "#3d2c10" }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => onLetterChange(e.currentTarget.textContent ?? "")}
+        >
+          {letter}
+        </p>
+        <p
+          className="mt-3 text-[12px] italic outline-none"
+          style={{ color: "#7a5d2e" }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => onAvailabilityChange(e.currentTarget.textContent ?? "")}
+        >
+          {availability}
+        </p>
+      </div>
+
+      {/* ── Folder card. Slight rotation so it reads as an object. ── */}
+      <div
+        className="relative mx-auto"
+        style={{
+          maxWidth: 940,
+          background:
+            "linear-gradient(180deg, #f4ede0 0%, #ede4d3 50%, #e3d9c4 100%)",
+          borderRadius: 12,
+          boxShadow:
+            "0 28px 60px rgba(58, 44, 22, 0.20), 0 6px 16px rgba(58, 44, 22, 0.10), inset 0 1px 0 rgba(255,255,255,0.55)",
+          border: "1px solid rgba(94, 70, 36, 0.18)",
+          transform: "rotate(-0.4deg)",
+          padding: "44px 48px 40px",
+        }}
+      >
+        {/* Manila tab corner — top-right, decorative. */}
+        <div
+          aria-hidden
+          className="absolute"
+          style={{
+            top: -14,
+            right: 56,
+            width: 110,
+            height: 24,
+            background: "linear-gradient(180deg, #e8dcc1 0%, #ddcfae 100%)",
+            borderRadius: "6px 6px 0 0",
+            border: "1px solid rgba(94, 70, 36, 0.22)",
+            borderBottom: "none",
+            boxShadow: "0 -2px 6px rgba(58, 44, 22, 0.10)",
+          }}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 items-center">
+          {/* Photo sleeve — left column. Pulls the same theme image
+              the editorial-close variant uses, so the folder photo
+              automatically matches whatever cover hero is set. */}
+          <div
+            className="relative"
+            style={{
+              background:
+                "linear-gradient(180deg, #fbf6ec 0%, #f1e9d6 100%)",
+              borderRadius: 10,
+              padding: 12,
+              boxShadow:
+                "0 8px 24px rgba(58, 44, 22, 0.16), inset 0 1px 0 rgba(255,255,255,0.6)",
+              border: "1px solid rgba(94, 70, 36, 0.14)",
+              transform: "rotate(0.6deg)",
+            }}
+          >
+            <div
+              className="relative w-full overflow-hidden"
+              style={{
+                aspectRatio: "4 / 5",
+                background: tokens.cardBg,
+                borderRadius: 6,
+                boxShadow: "inset 0 0 0 1px rgba(94, 70, 36, 0.10)",
+              }}
+            >
+              {themeImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={themeImageUrl}
+                  alt={headline}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              ) : (
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-[10.5px] uppercase tracking-[0.22em]"
+                  style={{ color: "#8a7656" }}
+                >
+                  {isEditor ? "Set theme photo on the cover or in editorial-close" : ""}
+                </div>
+              )}
+            </div>
+
+            {captionDestination && (
+              <div
+                className="mt-3 pt-3 text-center"
+                style={{ borderTop: "1px dashed rgba(94, 70, 36, 0.28)" }}
+              >
+                <div
+                  className="text-[10px] uppercase tracking-[0.32em] font-semibold"
+                  style={{ color: "#5e4624" }}
+                >
+                  Destination
+                </div>
+                <div
+                  className="text-[12.5px] mt-0.5"
+                  style={{
+                    color: "#3d2c10",
+                    fontFamily: `'${theme.displayFont}', serif`,
+                    fontStyle: "italic",
+                  }}
+                >
+                  {captionDestination}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Title block — right column. */}
+          <div className="relative">
+            <div
+              className="text-[10px] uppercase tracking-[0.34em] font-semibold mb-3"
+              style={{ color: "#7a5d2e" }}
+            >
+              Safari Ready
+            </div>
+
+            <h3
+              className="font-bold leading-[1.05] tracking-tight mb-5"
+              style={{
+                color: "#2a1d08",
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.6rem, 2.8vw, 2.4rem)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {trip.title}
+            </h3>
+
+            {/* Meta strip — typewriter feel. Read-only here; operators
+                edit these on the Cover or Trip Setup, this section
+                just reflects them. */}
+            <div
+              className="grid grid-cols-2 gap-x-6 gap-y-3 pt-4 mb-7"
+              style={{ borderTop: "1px solid rgba(94, 70, 36, 0.22)" }}
+            >
+              <SafariReadyMetaRow label="For">
+                {client.guestNames || "Your Guests"}
+              </SafariReadyMetaRow>
+              <SafariReadyMetaRow label="Dates">
+                {trip.dates || "—"}
+              </SafariReadyMetaRow>
+              <SafariReadyMetaRow label="Duration">
+                {formatTripDuration(trip.nights)}
+              </SafariReadyMetaRow>
+              <SafariReadyMetaRow label="Party">
+                {formatTripParty(client)}
+              </SafariReadyMetaRow>
+            </div>
+
+            {/* Wax-seal-styled CTA. Same WhatsApp deep-link as the
+                other variants' primary CTA (operator-trip-aware
+                pre-filled message). */}
+            <button
+              type="button"
+              onClick={onSecure}
+              className="inline-flex items-center gap-2.5 px-6 py-3 rounded-lg font-semibold transition shadow-md hover:shadow-lg active:scale-[0.99] group"
+              style={{
+                background: "linear-gradient(180deg, #2a1d08 0%, #1a1306 100%)",
+                color: "#f4ede0",
+                fontSize: 14,
+                letterSpacing: "0.04em",
+                border: "1px solid rgba(94, 70, 36, 0.45)",
+                fontFamily: `'${theme.bodyFont}', sans-serif`,
+              }}
+            >
+              <span
+                aria-hidden
+                className="inline-flex items-center justify-center"
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "#c9a84c",
+                  color: "#2a1d08",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                ✓
+              </span>
+              <span
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) => onCtaLabelChange(e.currentTarget.textContent ?? "")}
+                onClick={(e) => isEditor && e.stopPropagation()}
+                style={{ outline: "none" }}
+              >
+                {ctaLabel}
+              </span>
+              <span
+                aria-hidden
+                className="transition-transform group-hover:translate-x-0.5"
+                style={{ opacity: 0.85 }}
+              >
+                →
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary actions sit under the folder so the dossier owns
+          the visual climax. */}
+      <div className="max-w-2xl mx-auto mt-8">
+        <SecondaryActions
+          tokens={tokens}
+          operator={operator}
+          onShare={onShare}
+          onDownload={onDownload}
+          onRequestChanges={onRequestChanges}
+          onVisitWebsite={onVisitWebsite}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SafariReadyMetaRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div
+        className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mb-1"
+        style={{ color: "#7a5d2e" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[13.5px]"
+        style={{
+          color: "#2a1d08",
+          fontFamily: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+          letterSpacing: "0.01em",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Match the cover's "X days and Y nights" formatter so the same trip
+// reads identically on both sections. Local copy keeps the closing
+// section self-contained.
+function formatTripDuration(nights: number | undefined): string {
+  if (!nights || nights < 1) return "—";
+  return `${nights + 1} days · ${nights} nights`;
+}
+
+function formatTripParty(client: ClientDetails): string {
+  const a = client.adults;
+  const c = client.children;
+  if (typeof a === "number" && a > 0) {
+    const adultPart = `${a} ${a === 1 ? "adult" : "adults"}`;
+    if (typeof c === "number" && c > 0) {
+      const childPart = `${c} ${c === 1 ? "child" : "children"}`;
+      return `${adultPart} + ${childPart}`;
+    }
+    return adultPart;
+  }
+  return client.pax || "—";
 }
 
 // ─── Variant · editorial-close (default) ─────────────────────────────────
