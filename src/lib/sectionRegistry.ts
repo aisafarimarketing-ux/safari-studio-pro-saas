@@ -29,6 +29,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     description: "Hero cover with image + text. Right-click an image to replace it.",
     variants: [
       "hero-letter",
+      "dossier",
       "split-50-50-right",
       "split-50-50-left",
       "split-60-40-right",
