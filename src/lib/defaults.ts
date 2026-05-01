@@ -171,21 +171,27 @@ export const DEFAULT_PROPERTIES: Property[] = [
 // ─── Default sections ─────────────────────────────────────────────────────────
 
 function buildDefaultSections(): Section[] {
-  // Section order, top-to-bottom:
-  //   0  Operator header (logo + name across the top of every page)
-  //   1  Cover (hero image + trip title)
-  //   2  Greeting (personal note from the consultant)
-  //   3  Trip summary (stats)
-  //   4  Itinerary-at-a-glance (table)
-  //   5  Map (route with day pins — placed right after the table)
-  //   6  Day-by-day journey
+  // Section order, top-to-bottom (new proposals only — existing
+  // saved proposals keep their stored order verbatim):
+  //   0  Cover (hero image + trip title)
+  //   1  Personal Note (consultant letter — no divider above so the
+  //                     intro reads as one Cover→Note block)
+  //   2  Divider
+  //   3  Map (header reads "Itinerary at a glance" — operators add a
+  //          standalone itineraryTable section if they want the table
+  //          view as well, but it's not on by default to avoid
+  //          duplicating the title)
+  //   4  Divider
+  //   5  Day-by-day journey
+  //   6  Divider
   //   7  Property showcase
-  //   8  Gallery (optional visual break before pricing)
-  //   9  Pricing
-  //   10 Inclusions / exclusions
-  //   11 Practical info
-  //   12 Closing (personal sign-off)
-  //   13 Footer (operator contact)
+  //   8  Divider
+  //   9  Pricing (carries inclusions / exclusions / T&Cs inline)
+  //  10  Divider
+  //  11  Practical info
+  //  12  Divider
+  //  13  Closing
+  //  14  Footer
   return [
     // Cover — split-60-40-left: 60% image on the left, 40% text panel on
     // the right. Operator-default per request — replaces the older
@@ -212,39 +218,43 @@ function buildDefaultSections(): Section[] {
       signOffLead: "Thanks again and I remain at your full disposal!",
       signOff: "Best regards,",
     }),
-    // Divider — coloured band between Personal Note and Itinerary at
-    // a glance. All dividers in the default flow seed with the same
-    // gold colour; operators recolour each independently.
+    // Divider — first one of the proposal, sits between the
+    // Cover→Personal Note intro block and the Map. All dividers in
+    // the default flow seed with the same gold colour; operators
+    // recolour each independently.
     makeSection("divider", 2, "band", { color: "#c9a84c" }),
-    makeSection("itineraryTable", 3, "default"),
-    makeSection("map", 4, "route", { coords: [] }),
-    makeSection("divider", 5, "band", { color: "#c9a84c" }),
+    // No itineraryTable by default — the map's header already reads
+    // "Itinerary at a glance" so a standalone table duplicates the
+    // title. Operators who want the tabular view can still add it
+    // from the section panel.
+    makeSection("map", 3, "route", { coords: [] }),
+    makeSection("divider", 4, "band", { color: "#c9a84c" }),
     // Day-by-day — left-flip: image on the left of every day card,
     // narrative on the right. Operator-default per request. Magazine
     // rhythm without alternation; trip-flip and right-flip remain
     // available as overrides per-section.
-    makeSection("dayJourney", 6, "left-flip"),
-    makeSection("divider", 7, "band", { color: "#c9a84c" }),
-    makeSection("propertyShowcase", 8, "editorial-carousel"),
-    makeSection("divider", 9, "band", { color: "#c9a84c" }),
+    makeSection("dayJourney", 5, "left-flip"),
+    makeSection("divider", 6, "band", { color: "#c9a84c" }),
+    makeSection("propertyShowcase", 7, "editorial-carousel"),
+    makeSection("divider", 8, "band", { color: "#c9a84c" }),
     // Pricing now carries inclusions/exclusions + payment schedule,
     // cancellation, insurance, and T&Cs. No standalone inclusions section
     // in the default flow — still available in the registry for legacy.
-    makeSection("pricing", 10, "editorial"),
-    makeSection("divider", 11, "band", { color: "#c9a84c" }),
-    makeSection("practicalInfo", 12, "two-column-notes"),
-    makeSection("divider", 13, "band", { color: "#c9a84c" }),
+    makeSection("pricing", 9, "editorial"),
+    makeSection("divider", 10, "band", { color: "#c9a84c" }),
+    makeSection("practicalInfo", 11, "two-column-notes"),
+    makeSection("divider", 12, "band", { color: "#c9a84c" }),
     // Closing — stack: vertical layout (image rail on top, letter +
     // CTA below). Operator-default per request. Other variants
     // (split-card, gallery-row) remain available as per-section
     // overrides via SectionChrome.
-    makeSection("closing", 14, "stack", {
+    makeSection("closing", 13, "stack", {
       quote: "Take only memories, leave only footprints.",
       attribution: "— Chief Seattle",
       signOff:
         "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
-    makeSection("footer", 15, "default"),
+    makeSection("footer", 14, "default"),
   ];
 }
 
