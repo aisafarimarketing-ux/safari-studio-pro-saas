@@ -54,7 +54,7 @@ export function SectionChrome({ section, children }: Props) {
   // independently from one swatch row. Other sections-with-cards
   // (property showcase) get card bg + accent.
   type PickerSpec = {
-    token: keyof typeof themeTokens | "dayHeadBg";
+    token: keyof typeof themeTokens | "dayHeadBg" | "headerBg";
     title: string;
     swatch: string;
   };
@@ -65,6 +65,22 @@ export function SectionChrome({ section, children }: Props) {
       swatch: resolvedBg,
     },
   ];
+  // Sections that wear a SectionHeaderStrip at the top expose a
+  // headerBg picker so operators can recolour the strip from the
+  // section's chrome — replaces the inline 🎨 popover the strip used
+  // to carry, eliminating the duplicate editor that was layering on
+  // top of SectionChrome's controls.
+  const HAS_HEADER_STRIP: Record<string, boolean> = {
+    itineraryTable: true,
+    propertyShowcase: true,
+  };
+  if (HAS_HEADER_STRIP[section.type]) {
+    pickerSpecs.push({
+      token: "headerBg",
+      title: "Header strip",
+      swatch: overrides?.headerBg ?? themeTokens.accent ?? "#c9a84c",
+    });
+  }
   if (section.type === "dayJourney") {
     pickerSpecs.push(
       {
