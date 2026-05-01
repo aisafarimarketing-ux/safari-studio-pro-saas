@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -17,6 +18,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { DayCard } from "./day-card/DayCard";
 import { DriveTimeChip } from "./day-card/DriveTimeChip";
+import { AddDayDialog, type AddDayDialogMode } from "@/components/editor/AddDayDialog";
 import type { Section } from "@/lib/types";
 
 // Section wrapper for the Day-by-Day Journey. Every day renders through
@@ -24,22 +26,45 @@ import type { Section } from "@/lib/types";
 // variant switching. Dragging a card reorders the days.
 
 export function DayJourneySection({ section }: { section: Section }) {
-  const { proposal, moveDay, addDay, updateDay } = useProposalStore();
+  const { proposal, moveDay, updateDay } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { days, theme } = proposal;
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
 
+  // Dialog state — single source of truth for "user is about to insert
+  // days". Children (DayCard) ask to open it via setAddDayMode; the
+  // dialog reads the mode object to decide whether to pre-fill from a
+  // source day (duplicate) or start blank (after / append).
+  const [addDayMode, setAddDayMode] = useState<AddDayDialogMode | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
+  // Drag-to-reorder. We add ONE safeguard: if the move would split a
+  // multi-day stay (e.g. dragging Day 2 of a 2-3 Tarangire run away
+  // from Day 3), confirm before committing. Plain drags within or
+  // across single-stop runs commit silently as before.
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const fromIdx = days.findIndex((d) => d.id === active.id);
     const toIdx = days.findIndex((d) => d.id === over.id);
-    if (fromIdx !== -1 && toIdx !== -1) moveDay(fromIdx, toIdx);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const moving = days[fromIdx];
+    const left = days[fromIdx - 1];
+    const right = days[fromIdx + 1];
+    const wasInRun =
+      (left && left.destination === moving.destination) ||
+      (right && right.destination === moving.destination);
+    if (wasInRun) {
+      const ok = window.confirm(
+        `This will split the ${moving.destination} stay across the trip. Continue?`,
+      );
+      if (!ok) return;
+    }
+    moveDay(fromIdx, toIdx);
   };
 
   return (
@@ -99,6 +124,12 @@ export function DayJourneySection({ section }: { section: Section }) {
                   index={i}
                   totalDays={days.length}
                   section={section}
+                  onRequestAddAfter={() =>
+                    setAddDayMode({ kind: "after", afterDayId: day.id })
+                  }
+                  onRequestDuplicate={() =>
+                    setAddDayMode({ kind: "duplicate", sourceDayId: day.id })
+                  }
                 />
               </div>
             ))}
@@ -124,7 +155,7 @@ export function DayJourneySection({ section }: { section: Section }) {
               link reads as editor chrome, doesn't push sections
               apart. */}
           <button
-            onClick={addDay}
+            onClick={() => setAddDayMode({ kind: "append" })}
             className="text-[11.5px] font-semibold uppercase tracking-[0.18em] transition hover:opacity-75"
             style={{ color: tokens.accent }}
           >
@@ -132,6 +163,8 @@ export function DayJourneySection({ section }: { section: Section }) {
           </button>
         </div>
       )}
+
+      <AddDayDialog mode={addDayMode} onClose={() => setAddDayMode(null)} />
     </div>
   );
 }

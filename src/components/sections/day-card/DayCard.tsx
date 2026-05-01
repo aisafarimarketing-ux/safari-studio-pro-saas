@@ -30,17 +30,24 @@ export function DayCard({
   index,
   totalDays,
   section,
+  onRequestAddAfter,
+  onRequestDuplicate,
 }: {
   day: Day;
   index: number;
   totalDays: number;
   section: Section;
+  /** Open the AddDayDialog in "after" mode anchored to this day. The
+   *  parent (DayJourneySection) owns the dialog state so + Add day
+   *  and the per-card menu share one source of truth. */
+  onRequestAddAfter?: () => void;
+  /** Open the AddDayDialog in "duplicate" mode pre-filled from this
+   *  day's destination. */
+  onRequestDuplicate?: () => void;
 }) {
   const {
     proposal,
     updateDay,
-    addDayAfter,
-    duplicateDay,
     removeDay,
     addPropertyFromLibrary,
     addOptionalActivity,
@@ -242,8 +249,12 @@ export function DayCard({
           attributes={attributes}
           listeners={listeners}
           onFindImage={() => setImagePickerOpen(true)}
-          onAddAfter={() => addDayAfter(day.id)}
-          onDuplicate={() => duplicateDay(day.id)}
+          // Add-after and Duplicate now go through the parent's
+          // AddDayDialog so operators must pick a real destination
+          // and nights count — no more silent "New Destination"
+          // placeholders polluting the cover route and the map.
+          onAddAfter={() => onRequestAddAfter?.()}
+          onDuplicate={() => onRequestDuplicate?.()}
           onDelete={() => removeDay(day.id)}
         />
       )}

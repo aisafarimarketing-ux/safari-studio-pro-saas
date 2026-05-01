@@ -11,7 +11,6 @@ import { resolveTokens } from "@/lib/theme";
 // in the repo for reference but is no longer imported anywhere.
 import { RouteRealMap } from "./RouteRealMap";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
-import { countryOf } from "@/lib/destinationOrdering";
 
 // hasOffshoreStops removed — the main map now renders the FULL
 // route including coast extensions, masked outside the route's
@@ -36,44 +35,6 @@ export function MapSection({ section }: { section: Section }) {
 
   const caption = (section.content.caption as string | undefined) ?? "";
 
-  // Derived defaults — the operator edits any of these through the UI, we
-  // just seed from proposal state the first time.
-  const primaryCountry =
-    days.find((d) => d.country?.trim())?.country?.trim() ||
-    trip.destinations[0] ||
-    "";
-  // All unique countries the trip touches, in first-occurrence order.
-  // Used to render multiple flags on the rail header for cross-border
-  // trips (Tanzania + Kenya, etc.). For each day we prefer
-  // `d.country` if it's set on the autopilot output, falling back to
-  // `countryOf(d.destination)` for legacy data where country wasn't
-  // populated. Either way every day contributes its country to the
-  // unique set. Single-country trips show 1 flag; multi-country
-  // trips show 2.
-  const tripCountries = (() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const d of days) {
-      const c = d.country?.trim() || countryOf(d.destination ?? "") || "";
-      if (c && !seen.has(c)) {
-        seen.add(c);
-        out.push(c);
-      }
-    }
-    if (out.length === 0 && primaryCountry) out.push(primaryCountry);
-    return out;
-  })();
-  const countryName =
-    (section.content.countryName as string) ||
-    (tripCountries.length > 1 ? tripCountries.join(" · ") : tripCountries[0]) ||
-    "Country";
-  // Single-flag override stays editable for operators on legacy
-  // proposals; for cross-border trips we compute every country's
-  // flag from `tripCountries` and render them as a row in the rail
-  // header. The single-flag fallback (countryFlag) is what shows
-  // when the operator has hand-set a flag in section.content.
-  const countryFlag = (section.content.countryFlag as string) || flagFor(primaryCountry);
-  const countryFlags = tripCountries.map((c) => flagFor(c)).filter(Boolean);
   // Prefer days[] as the source of truth — that's what the itinerary table
   // and per-day sections actually render. trip.destinations is just the
   // original setup input and can drift out of sync after AI drafting.
@@ -114,15 +75,11 @@ export function MapSection({ section }: { section: Section }) {
   // because the registry now lists only `interactive`.
   return (
     <InteractiveMap
-      section={section}
       days={days}
       activeTier={activeTier as TierKey}
       properties={proposal.properties}
       theme={theme}
       tokens={tokens}
-      countryName={countryName}
-      countryFlag={countryFlag}
-      countryFlags={countryFlags}
       startPoint={startPoint}
       endPoint={endPoint}
       caption={caption}
@@ -131,7 +88,6 @@ export function MapSection({ section }: { section: Section }) {
       onCaptionChange={(next) => updateSectionContent(section.id, { caption: next })}
       onStartPointChange={(next) => updateSectionContent(section.id, { startPoint: next })}
       onEndPointChange={(next) => updateSectionContent(section.id, { endPoint: next })}
-      onCountryNameChange={(next) => updateSectionContent(section.id, { countryName: next })}
     />
   );
 }
@@ -188,15 +144,11 @@ function groupDayRows(
 // ─── Interactive variant component ────────────────────────────────────────
 
 function InteractiveMap({
-  section,
   days,
   activeTier,
   properties,
   theme,
   tokens,
-  countryName,
-  countryFlag,
-  countryFlags,
   startPoint,
   endPoint,
   caption,
@@ -205,17 +157,12 @@ function InteractiveMap({
   onCaptionChange,
   onStartPointChange,
   onEndPointChange,
-  onCountryNameChange,
 }: {
-  section: Section;
   days: Day[];
   activeTier: TierKey;
   properties: import("@/lib/types").Property[];
   theme: import("@/lib/types").ProposalTheme;
   tokens: import("@/lib/types").ThemeTokens;
-  countryName: string;
-  countryFlag: string;
-  countryFlags: string[];
   startPoint: string;
   endPoint: string;
   caption: string;
@@ -224,7 +171,6 @@ function InteractiveMap({
   onCaptionChange: (next: string) => void;
   onStartPointChange: (next: string) => void;
   onEndPointChange: (next: string) => void;
-  onCountryNameChange: (next: string) => void;
 }) {
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const groupedRows = groupDayRows(days, activeTier);
@@ -258,55 +204,38 @@ function InteractiveMap({
           section width. Operator brief: no gray section surface
           should bleed around the map. */}
       <div className="px-4 md:px-6 pt-3 md:pt-4">
+        {/* Header — LEFT-aligned, single column.
+            Title:      "Itinerary at a glance" (the section's name).
+            Subtitle:   "Arusha to {final destination}" — the trip arc.
+            Start row:  the actual start-of-trip place.
+            Operator brief: nothing on the right side. The previous
+            country-flags + country-name + eyebrow block was removed —
+            the country flag was leaking unrelated countries from
+            placeholder days that snuck in via Add Day. */}
         <header className="mb-3 md:mb-4">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            {/* Title moved to the LEFT (operator brief). Slightly smaller
-                font (clamp 16-19px instead of 18-22) so the eyebrow on
-                the right reads as the secondary item. */}
-            <h2
-              className="font-bold leading-[1.15]"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(16px, 1.5vw, 19px)",
-                letterSpacing: "-0.005em",
-              }}
+          <h2
+            className="font-bold leading-[1.1]"
+            style={{
+              color: tokens.headingText,
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(18px, 1.7vw, 22px)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            Itinerary at a glance
+          </h2>
+          {stops.length > 0 && (
+            <div
+              className="mt-1 text-[12.5px] uppercase tracking-[0.18em] font-semibold"
+              style={{ color: tokens.mutedText }}
             >
-              {stops.length > 1 ? `${stops[0]} to ${stops[stops.length - 1]}` : stops[0] ?? "Your route"}
-            </h2>
-            <div className="ml-auto flex items-center gap-2 flex-wrap">
-              {countryFlags.length > 1 ? (
-                countryFlags.map((f, i) => (
-                  <span key={i} className="text-[15px] leading-none" aria-hidden>
-                    {f}
-                  </span>
-                ))
-              ) : (
-                countryFlag && (
-                  <span className="text-[15px] leading-none" aria-hidden>
-                    {countryFlag}
-                  </span>
-                )
-              )}
-              <span
-                className="text-[10.5px] uppercase tracking-[0.18em] font-semibold outline-none"
-                style={{ color: tokens.mutedText }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => onCountryNameChange(e.currentTarget.textContent ?? "")}
-              >
-                {countryName}
-              </span>
-              <span
-                className="text-[9.5px] uppercase tracking-[0.28em] font-semibold"
-                style={{ color: tokens.mutedText }}
-              >
-                · Itinerary at a glance
-              </span>
+              {stops.length > 1
+                ? `${stops[0]} to ${stops[stops.length - 1]}`
+                : stops[0]}
             </div>
-          </div>
+          )}
           <div
-            className="mt-2 flex items-baseline gap-2"
+            className="mt-2.5 flex items-baseline gap-2"
             style={{ borderBottom: `1px solid ${tokens.border}`, paddingBottom: 8 }}
           >
             <div
@@ -479,28 +408,3 @@ function InteractiveMap({
   );
 }
 
-// Rough country → flag emoji mapping for the most common safari markets.
-// Operator-editable via section.content.countryFlag, so unknown countries
-// just render blank until the operator sets one.
-function flagFor(country: string | undefined): string {
-  if (!country) return "";
-  const key = country.trim().toLowerCase();
-  const table: Record<string, string> = {
-    kenya: "🇰🇪",
-    tanzania: "🇹🇿",
-    uganda: "🇺🇬",
-    rwanda: "🇷🇼",
-    botswana: "🇧🇼",
-    "south africa": "🇿🇦",
-    zambia: "🇿🇲",
-    zimbabwe: "🇿🇼",
-    namibia: "🇳🇦",
-    ethiopia: "🇪🇹",
-    madagascar: "🇲🇬",
-    malawi: "🇲🇼",
-    mozambique: "🇲🇿",
-    seychelles: "🇸🇨",
-    mauritius: "🇲🇺",
-  };
-  return table[key] ?? "";
-}

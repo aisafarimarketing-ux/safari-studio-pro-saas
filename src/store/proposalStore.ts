@@ -18,6 +18,88 @@ import { buildDefaultProposal, buildBlankProposal, migrateLoadedProposal } from 
 import { COLOR_PRESETS } from "@/lib/theme";
 import { SECTION_REGISTRY } from "@/lib/sectionRegistry";
 import { nanoid } from "@/lib/nanoid";
+import { countryOf } from "@/lib/destinationOrdering";
+
+// ─── Day mutation helpers ────────────────────────────────────────────────
+//
+// Renumber every day from 1 and recompute its `date` from the trip's
+// arrivalDate. Run this at the end of every action that adds, removes,
+// duplicates, or reorders days so downstream sections (map, itinerary
+// table, cover) read fresh values without a separate regeneration pass.
+
+function renumberAndRedate(days: Day[], arrivalDateISO: string | undefined) {
+  days.forEach((d, i) => {
+    d.dayNumber = i + 1;
+  });
+  if (!arrivalDateISO) return;
+  const start = parseISODate(arrivalDateISO);
+  if (!start) return;
+  for (const d of days) {
+    const dt = new Date(start);
+    dt.setUTCDate(start.getUTCDate() + (d.dayNumber - 1));
+    d.date = formatISODate(dt);
+  }
+}
+
+function parseISODate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatISODate(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// "Prevailing country" — the country that appears most often across the
+// existing days. Used as the fallback when countryOf() can't recognise a
+// new destination, so we never silently drop the trip into a country
+// it doesn't belong to. Replaces the old hardcoded "Kenya" default.
+function prevailingCountry(days: Day[], fallback = ""): string {
+  if (days.length === 0) return fallback;
+  const counts = new Map<string, number>();
+  for (const d of days) {
+    const c = (d.country ?? "").trim();
+    if (!c) continue;
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  let best: { c: string; n: number } | null = null;
+  for (const [c, n] of counts) {
+    if (!best || n > best.n) best = { c, n };
+  }
+  return best?.c ?? fallback;
+}
+
+// Build a fresh Day record. Country auto-derives from countryOf() and
+// falls back to the prevailing country in the existing trip. Tiers are
+// blank rather than "Camp Name" placeholders so the day card invites
+// the operator to pick a property instead of pretending one's set.
+function makeNewDay(opts: {
+  destination: string;
+  country?: string;
+  prevailingCountry: string;
+}): Day {
+  const dest = opts.destination.trim();
+  const country =
+    opts.country?.trim() || countryOf(dest) || opts.prevailingCountry || "";
+  return {
+    id: nanoid(),
+    dayNumber: 0, // overwritten by renumberAndRedate
+    destination: dest,
+    country,
+    description: "",
+    board: "Full board",
+    tiers: {
+      classic: { camp: "", location: "", note: "" },
+      premier: { camp: "", location: "", note: "" },
+      signature: { camp: "", location: "", note: "" },
+    },
+  };
+}
 
 interface ProposalState {
   proposal: Proposal;
@@ -59,6 +141,21 @@ interface ProposalState {
   resetSectionOverrides: (id: string) => void;
 
   // ── Days ────────────────────────────────────────────────────────────────────
+  /**
+   * Insert one or more days for a single destination at a chosen position.
+   * `nights` ≥ 1 inserts that many sequential days at the same place
+   * (the codebase represents a multi-night stay as N consecutive days).
+   * `afterDayId` undefined → append at the end. After the splice every
+   * day's `dayNumber` and `date` are recomputed so downstream sections
+   * (map, itinerary table, cover) read fresh values without a separate
+   * regeneration pass.
+   */
+  addDays: (input: {
+    destination: string;
+    country?: string;
+    nights: number;
+    afterDayId?: string;
+  }) => void;
   addDay: () => void;
   addDayAfter: (id: string) => void;
   removeDay: (id: string) => void;
@@ -332,52 +429,61 @@ export const useProposalStore = create<ProposalState>()(
 
     // ── Days ──────────────────────────────────────────────────────────────────
 
+    // The canonical insert path. Every UI affordance (+ Add day, Add
+    // after, Duplicate) routes through here via AddDayDialog so days
+    // can never be created without a real destination.
+    addDays: ({ destination, country, nights, afterDayId }) =>
+      set((state) => {
+        const n = Math.max(1, Math.min(31, Math.floor(nights)));
+        const trimmed = destination.trim();
+        if (!trimmed) return;
+        const existing = state.proposal.days;
+        const insertIdx =
+          afterDayId === undefined
+            ? existing.length
+            : (() => {
+                const idx = existing.findIndex((d) => d.id === afterDayId);
+                return idx === -1 ? existing.length : idx + 1;
+              })();
+        const prevailing = prevailingCountry(existing);
+        const fresh: Day[] = [];
+        for (let i = 0; i < n; i++) {
+          fresh.push(makeNewDay({ destination: trimmed, country, prevailingCountry: prevailing }));
+        }
+        existing.splice(insertIdx, 0, ...fresh);
+        renumberAndRedate(existing, state.proposal.trip.arrivalDate);
+      }),
+
+    // Legacy + safety-net entry. Kept so non-UI callers (autopilot,
+    // migrations, scripts) don't break, but the country fallback now
+    // uses the trip's prevailing country instead of a hardcoded
+    // "Kenya" — that hardcode was the cause of stray 🇰🇪 flags
+    // showing up on Tanzania-only trips.
     addDay: () =>
       set((state) => {
-        const n = state.proposal.days.length + 1;
-        state.proposal.days.push({
-          id: nanoid(),
-          dayNumber: n,
+        const newDay = makeNewDay({
           destination: "New Destination",
-          country: "Kenya",
-          description: "Describe this day...",
-          board: "Full board",
-          tiers: {
-            classic: { camp: "Camp Name", location: "Location", note: "" },
-            premier: { camp: "Camp Name", location: "Location", note: "" },
-            signature: { camp: "Camp Name", location: "Location", note: "" },
-          },
+          prevailingCountry: prevailingCountry(state.proposal.days),
         });
+        state.proposal.days.push(newDay);
+        renumberAndRedate(state.proposal.days, state.proposal.trip.arrivalDate);
       }),
 
     addDayAfter: (id) =>
       set((state) => {
         const idx = state.proposal.days.findIndex((d) => d.id === id);
-        const newDay: Day = {
-          id: nanoid(),
-          dayNumber: idx + 2,
+        const newDay = makeNewDay({
           destination: "New Destination",
-          country: "Kenya",
-          description: "Describe this day...",
-          board: "Full board",
-          tiers: {
-            classic: { camp: "Camp Name", location: "Location", note: "" },
-            premier: { camp: "Camp Name", location: "Location", note: "" },
-            signature: { camp: "Camp Name", location: "Location", note: "" },
-          },
-        };
-        state.proposal.days.splice(idx + 1, 0, newDay);
-        state.proposal.days.forEach((d, i) => {
-          d.dayNumber = i + 1;
+          prevailingCountry: prevailingCountry(state.proposal.days),
         });
+        state.proposal.days.splice(idx + 1, 0, newDay);
+        renumberAndRedate(state.proposal.days, state.proposal.trip.arrivalDate);
       }),
 
     removeDay: (id) =>
       set((state) => {
         state.proposal.days = state.proposal.days.filter((d) => d.id !== id);
-        state.proposal.days.forEach((d, i) => {
-          d.dayNumber = i + 1;
-        });
+        renumberAndRedate(state.proposal.days, state.proposal.trip.arrivalDate);
       }),
 
     duplicateDay: (id) =>
@@ -386,9 +492,7 @@ export const useProposalStore = create<ProposalState>()(
         if (idx === -1) return;
         const orig = state.proposal.days[idx];
         state.proposal.days.splice(idx + 1, 0, { ...orig, id: nanoid() });
-        state.proposal.days.forEach((d, i) => {
-          d.dayNumber = i + 1;
-        });
+        renumberAndRedate(state.proposal.days, state.proposal.trip.arrivalDate);
       }),
 
     moveDay: (fromIndex, toIndex) =>
@@ -396,9 +500,7 @@ export const useProposalStore = create<ProposalState>()(
         const days = state.proposal.days;
         const [moved] = days.splice(fromIndex, 1);
         days.splice(toIndex, 0, moved);
-        days.forEach((d, i) => {
-          d.dayNumber = i + 1;
-        });
+        renumberAndRedate(days, state.proposal.trip.arrivalDate);
       }),
 
     updateDay: (id, patch) =>
