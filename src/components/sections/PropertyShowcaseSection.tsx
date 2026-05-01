@@ -131,9 +131,21 @@ function PropertyBlock({
   const {
     updateProperty,
     addPropertyRoom,
+    refreshPropertyFromLibrary,
   } = useProposalStore();
   const [activeTab, setActiveTab] = useState<Tab>("stats");
   const [carouselIndex, setCarouselIndex] = useState(0);
+  // Refresh state — Idle / Working / Done flash so the operator
+  // sees the action took effect. Errors fall back to a brief
+  // "Couldn't refresh" pill state.
+  const [refreshState, setRefreshState] = useState<"idle" | "working" | "done" | "error">("idle");
+  const handleRefreshFromLibrary = async () => {
+    if (refreshState === "working") return;
+    setRefreshState("working");
+    const ok = await refreshPropertyFromLibrary(property.id);
+    setRefreshState(ok ? "done" : "error");
+    setTimeout(() => setRefreshState("idle"), 2200);
+  };
 
   // Compute "Days 1-2" label from which days use this property at the
   // active tier. Keeps this in sync with the itinerary automatically.
@@ -182,6 +194,42 @@ function PropertyBlock({
             · {property.location}
           </span>
         )}
+        {/* Refresh-from-library pill — visible only in editor mode
+            and only when the property carries a libraryPropertyId.
+            Hand-typed properties (no library origin) hide it
+            silently. */}
+        {isEditor && property.libraryPropertyId && (
+          <button
+            type="button"
+            onClick={handleRefreshFromLibrary}
+            disabled={refreshState === "working"}
+            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition disabled:opacity-60"
+            style={{
+              background: "rgba(0,0,0,0.42)",
+              color: "#ffffff",
+              border: "1px solid rgba(255,255,255,0.18)",
+              backdropFilter: "blur(6px)",
+            }}
+            title={
+              refreshState === "error"
+                ? "Couldn't refresh — try again"
+                : "Re-pull this property's fields from your library"
+            }
+          >
+            <span aria-hidden style={{ fontSize: 13 }}>
+              {refreshState === "working" ? "⟳" : refreshState === "done" ? "✓" : refreshState === "error" ? "!" : "⟳"}
+            </span>
+            <span>
+              {refreshState === "working"
+                ? "Refreshing…"
+                : refreshState === "done"
+                  ? "Refreshed"
+                  : refreshState === "error"
+                    ? "Couldn't refresh"
+                    : "Refresh from library"}
+            </span>
+          </button>
+        )}
       </div>
       <div className="max-w-6xl mx-auto px-8 md:px-12">
         {/* Editorial standfirst — promotes whyWeChoseThis from the
@@ -193,45 +241,69 @@ function PropertyBlock({
             property — the thing Safari Portal / Safari Office don't
             do. */}
         {(property.whyWeChoseThis || isEditor) && (
-          <div className="mb-8 md:mb-10 flex items-center gap-4 max-w-3xl mx-auto">
-            <span
-              aria-hidden
-              className="flex-1 h-px"
-              style={{ background: tokens.border }}
-            />
-            <div
-              className="text-center italic outline-none leading-snug"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(16px, 1.85vw, 21px)",
-                opacity: property.whyWeChoseThis ? 0.92 : 0.5,
-                maxWidth: "60ch",
-              }}
-              contentEditable={isEditor}
-              suppressContentEditableWarning
-              onBlur={(e) =>
-                useProposalStore.getState().updateProperty(property.id, {
-                  whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
-                })
-              }
-            >
-              {property.whyWeChoseThis ||
-                (isEditor
-                  ? "Why this lodge for these guests? One editorial line."
-                  : "")}
+          <div className="mb-8 md:mb-10 max-w-3xl mx-auto">
+            <div className="flex items-center gap-4">
+              <span
+                aria-hidden
+                className="flex-1 h-px"
+                style={{ background: tokens.border }}
+              />
+              <div
+                className="text-center italic outline-none leading-snug"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontSize: "clamp(16px, 1.85vw, 21px)",
+                  opacity: property.whyWeChoseThis ? 0.92 : 0.5,
+                  maxWidth: "60ch",
+                }}
+                contentEditable={isEditor}
+                suppressContentEditableWarning
+                onBlur={(e) =>
+                  useProposalStore.getState().updateProperty(property.id, {
+                    whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
+                  })
+                }
+              >
+                {property.whyWeChoseThis ||
+                  (isEditor
+                    ? "Why this lodge for these guests? One editorial line."
+                    : "")}
+              </div>
+              <span
+                aria-hidden
+                className="flex-1 h-px"
+                style={{ background: tokens.border }}
+              />
             </div>
-            <span
-              aria-hidden
-              className="flex-1 h-px"
-              style={{ background: tokens.border }}
-            />
+            {isEditor && (
+              <div className="text-center mt-2">
+                <LibrarySourceHint
+                  libraryPropertyId={property.libraryPropertyId}
+                  tab="story"
+                  field="Why we chose this"
+                  tokens={tokens}
+                />
+              </div>
+            )}
           </div>
         )}
 
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}
           <div>
+            {/* Property class eyebrow — sourced from the library
+                ("Boutique Lodge", "Tented Camp"). Hidden when blank
+                so legacy / hand-typed properties don't render an
+                empty slot. */}
+            {property.propertyClass && (
+              <div
+                className="text-[10px] uppercase tracking-[0.32em] font-semibold mb-2"
+                style={{ color: tokens.accent }}
+              >
+                {property.propertyClass}
+              </div>
+            )}
             <h3
               className="font-bold leading-[1.05] outline-none"
               style={{
@@ -250,6 +322,25 @@ function PropertyBlock({
             >
               {property.name}
             </h3>
+
+            {/* Suitability chips — small "Couples · Family · Adventure"
+                tag row. Library-sourced; hidden when empty. */}
+            {(property.suitability?.length ?? 0) > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {property.suitability!.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                    style={{
+                      background: `${tokens.accent}1c`,
+                      color: tokens.accent,
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div
               className="mt-3 text-[10.5px] uppercase tracking-[0.24em] font-semibold"
@@ -939,6 +1030,14 @@ function InformationTab({
           {property.description ||
             (isEditor ? "Describe the property — setting, character, service, style…" : "")}
         </div>
+        {isEditor && (
+          <LibrarySourceHint
+            libraryPropertyId={property.libraryPropertyId}
+            tab="story"
+            field="What makes special"
+            tokens={tokens}
+          />
+        )}
       </section>
 
       {/* Why-we-chose-this used to live here as its own section. It's
@@ -976,8 +1075,139 @@ function InformationTab({
                 ? "Comma-separated list — e.g. Pool, Spa, Private verandah, Kids club"
                 : ""}
           </div>
+          {isEditor && (
+            <LibrarySourceHint
+              libraryPropertyId={property.libraryPropertyId}
+              tab="amenities"
+              tokens={tokens}
+            />
+          )}
         </section>
       )}
+
+      {/* Library-sourced custom sections — "Sustainability", "Family
+          policies", "Dietary requirements", etc. The library's
+          `visible` flag is honoured at snapshot-time, so any section
+          rendered here was explicitly marked visible by the operator
+          on the library record. Bodies are read-only here; operators
+          edit the canonical text on the library, then click
+          "Refresh from library" on the property header to re-pull. */}
+      {(property.customSections ?? []).map((sec) => (
+        <section key={sec.id ?? sec.title}>
+          <div
+            className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
+            style={{ color: tokens.mutedText }}
+          >
+            {sec.title}
+          </div>
+          <div
+            className="text-[14px] leading-[1.8] whitespace-pre-line"
+            style={{ color: tokens.bodyText }}
+          >
+            {sec.body}
+          </div>
+          {isEditor && (
+            <LibrarySourceHint
+              libraryPropertyId={property.libraryPropertyId}
+              tab="custom"
+              field={sec.title}
+              tokens={tokens}
+            />
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// ─── LibrarySourceHint ───────────────────────────────────────────────────
+//
+// Editor-only breadcrumb shown under each showcase block that's
+// sourced from the operator's Property Library. The proposal's
+// INFORMATION tab aggregates THREE library tabs (Story · Amenities ·
+// Custom sections), so when an operator looks at the showcase and
+// wonders "where do I edit this?", the answer isn't obvious from the
+// library's tab labels. The hint spells out the exact path.
+//
+// When the property carries a libraryPropertyId, the hint is a
+// clickable link that opens the library editor with a URL hash
+// pointing at the right section. Otherwise it's a static italic
+// caption — useful for hand-typed properties where editing the
+// library would do nothing.
+//
+// Always hidden in client / share / print view.
+
+function LibrarySourceHint({
+  libraryPropertyId,
+  tab,
+  field,
+  tokens,
+}: {
+  /** undefined → render the hint as a plain caption (no link). */
+  libraryPropertyId: string | undefined;
+  /** Library section id — matches the SectionCard `id` in
+   *  PropertyEditor.tsx. Used as a URL hash for direct scroll. */
+  tab:
+    | "story"
+    | "amenities"
+    | "custom"
+    | "stay"
+    | "showcase"
+    | "rooms"
+    | "photos"
+    | "basics";
+  /** Human-readable field name shown in the breadcrumb after the tab.
+   *  Pass the same wording the operator sees inside that library
+   *  section so they can scan the breadcrumb against the form. */
+  field?: string;
+  tokens: ThemeTokens;
+}) {
+  const TAB_LABEL: Record<typeof tab, string> = {
+    story: "Story",
+    amenities: "Amenities",
+    custom: "Custom sections",
+    stay: "Stay snapshot",
+    showcase: "Showcase facts",
+    rooms: "Rooms",
+    photos: "Photos",
+    basics: "Basics",
+  };
+  const breadcrumb = field
+    ? `Library → ${TAB_LABEL[tab]} → ${field}`
+    : `Library → ${TAB_LABEL[tab]}`;
+  const baseStyle: React.CSSProperties = {
+    color: tokens.mutedText,
+    fontSize: 11,
+    letterSpacing: "0.01em",
+  };
+  const inner = (
+    <>
+      <span style={{ opacity: 0.7, marginRight: 6 }} aria-hidden>
+        ✎
+      </span>
+      <span>From your {breadcrumb}</span>
+    </>
+  );
+  if (libraryPropertyId) {
+    return (
+      <a
+        href={`/properties/${libraryPropertyId}#${tab}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center mt-1.5 italic hover:underline transition print:hidden"
+        style={baseStyle}
+        title="Open this property in your library"
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <div
+      className="mt-1.5 italic print:hidden"
+      style={{ ...baseStyle, opacity: 0.7 }}
+    >
+      {inner}
     </div>
   );
 }
