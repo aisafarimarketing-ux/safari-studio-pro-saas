@@ -111,6 +111,10 @@ interface ProposalState {
   createFromQuickStart: (form: QuickStartForm) => void;
   hydrateProposal: (proposal: Proposal) => void;
   updateMetadata: (title: string) => void;
+  /** Flip the proposal between the magazine (single-column) and
+   *  spread (two-column sticky-photo) render modes. Same data; just
+   *  changes which canvas chrome wraps the sections. */
+  updateViewMode: (next: "magazine" | "spread") => void;
   updateClient: (patch: Partial<Proposal["client"]>) => void;
   updateOperator: (patch: Partial<Proposal["operator"]>) => void;
   updateTrip: (patch: Partial<Proposal["trip"]>) => void;
@@ -264,6 +268,11 @@ export const useProposalStore = create<ProposalState>()(
       set((state) => {
         state.proposal.metadata.title = title;
         state.proposal.trip.title = title;
+      }),
+
+    updateViewMode: (next) =>
+      set((state) => {
+        state.proposal.viewMode = next;
       }),
 
     updateClient: (patch) =>

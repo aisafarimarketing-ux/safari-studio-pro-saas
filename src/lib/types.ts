@@ -381,6 +381,20 @@ export interface Proposal {
   inclusions: string[];
   exclusions: string[];
   practicalInfo: PracticalCard[];
+  /** How the whole proposal renders to the operator and the client.
+   *
+   *   "magazine" — single-column flow, full-width sections separated
+   *                by dividers (default; what we've shipped to date).
+   *   "spread"   — two-column with a sticky photograph on the left and
+   *                scrolling content on the right. Same data, same
+   *                editor — just a different chrome. Familiar to
+   *                operators migrating from Safari Portal, plus our
+   *                inline editor / AI tools / variants still apply.
+   *
+   * Optional + falsy → magazine (no migration needed for existing
+   * proposals).
+   */
+  viewMode?: "magazine" | "spread";
   /** Client-selected optional activities (from the share view "Add to my
    *  itinerary" toggles). Written only in non-editor mode. */
   selectedAddOns?: SelectedAddOn[];

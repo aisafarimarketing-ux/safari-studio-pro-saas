@@ -18,11 +18,27 @@ import type React from "react";
 import { SectionChrome } from "./SectionChrome";
 import { SectionRenderer } from "./SectionRenderer";
 import { AddSectionInserter } from "./AddSectionInserter";
+import { SpreadView } from "./SpreadView";
 
 export function ProposalCanvas() {
   const { proposal, moveSection } = useProposalStore();
   const { mode, openFloatingPicker } = useEditorStore();
   const isEditor = mode === "editor";
+
+  // Hooks first — react-hooks/rules-of-hooks. The viewMode branch
+  // happens after, in the JSX.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  // Spread view = the two-column sticky-photo layout (the Safari
+  // Portal-style render). Same data, same store, same editor — just
+  // a different chrome around each section. proposal.viewMode falsy
+  // → magazine (the original full-width flow); set to "spread" to
+  // switch. The toggle lives in the editor toolbar.
+  if (proposal.viewMode === "spread") {
+    return <SpreadView />;
+  }
 
   // Clicking on the page gutter (outside the proposal card) edits pageBg
   const handleGutterClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -38,10 +54,6 @@ export function ProposalCanvas() {
   };
 
   const sorted = [...proposal.sections].sort((a, b) => a.order - b.order);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

@@ -285,6 +285,16 @@ export function EditorToolbar({
           duplicating={duplicating}
         />
 
+        {/* View-mode toggle — Magazine vs Spread. Spread is the
+            two-column sticky-photo layout; magazine is the single-
+            column flow. Same data either way; the toggle just
+            switches the chrome. Tucked next to Preview so it sits
+            with the other "how does this proposal show up" controls. */}
+        <ViewModeSwitch
+          mode={proposal.viewMode === "spread" ? "spread" : "magazine"}
+          onChange={(next) => useProposalStore.getState().updateViewMode(next)}
+        />
+
         {/* Preview — outline button, visible. Promoted out of the ⋯
             menu per spec so the path to "see it as a guest will" is
             one click. */}
@@ -414,6 +424,63 @@ function EditorViewSwitch({
             aria-selected={active}
             onClick={() => onChange(it.key)}
             className="text-[12px] font-semibold px-3.5 py-1 rounded-full transition"
+            style={{
+              background: active ? "#1b3a2d" : "transparent",
+              color: active ? "white" : "rgba(13,38,32,0.65)",
+              boxShadow: active ? "0 1px 2px rgba(13,38,32,0.18)" : "none",
+              letterSpacing: "0.01em",
+            }}
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── View-mode toggle — Magazine vs Spread ───────────────────────────────
+//
+// Same look as EditorViewSwitch but lives in the right-hand action
+// stack because it controls how the proposal RENDERS (not how the
+// editor is laid out). Two states only:
+//
+//   Magazine — single-column, full-width sections with dividers (default)
+//   Spread   — two-column, sticky photograph on left, scrolling content
+//              on right (the Safari Portal-style layout)
+
+function ViewModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: "magazine" | "spread";
+  onChange: (next: "magazine" | "spread") => void;
+}) {
+  const items: { key: "magazine" | "spread"; label: string }[] = [
+    { key: "magazine", label: "Magazine" },
+    { key: "spread", label: "Spread" },
+  ];
+  return (
+    <div
+      className="hidden md:inline-flex items-center p-0.5 rounded-full"
+      style={{
+        background: "rgba(13,38,32,0.05)",
+        border: "1px solid rgba(13,38,32,0.06)",
+      }}
+      role="tablist"
+      aria-label="Proposal layout"
+      title="Switch between Magazine (single column) and Spread (two-column) layouts"
+    >
+      {items.map((it) => {
+        const active = mode === it.key;
+        return (
+          <button
+            key={it.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(it.key)}
+            className="text-[11.5px] font-semibold px-3 py-1 rounded-full transition"
             style={{
               background: active ? "#1b3a2d" : "transparent",
               color: active ? "white" : "rgba(13,38,32,0.65)",

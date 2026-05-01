@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
+import { SpreadView } from "@/components/editor/SpreadView";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
 import { ViewTracker } from "@/components/proposal-share/ViewTracker";
@@ -101,14 +102,21 @@ export default function ClientProposalPage({
 
       <ShareViewHeader proposal={proposal} />
 
-      <div
-        className="max-w-[900px] mx-auto"
-        style={{ background: theme.tokens.pageBg }}
-      >
-        {sorted.map((section: Section) => (
-          <SectionRenderer key={section.id} section={section} />
-        ))}
-      </div>
+      {proposal.viewMode === "spread" ? (
+        // Spread view — two-column sticky layout. Wider canvas (no
+        // 900px constraint) so the photograph on the left has room
+        // to breathe and the right column reads at editorial width.
+        <SpreadView />
+      ) : (
+        <div
+          className="max-w-[900px] mx-auto"
+          style={{ background: theme.tokens.pageBg }}
+        >
+          {sorted.map((section: Section) => (
+            <SectionRenderer key={section.id} section={section} />
+          ))}
+        </div>
+      )}
 
       {proposal.depositConfig?.enabled && (
         <DepositPayButton
