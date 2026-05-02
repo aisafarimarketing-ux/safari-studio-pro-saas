@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { orderDestinations } from "@/lib/destinationOrdering";
+import { RouteRealMap } from "@/components/sections/RouteRealMap";
 import type {
   Proposal,
   Section,
@@ -166,53 +167,6 @@ function SpreadRow({
       <div className="px-8 md:px-12 py-12 md:py-16 min-h-screen relative">
         {children}
       </div>
-    </div>
-  );
-}
-
-// Full-width chapter banner — used to separate Day-by-day, Accommodations
-// etc. so the operator/guest know they're entering a new section group.
-function ChapterBanner({
-  label,
-  subtitle,
-  tokens,
-  theme,
-}: {
-  label: string;
-  subtitle?: string;
-  tokens: ThemeTokens;
-  theme: ProposalTheme;
-}) {
-  return (
-    <div
-      className="px-8 md:px-12 py-10 md:py-14 text-center"
-      style={{ background: tokens.sectionSurface }}
-    >
-      <div
-        className="text-[10.5px] uppercase tracking-[0.34em] font-semibold mb-2"
-        style={{ color: tokens.mutedText }}
-      >
-        — Chapter
-      </div>
-      <h2
-        className="font-bold leading-[1.05]"
-        style={{
-          color: tokens.headingText,
-          fontFamily: `'${theme.displayFont}', serif`,
-          fontSize: "clamp(1.8rem, 3.4vw, 2.6rem)",
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {label}
-      </h2>
-      {subtitle && (
-        <div
-          className="text-[12.5px] uppercase tracking-[0.22em] font-semibold mt-2"
-          style={{ color: tokens.accent }}
-        >
-          {subtitle}
-        </div>
-      )}
     </div>
   );
 }
@@ -463,78 +417,120 @@ function MapChapter({
   isEditor: boolean;
   tokens: ThemeTokens;
 }) {
-  const { trip, theme } = proposal;
+  const { trip, theme, days, activeTier } = proposal;
   void isEditor;
   const dests = uniqueOrderedDestinations(proposal);
   const route =
     dests.length > 1 ? `${dests[0]} to ${dests[dests.length - 1]}` : dests[0] ?? "";
 
   return (
-    <SpreadRow
-      imageUrl={firstDayHero(proposal) || coverHero(proposal)}
-      eyebrow="— Itinerary details"
-      label="MAP"
-    >
+    <div className="grid grid-cols-1 md:grid-cols-2 items-start">
+      {/* Left — REAL map (the user flagged: "our map is not showing").
+          Sticky for the chapter's scroll length, exactly like the
+          photo rows but actually interactive. */}
       <div
-        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
-        style={{ color: tokens.mutedText }}
+        className="relative md:sticky md:top-0 md:h-screen overflow-hidden"
+        style={{ minHeight: 360, background: tokens.cardBg }}
       >
-        — Visualise your journey
-      </div>
-      <h2
-        className="font-bold leading-[1.1] mb-2"
-        style={{
-          color: tokens.headingText,
-          fontFamily: `'${theme.displayFont}', serif`,
-          fontSize: "clamp(1.7rem, 3vw, 2.4rem)",
-          letterSpacing: "-0.005em",
-        }}
-      >
-        Itinerary at a glance
-      </h2>
-      {route && (
-        <div
-          className="text-[12.5px] uppercase tracking-[0.22em] font-semibold mb-6"
-          style={{ color: tokens.accent }}
-        >
-          {route}
-        </div>
-      )}
-      <div
-        className="text-[14px] leading-[1.75]"
-        style={{ color: tokens.bodyText }}
-      >
-        {trip.subtitle ||
-          `${proposal.days.length} days across ${dests.length} ${dests.length === 1 ? "stop" : "stops"}.`}
-      </div>
-      {dests.length > 0 && (
-        <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
-          <div
-            className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
-            style={{ color: tokens.mutedText }}
-          >
-            Key Areas of Interest
+        {days.length > 0 ? (
+          <RouteRealMap
+            days={days}
+            activeTier={activeTier as TierKey}
+            tokens={tokens}
+            theme={theme}
+            isEditor={false}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-[12px] uppercase tracking-[0.22em]" style={{ color: tokens.mutedText }}>
+            Add days to see the route
           </div>
-          <ol className="space-y-2">
-            {dests.map((d, i) => (
-              <li
-                key={d}
-                className="flex items-baseline gap-3 text-[13.5px]"
-                style={{ color: tokens.bodyText }}
-              >
-                <span
-                  className="text-[11px] font-bold tabular-nums"
-                  style={{ color: tokens.accent, minWidth: 22 }}
-                >
-                  {i + 1}.
-                </span>
-                <span>{d}</span>
-              </li>
-            ))}
-          </ol>
+        )}
+        {/* Eyebrow + label — top-left of the map cell */}
+        <div className="absolute top-6 left-6 md:top-8 md:left-10 z-[1] pointer-events-none">
+          <div
+            className="text-[11px] italic mb-1.5"
+            style={{ color: "rgba(255,255,255,0.92)", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
+          >
+            — Itinerary details
+          </div>
+          <div
+            className="font-bold leading-[0.95] tracking-tight"
+            style={{
+              color: "rgba(255,255,255,0.95)",
+              textShadow: "0 1px 4px rgba(0,0,0,0.45)",
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(1.4rem, 2.6vw, 2rem)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            MAP
+          </div>
         </div>
-      )}
-    </SpreadRow>
+      </div>
+
+      {/* Right — visualise-your-journey copy + destinations list */}
+      <div className="px-8 md:px-12 py-12 md:py-16 min-h-screen">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+          style={{ color: tokens.mutedText }}
+        >
+          — Visualise your journey
+        </div>
+        <h2
+          className="font-bold leading-[1.1] mb-2"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+            fontSize: "clamp(1.7rem, 3vw, 2.4rem)",
+            letterSpacing: "-0.005em",
+          }}
+        >
+          Itinerary at a glance
+        </h2>
+        {route && (
+          <div
+            className="text-[12.5px] uppercase tracking-[0.22em] font-semibold mb-6"
+            style={{ color: tokens.accent }}
+          >
+            {route}
+          </div>
+        )}
+        <div
+          className="text-[14px] leading-[1.75]"
+          style={{ color: tokens.bodyText }}
+        >
+          {trip.subtitle ||
+            `${proposal.days.length} days across ${dests.length} ${dests.length === 1 ? "stop" : "stops"}.`}
+        </div>
+        {dests.length > 0 && (
+          <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
+            <div
+              className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+              style={{ color: tokens.mutedText }}
+            >
+              Key Areas of Interest
+            </div>
+            <ol className="space-y-2">
+              {dests.map((d, i) => (
+                <li
+                  key={d}
+                  className="flex items-baseline gap-3 text-[13.5px]"
+                  style={{ color: tokens.bodyText }}
+                >
+                  <span
+                    className="text-[11px] font-bold tabular-nums"
+                    style={{ color: tokens.accent, minWidth: 22 }}
+                  >
+                    {i + 1}.
+                  </span>
+                  <span>{d}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -549,73 +545,124 @@ function DayByDayChapter({
 }) {
   const { theme, days } = proposal;
   const updateDay = useProposalStore((s) => s.updateDay);
+  const sorted = useMemo(
+    () => [...days].sort((a, b) => a.dayNumber - b.dayNumber),
+    [days],
+  );
+  const [activeId, setActiveId] = useState<string | null>(sorted[0]?.id ?? null);
   if (days.length === 0) return null;
-  const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
 
   return (
-    <>
-      <ChapterBanner
-        label="Day by Day"
-        subtitle={`${sorted.length} ${sorted.length === 1 ? "day" : "days"}`}
-        tokens={tokens}
-        theme={theme}
-      />
-      {sorted.map((day) => (
-        <DayRow
+    <CrossfadeChapter
+      eyebrow="— Day by day"
+      label="DAY-BY-DAY"
+      tokens={tokens}
+      theme={theme}
+      items={sorted.map((d) => ({
+        id: d.id,
+        imageUrl: d.heroImageUrl ?? null,
+        imagePosition: d.heroImagePosition,
+      }))}
+      activeId={activeId}
+      activeOverlay={(() => {
+        const day = sorted.find((d) => d.id === activeId) ?? sorted[0];
+        return (
+          <>
+            <div className="text-[11px] uppercase tracking-[0.28em] mb-2 opacity-85 font-semibold">
+              Day {day.dayNumber}
+            </div>
+            <div
+              className="font-bold leading-[1.0] tracking-tight"
+              style={{
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(2rem, 4vw, 3.2rem)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {day.destination || "Destination"}
+            </div>
+            {day.country && (
+              <div className="text-[11px] uppercase tracking-[0.22em] mt-2 opacity-80">
+                {day.country}
+              </div>
+            )}
+          </>
+        );
+      })()}
+    >
+      {sorted.map((day, idx) => (
+        <DayInlineBlock
           key={day.id}
           day={day}
+          isFirst={idx === 0}
           isEditor={isEditor}
           tokens={tokens}
           theme={theme}
+          onActive={() => setActiveId(day.id)}
           onUpdateDay={(patch) => updateDay(day.id, patch)}
         />
       ))}
-    </>
+    </CrossfadeChapter>
   );
 }
 
-function DayRow({
+// One day block on the right column. Reports its in-view state up to
+// the chapter so the chapter's left photo can crossfade. Uses
+// IntersectionObserver against a sticky-aware threshold so we pick
+// the day whose top is roughly aligned with the middle of the
+// viewport.
+function DayInlineBlock({
   day,
+  isFirst,
   isEditor,
   tokens,
   theme,
+  onActive,
   onUpdateDay,
 }: {
   day: Day;
+  isFirst: boolean;
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
+  onActive: () => void;
   onUpdateDay: (patch: Partial<Day>) => void;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) onActive();
+        }
+      },
+      // Trigger when the block is in the middle 40% of the viewport
+      // — gives a clean swap as each day passes the eye-line, with
+      // no flicker when partial views overlap.
+      { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.5, 1] },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [onActive]);
+
   return (
-    <SpreadRow
-      imageUrl={day.heroImageUrl ?? null}
-      imagePosition={day.heroImagePosition}
-      overlay={
-        <>
-          <div className="text-[11px] uppercase tracking-[0.28em] mb-2 opacity-85 font-semibold">
-            Day {day.dayNumber}
-          </div>
-          <div
-            className="font-bold leading-[1.0] tracking-tight"
-            style={{
-              fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(2rem, 4vw, 3.2rem)",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {day.destination || "Destination"}
-          </div>
-          {day.country && (
-            <div className="text-[11px] uppercase tracking-[0.22em] mt-2 opacity-80">
-              {day.country}
-            </div>
-          )}
-        </>
-      }
+    <div
+      ref={ref}
+      className={`pb-12 ${isFirst ? "" : "pt-12 mt-12"}`}
+      style={isFirst ? undefined : { borderTop: `1px solid ${tokens.border}` }}
     >
+      {day.driveTimeBefore && !isFirst && (
+        <div
+          className="text-[11px] italic mb-4"
+          style={{ color: tokens.mutedText }}
+        >
+          → {day.driveTimeBefore}
+        </div>
+      )}
       <div
-        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
         style={{ color: tokens.mutedText }}
       >
         Day {day.dayNumber}
@@ -657,7 +704,7 @@ function DayRow({
         {day.description || (isEditor ? "Describe the day…" : "")}
       </p>
       {(day.highlights ?? []).length > 0 && (
-        <div className="mt-7 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
+        <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${tokens.border}` }}>
           <div
             className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
             style={{ color: tokens.mutedText }}
@@ -687,7 +734,131 @@ function DayRow({
           </ul>
         </div>
       )}
-    </SpreadRow>
+    </div>
+  );
+}
+
+// ─── CrossfadeChapter ───────────────────────────────────────────────────
+//
+// One sticky-photo column on the left that crossfades between the
+// images of multiple sub-blocks (days, properties) as those blocks
+// scroll past on the right. This is the Safari Portal trick — the
+// left-side scrolls SLOWER than the right because the photo pins for
+// the whole chapter while the right column carries N sub-blocks.
+//
+// Items provide just an id + image URL. The chapter renders all
+// images stacked in the sticky pane and toggles their opacity by
+// activeId. Children (the right column) are responsible for setting
+// activeId via IntersectionObserver as they scroll past.
+
+function CrossfadeChapter({
+  eyebrow,
+  label,
+  tokens,
+  theme,
+  items,
+  activeId,
+  activeOverlay,
+  children,
+}: {
+  eyebrow?: string;
+  label?: string;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  items: Array<{ id: string; imageUrl: string | null; imagePosition?: string }>;
+  activeId: string | null;
+  /** Bottom-left text overlay for whichever item is active. */
+  activeOverlay?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  void theme;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 items-start">
+      {/* Sticky photo pane — all images stacked, only the active one
+          visible. Opacity transition gives a clean crossfade as
+          IntersectionObserver toggles activeId. */}
+      <div
+        className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black"
+        style={{ minHeight: 360 }}
+      >
+        {items.map((it) => (
+          <div
+            key={it.id}
+            className="absolute inset-0 transition-opacity duration-500"
+            style={{ opacity: it.id === activeId ? 1 : 0 }}
+            aria-hidden={it.id !== activeId}
+          >
+            {it.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={it.imageUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ objectPosition: it.imagePosition || "50% 50%" }}
+              />
+            ) : (
+              <div className="absolute inset-0 bg-black/30" />
+            )}
+          </div>
+        ))}
+        {/* Soft top-and-bottom gradient so overlay text reads. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.50) 100%)",
+          }}
+        />
+        <div className="absolute bottom-10 left-8 md:left-12 right-8 md:right-12 text-white pointer-events-none">
+          {activeOverlay ? (
+            activeOverlay
+          ) : (
+            <>
+              {eyebrow && (
+                <div className="text-[12px] italic mb-2 opacity-85">{eyebrow}</div>
+              )}
+              {label && (
+                <div
+                  className="font-bold leading-[0.95] tracking-tight"
+                  style={{
+                    fontSize: "clamp(2rem, 4vw, 3.4rem)",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {label}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Right column — stacked sub-blocks. Each block's
+          IntersectionObserver swaps the sticky image to its own. */}
+      <div className="px-8 md:px-12 py-12 md:py-16">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
+          style={{ color: tokens.mutedText }}
+        >
+          {eyebrow || ""}
+        </div>
+        {label && (
+          <h2
+            className="font-bold leading-[1.05] mb-10"
+            style={{
+              color: tokens.headingText,
+              fontFamily: "inherit",
+              fontSize: "clamp(1.6rem, 2.8vw, 2.2rem)",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            {label === "DAY-BY-DAY" ? "Day by Day" : label === "ACCOMMODATIONS" ? "Where You'll Stay" : label}
+          </h2>
+        )}
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -701,6 +872,7 @@ function AccommodationsChapter({
   tokens: ThemeTokens;
 }) {
   const { theme, days, properties, activeTier } = proposal;
+  const updateProperty = useProposalStore((s) => s.updateProperty);
   // Only properties referenced by the active tier's day picks — same
   // rule the magazine PropertyShowcaseSection follows.
   const referencedCampNames = new Set<string>();
@@ -708,47 +880,103 @@ function AccommodationsChapter({
     const camp = d.tiers?.[activeTier as TierKey]?.camp?.trim().toLowerCase();
     if (camp) referencedCampNames.add(camp);
   }
-  const visible = properties.filter((p) =>
-    referencedCampNames.has(p.name.trim().toLowerCase()),
+  const visible = useMemo(
+    () => properties.filter((p) => referencedCampNames.has(p.name.trim().toLowerCase())),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [properties, activeTier, days],
   );
+  const [activeId, setActiveId] = useState<string | null>(visible[0]?.id ?? null);
   if (visible.length === 0) return null;
+  const active = visible.find((p) => p.id === activeId) ?? visible[0];
 
   return (
-    <>
-      <ChapterBanner
-        label="Where You'll Stay"
-        subtitle={`${visible.length} ${visible.length === 1 ? "lodge" : "lodges"}`}
-        tokens={tokens}
-        theme={theme}
-      />
-      {visible.map((p) => (
-        <PropertyRow
+    <CrossfadeChapter
+      eyebrow="— Where you'll stay"
+      label="ACCOMMODATIONS"
+      tokens={tokens}
+      theme={theme}
+      items={visible.map((p) => ({
+        id: p.id,
+        imageUrl: p.leadImageUrl ?? null,
+      }))}
+      activeId={activeId}
+      activeOverlay={
+        <>
+          {active.propertyClass && (
+            <div className="text-[10.5px] uppercase tracking-[0.32em] mb-2 opacity-85 font-semibold">
+              {active.propertyClass}
+            </div>
+          )}
+          <div
+            className="font-bold leading-[1.0] tracking-tight"
+            style={{
+              fontFamily: `'${theme.displayFont}', serif`,
+              fontSize: "clamp(1.8rem, 3.6vw, 2.8rem)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {active.name || "Lodge"}
+          </div>
+          {active.location && (
+            <div className="text-[11px] uppercase tracking-[0.22em] mt-2 opacity-80">
+              {active.location}
+            </div>
+          )}
+        </>
+      }
+    >
+      {visible.map((p, idx) => (
+        <PropertyInlineBlock
           key={p.id}
           property={p}
           proposal={proposal}
+          isFirst={idx === 0}
           isEditor={isEditor}
           tokens={tokens}
           theme={theme}
+          onActive={() => setActiveId(p.id)}
+          onUpdate={(patch) => updateProperty(p.id, patch)}
         />
       ))}
-    </>
+    </CrossfadeChapter>
   );
 }
 
-function PropertyRow({
+function PropertyInlineBlock({
   property,
   proposal,
+  isFirst,
   isEditor,
   tokens,
   theme,
+  onActive,
+  onUpdate,
 }: {
   property: Property;
   proposal: Proposal;
+  isFirst: boolean;
   isEditor: boolean;
   tokens: ThemeTokens;
   theme: ProposalTheme;
+  onActive: () => void;
+  onUpdate: (patch: Partial<Property>) => void;
 }) {
-  const updateProperty = useProposalStore((s) => s.updateProperty);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) onActive();
+        }
+      },
+      { rootMargin: "-30% 0px -55% 0px", threshold: [0, 0.5, 1] },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [onActive]);
+
   // Compute "Days 2-3" label for this property at the active tier.
   const lcName = property.name.trim().toLowerCase();
   const dayNums = proposal.days
@@ -777,35 +1005,13 @@ function PropertyRow({
   const nightsCount = dayNums.length;
 
   return (
-    <SpreadRow
-      imageUrl={property.leadImageUrl ?? null}
-      overlay={
-        <>
-          {property.propertyClass && (
-            <div className="text-[10.5px] uppercase tracking-[0.32em] mb-2 opacity-85 font-semibold">
-              {property.propertyClass}
-            </div>
-          )}
-          <div
-            className="font-bold leading-[1.0] tracking-tight"
-            style={{
-              fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(1.8rem, 3.6vw, 2.8rem)",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {property.name || "Lodge"}
-          </div>
-          {property.location && (
-            <div className="text-[11px] uppercase tracking-[0.22em] mt-2 opacity-80">
-              {property.location}
-            </div>
-          )}
-        </>
-      }
+    <div
+      ref={ref}
+      className={`pb-12 ${isFirst ? "" : "pt-12 mt-12"}`}
+      style={isFirst ? undefined : { borderTop: `1px solid ${tokens.border}` }}
     >
       <div
-        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
         style={{ color: tokens.mutedText }}
       >
         — Suggested resort
@@ -833,7 +1039,7 @@ function PropertyRow({
           contentEditable={isEditor}
           suppressContentEditableWarning
           onBlur={(e) =>
-            updateProperty(property.id, {
+            onUpdate({
               whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
             })
           }
@@ -846,16 +1052,12 @@ function PropertyRow({
         style={{ color: tokens.bodyText }}
         contentEditable={isEditor}
         suppressContentEditableWarning
-        onBlur={(e) =>
-          updateProperty(property.id, { description: e.currentTarget.textContent ?? "" })
-        }
+        onBlur={(e) => onUpdate({ description: e.currentTarget.textContent ?? "" })}
       >
         {property.description || (isEditor ? "Describe the property — setting, character, service, style…" : "")}
       </p>
-
-      {/* Stay snapshot — Nights / Meal / Check-in / Check-out */}
       <div
-        className="mt-7 pt-6 grid grid-cols-2 gap-x-6 gap-y-4"
+        className="mt-6 pt-5 grid grid-cols-2 gap-x-6 gap-y-3"
         style={{ borderTop: `1px solid ${tokens.border}` }}
       >
         <MetaCell label="Nights" tokens={tokens}>
@@ -875,12 +1077,10 @@ function PropertyRow({
           </MetaCell>
         )}
       </div>
-
-      {/* At-a-glance amenities */}
       {(property.amenities ?? []).length > 0 && (
-        <div className="mt-7">
+        <div className="mt-6">
           <div
-            className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+            className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
             style={{ color: tokens.mutedText }}
           >
             At a glance
@@ -894,7 +1094,7 @@ function PropertyRow({
           </div>
         </div>
       )}
-    </SpreadRow>
+    </div>
   );
 }
 
