@@ -249,7 +249,7 @@ export function CoverSection({ section }: { section: Section }) {
 
             {/* Dark overlay at bottom with title + destinations */}
             <div
-              className="absolute inset-x-0 bottom-0 px-10 md:px-14 pt-16 pb-8"
+              className="absolute inset-x-0 bottom-0 px-5 md:px-14 pt-16 pb-8"
               style={{
                 background:
                   "linear-gradient(to top, rgba(30,28,25,0.92) 0%, rgba(30,28,25,0.82) 45%, rgba(30,28,25,0) 100%)",
@@ -297,7 +297,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Meta band — For / Dates / Days·Nights / Travelers in the order
             operators asked for at onboarding. */}
         <div
-          className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-5 px-10 md:px-14 py-6"
+          className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-5 px-5 md:px-14 py-6"
           style={{ background: metaBand }}
         >
           <div>
@@ -399,8 +399,14 @@ export function CoverSection({ section }: { section: Section }) {
     const imageFirst = side === "left";
     return (
       <div
-        className={`relative w-full grid ${isEditor ? "min-h-[620px]" : "min-h-[640px]"}`}
-        style={{ gridTemplateColumns: cols, background: tokens.sectionSurface }}
+        className={`relative w-full ss-cover-grid ${isEditor ? "min-h-[620px]" : "min-h-[640px]"}`}
+        style={{
+          // Drives .ss-cover-grid (single-column on phone, this ratio
+          // on md+). Inline gridTemplateColumns at every viewport
+          // used to force 2 cols on phones.
+          "--cover-cols-md": cols,
+          background: tokens.sectionSurface,
+        } as React.CSSProperties}
       >
         {/* Image column */}
         <div
@@ -564,7 +570,7 @@ export function CoverSection({ section }: { section: Section }) {
             EditableOperatorLogoTile auto-picks light or dark tile based
             on the logo's brightness; in editor mode operators can
             override the tile colour or strip the bg per-proposal. */}
-        <div className="relative z-10 flex items-center justify-between px-10 md:px-14 pt-10">
+        <div className="relative z-10 flex items-center justify-between px-5 md:px-14 pt-10">
           <div className="flex items-center gap-3">
             <EditableOperatorLogoTile
               {...logoTileProps}
@@ -580,7 +586,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Lower paper band — masthead-style title block */}
         <div className="absolute inset-x-0 bottom-0 z-10">
           <div
-            className="px-10 md:px-16 pt-10 pb-12"
+            className="px-5 md:px-16 pt-10 pb-12"
             style={{
               background: tokens.pageBg,
               borderTop: `1px solid ${tokens.border}`,
@@ -790,7 +796,7 @@ export function CoverSection({ section }: { section: Section }) {
   if (variant === "minimal-type") {
     return (
       <div
-        className={`relative w-full flex flex-col justify-center overflow-hidden px-10 md:px-20 py-20 ${isEditor ? "min-h-[500px]" : "min-h-[80vh]"}`}
+        className={`relative w-full flex flex-col justify-center overflow-hidden px-5 md:px-20 py-20 ${isEditor ? "min-h-[500px]" : "min-h-[80vh]"}`}
         style={{ background: tokens.sectionSurface }}
       >
         {/* Operator top-left */}
@@ -905,12 +911,12 @@ export function CoverSection({ section }: { section: Section }) {
 
         {/* Top — logo only. Consultant attribution removed per
             operator spec. */}
-        <div className="relative z-10 flex items-start justify-between px-10 md:px-14 pt-10">
+        <div className="relative z-10 flex items-start justify-between px-5 md:px-14 pt-10">
           <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
         </div>
 
         {/* Bottom: title + destinations + meta strip on vignette. */}
-        <div className="absolute inset-x-0 bottom-0 z-10 px-10 md:px-16 pb-12">
+        <div className="absolute inset-x-0 bottom-0 z-10 px-5 md:px-16 pb-12">
           <div className="max-w-3xl mx-auto text-center">
             <h1
               className="font-bold text-white leading-[1.0] outline-none"
@@ -1011,7 +1017,7 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         {/* Right: text column */}
-        <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
+        <div className="relative z-10 ml-auto flex flex-col justify-between w-full md:w-[52%] px-5 md:px-14 py-10" style={{ minHeight: isEditor ? "600px" : "100vh" }}>
           <div className="flex items-center justify-end gap-3">
             <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />
           </div>
@@ -1124,7 +1130,7 @@ export function CoverSection({ section }: { section: Section }) {
       </div>
 
       {/* Left: text column */}
-      <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-10 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
+      <div className={`relative z-10 flex flex-col justify-between w-full md:w-[52%] px-5 md:px-14 py-10 ${isEditor ? "min-h-[600px]" : "min-h-[640px]"}`}>
         {/* Top: operator */}
         <div className="flex items-center gap-3">
           <EditableOperatorLogoTile {...logoTileProps} logoHeight={56} />

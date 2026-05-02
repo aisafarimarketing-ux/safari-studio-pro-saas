@@ -67,9 +67,12 @@ export function GallerySection({ section }: { section: Section }) {
           )}
 
           <div
-            className="grid gap-3 md:gap-4"
+            className="grid gap-3 md:gap-4 ss-gallery-mosaic"
             style={{
-              gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+              // Phone: 2 cols. Tablet/laptop: 6 cols (the editorial
+              // mosaic pattern). The CSS class in globals.css gates
+              // the column count on viewport width so a 6-up mosaic
+              // doesn't crush down to 6 unreadable strips on a phone.
               gridAutoRows: "120px",
             }}
           >
@@ -127,9 +130,14 @@ export function GallerySection({ section }: { section: Section }) {
   return (
     <div className="py-12 px-8 md:px-16" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
+        {/* On phone, all column variants drop to 2 cols so the photos
+            stay legibly sized. The full N-column ratio kicks in at
+            sm+ via the .ss-gallery-cols class. */}
         <div
-          className={`grid gap-3`}
-          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+          className="grid gap-3 ss-gallery-cols"
+          style={
+            { "--gallery-cols": cols } as React.CSSProperties
+          }
         >
           {images.map((url, i) => (
             <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden group">

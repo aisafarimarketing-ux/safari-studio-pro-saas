@@ -48,7 +48,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
           operators can recolour the head row without affecting the
           gutter. Falls back to sectionSurface when no override is set. */}
       <div
-        className="flex items-center gap-4 px-10 md:px-14 py-5"
+        className="flex items-center gap-4 px-5 md:px-14 py-5"
         style={{ background: dayHeadBg ?? tokens.sectionSurface }}
       >
         <div
@@ -137,7 +137,7 @@ export function EditorialStackCard(props: DayCardLayoutProps) {
           intermediary "Activities Day N" or "All Day" sub-headers.
           The day's identity lives in the top strip (day badge +
           destination + phase). The prose tells the story. */}
-      <div className="relative px-10 md:px-14 pt-8 pb-10 md:pt-10">
+      <div className="relative px-5 md:px-14 pt-8 pb-10 md:pt-10">
         {isEditor && (
           <div className="absolute top-6 right-8 md:right-10 z-[35]">
             <AIWriteButton
@@ -197,7 +197,7 @@ function OptionalBlock(props: DayCardLayoutProps) {
 
   return (
     <div
-      className="mx-10 md:mx-14 mb-2 pt-4 pb-6"
+      className="mx-5 md:mx-14 mb-2 pt-4 pb-6"
       style={{ borderTop: `1px solid ${tokens.border}` }}
     >
       <div className="flex items-baseline justify-between mb-3">
@@ -404,7 +404,7 @@ function AccommodationBlock(props: DayCardLayoutProps) {
 
   return (
     <div
-      className="mx-10 md:mx-14 mt-0 mb-10 pt-8"
+      className="mx-5 md:mx-14 mt-0 mb-10 pt-8"
       style={{ borderTop: `1px solid ${tokens.border}` }}
     >
       <div className="flex items-baseline gap-3 mb-4">
@@ -483,7 +483,7 @@ function AccommodationBlock(props: DayCardLayoutProps) {
               (~25% more pixels per image). The day card's overflow-hidden
               outer wrapper clips cleanly. */}
           <div
-            className="-mx-10 md:-mx-14 grid grid-cols-3 gap-1.5"
+            className="-mx-5 md:-mx-14 grid grid-cols-3 gap-1.5"
             style={{ background: tokens.cardBg }}
           >
             {[

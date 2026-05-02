@@ -118,7 +118,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
           variants on the same proposal stay visually consistent.
           Background honours the dayHeadBg override when set. */}
       <div
-        className="flex items-center gap-4 px-10 md:px-14 py-5"
+        className="flex items-center gap-4 px-5 md:px-14 py-5"
         style={{ background: dayHeadBg ?? tokens.sectionSurface }}
       >
         <div
@@ -186,7 +186,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
           slot. */}
       {(data.momentOfDay || isEditor) && (
         <div
-          className="relative px-10 md:px-14 pt-8 pb-2"
+          className="relative px-5 md:px-14 pt-8 pb-2"
           style={{ background: locationBg }}
         >
           {isEditor && (
@@ -228,7 +228,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       )}
 
       {/* ── Act I: Location ─────────────────────────────────────────── */}
-      <div className="relative group/act px-10 md:px-14 pt-6 pb-10">
+      <div className="relative group/act px-5 md:px-14 pt-6 pb-10">
         {isEditor && props.onSetLocationImageSide && props.onSetLocationBg && (
           <ActHoverEditor
             label="Location"
@@ -324,7 +324,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       {/* ── Act II: Property ────────────────────────────────────────── */}
       {(data.property || isEditor) && (
         <div
-          className="relative group/act px-10 md:px-14 pt-8 pb-12"
+          className="relative group/act px-5 md:px-14 pt-8 pb-12"
           style={{
             // Per-day propertyBgPerDay wins, then section-level
             // propertyBg, then the section's own sectionSurface.

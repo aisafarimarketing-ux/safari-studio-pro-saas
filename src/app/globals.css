@@ -43,6 +43,90 @@
   }
 }
 
+/* ── Cover split-panel grid ────────────────────────────────────────────
+   Cover variants split-50-50 / split-60-40 / split-40-60 used to set
+   gridTemplateColumns inline, forcing TWO COLUMNS on phones — the
+   hero photo and the meta column shared a single phone screen and
+   read as crammed columns. This stacks them on narrow viewports
+   (image above text, full width each) and uses the inline-set md
+   columns on tablet / laptop. */
+.ss-cover-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .ss-cover-grid {
+    grid-template-columns: var(--cover-cols-md, 1fr 1fr);
+  }
+}
+
+/* ── Generic horizontal-strip → wrap on phone ──────────────────────────
+   Used by FooterSection / PersonalNote contact strip, etc. — three
+   inline cells (photo, contact cards, logo) that on phone need to
+   stack so the cards row gets full width. */
+.ss-identity-strip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  justify-items: center;
+}
+@media (min-width: 768px) {
+  .ss-identity-strip {
+    grid-template-columns: auto 1fr auto;
+    gap: 2rem;
+    justify-items: stretch;
+    align-items: center;
+  }
+}
+
+/* ── Pricing 3-tier row ────────────────────────────────────────────────
+   Three tiers side-by-side on tablet / laptop, stacked on phone so
+   each tier's prices and inclusions remain legible. */
+.ss-pricing-tiers {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+@media (min-width: 640px) {
+  .ss-pricing-tiers {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 0;
+  }
+}
+
+/* ── Gallery — mosaic + N-column layouts ───────────────────────────────
+   The editorial mosaic uses a 6-column base on tablet/laptop with
+   row-spanning tiles to create a magazine pattern. On phone we drop
+   to 2 columns so each tile stays readable. The N-column variants
+   (2 / 3 / 4) likewise drop to 2 columns at phone width. */
+.ss-gallery-mosaic {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+  .ss-gallery-mosaic {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+.ss-gallery-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  .ss-gallery-cols {
+    grid-template-columns: repeat(var(--gallery-cols, 3), minmax(0, 1fr));
+  }
+}
+
+/* ── Mobile reading paddings ───────────────────────────────────────────
+   Many sections use px-10 (40px) which on phones eats half the
+   readable width. Override at the section level to a tighter
+   px-5/px-6 on phones; md+ keeps the editorial breathing room. */
+@media (max-width: 767px) {
+  .ss-mobile-pad {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+}
+
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 /* Single source of truth for the Safari Studio palette + type stack. UI       */
 /* components reference these via CSS custom properties or hard-coded hex      */

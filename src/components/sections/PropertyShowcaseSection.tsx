@@ -77,7 +77,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
       {/* Section title — plain editorial header, no coloured strip
           behind it. Operator brief: "no need for color in the title
           of the Accommodation section." */}
-      <div className="px-8 md:px-12 pt-10 pb-6">
+      <div className="px-5 md:px-12 pt-10 pb-6">
         <h2
           className="font-bold leading-[1.05]"
           style={{
@@ -103,7 +103,7 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
               properties." Same colour + thickness as the day-to-day
               rule so the proposal reads as one rhythm. */}
           {idx > 0 && (
-            <div className="px-8 md:px-12 my-3">
+            <div className="px-5 md:px-12 my-3">
               <div
                 aria-hidden
                 style={{
@@ -242,7 +242,7 @@ function PropertyBlock({
           directly inside the section without a coloured strip behind
           it; only renders in editor mode for library-linked properties. */}
       {isEditor && property.libraryPropertyId && (
-        <div className="flex justify-end px-8 md:px-12 pt-2 pb-3">
+        <div className="flex justify-end px-5 md:px-12 pt-2 pb-3">
           <button
             type="button"
             onClick={handleRefreshFromLibrary}
@@ -274,7 +274,7 @@ function PropertyBlock({
           </button>
         </div>
       )}
-      <div className="max-w-6xl mx-auto px-8 md:px-12">
+      <div className="max-w-6xl mx-auto px-5 md:px-12">
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}
           <div>
@@ -589,7 +589,7 @@ function PropertyBlock({
       </div>
       {!isLast && (
         <div
-          className="max-w-6xl mx-auto px-8 md:px-12 mt-14"
+          className="max-w-6xl mx-auto px-5 md:px-12 mt-14"
           aria-hidden
           style={{ height: 1, background: "transparent" }}
         />

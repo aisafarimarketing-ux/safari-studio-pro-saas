@@ -73,7 +73,7 @@ export function DayJourneySection({ section }: { section: Section }) {
           continuously into Map (cream) above and Property Showcase
           (cream) below — no visible green page-bg strips between
           sections. Day cards inside use their own bg as before. */}
-      <div className="px-8 md:px-12 pt-3 pb-2">
+      <div className="px-5 md:px-12 pt-3 pb-2">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
             <div
@@ -113,7 +113,7 @@ export function DayJourneySection({ section }: { section: Section }) {
                     palette as the section-level divider band; sits
                     above the drive-time chip. Skipped above day 1. */}
                 {i > 0 && (
-                  <div className="px-8 md:px-12 mt-3 mb-3">
+                  <div className="px-5 md:px-12 mt-3 mb-3">
                     <div
                       aria-hidden
                       style={{
@@ -156,7 +156,7 @@ export function DayJourneySection({ section }: { section: Section }) {
       </DndContext>
 
       {days.length === 0 && (
-        <div className="px-8 md:px-12">
+        <div className="px-5 md:px-12">
           <div
             className="text-center py-16 rounded-2xl border-2 border-dashed text-small"
             style={{ borderColor: tokens.border, color: tokens.mutedText }}
@@ -167,7 +167,7 @@ export function DayJourneySection({ section }: { section: Section }) {
       )}
 
       {isEditor && (
-        <div className="px-8 md:px-12 mt-2 mb-1 text-right">
+        <div className="px-5 md:px-12 mt-2 mb-1 text-right">
           {/* Small inline add — was a full-width 80px dashed button
               that compounded the gap to the next section. Inline
               link reads as editor chrome, doesn't push sections

@@ -136,7 +136,7 @@ export function PersonalNoteSection({ section }: { section: Section }) {
         </div>
       )}
 
-      <div className={`mx-auto px-10 md:px-14 pt-10 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
+      <div className={`mx-auto px-5 md:px-14 pt-10 ${isMinimal ? "max-w-[720px]" : "max-w-[840px]"}`}>
         {/* Greeting body */}
         <div
           className="text-[15px] font-semibold mb-3 outline-none"
@@ -255,10 +255,10 @@ export function PersonalNoteSection({ section }: { section: Section }) {
           readability; the strip below uses 1200px because it carries
           chrome (icons, photo, logo) rather than prose. */}
       <div
-        className="mx-auto px-6 md:px-10 mt-10 pt-8 pb-12 max-w-[1200px]"
+        className="mx-auto px-5 md:px-10 mt-10 pt-8 pb-12 max-w-[1200px]"
         style={{ borderTop: `1px solid ${tokens.border}` }}
       >
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6 md:gap-10">
+        <div className="ss-identity-strip">
           {/* Consultant — photo + name stacked vertically. The photo
               still drives the click-to-replace flow; the name sits
               beneath as the editorial signature line. Both auto-

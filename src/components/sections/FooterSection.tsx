@@ -65,7 +65,7 @@ export function FooterSection({ section }: { section: Section }) {
       {/* Identity strip — same shape as the Personal Note footer:
           consultant photo + name | email + whatsapp cards | logo. */}
       <div className="mx-auto max-w-[1200px]">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6 md:gap-10">
+        <div className="ss-identity-strip">
           {/* Consultant — photo + name stacked */}
           <div className="flex flex-col items-center gap-2 shrink-0" style={{ width: 96 }}>
             <div
