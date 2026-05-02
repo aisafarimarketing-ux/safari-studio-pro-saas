@@ -14,6 +14,7 @@ import { CommentsDrawer } from "./CommentsDrawer";
 import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
 import { DeployBadge } from "./DeployBadge";
+import { AIToneShiftDialog } from "./AIToneShiftDialog";
 import { useEditorStore, type EditorView } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -57,6 +58,7 @@ export function EditorToolbar({
   const [compressing, setCompressing] = useState(false);
   const [compressResult, setCompressResult] = useState<string | null>(null);
   const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [toneShiftOpen, setToneShiftOpen] = useState(false);
 
   // "Proposal is X MB — too big to auto-save" is the signal that the
   // user's saved images exceed the body-size cap. Only that specific
@@ -285,6 +287,21 @@ export function EditorToolbar({
           duplicating={duplicating}
         />
 
+        {/* AI Tools — proposal-wide AI actions. Today: tone shift
+            (rewrites every narrative field in a target voice while
+            preserving facts). More tools land here as we ship them. */}
+        <button
+          type="button"
+          onClick={() => setToneShiftOpen(true)}
+          className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm rounded-lg transition active:scale-95 font-medium border border-black/12 text-black/75 hover:bg-black/[0.03]"
+          title="AI Tools — tone shift"
+        >
+          <span aria-hidden style={{ color: "#c9a84c", fontSize: 14 }}>
+            ✦
+          </span>
+          AI
+        </button>
+
         {/* View-mode toggle — Magazine vs Spread. Spread is the
             two-column sticky-photo layout; magazine is the single-
             column flow. Same data either way; the toggle just
@@ -379,6 +396,11 @@ export function EditorToolbar({
       <RebuildBudgetDialog
         open={rebuildOpen}
         onClose={() => setRebuildOpen(false)}
+      />
+
+      <AIToneShiftDialog
+        open={toneShiftOpen}
+        onClose={() => setToneShiftOpen(false)}
       />
     </div>
   );
