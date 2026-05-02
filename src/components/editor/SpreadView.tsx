@@ -7,6 +7,7 @@ import { resolveTokens } from "@/lib/theme";
 import { orderDestinations } from "@/lib/destinationOrdering";
 import { RouteRealMap } from "@/components/sections/RouteRealMap";
 import { ChapterAIPill, type ChapterAIField } from "./ChapterAIPill";
+import { uploadImage } from "@/lib/uploadImage";
 import type {
   Proposal,
   Section,
@@ -94,6 +95,11 @@ interface SpreadRowProps {
   children: React.ReactNode;
   /** Override left-side aspect on small screens — defaults to a tall hero. */
   minHeight?: number;
+  /** When provided + isEditor, the photo becomes click-to-upload. Same
+   *  upload pipeline as magazine view (compress → Supabase Storage with
+   *  a data-URL fallback). */
+  onImageUpload?: (url: string) => void;
+  isEditor?: boolean;
 }
 
 // One row of the spread. Left column is `position: sticky` for the
@@ -108,65 +114,174 @@ function SpreadRow({
   overlay,
   children,
   minHeight = 320,
+  onImageUpload,
+  isEditor,
 }: SpreadRowProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 items-start">
       {/* Left — sticky photograph */}
-      <div
-        className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black"
-        style={{ minHeight }}
-      >
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ objectPosition: imagePosition || "50% 50%" }}
-          />
-        ) : (
-          <div
-            className="absolute inset-0 flex items-center justify-center text-white/35 text-[12px] uppercase tracking-[0.22em]"
-          >
-            No photo
-          </div>
-        )}
-        {/* Soft top-and-bottom gradient so overlay text reads. */}
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(to bottom, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.50) 100%)",
-          }}
-        />
-        <div className="absolute bottom-10 left-8 md:left-12 right-8 md:right-12 text-white">
-          {overlay ? (
-            overlay
-          ) : (
-            <>
-              {eyebrow && (
-                <div className="text-[12px] italic mb-2 opacity-85">{eyebrow}</div>
-              )}
-              {label && (
-                <div
-                  className="font-bold leading-[0.95] tracking-tight"
-                  style={{
-                    fontSize: "clamp(2rem, 4vw, 3.4rem)",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  {label}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      <StickyPhotoCell
+        imageUrl={imageUrl}
+        imagePosition={imagePosition}
+        minHeight={minHeight}
+        eyebrow={eyebrow}
+        label={label}
+        overlay={overlay}
+        onImageUpload={onImageUpload}
+        isEditor={isEditor}
+      />
 
       {/* Right — scrolling content */}
       <div className="px-8 md:px-12 py-12 md:py-16 min-h-screen relative">
         {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sticky photo cell with click-to-upload ─────────────────────────────
+//
+// One left-column sticky photo with the standard chrome:
+//   • Soft top + bottom gradient so overlay text reads.
+//   • Bottom-left overlay (eyebrow, label, custom overlay).
+//   • Editor-only "Change image" pill top-right of the photo, with a
+//     hidden file input. Click → file picker → uploadImage() → callback
+//     → store action writes the new URL to wherever the parent says.
+//   • If there's no image and we're in editor mode, the empty state
+//     itself becomes a click-to-upload affordance so operators can
+//     start from blank.
+
+function StickyPhotoCell({
+  imageUrl,
+  imagePosition,
+  minHeight = 320,
+  eyebrow,
+  label,
+  overlay,
+  onImageUpload,
+  isEditor,
+}: {
+  imageUrl: string | null;
+  imagePosition?: string;
+  minHeight?: number;
+  eyebrow?: string;
+  label?: string;
+  overlay?: React.ReactNode;
+  onImageUpload?: (url: string) => void;
+  isEditor?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const onFile = async (file: File | undefined) => {
+    if (!file || !onImageUpload) return;
+    setBusy(true);
+    try {
+      const url = await uploadImage(file);
+      onImageUpload(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const editable = !!(isEditor && onImageUpload);
+  return (
+    <div
+      className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black group"
+      style={{ minHeight }}
+      onContextMenu={(e) => {
+        if (!editable) return;
+        e.preventDefault();
+        inputRef.current?.click();
+      }}
+    >
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectPosition: imagePosition || "50% 50%" }}
+        />
+      ) : editable ? (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
+        >
+          <div className="text-4xl mb-2 opacity-70">+</div>
+          <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
+            Click to upload photo
+          </div>
+          <div className="text-[10px] opacity-60 mt-1">or right-click to replace</div>
+        </button>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center text-white/35 text-[12px] uppercase tracking-[0.22em]">
+          No photo
+        </div>
+      )}
+      {/* Soft top-and-bottom gradient so overlay text reads. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.50) 100%)",
+        }}
+      />
+      {/* Editor: change-image pill, top-right, fade-in on hover. */}
+      {editable && imageUrl && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          className="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10.5px] font-semibold opacity-0 group-hover:opacity-100 transition shadow-md hover:bg-black/80 disabled:opacity-60 print:hidden"
+          title="Replace photo (or right-click anywhere on the image)"
+        >
+          {busy ? (
+            <>
+              <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              <span>Uploading…</span>
+            </>
+          ) : (
+            <>
+              <span aria-hidden>📷</span>
+              <span>Change image</span>
+            </>
+          )}
+        </button>
+      )}
+      {editable && (
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onFile(e.target.files?.[0])}
+        />
+      )}
+      {/* Bottom-left overlay text. */}
+      <div className="absolute bottom-10 left-8 md:left-12 right-8 md:right-12 text-white pointer-events-none">
+        {overlay ? (
+          overlay
+        ) : (
+          <>
+            {eyebrow && (
+              <div className="text-[12px] italic mb-2 opacity-85">{eyebrow}</div>
+            )}
+            {label && (
+              <div
+                className="font-bold leading-[0.95] tracking-tight"
+                style={{
+                  fontSize: "clamp(2rem, 4vw, 3.4rem)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {label}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -241,6 +356,7 @@ function CoverChapter({
   const updateTrip = useProposalStore((s) => s.updateTrip);
   const updateClient = useProposalStore((s) => s.updateClient);
   const cover = findCoverSection(proposal);
+  const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
   const heroUrl = (cover?.content?.heroImageUrl as string | undefined) ?? null;
   const heroPos = cover?.content?.heroImagePosition as string | undefined;
   const dests = uniqueOrderedDestinations(proposal);
@@ -249,6 +365,12 @@ function CoverChapter({
     <SpreadRow
       imageUrl={heroUrl}
       imagePosition={heroPos}
+      isEditor={isEditor}
+      onImageUpload={
+        cover
+          ? (url) => updateSectionContent(cover.id, { heroImageUrl: url })
+          : undefined
+      }
       overlay={
         <>
           <div className="text-[12px] italic mb-2 opacity-85">— Your journey begins</div>
@@ -371,7 +493,13 @@ function WelcomeChapter({
   };
 
   return (
-    <SpreadRow imageUrl={consultantPhoto} eyebrow="— A note from us" label="WELCOME">
+    <SpreadRow
+      imageUrl={consultantPhoto}
+      eyebrow="— A note from us"
+      label="WELCOME"
+      isEditor={isEditor}
+      onImageUpload={(url) => useProposalStore.getState().updateOperator({ consultantPhoto: url })}
+    >
       {isEditor && (
         <ChapterAIPill
           chapterLabel="Welcome — Personal note"
@@ -618,6 +746,8 @@ function DayByDayChapter({
         imagePosition: d.heroImagePosition,
       }))}
       activeId={activeId}
+      isEditor={isEditor}
+      onActiveImageUpload={(dayId, url) => updateDay(dayId, { heroImageUrl: url })}
       topRightChrome={
         isEditor ? (
           <ChapterAIPill
@@ -936,6 +1066,8 @@ function CrossfadeChapter({
   activeId,
   activeOverlay,
   topRightChrome,
+  isEditor,
+  onActiveImageUpload,
   children,
 }: {
   eyebrow?: string;
@@ -949,17 +1081,43 @@ function CrossfadeChapter({
   /** Editor-only floating chrome top-right of the right column. The
    *  ChapterAIPill renders here in editor mode; null in share / print. */
   topRightChrome?: React.ReactNode;
+  /** Editor-only. Click on the active sticky photo → file picker →
+   *  uploadImage → callback fires with the active item's id + new URL.
+   *  Parent wires it to updateDay / updateProperty. */
+  isEditor?: boolean;
+  onActiveImageUpload?: (itemId: string, url: string) => void;
   children: React.ReactNode;
 }) {
   void theme;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const editable = !!(isEditor && onActiveImageUpload && activeId);
+  const onFile = async (file: File | undefined) => {
+    if (!file || !activeId || !onActiveImageUpload) return;
+    setBusy(true);
+    try {
+      const url = await uploadImage(file);
+      onActiveImageUpload(activeId, url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Image upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 items-start">
       {/* Sticky photo pane — all images stacked, only the active one
           visible. Opacity transition gives a clean crossfade as
           IntersectionObserver toggles activeId. */}
       <div
-        className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black"
+        className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black group"
         style={{ minHeight: 360 }}
+        onContextMenu={(e) => {
+          if (!editable) return;
+          e.preventDefault();
+          inputRef.current?.click();
+        }}
       >
         {items.map((it) => (
           <div
@@ -976,6 +1134,17 @@ function CrossfadeChapter({
                 className="absolute inset-0 w-full h-full object-cover"
                 style={{ objectPosition: it.imagePosition || "50% 50%" }}
               />
+            ) : it.id === activeId && editable ? (
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
+              >
+                <div className="text-4xl mb-2 opacity-70">+</div>
+                <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
+                  Click to upload photo
+                </div>
+              </button>
             ) : (
               <div className="absolute inset-0 bg-black/30" />
             )}
@@ -990,6 +1159,38 @@ function CrossfadeChapter({
               "linear-gradient(to bottom, rgba(0,0,0,0.32) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.50) 100%)",
           }}
         />
+        {/* Change-image pill — fades in on hover when editable AND the
+            active item already has an image. */}
+        {editable && items.find((i) => i.id === activeId)?.imageUrl && (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10.5px] font-semibold opacity-0 group-hover:opacity-100 transition shadow-md hover:bg-black/80 disabled:opacity-60 print:hidden"
+            title="Replace photo for this item (or right-click)"
+          >
+            {busy ? (
+              <>
+                <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <span>Uploading…</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden>📷</span>
+                <span>Change image</span>
+              </>
+            )}
+          </button>
+        )}
+        {editable && (
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onFile(e.target.files?.[0])}
+          />
+        )}
         <div className="absolute bottom-10 left-8 md:left-12 right-8 md:right-12 text-white pointer-events-none">
           {activeOverlay ? (
             activeOverlay
@@ -1109,6 +1310,10 @@ function AccommodationsChapter({
         imageUrl: p.leadImageUrl ?? null,
       }))}
       activeId={activeId}
+      isEditor={isEditor}
+      onActiveImageUpload={(propertyId, url) =>
+        updateProperty(propertyId, { leadImageUrl: url })
+      }
       topRightChrome={
         isEditor ? (
           <ChapterAIPill
@@ -1540,6 +1745,10 @@ function ClosingChapter({
       imageUrl={themeImage}
       eyebrow="— Secure your trip"
       label={proposal.trip.tripStyle?.toUpperCase() || "READY?"}
+      isEditor={isEditor}
+      onImageUpload={(url) =>
+        updateSectionContent(closing.id, { themeImageUrl: url })
+      }
     >
       {isEditor && (
         <ChapterAIPill
