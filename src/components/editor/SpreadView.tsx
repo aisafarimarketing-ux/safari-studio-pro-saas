@@ -8,6 +8,7 @@ import { orderDestinations } from "@/lib/destinationOrdering";
 import { RouteRealMap } from "@/components/sections/RouteRealMap";
 import { ChapterAIPill, type ChapterAIField } from "./ChapterAIPill";
 import { ChapterColorPill } from "./ChapterColorPill";
+import { SmartImage } from "@/components/ui/SmartImage";
 
 // Tiny wrapper that anchors a chapter's hover-chrome (✦ AI · 🎨
 // Colours) at the top-right of the right column. flex/gap-2 so two
@@ -231,31 +232,31 @@ function StickyPhotoCell({
         inputRef.current?.click();
       }}
     >
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageUrl}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ objectPosition: imagePosition || "50% 50%" }}
-        />
-      ) : editable ? (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
-        >
-          <div className="text-4xl mb-2 opacity-70">+</div>
-          <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
-            Click to upload photo
-          </div>
-          <div className="text-[10px] opacity-60 mt-1">or right-click to replace</div>
-        </button>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-white/35 text-[12px] uppercase tracking-[0.22em]">
-          No photo
-        </div>
-      )}
+      <SmartImage
+        srcs={[imageUrl]}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ objectPosition: imagePosition || "50% 50%" }}
+        fallback={
+          editable ? (
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
+            >
+              <div className="text-4xl mb-2 opacity-70">+</div>
+              <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
+                Click to upload photo
+              </div>
+              <div className="text-[10px] opacity-60 mt-1">or right-click to replace</div>
+            </button>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-white/35 text-[12px] uppercase tracking-[0.22em]">
+              No photo
+            </div>
+          )
+        }
+      />
       {/* Soft top-and-bottom gradient so overlay text reads. */}
       <div
         aria-hidden
@@ -884,31 +885,31 @@ function DayByDayChapter({
       label="DAY-BY-DAY"
       tokens={tokens}
       theme={theme}
-      items={sorted.map((d) => ({
-        id: d.id,
-        // Five-tier fallback: own hero → assigned property's lead →
-        // assigned property's first gallery → cover hero → any image
-        // in the proposal. Empty strings always coerce to null first.
-        // Operator-flagged: "daycards lose images in preview/webview"
-        // — was: `d.heroImageUrl ?? null`, where `??` doesn't catch
-        // autopilot's "" empty-string writes.
-        imageUrl: (() => {
-          const own = nonEmptyUrl(d.heroImageUrl);
-          if (own) return own;
-          const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase();
-          if (camp) {
-            const property = proposal.properties.find(
-              (p) => p.name.trim().toLowerCase() === camp,
-            );
-            const lead = nonEmptyUrl(property?.leadImageUrl);
-            if (lead) return lead;
-            const gallery = nonEmptyUrl(property?.galleryUrls?.[0]);
-            if (gallery) return gallery;
-          }
-          return coverHero(proposal) ?? anyImageInProposal(proposal);
-        })(),
-        imagePosition: d.heroImagePosition,
-      }))}
+      items={sorted.map((d) => {
+        // Build the FULL fallback chain so SmartImage can walk it on
+        // load errors (broken Supabase URLs, expired assets, CORS
+        // failures, etc.). Each entry is filtered through nonEmptyUrl
+        // so empty-string writes from autopilot don't poison the
+        // chain. Operator-flagged: "daycards lose images in preview"
+        // — root cause was a non-empty-but-broken URL with nowhere
+        // to fall through to.
+        const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase();
+        const property = camp
+          ? proposal.properties.find((p) => p.name.trim().toLowerCase() === camp)
+          : null;
+        const srcs = [
+          nonEmptyUrl(d.heroImageUrl),
+          nonEmptyUrl(property?.leadImageUrl),
+          ...((property?.galleryUrls ?? []).map(nonEmptyUrl)),
+          coverHero(proposal),
+          anyImageInProposal(proposal),
+        ].filter((s): s is string => typeof s === "string");
+        return {
+          id: d.id,
+          srcs,
+          imagePosition: d.heroImagePosition,
+        };
+      })}
       activeId={activeId}
       isEditor={isEditor}
       rightBackground={tokens.sectionSurface}
@@ -1431,17 +1432,9 @@ function DayStayCard({
     (p) => p.name.trim().toLowerCase() === campName.toLowerCase(),
   );
   // Even without a library match, still show the camp name so guests
-  // know where they're staying. Image fallback chain: property lead
-  // → first gallery URL → day's hero. Empty strings (autopilot's
-  // legacy fallback for missing images) coerce to null. This is what
-  // fixes the "property images not transported to preview / webview"
-  // bug — non-editor mode was rendering an empty slot when the value
-  // was "" instead of null.
-  const lead =
-    nonEmptyUrl(property?.leadImageUrl) ??
-    nonEmptyUrl(property?.galleryUrls?.[0]) ??
-    nonEmptyUrl(day.heroImageUrl) ??
-    null;
+  // know where they're staying. SmartImage walks the candidate chain
+  // (property lead → gallery → day hero) and falls through on load
+  // errors so a stale Supabase URL doesn't render as a blank cell.
   const location = property?.location || tierAssignment?.location || "";
   const summary = property?.shortDesc || property?.whyWeChoseThis || "";
 
@@ -1464,21 +1457,23 @@ function DayStayCard({
           className="relative overflow-hidden"
           style={{ aspectRatio: "4 / 5", background: tokens.sectionSurface }}
         >
-          {lead ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={lead}
-              alt={property?.name ?? campName}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          ) : (
-            <div
-              className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
-              style={{ color: tokens.mutedText }}
-            >
-              No photo
-            </div>
-          )}
+          <SmartImage
+            srcs={[
+              property?.leadImageUrl,
+              ...(property?.galleryUrls ?? []),
+              day.heroImageUrl,
+            ]}
+            alt={property?.name ?? campName}
+            className="absolute inset-0 w-full h-full object-cover"
+            fallback={
+              <div
+                className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
+                style={{ color: tokens.mutedText }}
+              >
+                No photo
+              </div>
+            }
+          />
         </div>
         <div className="pr-4 py-3 min-w-0">
           <div
@@ -1544,7 +1539,14 @@ function CrossfadeChapter({
   label?: string;
   tokens: ThemeTokens;
   theme: ProposalTheme;
-  items: Array<{ id: string; imageUrl: string | null; imagePosition?: string }>;
+  items: Array<{
+    id: string;
+    /** Ordered list of fallback URLs. SmartImage walks them on
+     *  load error (404, expired Supabase URL, CORS, etc.) so a
+     *  broken-but-non-empty src doesn't render as a blank cell. */
+    srcs: string[];
+    imagePosition?: string;
+  }>;
   activeId: string | null;
   /** Bottom-left text overlay for whichever item is active. */
   activeOverlay?: React.ReactNode;
@@ -1585,7 +1587,10 @@ function CrossfadeChapter({
   // operator-flagged: "images not showing in preview / webview" was
   // a missing-fallback issue compounded by the bg-black default
   // looking jarring next to the brown right column.
-  const activeHasImage = !!items.find((it) => it.id === activeId)?.imageUrl;
+  const activeHasImage =
+    (items.find((it) => it.id === activeId)?.srcs ?? []).filter(
+      (s) => s && s.trim().length > 0,
+    ).length > 0;
   const fallbackBg = rightBackground || tokens.sectionSurface;
 
   return (
@@ -1612,28 +1617,26 @@ function CrossfadeChapter({
             style={{ opacity: it.id === activeId ? 1 : 0 }}
             aria-hidden={it.id !== activeId}
           >
-            {it.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={it.imageUrl}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-                style={{ objectPosition: it.imagePosition || "50% 50%" }}
-              />
-            ) : it.id === activeId && editable ? (
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
-              >
-                <div className="text-4xl mb-2 opacity-70">+</div>
-                <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
-                  Click to upload photo
-                </div>
-              </button>
-            ) : (
-              <div className="absolute inset-0 bg-black/30" />
-            )}
+            <SmartImage
+              srcs={it.srcs}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ objectPosition: it.imagePosition || "50% 50%" }}
+              fallback={
+                it.id === activeId && editable ? (
+                  <button
+                    type="button"
+                    onClick={() => inputRef.current?.click()}
+                    className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
+                  >
+                    <div className="text-4xl mb-2 opacity-70">+</div>
+                    <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
+                      Click to upload photo
+                    </div>
+                  </button>
+                ) : null
+              }
+            />
           </div>
         ))}
         {/* Soft top-and-bottom gradient so overlay text reads. */}
@@ -1646,8 +1649,8 @@ function CrossfadeChapter({
           }}
         />
         {/* Change-image pill — fades in on hover when editable AND the
-            active item already has an image. */}
-        {editable && items.find((i) => i.id === activeId)?.imageUrl && (
+            active item already has at least one fallback URL. */}
+        {editable && (items.find((i) => i.id === activeId)?.srcs ?? []).some((s) => s?.trim()) && (
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -1812,22 +1815,22 @@ function AccommodationsChapter({
               lcName,
           )?.heroImageUrl,
         );
-        // Five-tier fallback for accommodations-chapter sticky photo:
-        //   1. property's own lead image
-        //   2. property's first gallery image
-        //   3. hero of any day this property is assigned to
-        //   4. cover hero (now empty-string-filtered)
-        //   5. any non-empty image anywhere in the proposal
-        // Step 5 covers the "operator imported a proposal whose cover
-        // image is also blank" case — anything's better than reading
-        // as a totally empty cell in preview / share.
-        const fallback =
-          nonEmptyUrl(p.leadImageUrl) ??
-          nonEmptyUrl(p.galleryUrls?.[0]) ??
-          dayHero ??
-          coverHero(proposal) ??
-          anyImageInProposal(proposal);
-        return { id: p.id, imageUrl: fallback };
+        // Build the FULL fallback chain (not just the first
+        // non-empty). SmartImage walks this on each load error so a
+        // stale-but-non-empty Supabase URL falls through to the next
+        // candidate, instead of rendering as a blank cell. Operators
+        // flagged "Lemala Mpingo Ridge" reading as cream/empty in
+        // preview — root cause was the resolved leadImageUrl pointed
+        // at a deleted asset; with single-URL items there was no way
+        // to fall through.
+        const srcs = [
+          nonEmptyUrl(p.leadImageUrl),
+          ...(p.galleryUrls ?? []).map(nonEmptyUrl),
+          dayHero,
+          coverHero(proposal),
+          anyImageInProposal(proposal),
+        ].filter((s): s is string => typeof s === "string");
+        return { id: p.id, srcs };
       })}
       activeId={activeId}
       isEditor={isEditor}

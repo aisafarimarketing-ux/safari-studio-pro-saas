@@ -7,6 +7,7 @@ import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
 import { SectionHeaderStrip, autoTextOnHex } from "@/components/editor/SectionHeaderStrip";
+import { SmartImage } from "@/components/ui/SmartImage";
 import type {
   Section,
   Property,
@@ -729,24 +730,28 @@ function StatsTab({
           borderRadius: 4,
         }}
       >
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt={property.name}
-            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
-          />
-        ) : isEditor ? (
-          <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
-            <input type="file" accept="image/*" className="hidden" onChange={uploadLead} />
-            <div className="text-center" style={{ color: tokens.mutedText }}>
-              <div className="text-4xl mb-2 opacity-60">+</div>
-              <div className="text-[11.5px] uppercase tracking-[0.22em] font-semibold">
-                Add property photo
-              </div>
-            </div>
-          </label>
-        ) : null}
+        <SmartImage
+          // SmartImage walks every URL the carousel knows about so a
+          // stale lead URL doesn't render a blank frame in share view.
+          // Editor mode shows the upload affordance when nothing
+          // resolves; share view falls through to a tinted empty cell.
+          srcs={imageUrl ? [imageUrl, ...carouselImages.filter((u) => u !== imageUrl)] : carouselImages}
+          alt={property.name}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+          fallback={
+            isEditor ? (
+              <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
+                <input type="file" accept="image/*" className="hidden" onChange={uploadLead} />
+                <div className="text-center" style={{ color: tokens.mutedText }}>
+                  <div className="text-4xl mb-2 opacity-60">+</div>
+                  <div className="text-[11.5px] uppercase tracking-[0.22em] font-semibold">
+                    Add property photo
+                  </div>
+                </div>
+              </label>
+            ) : null
+          }
+        />
 
         {isEditor && (
           <label
