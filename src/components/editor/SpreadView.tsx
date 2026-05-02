@@ -9,6 +9,7 @@ import { RouteRealMap } from "@/components/sections/RouteRealMap";
 import { ChapterAIPill, type ChapterAIField } from "./ChapterAIPill";
 import { ChapterColorPill } from "./ChapterColorPill";
 import { SmartImage } from "@/components/ui/SmartImage";
+import { pickSampleImageForDestination } from "@/lib/sampleDestinationImages";
 
 // Tiny wrapper that anchors a chapter's hover-chrome (✦ AI · 🎨
 // Colours) at the top-right of the right column. flex/gap-2 so two
@@ -355,6 +356,36 @@ function firstDayHero(proposal: Proposal): string | null {
       .find((u): u is string => u !== null) ?? null
   );
 }
+// Sample destination image — the *final* fallback. If the proposal
+// has zero usable images anywhere (operator hasn't uploaded anything
+// yet, or previous saves failed before image URLs reached the DB),
+// we lookup a CC0 Unsplash image keyed by the destination string.
+// Prefer a destination that's actually mentioned somewhere — the
+// passed-in `destination` first, then the cover's destinations array,
+// then any day's destination. Returns null only when every lookup
+// also misses, which won't happen with the catalogue's __fallback__
+// entry.
+function destinationSampleUrl(
+  proposal: Proposal,
+  preferredDestination?: string,
+): string | null {
+  const tries: string[] = [];
+  if (preferredDestination?.trim()) tries.push(preferredDestination);
+  for (const d of proposal.trip?.destinations ?? []) {
+    if (d?.trim()) tries.push(d);
+  }
+  for (const day of proposal.days) {
+    if (day.destination?.trim()) tries.push(day.destination);
+  }
+  for (const t of tries) {
+    const sample = pickSampleImageForDestination(t, { fallback: false });
+    if (sample) return sample.url;
+  }
+  // Final fallback — generic Unsplash safari image (catalogue's
+  // __fallback__ entry).
+  return pickSampleImageForDestination("", { fallback: true })?.url ?? null;
+}
+
 // Last-ditch fallback for chapters that should never read as a
 // completely empty slot in preview / share view. Walks every property
 // snapshot, then every day's hero — the first non-empty URL we find
@@ -887,12 +918,9 @@ function DayByDayChapter({
       theme={theme}
       items={sorted.map((d) => {
         // Build the FULL fallback chain so SmartImage can walk it on
-        // load errors (broken Supabase URLs, expired assets, CORS
-        // failures, etc.). Each entry is filtered through nonEmptyUrl
-        // so empty-string writes from autopilot don't poison the
-        // chain. Operator-flagged: "daycards lose images in preview"
-        // — root cause was a non-empty-but-broken URL with nowhere
-        // to fall through to.
+        // load errors. Final tier: a sample destination image keyed
+        // by the day's destination, so a day with no uploads still
+        // renders a relevant Unsplash photo instead of an empty cell.
         const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase();
         const property = camp
           ? proposal.properties.find((p) => p.name.trim().toLowerCase() === camp)
@@ -903,6 +931,7 @@ function DayByDayChapter({
           ...((property?.galleryUrls ?? []).map(nonEmptyUrl)),
           coverHero(proposal),
           anyImageInProposal(proposal),
+          destinationSampleUrl(proposal, d.destination),
         ].filter((s): s is string => typeof s === "string");
         return {
           id: d.id,
@@ -1462,6 +1491,7 @@ function DayStayCard({
               property?.leadImageUrl,
               ...(property?.galleryUrls ?? []),
               day.heroImageUrl,
+              destinationSampleUrl(proposal, day.destination),
             ]}
             alt={property?.name ?? campName}
             className="absolute inset-0 w-full h-full object-cover"
@@ -1818,17 +1848,25 @@ function AccommodationsChapter({
         // Build the FULL fallback chain (not just the first
         // non-empty). SmartImage walks this on each load error so a
         // stale-but-non-empty Supabase URL falls through to the next
-        // candidate, instead of rendering as a blank cell. Operators
-        // flagged "Lemala Mpingo Ridge" reading as cream/empty in
-        // preview — root cause was the resolved leadImageUrl pointed
-        // at a deleted asset; with single-URL items there was no way
-        // to fall through.
+        // candidate, instead of rendering as a blank cell. Final
+        // tier: a sample destination image keyed by the property's
+        // location, so even an empty proposal (operator hasn't
+        // uploaded anything yet) shows real imagery.
+        const propertyDestination =
+          p.location?.split(",")[0]?.trim() ||
+          proposal.days.find(
+            (d) =>
+              d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase() ===
+              lcName,
+          )?.destination ||
+          undefined;
         const srcs = [
           nonEmptyUrl(p.leadImageUrl),
           ...(p.galleryUrls ?? []).map(nonEmptyUrl),
           dayHero,
           coverHero(proposal),
           anyImageInProposal(proposal),
+          destinationSampleUrl(proposal, propertyDestination),
         ].filter((s): s is string => typeof s === "string");
         return { id: p.id, srcs };
       })}

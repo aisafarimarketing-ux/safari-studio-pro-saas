@@ -8,6 +8,7 @@ import { uploadImage } from "@/lib/uploadImage";
 import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
 import { SectionHeaderStrip, autoTextOnHex } from "@/components/editor/SectionHeaderStrip";
 import { SmartImage } from "@/components/ui/SmartImage";
+import { pickSampleImageForDestination } from "@/lib/sampleDestinationImages";
 import type {
   Section,
   Property,
@@ -733,9 +734,16 @@ function StatsTab({
         <SmartImage
           // SmartImage walks every URL the carousel knows about so a
           // stale lead URL doesn't render a blank frame in share view.
-          // Editor mode shows the upload affordance when nothing
-          // resolves; share view falls through to a tinted empty cell.
-          srcs={imageUrl ? [imageUrl, ...carouselImages.filter((u) => u !== imageUrl)] : carouselImages}
+          // Final fallback: a CC0 destination-matched Unsplash photo
+          // keyed by the property's location, so even a no-image
+          // property still renders a relevant landscape.
+          srcs={[
+            ...(imageUrl ? [imageUrl, ...carouselImages.filter((u) => u !== imageUrl)] : carouselImages),
+            pickSampleImageForDestination(
+              property.location?.split(",")[0]?.trim() || property.name,
+              { fallback: true },
+            )?.url,
+          ].filter((s): s is string => typeof s === "string" && s.length > 0)}
           alt={property.name}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
           fallback={
