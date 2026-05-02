@@ -663,6 +663,7 @@ function DayByDayChapter({
         <DayInlineBlock
           key={day.id}
           day={day}
+          proposal={proposal}
           isFirst={idx === 0}
           isEditor={isEditor}
           tokens={tokens}
@@ -682,6 +683,7 @@ function DayByDayChapter({
 // viewport.
 function DayInlineBlock({
   day,
+  proposal,
   isFirst,
   isEditor,
   tokens,
@@ -690,6 +692,7 @@ function DayInlineBlock({
   onUpdateDay,
 }: {
   day: Day;
+  proposal: Proposal;
   isFirst: boolean;
   isEditor: boolean;
   tokens: ThemeTokens;
@@ -803,6 +806,110 @@ function DayInlineBlock({
           </ul>
         </div>
       )}
+
+      {/* Stay card — the property assigned to this day at the active
+          tier. Surfaces the lead image + name + meta inline so the
+          spread shows what the day's daycard equivalent shows: "you'll
+          sleep here". The full property details still live in the
+          dedicated Accommodations chapter; this is the small reference
+          beside the day's narrative. Hidden when no property is
+          assigned. */}
+      <DayStayCard day={day} proposal={proposal} tokens={tokens} theme={theme} />
+    </div>
+  );
+}
+
+// Small property reference card under each day's narrative. Reads the
+// property assigned to the day at the active tier; case-insensitive
+// match against proposal.properties. Renders nothing when no property
+// is matched (free-text camp names without a library record).
+function DayStayCard({
+  day,
+  proposal,
+  tokens,
+  theme,
+}: {
+  day: Day;
+  proposal: Proposal;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+}) {
+  const tierAssignment = day.tiers?.[proposal.activeTier as TierKey];
+  const campName = tierAssignment?.camp?.trim();
+  if (!campName) return null;
+  const property = proposal.properties.find(
+    (p) => p.name.trim().toLowerCase() === campName.toLowerCase(),
+  );
+  // Even without a library match, still show the camp name so guests
+  // know where they're staying. Image just falls back to a placeholder.
+  const lead = property?.leadImageUrl ?? null;
+  const location = property?.location || tierAssignment?.location || "";
+  const summary = property?.shortDesc || property?.whyWeChoseThis || "";
+
+  return (
+    <div
+      className="mt-8 pt-6"
+      style={{ borderTop: `1px solid ${tokens.border}` }}
+    >
+      <div
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+        style={{ color: tokens.mutedText }}
+      >
+        — Where you&rsquo;ll stay
+      </div>
+      <div
+        className="grid grid-cols-[112px_minmax(0,1fr)] gap-4 items-center rounded-lg overflow-hidden"
+        style={{ background: tokens.cardBg, border: `1px solid ${tokens.border}` }}
+      >
+        <div
+          className="relative overflow-hidden"
+          style={{ aspectRatio: "4 / 5", background: tokens.sectionSurface }}
+        >
+          {lead ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={lead}
+              alt={property?.name ?? campName}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <div
+              className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.22em]"
+              style={{ color: tokens.mutedText }}
+            >
+              No photo
+            </div>
+          )}
+        </div>
+        <div className="pr-4 py-3 min-w-0">
+          <div
+            className="text-[14px] font-bold leading-tight truncate"
+            style={{
+              color: tokens.headingText,
+              fontFamily: `'${theme.displayFont}', serif`,
+            }}
+            title={property?.name ?? campName}
+          >
+            {property?.name ?? campName}
+          </div>
+          {location && (
+            <div
+              className="text-[11px] italic mt-0.5 truncate"
+              style={{ color: tokens.mutedText }}
+            >
+              {location}
+            </div>
+          )}
+          {summary && (
+            <div
+              className="text-[12.5px] leading-snug mt-2 line-clamp-2"
+              style={{ color: tokens.bodyText }}
+            >
+              {summary}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
