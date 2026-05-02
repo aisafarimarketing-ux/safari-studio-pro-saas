@@ -15,6 +15,7 @@ import { ProposalViewsWidget } from "./ProposalViewsWidget";
 import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
 import { DeployBadge } from "./DeployBadge";
 import { AIToneShiftDialog } from "./AIToneShiftDialog";
+import { AIFillBlanksDialog } from "./AIFillBlanksDialog";
 import { useEditorStore, type EditorView } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -59,6 +60,8 @@ export function EditorToolbar({
   const [compressResult, setCompressResult] = useState<string | null>(null);
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [toneShiftOpen, setToneShiftOpen] = useState(false);
+  const [fillBlanksOpen, setFillBlanksOpen] = useState(false);
+  const [aiMenuOpen, setAIMenuOpen] = useState(false);
 
   // "Proposal is X MB — too big to auto-save" is the signal that the
   // user's saved images exceed the body-size cap. Only that specific
@@ -287,20 +290,68 @@ export function EditorToolbar({
           duplicating={duplicating}
         />
 
-        {/* AI Tools — proposal-wide AI actions. Today: tone shift
-            (rewrites every narrative field in a target voice while
-            preserving facts). More tools land here as we ship them. */}
-        <button
-          type="button"
-          onClick={() => setToneShiftOpen(true)}
-          className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm rounded-lg transition active:scale-95 font-medium border border-black/12 text-black/75 hover:bg-black/[0.03]"
-          title="AI Tools — tone shift"
-        >
-          <span aria-hidden style={{ color: "#c9a84c", fontSize: 14 }}>
-            ✦
-          </span>
-          AI
-        </button>
+        {/* AI Tools — proposal-wide AI actions in a small dropdown.
+            Currently: Fill blanks (generate empty fields), Tone shift
+            (rewrite filled fields in a target voice). The "Apply with
+            AI" action lives on each client comment in the comments
+            drawer; that's the third pillar of the AI-tools triad. */}
+        <div className="hidden md:block relative">
+          <button
+            type="button"
+            onClick={() => setAIMenuOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm rounded-lg transition active:scale-95 font-medium border border-black/12 text-black/75 hover:bg-black/[0.03]"
+            title="AI Tools"
+          >
+            <span aria-hidden style={{ color: "#c9a84c", fontSize: 14 }}>
+              ✦
+            </span>
+            AI
+            <span aria-hidden style={{ opacity: 0.5, fontSize: 9 }}>▾</span>
+          </button>
+          {aiMenuOpen && (
+            <>
+              <div
+                onClick={() => setAIMenuOpen(false)}
+                style={{ position: "fixed", inset: 0, zIndex: 40 }}
+              />
+              <div
+                className="absolute right-0 top-[calc(100%+6px)] z-50 w-[260px] bg-white border border-black/10 rounded-xl shadow-2xl overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAIMenuOpen(false);
+                    setFillBlanksOpen(true);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-black/[0.03] transition border-b border-black/6"
+                >
+                  <div className="text-[13px] font-semibold text-black/85">
+                    ✦ Fill blanks
+                  </div>
+                  <div className="text-[11.5px] text-black/55 mt-0.5">
+                    Auto-draft narrative for empty fields.
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAIMenuOpen(false);
+                    setToneShiftOpen(true);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-black/[0.03] transition"
+                >
+                  <div className="text-[13px] font-semibold text-black/85">
+                    ✦ Tone shift
+                  </div>
+                  <div className="text-[11.5px] text-black/55 mt-0.5">
+                    Rewrite the proposal in a target voice.
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* View-mode toggle — Magazine vs Spread. Spread is the
             two-column sticky-photo layout; magazine is the single-
@@ -401,6 +452,11 @@ export function EditorToolbar({
       <AIToneShiftDialog
         open={toneShiftOpen}
         onClose={() => setToneShiftOpen(false)}
+      />
+
+      <AIFillBlanksDialog
+        open={fillBlanksOpen}
+        onClose={() => setFillBlanksOpen(false)}
       />
     </div>
   );
