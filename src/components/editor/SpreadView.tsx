@@ -6,6 +6,7 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { orderDestinations } from "@/lib/destinationOrdering";
 import { RouteRealMap } from "@/components/sections/RouteRealMap";
+import { ChapterAIPill, type ChapterAIField } from "./ChapterAIPill";
 import type {
   Proposal,
   Section,
@@ -350,8 +351,40 @@ function WelcomeChapter({
   const opener = (note.content?.opener as string) || "";
   const signOff = (note.content?.signOff as string) || "Best regards,";
 
+  const buildAIFields = (): ChapterAIField[] => {
+    const out: ChapterAIField[] = [];
+    if (note.content?.body && (note.content.body as string).trim()) {
+      out.push({
+        key: `section:${note.id}:body`,
+        text: note.content.body as string,
+        target: { kind: "sectionContent", sectionId: note.id, field: "body" },
+      });
+    }
+    if (note.content?.signOffLead && (note.content.signOffLead as string).trim()) {
+      out.push({
+        key: `section:${note.id}:signOffLead`,
+        text: note.content.signOffLead as string,
+        target: { kind: "sectionContent", sectionId: note.id, field: "signOffLead" },
+      });
+    }
+    return out;
+  };
+
   return (
     <SpreadRow imageUrl={consultantPhoto} eyebrow="— A note from us" label="WELCOME">
+      {isEditor && (
+        <ChapterAIPill
+          chapterLabel="Welcome — Personal note"
+          getFields={buildAIFields}
+          context={{
+            tripTitle: proposal.trip.title,
+            destinations: proposal.trip.destinations,
+            nights: proposal.trip.nights,
+            tripStyle: proposal.trip.tripStyle,
+            clientName: proposal.client.guestNames,
+          }}
+        />
+      )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
@@ -552,6 +585,27 @@ function DayByDayChapter({
   const [activeId, setActiveId] = useState<string | null>(sorted[0]?.id ?? null);
   if (days.length === 0) return null;
 
+  const buildAIFields = (): ChapterAIField[] => {
+    const out: ChapterAIField[] = [];
+    for (const d of sorted) {
+      if (d.description?.trim()) {
+        out.push({
+          key: `day:${d.id}:description`,
+          text: d.description,
+          target: { kind: "day", dayId: d.id, field: "description" },
+        });
+      }
+      if (d.subtitle?.trim()) {
+        out.push({
+          key: `day:${d.id}:subtitle`,
+          text: d.subtitle,
+          target: { kind: "day", dayId: d.id, field: "subtitle" },
+        });
+      }
+    }
+    return out;
+  };
+
   return (
     <CrossfadeChapter
       eyebrow="— Day by day"
@@ -564,6 +618,21 @@ function DayByDayChapter({
         imagePosition: d.heroImagePosition,
       }))}
       activeId={activeId}
+      topRightChrome={
+        isEditor ? (
+          <ChapterAIPill
+            chapterLabel="Day by Day"
+            getFields={buildAIFields}
+            context={{
+              tripTitle: proposal.trip.title,
+              destinations: proposal.trip.destinations,
+              nights: proposal.trip.nights,
+              tripStyle: proposal.trip.tripStyle,
+              clientName: proposal.client.guestNames,
+            }}
+          />
+        ) : null
+      }
       activeOverlay={(() => {
         const day = sorted.find((d) => d.id === activeId) ?? sorted[0];
         return (
@@ -759,6 +828,7 @@ function CrossfadeChapter({
   items,
   activeId,
   activeOverlay,
+  topRightChrome,
   children,
 }: {
   eyebrow?: string;
@@ -769,6 +839,9 @@ function CrossfadeChapter({
   activeId: string | null;
   /** Bottom-left text overlay for whichever item is active. */
   activeOverlay?: React.ReactNode;
+  /** Editor-only floating chrome top-right of the right column. The
+   *  ChapterAIPill renders here in editor mode; null in share / print. */
+  topRightChrome?: React.ReactNode;
   children: React.ReactNode;
 }) {
   void theme;
@@ -836,7 +909,8 @@ function CrossfadeChapter({
 
       {/* Right column — stacked sub-blocks. Each block's
           IntersectionObserver swaps the sticky image to its own. */}
-      <div className="px-8 md:px-12 py-12 md:py-16">
+      <div className="relative px-8 md:px-12 py-12 md:py-16">
+        {topRightChrome}
         <div
           className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
           style={{ color: tokens.mutedText }}
@@ -889,6 +963,34 @@ function AccommodationsChapter({
   if (visible.length === 0) return null;
   const active = visible.find((p) => p.id === activeId) ?? visible[0];
 
+  const buildAIFields = (): ChapterAIField[] => {
+    const out: ChapterAIField[] = [];
+    for (const p of visible) {
+      if (p.description?.trim()) {
+        out.push({
+          key: `property:${p.id}:description`,
+          text: p.description,
+          target: { kind: "property", propertyId: p.id, field: "description" },
+        });
+      }
+      if (p.whyWeChoseThis?.trim()) {
+        out.push({
+          key: `property:${p.id}:whyWeChoseThis`,
+          text: p.whyWeChoseThis,
+          target: { kind: "property", propertyId: p.id, field: "whyWeChoseThis" },
+        });
+      }
+      if (p.shortDesc?.trim()) {
+        out.push({
+          key: `property:${p.id}:shortDesc`,
+          text: p.shortDesc,
+          target: { kind: "property", propertyId: p.id, field: "shortDesc" },
+        });
+      }
+    }
+    return out;
+  };
+
   return (
     <CrossfadeChapter
       eyebrow="— Where you'll stay"
@@ -900,6 +1002,21 @@ function AccommodationsChapter({
         imageUrl: p.leadImageUrl ?? null,
       }))}
       activeId={activeId}
+      topRightChrome={
+        isEditor ? (
+          <ChapterAIPill
+            chapterLabel="Where You'll Stay"
+            getFields={buildAIFields}
+            context={{
+              tripTitle: proposal.trip.title,
+              destinations: proposal.trip.destinations,
+              nights: proposal.trip.nights,
+              tripStyle: proposal.trip.tripStyle,
+              clientName: proposal.client.guestNames,
+            }}
+          />
+        ) : null
+      }
       activeOverlay={
         <>
           {active.propertyClass && (
@@ -1296,12 +1413,40 @@ function ClosingChapter({
     "Now please review every section and let me know what needs adjusting. I'll hold these camp dates while you confirm.";
   const ctaLabel = (closing.content?.ctaLabel as string) || "Secure This Safari";
 
+  const buildAIFields = (): ChapterAIField[] => {
+    const out: ChapterAIField[] = [];
+    for (const f of ["letter", "headline", "availability"] as const) {
+      const v = (closing.content?.[f] as string | undefined) ?? "";
+      if (v.trim()) {
+        out.push({
+          key: `section:${closing.id}:${f}`,
+          text: v,
+          target: { kind: "sectionContent", sectionId: closing.id, field: f },
+        });
+      }
+    }
+    return out;
+  };
+
   return (
     <SpreadRow
       imageUrl={themeImage}
       eyebrow="— Secure your trip"
       label={proposal.trip.tripStyle?.toUpperCase() || "READY?"}
     >
+      {isEditor && (
+        <ChapterAIPill
+          chapterLabel="Closing"
+          getFields={buildAIFields}
+          context={{
+            tripTitle: proposal.trip.title,
+            destinations: proposal.trip.destinations,
+            nights: proposal.trip.nights,
+            tripStyle: proposal.trip.tripStyle,
+            clientName: proposal.client.guestNames,
+          }}
+        />
+      )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
