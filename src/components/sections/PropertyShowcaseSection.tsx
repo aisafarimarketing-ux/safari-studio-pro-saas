@@ -6,7 +6,6 @@ import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
 import { uploadImage } from "@/lib/uploadImage";
 import { AmenityIcon } from "@/components/sections/day-card/shared/AmenityIcon";
-import { SectionHeaderStrip, autoTextOnHex } from "@/components/editor/SectionHeaderStrip";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { pickSampleImageForDestination } from "@/lib/sampleDestinationImages";
 import type {
@@ -75,34 +74,60 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
 
   return (
     <div className="relative" style={{ background: tokens.sectionSurface }}>
-      {/* Section's own coloured header strip — replaces the previous
-          "The lodges / Your accommodations" header. Carries the 🎨
-          editor inline so the operator can recolour the strip + the
-          section bg in one place. */}
-      <SectionHeaderStrip
-        section={section}
-        title="Your accommodations"
-        subtitle={`${properties.length} ${properties.length === 1 ? "lodge" : "lodges"}`}
-      />
+      {/* Section title — plain editorial header, no coloured strip
+          behind it. Operator brief: "no need for color in the title
+          of the Accommodation section." */}
+      <div className="px-8 md:px-12 pt-10 pb-6">
+        <h2
+          className="font-bold leading-[1.05]"
+          style={{
+            color: tokens.headingText,
+            fontFamily: `'${theme.displayFont}', serif`,
+            fontSize: "clamp(1.6rem, 2.6vw, 2.2rem)",
+            letterSpacing: "-0.005em",
+          }}
+        >
+          Your accommodations
+        </h2>
+        <div
+          className="mt-1 text-[11px] uppercase tracking-[0.28em] font-semibold"
+          style={{ color: tokens.mutedText }}
+        >
+          {properties.length} {properties.length === 1 ? "lodge" : "lodges"}
+        </div>
+      </div>
       {properties.map((property, idx) => (
-        <PropertyBlock
-          key={property.id}
-          property={property}
-          isLast={idx === properties.length - 1}
-          isEditor={isEditor}
-          proposal={proposal}
-          theme={theme}
-          tokens={tokens}
-          // Per-property header band uses the section's strip colour
-          // by default so the lodges read as one visual family. The
-          // section's 🎨 editor recolours all property headers in
-          // lockstep with the section header.
-          headerBg={
-            (section.styleOverrides?.headerBg as string | undefined) ||
-            (section.content.color as string | undefined) ||
-            "#c9a84c"
-          }
-        />
+        <div key={property.id}>
+          {/* Hairline divider between property blocks. Operator
+              brief: "the properties separated by section divider by
+              default." Drawn with the trip's secondary stroke colour
+              at 35% opacity so it reads as editorial rule, not a
+              hard wall. Skipped above the first block. */}
+          {idx > 0 && (
+            <div className="px-8 md:px-12">
+              <div
+                aria-hidden
+                style={{
+                  height: 1,
+                  background: tokens.border,
+                  opacity: 0.7,
+                }}
+              />
+            </div>
+          )}
+          <PropertyBlock
+            property={property}
+            isLast={idx === properties.length - 1}
+            isEditor={isEditor}
+            proposal={proposal}
+            theme={theme}
+            tokens={tokens}
+            // headerBg prop kept for back-compat with the PropertyBlock
+            // signature; the per-property coloured strip was removed
+            // alongside the section-level one.
+            headerBg="transparent"
+          />
+        </div>
       ))}
     </div>
   );
@@ -203,11 +228,6 @@ function PropertyBlock({
   const goNext = () =>
     setCarouselIndex((i) => (i >= carouselImages.length - 1 ? 0 : i + 1));
 
-  // Per-property header band — same visual register as the section's
-  // own top strip, just with the property name. Auto-picks readable
-  // text colour against the band so it works on cream / charcoal /
-  // gold without per-property tuning.
-  const propertyHeaderText = autoTextOnHex(headerBg);
 
   return (
     <div
@@ -217,33 +237,22 @@ function PropertyBlock({
         background: tokens.sectionSurface,
       }}
     >
-      {/* Per-property header band — title text removed per operator
-          spec ("first accommodation title is redundant with the big
-          h3 below"). The band stays only as a coloured spacer that
-          carries the headerBg picker's colour and hosts the refresh-
-          from-library pill in editor mode. In preview / share where
-          the pill is gone, the band collapses to zero height so the
-          property reads cleanly without a phantom strip. */}
-      <div
-        className="w-full flex items-center justify-end gap-3 px-8 md:px-12"
-        style={{
-          background: headerBg,
-          height: isEditor && property.libraryPropertyId ? 40 : 0,
-          color: propertyHeaderText,
-          marginBottom: isEditor && property.libraryPropertyId ? "1rem" : 0,
-        }}
-      >
-        {isEditor && property.libraryPropertyId && (
+      {/* Refresh-from-library pill. The coloured per-property header
+          band is gone — operator brief: "no need for color in the
+          title of the Accommodation section." The pill now floats
+          directly inside the section without a coloured strip behind
+          it; only renders in editor mode for library-linked properties. */}
+      {isEditor && property.libraryPropertyId && (
+        <div className="flex justify-end px-8 md:px-12 pt-2 pb-3">
           <button
             type="button"
             onClick={handleRefreshFromLibrary}
             disabled={refreshState === "working"}
-            className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold transition disabled:opacity-60"
             style={{
-              background: "rgba(0,0,0,0.42)",
-              color: "#ffffff",
-              border: "1px solid rgba(255,255,255,0.18)",
-              backdropFilter: "blur(6px)",
+              background: "rgba(0,0,0,0.08)",
+              color: tokens.bodyText,
+              border: "1px solid rgba(0,0,0,0.08)",
             }}
             title={
               refreshState === "error"
@@ -264,8 +273,8 @@ function PropertyBlock({
                     : "Refresh from library"}
             </span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-8 md:px-12">
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}

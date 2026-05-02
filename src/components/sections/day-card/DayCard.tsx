@@ -206,6 +206,7 @@ export function DayCard({
     theme,
     activeTier: activeTier as TierKey,
     dayHeadBg: section.styleOverrides?.dayHeadBg,
+    propertyBg: section.styleOverrides?.propertyBg,
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,

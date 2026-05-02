@@ -26,7 +26,7 @@ import type { Section } from "@/lib/types";
 // IntelligentColorPicker. Falls back to the theme's secondary accent
 // (gold) when unset so a freshly-inserted divider is never invisible.
 
-const DEFAULT_BAND_COLOR_FALLBACK = "#c9a84c";
+const DEFAULT_BAND_COLOR_FALLBACK = "#82744a";
 
 export function DividerSection({ section }: { section: Section }) {
   const { proposal, updateSectionContent } = useProposalStore();
@@ -137,6 +137,7 @@ function BandDivider({
 }
 
 const DIVIDER_PRESETS = [
+  { value: "#82744a", label: "Khaki" },
   { value: "#c9a84c", label: "Gold" },
   { value: "#1b3a2d", label: "Forest" },
   { value: "#2d5a40", label: "Sage" },

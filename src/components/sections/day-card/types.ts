@@ -101,6 +101,9 @@ export type DayCardLayoutProps = {
   /** Operator-picked override for the day-card head strip background.
    *  When unset, layouts fall back to `tokens.sectionSurface`. */
   dayHeadBg?: string;
+  /** Operator-picked override for the property-act background (Act II
+   *  of FlipCard). Falls back to `tokens.sectionSurface` when unset. */
+  propertyBg?: string;
 
   // Text editing (reusing contentEditable pattern with data-ai-editable)
   onDestinationChange: (next: string) => void;

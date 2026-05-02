@@ -3,32 +3,25 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
+import { uploadImage } from "@/lib/uploadImage";
 import { EditableOperatorLogoTile } from "@/components/brand/EditableOperatorLogoTile";
+import { ContactCards } from "@/components/sections/personal-note/ContactCards";
 import type { Section } from "@/lib/types";
 
-// ─── FooterSection — quiet operator brand strip ─────────────────────────
+// ─── FooterSection — operator brand strip + consultant identity ─────────
 //
-// Operator brief: "minimize this footer section, it needs not to scream
-// for attention with the closing page that is for selling."
-//
-// This used to be a triple-decker — logo/company on the left, full
-// consultant identity (photo + role + signature) on the right, plus
-// a row of Email + WhatsApp pills below (rendered TWICE in editor
-// mode because ContactCards shows both inputs and display cards).
-// All of that competed with the Closing's Secure-Your-Trip CTA right
-// above it.
-//
-// The new footer is a single quiet line: logo + company name +
-// website link. Consultant identity is already in the Personal Note
-// + Closing; Email / WhatsApp pills live in the Closing's secondary
-// actions row. The footer is now operator brand identity only —
-// nothing more.
+// Operator brief: "the footer to host the maker of the itinerary photo,
+// email and whatsapp like in the personal greeting section." Footer
+// now mirrors the Personal Note's bottom strip — consultant photo +
+// name on the left, email / whatsapp ContactCards in the centre,
+// company logo on the right — followed by a small row carrying the
+// company name and website link.
 //
 // Background still resolves through tokens.sectionSurface so the
 // section's bg picker keeps working.
 
 export function FooterSection({ section }: { section: Section }) {
-  const { proposal, updateOperator } = useProposalStore();
+  const { proposal, updateOperator, updateSectionContent } = useProposalStore();
   const { mode } = useEditorStore();
   const isEditor = mode === "editor";
   const { operator, theme } = proposal;
@@ -42,75 +35,185 @@ export function FooterSection({ section }: { section: Section }) {
     return `https://${w}`;
   })();
 
+  const pickPhoto = () => {
+    if (!isEditor) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await uploadImage(file);
+        updateOperator({ consultantPhoto: dataUrl });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Image upload failed");
+      }
+    };
+    input.click();
+  };
+
   return (
     <div
-      className="py-5 md:py-6 px-6 md:px-12 border-t"
+      className="py-8 md:py-10 px-6 md:px-12 border-t"
       style={{
         background: tokens.sectionSurface,
         borderColor: tokens.border,
         fontFamily: `'${theme.bodyFont}', sans-serif`,
       }}
     >
-      <div className="mx-auto max-w-[1100px] flex items-center justify-between gap-4 flex-wrap">
-        {/* Left — logo + company */}
-        <div className="flex items-center gap-3 min-w-0">
-          {(effectiveLogoUrl || isEditor) && (
-            <div className="shrink-0">
-              <EditableOperatorLogoTile
-                bare
-                isEditor={isEditor}
-                logoUrl={effectiveLogoUrl}
-                companyName={operator.companyName}
-                logoHeight={28}
-                onLogoChange={(url) => updateOperator({ logoUrl: url })}
-              />
+      {/* Identity strip — same shape as the Personal Note footer:
+          consultant photo + name | email + whatsapp cards | logo. */}
+      <div className="mx-auto max-w-[1200px]">
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-6 md:gap-10">
+          {/* Consultant — photo + name stacked */}
+          <div className="flex flex-col items-center gap-2 shrink-0" style={{ width: 96 }}>
+            <div
+              className="overflow-hidden cursor-pointer w-full"
+              style={{ height: 96, background: tokens.cardBg, borderRadius: 4 }}
+              onClick={pickPhoto}
+              onContextMenu={(e) => {
+                if (!isEditor) return;
+                e.preventDefault();
+                pickPhoto();
+              }}
+              title={isEditor ? "Click / right-click to replace photo" : undefined}
+            >
+              {operator.consultantPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={operator.consultantPhoto}
+                  alt={operator.consultantName}
+                  className="w-full h-full object-cover"
+                />
+              ) : isEditor ? (
+                <div
+                  className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-center"
+                  style={{ color: tokens.mutedText }}
+                >
+                  + Photo
+                </div>
+              ) : (
+                <div
+                  className="w-full h-full flex items-center justify-center text-2xl font-bold"
+                  style={{ color: tokens.accent }}
+                >
+                  {operator.consultantName?.charAt(0) ?? "·"}
+                </div>
+              )}
             </div>
-          )}
+            <div
+              className="text-[11px] font-semibold uppercase tracking-[0.18em] text-center leading-tight outline-none w-full"
+              style={{ color: tokens.headingText }}
+              contentEditable={isEditor}
+              suppressContentEditableWarning
+              onBlur={(e) =>
+                updateOperator({
+                  consultantName: e.currentTarget.textContent?.trim() ?? operator.consultantName,
+                })
+              }
+            >
+              {operator.consultantName || (isEditor ? "Your name" : "")}
+            </div>
+          </div>
+
+          {/* ContactCards — email + WhatsApp, with the same Style
+              picker affordance as the Personal Note. */}
+          <ContactCards
+            isEditor={isEditor}
+            values={{
+              phone: operator.phone,
+              email: operator.email,
+              whatsapp: operator.whatsapp,
+            }}
+            style={{
+              iconBg: section.content.contactIconBg as string | undefined,
+              iconColor: section.content.contactIconColor as string | undefined,
+              cardBg: section.content.contactCardBg as string | undefined,
+            }}
+            onValueChange={(next) =>
+              updateOperator({
+                phone: next.phone ?? "",
+                email: next.email ?? "",
+                whatsapp: next.whatsapp ?? "",
+              })
+            }
+            onStyleChange={(next) =>
+              updateSectionContent(section.id, {
+                contactIconBg: next.iconBg,
+                contactIconColor: next.iconColor,
+                contactCardBg: next.cardBg,
+              })
+            }
+          />
+
+          {/* Company logo */}
           <div
-            className="text-[12.5px] font-medium truncate"
-            style={{ color: tokens.headingText }}
+            className="shrink-0 flex items-center justify-center"
+            style={{ width: 92, height: 92 }}
           >
-            {operator.companyName || (isEditor ? "Your company" : "")}
+            <EditableOperatorLogoTile
+              bare
+              isEditor={isEditor}
+              logoUrl={effectiveLogoUrl}
+              companyName={operator.companyName}
+              logoHeight={68}
+              onLogoChange={(url) => updateOperator({ logoUrl: url })}
+            />
           </div>
         </div>
 
-        {/* Right — website link only. Email / WhatsApp / consultant
-            identity all live above (Personal Note + Closing); the
-            footer doesn't repeat them. */}
-        {(websiteHref || isEditor) && (
-          <div className="text-[12px]" style={{ color: tokens.mutedText }}>
-            {websiteHref ? (
-              <a
-                href={websiteHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline transition outline-none"
-                style={{ color: tokens.accent }}
-              >
+        {/* Brand line — company name + website. */}
+        <div
+          className="mt-6 pt-5 flex items-center justify-between gap-4 flex-wrap"
+          style={{ borderTop: `1px solid ${tokens.border}` }}
+        >
+          <div
+            className="text-[12.5px] font-medium outline-none"
+            style={{ color: tokens.headingText }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateOperator({ companyName: e.currentTarget.textContent?.trim() ?? operator.companyName })
+            }
+          >
+            {operator.companyName || (isEditor ? "Your company" : "")}
+          </div>
+          {(websiteHref || isEditor) && (
+            <div className="text-[12px]" style={{ color: tokens.mutedText }}>
+              {websiteHref ? (
+                <a
+                  href={websiteHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline transition outline-none"
+                  style={{ color: tokens.accent }}
+                >
+                  <span
+                    contentEditable={isEditor}
+                    suppressContentEditableWarning
+                    onBlur={(e) =>
+                      updateOperator({ website: e.currentTarget.textContent?.trim() || "" })
+                    }
+                  >
+                    {operator.website}
+                  </span>
+                </a>
+              ) : (
                 <span
+                  className="outline-none"
                   contentEditable={isEditor}
                   suppressContentEditableWarning
                   onBlur={(e) =>
                     updateOperator({ website: e.currentTarget.textContent?.trim() || "" })
                   }
                 >
-                  {operator.website}
+                  yourcompany.com
                 </span>
-              </a>
-            ) : (
-              <span
-                className="outline-none"
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  updateOperator({ website: e.currentTarget.textContent?.trim() || "" })
-                }
-              >
-                yourcompany.com
-              </span>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

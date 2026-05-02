@@ -44,6 +44,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
     theme,
     flip,
     dayHeadBg,
+    propertyBg,
     onDestinationChange,
     onPhaseLabelChange,
     onNarrativeChange,
@@ -295,7 +296,11 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
         <div
           className="px-10 md:px-14 pt-8 pb-12"
           style={{
-            background: tokens.sectionSurface,
+            // propertyBg is the operator-picked colour for the
+            // "where you'll stay" half of every flip card; falls
+            // back to the section's own sectionSurface when unset.
+            // See SectionChrome's "Property column background" pill.
+            background: propertyBg ?? tokens.sectionSurface,
             borderTop: `1px solid ${tokens.border}`,
           }}
         >

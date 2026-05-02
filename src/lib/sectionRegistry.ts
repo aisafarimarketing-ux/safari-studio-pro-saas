@@ -229,7 +229,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // just aren't selectable from the chrome any more.
     variants: ["band"],
     defaultVariant: "band",
-    defaultContent: { color: "#c9a84c" },
+    defaultContent: { color: "#82744a" },
   },
   spacer: {
     type: "spacer",

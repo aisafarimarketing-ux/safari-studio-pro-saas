@@ -54,7 +54,7 @@ export function SectionChrome({ section, children }: Props) {
   // independently from one swatch row. Other sections-with-cards
   // (property showcase) get card bg + accent.
   type PickerSpec = {
-    token: keyof typeof themeTokens | "dayHeadBg" | "headerBg";
+    token: keyof typeof themeTokens | "dayHeadBg" | "headerBg" | "propertyBg";
     title: string;
     swatch: string;
   };
@@ -70,9 +70,12 @@ export function SectionChrome({ section, children }: Props) {
   // section's chrome — replaces the inline 🎨 popover the strip used
   // to carry, eliminating the duplicate editor that was layering on
   // top of SectionChrome's controls.
+  // propertyShowcase removed: its title is rendered as a plain
+  // editorial heading now (operator brief: "no need for color in
+  // the title of the Accommodation section"), so the strip-bg pill
+  // would be a pill that paints nothing.
   const HAS_HEADER_STRIP: Record<string, boolean> = {
     itineraryTable: true,
-    propertyShowcase: true,
   };
   if (HAS_HEADER_STRIP[section.type]) {
     pickerSpecs.push({
@@ -90,8 +93,18 @@ export function SectionChrome({ section, children }: Props) {
       },
       {
         token: "cardBg",
-        title: "Card background",
+        title: "Destination column background",
         swatch: overrides?.cardBg ?? themeTokens.cardBg,
+      },
+      {
+        // Operator brief: "Allow color selections for daycard
+        // property section, separately from the destination text
+        // section for all the daycards." propertyBg paints the
+        // property-act half of every flip card; falls back to the
+        // section's own sectionSurface when unset.
+        token: "propertyBg",
+        title: "Property column background",
+        swatch: (overrides?.propertyBg as string | undefined) ?? themeTokens.sectionSurface,
       },
       {
         token: "accent",
@@ -299,9 +312,14 @@ export function SectionChrome({ section, children }: Props) {
           </div>
         )}
 
-        {/* ── Selection indicator label ── */}
+        {/* ── Selection indicator label ──
+            Anchored at the TOP of the section (not the bottom) so the
+            badge is never buried under the next section's chrome.
+            Operator brief: "the editor in the Closing section hides
+            in the footer — unhide it." z-[700] matches the rest of
+            the section chrome so it stacks above sibling sections. */}
         {isSelected && (
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[700] pointer-events-none">
             <div className="bg-[#1b3a2d] text-white text-[9px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full shadow-lg">
               Editing: {reg?.label ?? section.type}
             </div>

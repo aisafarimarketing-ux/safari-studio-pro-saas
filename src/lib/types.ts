@@ -356,6 +356,12 @@ export type StyleOverrides = Partial<ThemeTokens> & {
    *  sectionSurface so the strip can carry its own colour without
    *  dragging the section body with it. Consumed by SectionHeaderStrip. */
   headerBg?: string;
+  /** Day-card property-act background — Act II of FlipCard (the
+   *  "where you'll stay" half). Distinct from sectionSurface and
+   *  cardBg so the operator can colour the property column on its
+   *  own without touching the destination column. Consumed by
+   *  FlipCard. */
+  propertyBg?: string;
 };
 
 export interface Section {
