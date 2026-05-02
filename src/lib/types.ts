@@ -205,6 +205,14 @@ export interface Day {
    *  side from Act I). */
   locationImageSide?: "left" | "right";
   propertyImageSide?: "left" | "right";
+  /** Per-day background overrides for the flip card's two acts.
+   *  Operator brief: "Day card to have editor function for both
+   *  location and accommodation section separately to change layout,
+   *  color and more independently." Each undefined falls back to the
+   *  section-level surface (cardBg for location, propertyBg /
+   *  sectionSurface for the accommodation). */
+  locationBg?: string;
+  propertyBgPerDay?: string;
   tiers: {
     classic: Accommodation;
     premier: Accommodation;

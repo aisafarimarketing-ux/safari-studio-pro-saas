@@ -99,18 +99,19 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
       {properties.map((property, idx) => (
         <div key={property.id}>
           {/* Hairline divider between property blocks. Operator
-              brief: "the properties separated by section divider by
-              default." Drawn with the trip's secondary stroke colour
-              at 35% opacity so it reads as editorial rule, not a
-              hard wall. Skipped above the first block. */}
+              brief: "all dividers should generate default with this
+              colour #5e4f33." Single source of truth for the rule
+              colour kept here so future operator-driven theme tweaks
+              only need to update one constant. Skipped above the
+              first block. */}
           {idx > 0 && (
             <div className="px-8 md:px-12">
               <div
                 aria-hidden
                 style={{
                   height: 1,
-                  background: tokens.border,
-                  opacity: 0.7,
+                  background: "#5e4f33",
+                  opacity: 0.6,
                 }}
               />
             </div>

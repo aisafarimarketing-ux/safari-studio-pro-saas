@@ -223,13 +223,13 @@ function buildDefaultSections(): Section[] {
     // Cover→Personal Note intro block and the Map. All dividers in
     // the default flow seed with the same gold colour; operators
     // recolour each independently.
-    makeSection("divider", 2, "band", { color: "#82744a" }),
+    makeSection("divider", 2, "band", { color: "#5e4f33" }),
     // No itineraryTable by default — the map's header already reads
     // "Itinerary at a glance" so a standalone table duplicates the
     // title. Operators who want the tabular view can still add it
     // from the section panel.
     makeSection("map", 3, "route", { coords: [] }),
-    makeSection("divider", 4, "band", { color: "#82744a" }),
+    makeSection("divider", 4, "band", { color: "#5e4f33" }),
     // Day-by-day — trip-flip alternates image side per day so the
     // proposal reads as a magazine spread by default. Operator brief:
     // "Day cards by default to have alternating photo and text — if
@@ -237,16 +237,16 @@ function buildDefaultSections(): Section[] {
     // right." (See FlipCard for the per-card location/property
     // alternation that lives ON TOP of trip-flip.)
     makeSection("dayJourney", 5, "trip-flip"),
-    makeSection("divider", 6, "band", { color: "#82744a" }),
+    makeSection("divider", 6, "band", { color: "#5e4f33" }),
     makeSection("propertyShowcase", 7, "editorial-carousel"),
-    makeSection("divider", 8, "band", { color: "#82744a" }),
+    makeSection("divider", 8, "band", { color: "#5e4f33" }),
     // Pricing now carries inclusions/exclusions + payment schedule,
     // cancellation, insurance, and T&Cs. No standalone inclusions section
     // in the default flow — still available in the registry for legacy.
     makeSection("pricing", 9, "editorial"),
-    makeSection("divider", 10, "band", { color: "#82744a" }),
+    makeSection("divider", 10, "band", { color: "#5e4f33" }),
     makeSection("practicalInfo", 11, "two-column-notes"),
-    makeSection("divider", 12, "band", { color: "#82744a" }),
+    makeSection("divider", 12, "band", { color: "#5e4f33" }),
     // Closing — stack: vertical layout (image rail on top, letter +
     // CTA below). Operator-default per request. Other variants
     // (split-card, gallery-row) remain available as per-section
@@ -257,7 +257,7 @@ function buildDefaultSections(): Section[] {
       signOff:
         "It has been a genuine pleasure putting this together for you. If you'd like anything adjusted — a camp, a date, a tier — just leave a note below or reply directly. I'll hold these arrangements for seven days while you decide.",
     }),
-    makeSection("divider", 14, "band", { color: "#82744a" }),
+    makeSection("divider", 14, "band", { color: "#5e4f33" }),
     makeSection("footer", 15, "default"),
   ];
 }

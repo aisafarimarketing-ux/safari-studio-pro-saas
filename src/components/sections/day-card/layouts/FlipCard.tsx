@@ -93,8 +93,18 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
   const actIIImageOrder = imageOrderFor(actIIFlip);
   const actIITextOrder = textOrderFor(actIIFlip);
 
+  // Per-day overrides win over section-level pickers. Operator brief:
+  // "Day card to have editor function for both location and
+  // accommodation section separately to change layout, color and
+  // more independently." Falls back through the layered defaults so
+  // a section-level recolour still applies wherever a day hasn't
+  // overridden.
+  const locationBg = data.locationBg ?? tokens.cardBg;
+  const propertyBgFinal =
+    data.propertyBgPerDay ?? propertyBg ?? tokens.sectionSurface;
+
   return (
-    <div className="flex flex-col" style={{ background: tokens.cardBg }}>
+    <div className="flex flex-col" style={{ background: locationBg }}>
       {/* Top strip — same as editorial-stack so trip-flip + stack
           variants on the same proposal stay visually consistent.
           Background honours the dayHeadBg override when set. */}
@@ -168,7 +178,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       {(data.momentOfDay || isEditor) && (
         <div
           className="relative px-10 md:px-14 pt-8 pb-2"
-          style={{ background: tokens.cardBg }}
+          style={{ background: locationBg }}
         >
           {isEditor && (
             <div className="absolute top-6 right-8 md:right-12 z-[35]">
@@ -209,13 +219,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       )}
 
       {/* ── Act I: Location ─────────────────────────────────────────── */}
-      <div
-        className="grid grid-cols-1 md:gap-10 lg:gap-14 px-10 md:px-14 pt-6 pb-10"
-        style={{ gridTemplateColumns: undefined }}
-      >
+      <div className="px-10 md:px-14 pt-6 pb-10">
+        {/* `.ss-act-grid` (defined in globals.css) renders single-column
+            on narrow viewports and switches to the inline-set md
+            columns on md+. Drives off the --act-cols-md custom prop
+            so the same class works for both flip directions and for
+            both acts. */}
         <div
-          className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
-          style={{ gridTemplateColumns: actICols }}
+          className="ss-act-grid"
+          style={{ "--act-cols-md": actICols } as React.CSSProperties}
         >
           {/* Image — stretches to fill the row's height so it no longer
               floats with cream around it. Aspect ratio bumped from 4:3
@@ -296,17 +308,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
         <div
           className="px-10 md:px-14 pt-8 pb-12"
           style={{
-            // propertyBg is the operator-picked colour for the
-            // "where you'll stay" half of every flip card; falls
-            // back to the section's own sectionSurface when unset.
-            // See SectionChrome's "Property column background" pill.
-            background: propertyBg ?? tokens.sectionSurface,
+            // Per-day propertyBgPerDay wins, then section-level
+            // propertyBg, then the section's own sectionSurface.
+            background: propertyBgFinal,
             borderTop: `1px solid ${tokens.border}`,
           }}
         >
           <div
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
-            style={{ gridTemplateColumns: actIICols }}
+            className="ss-act-grid"
+            style={{ "--act-cols-md": actIICols } as React.CSSProperties}
           >
             {/* Property gallery — sits OPPOSITE to Act I's image so
                 the day card reads as a flip (Act I image left ⇄

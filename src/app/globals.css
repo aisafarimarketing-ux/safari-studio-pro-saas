@@ -19,6 +19,30 @@
 
 @import "tailwindcss";
 
+/* ── Day-card flip grid ────────────────────────────────────────────────
+   Each act of FlipCard (location row, property row) needs to render as
+   a single column on narrow viewports — image above text — and switch
+   to a side-by-side ratio on md+ (60/40 by default, controlled per
+   card via the `--act-cols-md` inline custom property). Operator
+   brief: "ensure the text and image on the daycards destination
+   section is not getting mixed up." Earlier we set
+   `gridTemplateColumns` directly inline, which overrode the
+   responsive Tailwind classes at every viewport width and forced two
+   columns on phones — image and narrative collided.
+   ─────────────────────────────────────────────────────────────────── */
+.ss-act-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: stretch;
+}
+@media (min-width: 768px) {
+  .ss-act-grid {
+    grid-template-columns: var(--act-cols-md, 1fr 1fr);
+    gap: 2.5rem;
+  }
+}
+
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 /* Single source of truth for the Safari Studio palette + type stack. UI       */
 /* components reference these via CSS custom properties or hard-coded hex      */

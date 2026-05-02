@@ -88,6 +88,12 @@ export type DayCardData = {
   /** Per-day flip override for the property act. Falls back to the
    *  opposite of the section-level flip when undefined. */
   propertyImageSide?: "left" | "right";
+  /** Per-day background override for the location act. Falls back to
+   *  cardBg when undefined. */
+  locationBg?: string;
+  /** Per-day background override for the property act. Falls back to
+   *  the section-level propertyBg / sectionSurface when undefined. */
+  propertyBgPerDay?: string;
 };
 
 // Shared props every layout component accepts. Layouts never touch the

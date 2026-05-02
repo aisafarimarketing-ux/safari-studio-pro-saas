@@ -264,6 +264,12 @@ export function DayCard({
           onSetPropertyImageSide={(next) =>
             updateDay(day.id, { propertyImageSide: next })
           }
+          locationBg={day.locationBg}
+          propertyBgPerDay={day.propertyBgPerDay}
+          onSetLocationBg={(next) => updateDay(day.id, { locationBg: next })}
+          onSetPropertyBgPerDay={(next) =>
+            updateDay(day.id, { propertyBgPerDay: next })
+          }
         />
       )}
       {/* Section colour editor moved to SectionChrome (top-right of

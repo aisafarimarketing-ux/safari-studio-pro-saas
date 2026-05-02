@@ -106,6 +106,23 @@ export function DayJourneySection({ section }: { section: Section }) {
           <div className="space-y-2 md:space-y-3">
             {days.map((day, i) => (
               <div key={day.id}>
+                {/* Day-to-day divider — single hairline between every
+                    pair of consecutive days. Operator brief: "introduce
+                    divider between day to day." Drawn on top of the
+                    drive-time chip column so it reads as editorial
+                    rule, never a hard wall. Skipped above day 1. */}
+                {i > 0 && (
+                  <div className="px-8 md:px-12 mt-1 mb-1">
+                    <div
+                      aria-hidden
+                      style={{
+                        height: 1,
+                        background: "#5e4f33",
+                        opacity: 0.55,
+                      }}
+                    />
+                  </div>
+                )}
                 {/* Drive-time chip — appears ABOVE every day except
                     Day 1 (no preceding day to transfer from). Editor
                     mode shows the slot even when blank so operators
