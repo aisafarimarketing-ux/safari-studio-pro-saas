@@ -80,7 +80,12 @@ export function SpreadView() {
         fontFamily: `'${proposal.theme.bodyFont}', sans-serif`,
       }}
     >
-      <div className="mx-auto" style={{ maxWidth: 1280 }}>
+      {/* Full-bleed canvas — Safari-Portal-style: the spread hugs
+          the viewport edges so the photo on the left and the
+          content on the right feel like a magazine spread, not a
+          centred card. Operator brief: "the screen is all cover
+          from right to left split in the middle". */}
+      <div className="w-full">
         <CoverChapter proposal={proposal} isEditor={isEditor} tokens={tokens} />
         <WelcomeChapter proposal={proposal} isEditor={isEditor} tokens={tokens} />
         <MapChapter proposal={proposal} isEditor={isEditor} tokens={tokens} />
@@ -625,65 +630,56 @@ function WelcomeChapter({
 function MapChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
   tokens: ThemeTokens;
 }) {
   const { trip, theme, days, activeTier } = proposal;
-  void isEditor;
   const dests = uniqueOrderedDestinations(proposal);
   const route =
     dests.length > 1 ? `${dests[0]} to ${dests[dests.length - 1]}` : dests[0] ?? "";
+  // Map chapter borrows the map section's overrides for theming.
+  const mapSection = proposal.sections.find((s) => s.type === "map");
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, mapSection?.styleOverrides);
+  // Operator brief (this iteration): "move the map to the right and
+  // have image on the left of destination". So left = sticky
+  // destination hero, right = visualise copy + interactive map +
+  // destinations list. Falls back to cover hero, then first day's
+  // hero, when no map-specific image is set.
+  const leftPhoto = coverHero(proposal) || firstDayHero(proposal);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 items-start">
-      {/* Left — REAL map (the user flagged: "our map is not showing").
-          Sticky for the chapter's scroll length, exactly like the
-          photo rows but actually interactive. */}
-      <div
-        className="relative md:sticky md:top-0 md:h-screen overflow-hidden"
-        style={{ minHeight: 360, background: tokens.cardBg }}
-      >
-        {days.length > 0 ? (
-          <RouteRealMap
-            days={days}
-            activeTier={activeTier as TierKey}
-            tokens={tokens}
-            theme={theme}
-            isEditor={false}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-[12px] uppercase tracking-[0.22em]" style={{ color: tokens.mutedText }}>
-            Add days to see the route
-          </div>
-        )}
-        {/* Eyebrow + label — top-left of the map cell */}
-        <div className="absolute top-6 left-6 md:top-8 md:left-10 z-[1] pointer-events-none">
-          <div
-            className="text-[11px] italic mb-1.5"
-            style={{ color: "rgba(255,255,255,0.92)", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
-          >
-            — Itinerary details
-          </div>
-          <div
-            className="font-bold leading-[0.95] tracking-tight"
-            style={{
-              color: "rgba(255,255,255,0.95)",
-              textShadow: "0 1px 4px rgba(0,0,0,0.45)",
-              fontFamily: `'${theme.displayFont}', serif`,
-              fontSize: "clamp(1.4rem, 2.6vw, 2rem)",
-              letterSpacing: "-0.005em",
-            }}
-          >
-            MAP
-          </div>
-        </div>
-      </div>
+      {/* Left — destination image, sticky for the chapter's scroll. */}
+      <StickyPhotoCell
+        imageUrl={leftPhoto}
+        eyebrow="— Itinerary details"
+        label="MAP"
+        minHeight={360}
+      />
 
-      {/* Right — visualise-your-journey copy + destinations list */}
-      <div className="px-8 md:px-12 py-12 md:py-16 min-h-screen">
+      {/* Right — visualise-your-journey copy + interactive map +
+          destinations list. The map sits inline in the right column
+          so it scrolls naturally with the rest of the chapter. */}
+      <div
+        className="relative px-8 md:px-12 py-12 md:py-16 min-h-screen"
+        style={{ background: tokens.sectionSurface }}
+      >
+        {isEditor && mapSection && (
+          <ChapterChrome>
+            <ChapterColorPill
+              sectionId={mapSection.id}
+              overrides={mapSection.styleOverrides ?? {}}
+              fields={[
+                { key: "sectionSurface", label: "Section background" },
+                { key: "accent", label: "Accent" },
+              ]}
+            />
+          </ChapterChrome>
+        )}
         <div
           className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
           style={{ color: tokens.mutedText }}
@@ -710,14 +706,46 @@ function MapChapter({
           </div>
         )}
         <div
-          className="text-[14px] leading-[1.75]"
+          className="text-[14px] leading-[1.75] mb-7"
           style={{ color: tokens.bodyText }}
         >
           {trip.subtitle ||
             `${proposal.days.length} days across ${dests.length} ${dests.length === 1 ? "stop" : "stops"}.`}
         </div>
+
+        {/* Interactive map — moved inline to the RIGHT column so the
+            destination image holds the LEFT sticky pane. The map
+            still gets full real-estate (16:10) and is interactive.
+            Renders inside a relative wrapper so MapLibre's controls
+            don't escape. */}
+        <div
+          className="relative w-full overflow-hidden rounded-md mb-6"
+          style={{
+            aspectRatio: "16 / 10",
+            background: tokens.cardBg,
+            border: `1px solid ${tokens.border}`,
+          }}
+        >
+          {days.length > 0 ? (
+            <RouteRealMap
+              days={days}
+              activeTier={activeTier as TierKey}
+              tokens={tokens}
+              theme={theme}
+              isEditor={false}
+            />
+          ) : (
+            <div
+              className="absolute inset-0 flex items-center justify-center text-[12px] uppercase tracking-[0.22em]"
+              style={{ color: tokens.mutedText }}
+            >
+              Add days to see the route
+            </div>
+          )}
+        </div>
+
         {dests.length > 0 && (
-          <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
+          <div className="pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
             <div
               className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
               style={{ color: tokens.mutedText }}
@@ -986,6 +1014,12 @@ function computeDayDateLabel(day: Day, arrivalISO: string | undefined): string {
   return shortDate(start);
 }
 
+function nonEmptyUrl(s: string | null | undefined): string | null {
+  if (typeof s !== "string") return null;
+  const t = s.trim();
+  return t.length > 0 ? t : null;
+}
+
 function parseISODate(iso: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   if (!m) return null;
@@ -1045,8 +1079,15 @@ function DayInlineBlock({
   return (
     <div
       ref={ref}
-      className={`pb-12 ${isFirst ? "" : "pt-12 mt-12"}`}
-      style={isFirst ? undefined : { borderTop: `1px solid ${tokens.border}` }}
+      className={`pb-24 ${isFirst ? "pt-2" : "pt-16 mt-12"}`}
+      style={{
+        // ~2 viewports per day so the sticky photo on the left has
+        // real scroll distance to live through. Operator counted "32
+        // scrolls for 16 images" on Safari Portal — that's the
+        // density we're matching.
+        minHeight: "150vh",
+        ...(isFirst ? {} : { borderTop: `1px solid ${tokens.border}` }),
+      }}
     >
       {day.driveTimeBefore && !isFirst && (
         <div
@@ -1164,8 +1205,17 @@ function DayStayCard({
     (p) => p.name.trim().toLowerCase() === campName.toLowerCase(),
   );
   // Even without a library match, still show the camp name so guests
-  // know where they're staying. Image just falls back to a placeholder.
-  const lead = property?.leadImageUrl ?? null;
+  // know where they're staying. Image fallback chain: property lead
+  // → first gallery URL → day's hero. Empty strings (autopilot's
+  // legacy fallback for missing images) coerce to null. This is what
+  // fixes the "property images not transported to preview / webview"
+  // bug — non-editor mode was rendering an empty slot when the value
+  // was "" instead of null.
+  const lead =
+    nonEmptyUrl(property?.leadImageUrl) ??
+    nonEmptyUrl(property?.galleryUrls?.[0]) ??
+    nonEmptyUrl(day.heroImageUrl) ??
+    null;
   const location = property?.location || tierAssignment?.location || "";
   const summary = property?.shortDesc || property?.whyWeChoseThis || "";
 
@@ -1654,8 +1704,14 @@ function PropertyInlineBlock({
   return (
     <div
       ref={ref}
-      className={`pb-12 ${isFirst ? "" : "pt-12 mt-12"}`}
-      style={isFirst ? undefined : { borderTop: `1px solid ${tokens.border}` }}
+      className={`pb-24 ${isFirst ? "pt-2" : "pt-16 mt-12"}`}
+      style={{
+        // ~2 viewports per property so the sticky photo holds long
+        // enough to read every Fast Fact + custom section without
+        // crossfading early.
+        minHeight: "180vh",
+        ...(isFirst ? {} : { borderTop: `1px solid ${tokens.border}` }),
+      }}
     >
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
@@ -1882,14 +1938,16 @@ function FactList({
 function PricingChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
   tokens: ThemeTokens;
 }) {
   const { theme, pricing, activeTier } = proposal;
-  void isEditor;
+  const pricingSection = proposal.sections.find((s) => s.type === "pricing");
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, pricingSection?.styleOverrides);
   const tier = pricing?.[activeTier as TierKey];
   if (!tier) return null;
 
@@ -1900,6 +1958,18 @@ function PricingChapter({
       label="PRICING"
       rightBackground={tokens.sectionSurface}
     >
+      {isEditor && pricingSection && (
+        <ChapterChrome>
+          <ChapterColorPill
+            sectionId={pricingSection.id}
+            overrides={pricingSection.styleOverrides ?? {}}
+            fields={[
+              { key: "sectionSurface", label: "Section background" },
+              { key: "accent", label: "Accent" },
+            ]}
+          />
+        </ChapterChrome>
+      )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
@@ -1969,14 +2039,16 @@ function PricingChapter({
 function GoodToKnowChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
   tokens: ThemeTokens;
 }) {
   const { theme, practicalInfo } = proposal;
-  void isEditor;
+  const practicalSection = proposal.sections.find((s) => s.type === "practicalInfo");
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, practicalSection?.styleOverrides);
   if (!practicalInfo || practicalInfo.length === 0) return null;
 
   return (
@@ -1986,6 +2058,18 @@ function GoodToKnowChapter({
       label="PRE-TRAVEL INFORMATION"
       rightBackground={tokens.sectionSurface}
     >
+      {isEditor && practicalSection && (
+        <ChapterChrome>
+          <ChapterColorPill
+            sectionId={practicalSection.id}
+            overrides={practicalSection.styleOverrides ?? {}}
+            fields={[
+              { key: "sectionSurface", label: "Section background" },
+              { key: "accent", label: "Accent" },
+            ]}
+          />
+        </ChapterChrome>
+      )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}

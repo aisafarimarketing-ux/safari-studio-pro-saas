@@ -21,25 +21,38 @@ export function resolveDayCard(
       (p) => p.name.trim().toLowerCase() === campName.toLowerCase(),
     );
     if (match) {
+      // Coerce empty strings to null and fall back to the day's hero
+      // when the library record has no lead image — operators
+      // reported property images "not transported to preview/webview"
+      // when autopilot left leadImageUrl as "" (empty string, not
+      // null). Empty strings render as a blank slot in non-editor
+      // mode; treating them as null + falling back to day.heroImageUrl
+      // means there's always SOMETHING to show.
+      const matchLead = nonEmpty(match.leadImageUrl);
+      const matchGallery = (match.galleryUrls ?? []).filter(
+        (u): u is string => typeof u === "string" && u.trim().length > 0,
+      );
+      const dayHero = nonEmpty(day.heroImageUrl);
       property = {
         id: match.id,
         name: match.name,
         location: match.location || tierAssignment?.location || "",
         summary: firstSentences(match.shortDesc ?? match.description ?? "", 2),
         highlights: (match.amenities ?? []).slice(0, 3),
-        leadImageUrl: match.leadImageUrl ?? null,
-        galleryUrls: (match.galleryUrls ?? []).filter(Boolean),
+        leadImageUrl: matchLead ?? matchGallery[0] ?? dayHero ?? null,
+        galleryUrls: matchGallery,
       };
     } else {
       // Tier points at a camp that isn't in the library (free-text stay).
-      // We still render a property card — just without imagery.
+      // We still render a property card — fall back to the day's hero
+      // image so guests see *something* relevant to the day.
       property = {
         id: `phantom-${day.id}-${activeTier}`,
         name: campName,
         location: tierAssignment?.location ?? "",
         summary: tierAssignment?.note ?? "",
         highlights: [],
-        leadImageUrl: null,
+        leadImageUrl: nonEmpty(day.heroImageUrl) ?? null,
         galleryUrls: [],
       };
     }
@@ -62,6 +75,16 @@ export function resolveDayCard(
     optionalActivities: day.optionalActivities ?? [],
     layoutVariant: getDayCardVariant(sectionLayoutVariant),
   };
+}
+
+// Treat undefined / null / whitespace-only / empty strings the same
+// — autopilot has historically written `""` for missing images,
+// which renders as an empty slot in non-editor mode and fooled
+// operators into thinking images "weren't transported".
+function nonEmpty(s: string | null | undefined): string | null {
+  if (typeof s !== "string") return null;
+  const t = s.trim();
+  return t.length > 0 ? t : null;
 }
 
 function firstSentences(text: string, n: number): string {
