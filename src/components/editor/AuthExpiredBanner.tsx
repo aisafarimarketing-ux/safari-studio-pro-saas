@@ -1,34 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // AuthExpiredBanner — listens for the global "safari-studio:auth-expired"
 // CustomEvent and pops a persistent top banner when the operator's
-// Clerk session has expired. Without it, image uploads + auto-saves
-// silently 401 and the editor LOOKS fine while every change is
-// disappearing into the void. Operators flagged "images missing in
-// preview / webview" repeatedly — root cause was a session that
-// expired while the tab stayed open.
+// Clerk session has expired.
 //
-// Why a banner instead of an auto-redirect:
-//   Earlier we tried auto-redirecting on the first 401. That yanked
-//   the operator out mid-edit, and the sign-in page (sometimes seeing
-//   them as still signed-in via a refreshed cookie) bounced them to
-//   /dashboard — so they lost work AND ended up at the wrong screen.
-//   The banner gives the operator a chance to copy out anything they
-//   absolutely need before re-authenticating, with a one-click
-//   "Sign in" button that opens in a new tab so the editor stays put.
+// Behavior:
+//   1) While the session is HEALTHY, pings /api/session-ping every
+//      60s (and on tab refocus). Catches expiry proactively.
+//   2) Once expired, STOPS pinging — otherwise the console floods
+//      with 401s every minute, drowning out real errors. Resumes
+//      pinging only when the operator dismisses the banner or comes
+//      back from a refocus that returns 200 (they signed in elsewhere).
+//   3) On tab refocus while the banner is showing, pings ONCE. A 200
+//      response means the operator signed in — we auto-reload to
+//      pick up fresh data. A 401 keeps the banner up.
 //
-// Also runs a 60-second session-ping keep-alive: hits
-// /api/session-ping while the tab is foregrounded so the Clerk JWT
-// stays warm even when the operator is reading rather than typing.
-// On 401 from the ping, we fire the auth-expired event ourselves —
-// catching the expiry BEFORE the operator's next save fails.
+// Earlier the keep-alive interval kept firing after the banner went
+// up — operator's console flooded with /api/session-ping 401s,
+// confusing the diagnostic picture and making it look like a
+// general bug rather than a single expired-session symptom.
 
 const KEEPALIVE_INTERVAL_MS = 60 * 1000;
 
 export function AuthExpiredBanner() {
   const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+  openRef.current = open;
 
   useEffect(() => {
     const handler = () => setOpen(true);
@@ -36,34 +35,51 @@ export function AuthExpiredBanner() {
     return () => window.removeEventListener("safari-studio:auth-expired", handler);
   }, []);
 
-  // Session keep-alive. Pings every 60s while the document is
-  // visible (skipping when the tab is backgrounded so we don't
-  // burn requests on tabs the operator forgot about). On 401 we
-  // dispatch auth-expired ourselves — proactive warning instead of
-  // waiting for the next save / upload to fail.
+  // Session keep-alive — only runs while the banner is CLOSED. Once
+  // we know the session is dead we stop pinging so we don't flood
+  // the console with 401s every minute. The banner-dismiss handler
+  // (and tab-refocus auto-recovery) re-arms us.
   useEffect(() => {
     let cancelled = false;
 
-    const ping = async () => {
-      if (cancelled) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    const ping = async (): Promise<number | null> => {
+      if (cancelled) return null;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return null;
       try {
         const res = await fetch("/api/session-ping", { cache: "no-store" });
-        if (res.status === 401) {
-          window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
-        }
+        return res.status;
       } catch {
-        // Network blip — ignore. The next save attempt will surface
-        // any real problem.
+        return null;
       }
     };
 
-    const timer = setInterval(ping, KEEPALIVE_INTERVAL_MS);
-    // Also ping immediately on tab focus — catches the case where
-    // the operator left the tab idle for hours and is just coming
-    // back to it. We want the banner BEFORE they start typing.
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") void ping();
+    const tickWhileHealthy = async () => {
+      if (openRef.current) return;
+      const status = await ping();
+      if (status === 401) {
+        window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
+      }
+    };
+
+    const timer = setInterval(tickWhileHealthy, KEEPALIVE_INTERVAL_MS);
+
+    // On tab refocus:
+    //   • If banner is open, ping once. 200 = operator signed in
+    //     elsewhere; auto-reload so the fresh session + data take
+    //     effect. 401 = still expired; keep banner up.
+    //   • If banner is closed, do a normal health check.
+    const onVisibility = async () => {
+      if (document.visibilityState !== "visible") return;
+      const status = await ping();
+      if (status === 200 && openRef.current) {
+        // Session restored — reload to pick up latest data + clear
+        // banner. Brief delay so any in-flight fetches settle first.
+        setTimeout(() => window.location.reload(), 200);
+        return;
+      }
+      if (status === 401 && !openRef.current) {
+        window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
