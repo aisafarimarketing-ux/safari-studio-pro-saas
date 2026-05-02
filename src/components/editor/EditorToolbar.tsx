@@ -16,6 +16,7 @@ import { RebuildBudgetDialog } from "./RebuildBudgetDialog";
 import { DeployBadge } from "./DeployBadge";
 import { AIToneShiftDialog } from "./AIToneShiftDialog";
 import { AIFillBlanksDialog } from "./AIFillBlanksDialog";
+import { AISmartPropertyDialog } from "./AISmartPropertyDialog";
 import { useEditorStore, type EditorView } from "@/store/editorStore";
 import { useProposalStore } from "@/store/proposalStore";
 import { nanoid } from "@/lib/nanoid";
@@ -61,6 +62,7 @@ export function EditorToolbar({
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [toneShiftOpen, setToneShiftOpen] = useState(false);
   const [fillBlanksOpen, setFillBlanksOpen] = useState(false);
+  const [smartPropertyOpen, setSmartPropertyOpen] = useState(false);
   const [aiMenuOpen, setAIMenuOpen] = useState(false);
 
   // "Proposal is X MB — too big to auto-save" is the signal that the
@@ -322,6 +324,21 @@ export function EditorToolbar({
                   type="button"
                   onClick={() => {
                     setAIMenuOpen(false);
+                    setSmartPropertyOpen(true);
+                  }}
+                  className="w-full px-4 py-3 text-left hover:bg-black/[0.03] transition border-b border-black/6"
+                >
+                  <div className="text-[13px] font-semibold text-black/85">
+                    ✦ Smart properties
+                  </div>
+                  <div className="text-[11.5px] text-black/55 mt-0.5">
+                    Pick lodges from your library, day by day.
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAIMenuOpen(false);
                     setFillBlanksOpen(true);
                   }}
                   className="w-full px-4 py-3 text-left hover:bg-black/[0.03] transition border-b border-black/6"
@@ -457,6 +474,11 @@ export function EditorToolbar({
       <AIFillBlanksDialog
         open={fillBlanksOpen}
         onClose={() => setFillBlanksOpen(false)}
+      />
+
+      <AISmartPropertyDialog
+        open={smartPropertyOpen}
+        onClose={() => setSmartPropertyOpen(false)}
       />
     </div>
   );
