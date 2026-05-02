@@ -7,6 +7,18 @@ import { resolveTokens } from "@/lib/theme";
 import { orderDestinations } from "@/lib/destinationOrdering";
 import { RouteRealMap } from "@/components/sections/RouteRealMap";
 import { ChapterAIPill, type ChapterAIField } from "./ChapterAIPill";
+import { ChapterColorPill } from "./ChapterColorPill";
+
+// Tiny wrapper that anchors a chapter's hover-chrome (✦ AI · 🎨
+// Colours) at the top-right of the right column. flex/gap-2 so two
+// pills sit side-by-side without manual coordinates.
+function ChapterChrome({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute top-4 right-4 z-30 flex items-start gap-2 print:hidden">
+      {children}
+    </div>
+  );
+}
 import { uploadImage } from "@/lib/uploadImage";
 import type {
   Proposal,
@@ -346,7 +358,7 @@ function formatParty(client: Proposal["client"]): string {
 function CoverChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
@@ -360,6 +372,11 @@ function CoverChapter({
   const heroUrl = (cover?.content?.heroImageUrl as string | undefined) ?? null;
   const heroPos = cover?.content?.heroImagePosition as string | undefined;
   const dests = uniqueOrderedDestinations(proposal);
+  void _globalTokens;
+  // Local tokens — section's styleOverrides applied so the colour pill
+  // writes are visible in spread immediately (and carry to magazine
+  // when the operator flips back).
+  const tokens = resolveTokens(theme.tokens, cover?.styleOverrides);
 
   return (
     <SpreadRow
@@ -392,6 +409,18 @@ function CoverChapter({
         </>
       }
     >
+      {isEditor && cover && (
+        <ChapterChrome>
+          <ChapterColorPill
+            sectionId={cover.id}
+            overrides={cover.styleOverrides ?? {}}
+            fields={[
+              { key: "sectionSurface", label: "Section background" },
+              { key: "accent", label: "Accent" },
+            ]}
+          />
+        </ChapterChrome>
+      )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
@@ -456,7 +485,7 @@ function CoverChapter({
 function WelcomeChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
@@ -466,6 +495,8 @@ function WelcomeChapter({
   const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
   const note = findPersonalNoteSection(proposal);
   const consultantPhoto = operator.consultantPhoto || coverHero(proposal);
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, note?.styleOverrides);
   if (!note) return null;
   const body =
     (note.content?.body as string) ||
@@ -501,17 +532,27 @@ function WelcomeChapter({
       onImageUpload={(url) => useProposalStore.getState().updateOperator({ consultantPhoto: url })}
     >
       {isEditor && (
-        <ChapterAIPill
-          chapterLabel="Welcome — Personal note"
-          getFields={buildAIFields}
-          context={{
-            tripTitle: proposal.trip.title,
-            destinations: proposal.trip.destinations,
-            nights: proposal.trip.nights,
-            tripStyle: proposal.trip.tripStyle,
-            clientName: proposal.client.guestNames,
-          }}
-        />
+        <ChapterChrome>
+          <ChapterAIPill
+            chapterLabel="Welcome — Personal note"
+            getFields={buildAIFields}
+            context={{
+              tripTitle: proposal.trip.title,
+              destinations: proposal.trip.destinations,
+              nights: proposal.trip.nights,
+              tripStyle: proposal.trip.tripStyle,
+              clientName: proposal.client.guestNames,
+            }}
+          />
+          <ChapterColorPill
+            sectionId={note.id}
+            overrides={note.styleOverrides ?? {}}
+            fields={[
+              { key: "sectionSurface", label: "Section background" },
+              { key: "accent", label: "Accent" },
+            ]}
+          />
+        </ChapterChrome>
       )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
@@ -698,7 +739,7 @@ function MapChapter({
 function DayByDayChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
@@ -710,6 +751,9 @@ function DayByDayChapter({
     () => [...days].sort((a, b) => a.dayNumber - b.dayNumber),
     [days],
   );
+  const dayJourneySection = proposal.sections.find((s) => s.type === "dayJourney");
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, dayJourneySection?.styleOverrides);
   const [activeId, setActiveId] = useState<string | null>(sorted[0]?.id ?? null);
   if (days.length === 0) return null;
 
@@ -750,17 +794,30 @@ function DayByDayChapter({
       onActiveImageUpload={(dayId, url) => updateDay(dayId, { heroImageUrl: url })}
       topRightChrome={
         isEditor ? (
-          <ChapterAIPill
-            chapterLabel="Day by Day"
-            getFields={buildAIFields}
-            context={{
-              tripTitle: proposal.trip.title,
-              destinations: proposal.trip.destinations,
-              nights: proposal.trip.nights,
-              tripStyle: proposal.trip.tripStyle,
-              clientName: proposal.client.guestNames,
-            }}
-          />
+          <ChapterChrome>
+            <ChapterAIPill
+              chapterLabel="Day by Day"
+              getFields={buildAIFields}
+              context={{
+                tripTitle: proposal.trip.title,
+                destinations: proposal.trip.destinations,
+                nights: proposal.trip.nights,
+                tripStyle: proposal.trip.tripStyle,
+                clientName: proposal.client.guestNames,
+              }}
+            />
+            {dayJourneySection && (
+              <ChapterColorPill
+                sectionId={dayJourneySection.id}
+                overrides={dayJourneySection.styleOverrides ?? {}}
+                fields={[
+                  { key: "sectionSurface", label: "Section background" },
+                  { key: "cardBg", label: "Card background" },
+                  { key: "accent", label: "Accent" },
+                ]}
+              />
+            )}
+          </ChapterChrome>
         ) : null
       }
       activeOverlay={(() => {
@@ -1247,7 +1304,7 @@ function CrossfadeChapter({
 function AccommodationsChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
@@ -1255,6 +1312,9 @@ function AccommodationsChapter({
 }) {
   const { theme, days, properties, activeTier } = proposal;
   const updateProperty = useProposalStore((s) => s.updateProperty);
+  const showcaseSection = proposal.sections.find((s) => s.type === "propertyShowcase");
+  void _globalTokens;
+  const tokens = resolveTokens(theme.tokens, showcaseSection?.styleOverrides);
   // Only properties referenced by the active tier's day picks — same
   // rule the magazine PropertyShowcaseSection follows.
   const referencedCampNames = new Set<string>();
@@ -1316,17 +1376,31 @@ function AccommodationsChapter({
       }
       topRightChrome={
         isEditor ? (
-          <ChapterAIPill
-            chapterLabel="Where You'll Stay"
-            getFields={buildAIFields}
-            context={{
-              tripTitle: proposal.trip.title,
-              destinations: proposal.trip.destinations,
-              nights: proposal.trip.nights,
-              tripStyle: proposal.trip.tripStyle,
-              clientName: proposal.client.guestNames,
-            }}
-          />
+          <ChapterChrome>
+            <ChapterAIPill
+              chapterLabel="Where You'll Stay"
+              getFields={buildAIFields}
+              context={{
+                tripTitle: proposal.trip.title,
+                destinations: proposal.trip.destinations,
+                nights: proposal.trip.nights,
+                tripStyle: proposal.trip.tripStyle,
+                clientName: proposal.client.guestNames,
+              }}
+            />
+            {showcaseSection && (
+              <ChapterColorPill
+                sectionId={showcaseSection.id}
+                overrides={showcaseSection.styleOverrides ?? {}}
+                fields={[
+                  { key: "sectionSurface", label: "Section background" },
+                  { key: "cardBg", label: "Card background" },
+                  { key: "headerBg", label: "Header strip" },
+                  { key: "accent", label: "Accent" },
+                ]}
+              />
+            )}
+          </ChapterChrome>
         ) : null
       }
       activeOverlay={
@@ -1705,7 +1779,7 @@ function Accordion({
 function ClosingChapter({
   proposal,
   isEditor,
-  tokens,
+  tokens: _globalTokens,
 }: {
   proposal: Proposal;
   isEditor: boolean;
@@ -1713,8 +1787,10 @@ function ClosingChapter({
 }) {
   const updateSectionContent = useProposalStore((s) => s.updateSectionContent);
   const closing = findClosingSection(proposal);
-  if (!closing) return null;
+  void _globalTokens;
   const { theme } = proposal;
+  const tokens = resolveTokens(theme.tokens, closing?.styleOverrides);
+  if (!closing) return null;
   const themeImage =
     (closing.content?.themeImageUrl as string | undefined) || coverHero(proposal);
   const headline =
@@ -1751,17 +1827,27 @@ function ClosingChapter({
       }
     >
       {isEditor && (
-        <ChapterAIPill
-          chapterLabel="Closing"
-          getFields={buildAIFields}
-          context={{
-            tripTitle: proposal.trip.title,
-            destinations: proposal.trip.destinations,
-            nights: proposal.trip.nights,
-            tripStyle: proposal.trip.tripStyle,
-            clientName: proposal.client.guestNames,
-          }}
-        />
+        <ChapterChrome>
+          <ChapterAIPill
+            chapterLabel="Closing"
+            getFields={buildAIFields}
+            context={{
+              tripTitle: proposal.trip.title,
+              destinations: proposal.trip.destinations,
+              nights: proposal.trip.nights,
+              tripStyle: proposal.trip.tripStyle,
+              clientName: proposal.client.guestNames,
+            }}
+          />
+          <ChapterColorPill
+            sectionId={closing.id}
+            overrides={closing.styleOverrides ?? {}}
+            fields={[
+              { key: "sectionSurface", label: "Section background" },
+              { key: "accent", label: "Accent" },
+            ]}
+          />
+        </ChapterChrome>
       )}
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"

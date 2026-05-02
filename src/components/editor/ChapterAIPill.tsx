@@ -161,7 +161,7 @@ export function ChapterAIPill({
   const inFlight = state.kind === "working";
 
   return (
-    <div ref={ref} className="absolute top-4 right-4 z-30 print:hidden">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
