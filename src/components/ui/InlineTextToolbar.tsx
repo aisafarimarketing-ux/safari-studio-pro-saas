@@ -78,18 +78,31 @@ const PRESET_HIGHLIGHTS: { value: string; label: string }[] = [
 // handwriting / mono. The proposal's two theme fonts (display + body)
 // are surfaced FIRST in the menu (see themeFonts below) so operators
 // don't have to scan to find them.
+// Every value here MUST match a family loaded by globals.css's
+// Google-Fonts @import (and buildGoogleFontsUrl in src/lib/theme.ts).
+// Mismatches were the root cause of "fonts don't apply" — the toolbar
+// would set font-family: 'Cormorant Garamond' on a span but the page
+// only fetched 'Cormorant', so the browser silently fell back to a
+// system serif. Names + URL list now agree.
 const FONT_FAMILY_OPTIONS = [
   { value: "", label: "Default" },
   // ── Serif (editorial / book) ──────────────────────────────────────
   { value: "'Playfair Display', serif", label: "Playfair Display" },
-  { value: "'Cormorant Garamond', serif", label: "Cormorant" },
+  { value: "'Cormorant', serif", label: "Cormorant" },
   { value: "'EB Garamond', serif", label: "EB Garamond" },
+  { value: "'DM Serif Display', serif", label: "DM Serif Display" },
+  { value: "'Libre Baskerville', serif", label: "Libre Baskerville" },
   { value: "'Lora', serif", label: "Lora" },
   { value: "'Merriweather', serif", label: "Merriweather" },
   { value: "'Crimson Pro', serif", label: "Crimson Pro" },
   { value: "'Source Serif Pro', serif", label: "Source Serif" },
   // ── Sans (modern / corporate) ─────────────────────────────────────
   { value: "'Inter', sans-serif", label: "Inter" },
+  { value: "'Jost', sans-serif", label: "Jost" },
+  { value: "'Outfit', sans-serif", label: "Outfit" },
+  { value: "'Lato', sans-serif", label: "Lato" },
+  { value: "'Nunito Sans', sans-serif", label: "Nunito Sans" },
+  { value: "'Source Sans 3', sans-serif", label: "Source Sans" },
   { value: "'Montserrat', sans-serif", label: "Montserrat" },
   { value: "'Roboto', sans-serif", label: "Roboto" },
   { value: "'Open Sans', sans-serif", label: "Open Sans" },
@@ -130,6 +143,26 @@ export function InlineTextToolbar() {
   // operators can re-apply the same size to recover from a stray
   // click that lost the wrap.
   const sizeApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Span most recently touched by an apply. While the user is
+  // sampling fonts / colours / sizes, browsers fire dozens of
+  // selectionchange events as the wrapped span gets re-selected
+  // post-apply; those used to reposition the toolbar mid-interaction
+  // and felt like the editor "flipping" or "ceasing to affect the
+  // selected area." Now: if the post-apply selection is inside the
+  // span we just touched, the selectionchange handler skips
+  // repositioning so the toolbar + popover stay anchored exactly
+  // where the operator's cursor is. When the operator moves to a
+  // genuinely different selection (a different paragraph, new
+  // highlight) the handler repositions normally.
+  const lastAppliedSpanRef = useRef<HTMLElement | null>(null);
+  // Short cool-down right after an apply (covers the case where the
+  // post-apply selection isn't strictly inside the wrapped span —
+  // e.g. surroundContents fell back to extractContents and the
+  // browser collapsed the selection). 400ms is long enough to absorb
+  // a single apply's selectionchange storm but short enough that the
+  // operator can intentionally re-select within a second.
+  const lastApplyAtRef = useRef<number>(0);
+  const APPLY_STICKY_MS = 400;
   const [openMenu, setOpenMenu] = useState<
     null | "color" | "highlight" | "font" | "align"
   >(null);
@@ -206,6 +239,28 @@ export function InlineTextToolbar() {
       // make the popover dance under the cursor. Lock the position
       // until the popover closes.
       if (openMenuRef.current) return;
+      // Same lock for size-input applies (they don't open a popover).
+      // Operator brief: "make it linger long enough to change text
+      // sizes multiple times without it disappearing or de-selecting
+      // the text." Two-tier check: if the new selection is inside
+      // the span we just touched, this is the apply's own reselect
+      // and we bail unconditionally. Otherwise fall back to a short
+      // time-based cool-down for cases where the apply collapses or
+      // moves the selection (extractContents fallback, etc.).
+      const appliedSpan = lastAppliedSpanRef.current;
+      if (appliedSpan && document.contains(appliedSpan)) {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const r = sel.getRangeAt(0);
+          if (
+            appliedSpan.contains(r.startContainer) &&
+            appliedSpan.contains(r.endContainer)
+          ) {
+            return;
+          }
+        }
+      }
+      if (Date.now() - lastApplyAtRef.current < APPLY_STICKY_MS) return;
 
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
@@ -265,10 +320,30 @@ export function InlineTextToolbar() {
       // a different paragraph, scrolls the canvas a long way, etc.).
       // Popover direction is recomputed only on those big jumps so
       // the panel doesn't flip up↔down mid-edit.
+      // Read the current font-size of the selected text so the size
+      // input pre-fills with whatever the operator's looking at.
+      // Operator brief: "the text needs to start with the existing
+      // text size so that one can add or subtract and see in real
+      // time." Walk up to the nearest element ancestor and use its
+      // computed font-size.
+      const measureFontSizePx = (): string => {
+        let n: Node | null = range.commonAncestorContainer;
+        while (n && n.nodeType !== Node.ELEMENT_NODE) n = n.parentNode;
+        if (!n) return "";
+        const cs = window.getComputedStyle(n as Element);
+        const m = /^(\d+(?:\.\d+)?)px$/.exec(cs.fontSize);
+        if (!m) return "";
+        return String(Math.round(Number(m[1])));
+      };
+
       setPos((prev) => {
         if (!prev) {
           const toolbarBottom = top + TOOLBAR_H;
           setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
+          // First show — prefill the size input with the selected
+          // text's current size so increment / decrement starts from
+          // the right baseline.
+          setSizeInput(measureFontSizePx());
           return { top, left };
         }
         const dx = Math.abs(prev.left - left);
@@ -276,6 +351,10 @@ export function InlineTextToolbar() {
         if (dx < 80 && dy < 80) return prev;
         const toolbarBottom = top + TOOLBAR_H;
         setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
+        // New text selected (toolbar moved a real distance) — refresh
+        // the size input baseline. Small jumps don't trigger this so
+        // the operator's typed size sticks while they're sampling.
+        setSizeInput(measureFontSizePx());
         return { top, left };
       });
       rangeRef.current = range.cloneRange();
@@ -306,6 +385,8 @@ export function InlineTextToolbar() {
     setOpenMenu(null);
     rangeRef.current = null;
     hostRef.current = null;
+    lastAppliedSpanRef.current = null;
+    lastApplyAtRef.current = 0;
     setSizeInput("");
   };
 
@@ -356,12 +437,16 @@ export function InlineTextToolbar() {
     const ctx = restoreRange();
     if (!ctx) return null;
     const { range } = ctx;
+    // Mark the apply window AND the touched span so selectionchange
+    // won't reposition the toolbar while the operator is sampling.
+    lastApplyAtRef.current = Date.now();
     // Patch path — selection is already inside one span and covers
     // its entire text. Just update its style; no new DOM nodes.
     const existing = findEnclosingSpan(range);
     if (existing) {
       Object.assign(existing.style, style);
       reselectSpan(existing);
+      lastAppliedSpanRef.current = existing;
       hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
       return existing;
     }
@@ -380,6 +465,7 @@ export function InlineTextToolbar() {
       range.insertNode(span);
     }
     reselectSpan(span);
+    lastAppliedSpanRef.current = span;
     hostRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
     return span;
   };
@@ -687,6 +773,14 @@ export function InlineTextToolbar() {
                   <button
                     key={f.label}
                     type="button"
+                    // preventDefault on mousedown keeps focus on the
+                    // contentEditable so the selection survives the
+                    // click — without it the browser shifts focus to
+                    // this button, the selection drops, and the next
+                    // wrapInSpan target is gone. Operator brief:
+                    // "make all fonts apply on selected text without
+                    // disappearing until the final font is found."
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setFontFamily(f.value)}
                     className="w-full text-left px-2.5 py-1.5 text-[12.5px] rounded-md hover:bg-white/10 transition-colors flex items-center gap-2"
                     style={{ fontFamily: f.value || "inherit" }}
@@ -723,6 +817,9 @@ export function InlineTextToolbar() {
                       key={c.value}
                       type="button"
                       title={c.label}
+                      // Preserve the contentEditable selection — see
+                      // the font-button comment above.
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => setHighlight(c.value)}
                       className="w-7 h-7 rounded-md border border-white/10 hover:scale-110 transition-transform flex items-center justify-center"
                       style={{

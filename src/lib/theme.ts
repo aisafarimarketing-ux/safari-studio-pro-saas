@@ -61,12 +61,28 @@ export type PresetKey = keyof typeof COLOR_PRESETS;
 
 // ─── Font options ─────────────────────────────────────────────────────────────
 
+// Every name here MUST match a family loaded by globals.css's
+// Google-Fonts @import. Operator brief: "the fonts on the right side
+// of the editor don't even affect the proposal — make them useful."
+// Earlier the picker offered five faces and the rest of the toolbar's
+// menu was unreachable from the side panel; now the side picker
+// surfaces every loaded family the inline toolbar offers, so picking
+// from either UI gives the same result.
 export const DISPLAY_FONTS = [
   { name: "Cormorant", label: "Cormorant" },
   { name: "Playfair Display", label: "Playfair Display" },
   { name: "EB Garamond", label: "EB Garamond" },
   { name: "DM Serif Display", label: "DM Serif Display" },
   { name: "Libre Baskerville", label: "Libre Baskerville" },
+  { name: "Lora", label: "Lora" },
+  { name: "Merriweather", label: "Merriweather" },
+  { name: "Crimson Pro", label: "Crimson Pro" },
+  { name: "Source Serif Pro", label: "Source Serif" },
+  { name: "Bebas Neue", label: "Bebas Neue" },
+  { name: "Oswald", label: "Oswald" },
+  { name: "Caveat", label: "Caveat" },
+  { name: "Pacifico", label: "Pacifico" },
+  { name: "Italianno", label: "Italianno" },
 ];
 
 export const BODY_FONTS = [
@@ -76,6 +92,13 @@ export const BODY_FONTS = [
   { name: "Lato", label: "Lato" },
   { name: "Nunito Sans", label: "Nunito Sans" },
   { name: "Source Sans 3", label: "Source Sans" },
+  { name: "Montserrat", label: "Montserrat" },
+  { name: "Roboto", label: "Roboto" },
+  { name: "Open Sans", label: "Open Sans" },
+  { name: "Poppins", label: "Poppins" },
+  { name: "Raleway", label: "Raleway" },
+  { name: "Work Sans", label: "Work Sans" },
+  { name: "IBM Plex Sans", label: "IBM Plex Sans" },
 ];
 
 // ─── Google Fonts URL ─────────────────────────────────────────────────────────

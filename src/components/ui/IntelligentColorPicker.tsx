@@ -188,6 +188,11 @@ export function IntelligentColorPicker({
       <div
         ref={svRef}
         onMouseDown={(e) => {
+          // Preserve the contentEditable selection: without
+          // preventDefault, mousedown on the picker shifts focus
+          // away from the editor and the saved Range gets lost,
+          // so the next colour change has no target to apply to.
+          e.preventDefault();
           setDragging("sv");
           if (svRef.current) {
             const rect = svRef.current.getBoundingClientRect();
@@ -215,6 +220,9 @@ export function IntelligentColorPicker({
       <div
         ref={hueRef}
         onMouseDown={(e) => {
+          // Preserve the contentEditable selection — see the SV
+          // square's preventDefault note above.
+          e.preventDefault();
           setDragging("hue");
           if (hueRef.current) {
             const rect = hueRef.current.getBoundingClientRect();

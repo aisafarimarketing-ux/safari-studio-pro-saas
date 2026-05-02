@@ -1,5 +1,18 @@
-/* ── Google Fonts must come before tailwind ─────────────────────────────── */
-@import url("https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Serif+Display:ital@0;1&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Jost:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&family=Inter:wght@300;400;500;600&family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Nunito+Sans:wght@300;400;600&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400&display=swap");
+/* ── Google Fonts must come before tailwind ───────────────────────────────
+   Single import covering: every theme font (display + body pairs) AND
+   every family the InlineTextToolbar's font menu offers, so picking
+   any font in the toolbar visibly applies. Operator brief: "make all
+   fonts apply on selected text… right now some fonts are not
+   functioning." Earlier this list missed Lora / Merriweather / Crimson /
+   Source Serif / Montserrat / Roboto / Open Sans / Poppins / Raleway /
+   Work Sans / IBM Plex / Bebas Neue / Oswald / Caveat / Pacifico /
+   Italianno — the toolbar wrapped spans with those families but the
+   browser fell back to system fonts because the URL never asked for
+   them.
+
+   Keep this in sync with `buildGoogleFontsUrl()` in src/lib/theme.ts
+   and FONT_FAMILY_OPTIONS in InlineTextToolbar.tsx. */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Serif+Display:ital@0;1&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+Pro:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&family=Inter:wght@300;400;500;600&family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Nunito+Sans:wght@300;400;600&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400&family=Montserrat:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;600;700&family=Poppins:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700&family=Work+Sans:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Bebas+Neue&family=Oswald:wght@300;400;500;600;700&family=Caveat:wght@400;600;700&family=Pacifico&family=Italianno&display=swap");
 
 /* Leaflet map styles — needed for the route-map variant on the Map section */
 @import url("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
