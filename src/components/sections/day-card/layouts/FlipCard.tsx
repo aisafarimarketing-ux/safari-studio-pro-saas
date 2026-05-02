@@ -55,17 +55,42 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
     onPropertyImageUpload,
   } = props;
 
-  // CSS grid template for each act's two-column row. flip=right puts the
-  // image in the second column (visually on the right); flip=left in the
-  // first. On narrow viewports both halves stack via the responsive grid.
+  // Per-act column placement. Default: Act I uses `flip` directly,
+  // Act II uses the opposite side so each day card reads as a proper
+  // flip. Operator brief: "Location image on the right and day's
+  // narration on the left, then property picture on the left and the
+  // property details on the right — to produce a proper flip on the
+  // day cards."
   //
-  // Image side is wider (1.5fr vs 1fr text = roughly 60/40). Operator
-  // brief: the location photo IS the day's identity — it should
-  // dominate the spread, not share the row 50/50 with body copy. Same
-  // ratio applied to Act II so the property gallery scales with it.
-  const actCols = flip === "right" ? "1fr 1.5fr" : "1.5fr 1fr";
-  const imageOrderClass = flip === "right" ? "md:order-2" : "md:order-1";
-  const textOrderClass = flip === "right" ? "md:order-1" : "md:order-2";
+  // Per-day overrides (`data.locationImageSide` / `data.propertyImageSide`)
+  // win when present, so an operator can mix layouts day-by-day:
+  // operator brief "allow editor to function the location layout and
+  // the day's accommodation separately to give different variation".
+  // The cross-card alternation (trip-flip) still kicks in at the
+  // section level via DayCard.pickConcreteLayout when no override is
+  // set.
+  //
+  // Image side is wider (1.5fr vs 1fr text = roughly 60/40). The
+  // location photo IS the day's identity — it should dominate the
+  // spread, not share the row 50/50 with body copy. Same ratio on
+  // Act II so the property gallery scales with it.
+  const flipAlt: "left" | "right" = flip === "right" ? "left" : "right";
+  const actIFlip: "left" | "right" = data.locationImageSide ?? flip;
+  const actIIFlip: "left" | "right" = data.propertyImageSide ?? flipAlt;
+  const colsFor = (f: "left" | "right") =>
+    f === "right" ? "1fr 1.5fr" : "1.5fr 1fr";
+  const imageOrderFor = (f: "left" | "right") =>
+    f === "right" ? "md:order-2" : "md:order-1";
+  const textOrderFor = (f: "left" | "right") =>
+    f === "right" ? "md:order-1" : "md:order-2";
+
+  const actICols = colsFor(actIFlip);
+  const actIImageOrder = imageOrderFor(actIFlip);
+  const actITextOrder = textOrderFor(actIFlip);
+
+  const actIICols = colsFor(actIIFlip);
+  const actIIImageOrder = imageOrderFor(actIIFlip);
+  const actIITextOrder = textOrderFor(actIIFlip);
 
   return (
     <div className="flex flex-col" style={{ background: tokens.cardBg }}>
@@ -189,14 +214,14 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       >
         <div
           className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
-          style={{ gridTemplateColumns: actCols }}
+          style={{ gridTemplateColumns: actICols }}
         >
           {/* Image — stretches to fill the row's height so it no longer
               floats with cream around it. Aspect ratio bumped from 4:3
               to 3:2 (wider / more cinematic landscape) to match the
               wider grid column and to make the photo dominate the
               spread visually. */}
-          <div className={`min-w-0 h-full ${imageOrderClass}`}>
+          <div className={`min-w-0 h-full ${actIImageOrder}`}>
             <ImageSlot
               url={data.destinationImageUrl}
               alt={data.destinationName}
@@ -217,7 +242,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
           </div>
 
           {/* Narrative */}
-          <div className={`min-w-0 relative ${textOrderClass}`}>
+          <div className={`min-w-0 relative ${actITextOrder}`}>
             {isEditor && (
               <div className="absolute -top-2 right-0 z-[35]">
                 <AIWriteButton
@@ -276,14 +301,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
         >
           <div
             className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10 items-stretch"
-            style={{ gridTemplateColumns: actCols }}
+            style={{ gridTemplateColumns: actIICols }}
           >
-            {/* Property gallery — same wider image column as Act I so
-                the two halves of the card share a single visual rhythm.
-                items-stretch lets the gallery scale to match the
-                narrative column's natural height instead of floating
-                small in the middle. */}
-            <div className={`min-w-0 h-full ${imageOrderClass}`}>
+            {/* Property gallery — sits OPPOSITE to Act I's image so
+                the day card reads as a flip (Act I image left ⇄
+                property image right, or vice-versa). items-stretch
+                lets the gallery scale to match the narrative column's
+                natural height instead of floating small in the
+                middle. */}
+            <div className={`min-w-0 h-full ${actIIImageOrder}`}>
               <PropertyGallery
                 property={data.property}
                 isEditor={isEditor}
@@ -294,7 +320,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
             </div>
 
             {/* Property narrative */}
-            <div className={`min-w-0 ${textOrderClass}`}>
+            <div className={`min-w-0 ${actIITextOrder}`}>
               <div
                 className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
                 style={{ color: tokens.mutedText }}

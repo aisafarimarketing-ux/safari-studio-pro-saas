@@ -3,7 +3,34 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { resolveTokens } from "@/lib/theme";
-import type { Section } from "@/lib/types";
+import type { Section, ThemeTokens, ProposalTheme } from "@/lib/types";
+
+// Editorial header for the Practical Info block. Big serif title +
+// tracked-out "Travel tips" eyebrow underneath, sized to read as the
+// section's headline rather than a chrome label.
+function SectionHeading({ tokens, theme }: { tokens: ThemeTokens; theme: ProposalTheme }) {
+  return (
+    <div className="mb-10">
+      <h2
+        className="font-bold leading-[1.05]"
+        style={{
+          color: tokens.headingText,
+          fontFamily: `'${theme.displayFont}', serif`,
+          fontSize: "clamp(2rem, 4vw, 2.8rem)",
+          letterSpacing: "-0.01em",
+        }}
+      >
+        Good to know
+      </h2>
+      <div
+        className="mt-2 text-[11px] uppercase tracking-[0.3em] font-semibold"
+        style={{ color: tokens.mutedText }}
+      >
+        Travel tips
+      </div>
+    </div>
+  );
+}
 
 export function PracticalInfoSection({ section }: { section: Section }) {
   const { proposal, addPracticalCard, removePracticalCard, updatePracticalCard } = useProposalStore();
@@ -59,9 +86,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
     return (
       <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
         <div className="max-w-3xl mx-auto">
-          <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
-            Good to know
-          </div>
+          <SectionHeading tokens={tokens} theme={theme} />
           <div className="space-y-6">
             {practicalInfo.map((card) => (
               <div key={card.id} className="relative flex items-start gap-5 pb-6" style={{ borderBottom: `1px solid ${tokens.border}` }}>
@@ -100,9 +125,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
     return (
       <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
         <div className="max-w-4xl mx-auto">
-          <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
-            Good to know
-          </div>
+          <SectionHeading tokens={tokens} theme={theme} />
           {practicalInfo.map((card) => (
             <div key={card.id} className="relative py-6" style={{ borderBottom: `1px solid ${tokens.border}` }}>
               {isEditor && (
@@ -142,9 +165,7 @@ export function PracticalInfoSection({ section }: { section: Section }) {
   return (
     <div className="py-2 md:py-3 px-8 md:px-20" style={{ background: tokens.sectionSurface }}>
       <div className="max-w-5xl mx-auto">
-        <div className="text-[10px] uppercase tracking-[0.3em] mb-12" style={{ color: tokens.mutedText }}>
-          Good to know
-        </div>
+        <SectionHeading tokens={tokens} theme={theme} />
 
         <div className={`${isGrid ? "grid grid-cols-1 md:grid-cols-2 gap-5" : "space-y-4"}`}>
           {practicalInfo.map(renderCard)}

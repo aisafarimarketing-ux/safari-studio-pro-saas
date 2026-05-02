@@ -132,10 +132,18 @@ export function RouteRealMap({ days, activeTier, tokens, theme }: RouteRealMapPr
     }));
   }, [stops]);
 
-  // ── Init the map once on mount. Static options only; everything
-  //    dynamic happens in the imperative effect below.
+  // ── Init the map ONCE when the first non-empty stops set arrives.
+  //    The map instance persists across day add / remove / edit so
+  //    operators don't see the basemap flash on every itinerary edit;
+  //    the dynamic effect below pushes new markers + bounds onto the
+  //    existing map. Earlier this effect tore the map down whenever
+  //    `stops.length` changed — adding a day on a 3-stop trip would
+  //    re-create the whole map and the user-visible result was "the
+  //    map didn't update" because the new map raced the marker
+  //    update effect's `mapLoaded` gate.
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (mapRef.current) return; // already initialised
+    if (!containerRef.current) return;
     if (stops.length === 0) return;
 
     const lngs = stops.map((s) => s.coord.lng);
@@ -163,16 +171,24 @@ export function RouteRealMap({ days, activeTier, tokens, theme }: RouteRealMapPr
 
     map.on("load", () => setMapLoaded(true));
     mapRef.current = map;
+    // No cleanup here — the map outlives stops changes. Final teardown
+    // happens in the unmount-only effect below.
+  }, [stops]);
 
+  // Unmount cleanup only — releases the map and its markers when the
+  // section is removed or the editor closes. Decoupled from the stops
+  // update path so add/remove day doesn't trigger a teardown.
+  useEffect(() => {
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
-      map.remove();
-      mapRef.current = null;
-      setMapLoaded(false);
+      const map = mapRef.current;
+      if (map) {
+        map.remove();
+        mapRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops.length]);
+  }, []);
 
   // ── Add / refresh layers, markers, and the animated reveal ─────────────
   useEffect(() => {

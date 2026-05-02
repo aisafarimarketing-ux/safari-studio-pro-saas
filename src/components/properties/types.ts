@@ -62,6 +62,10 @@ export interface PropertyForm {
   totalRooms: number | null;
   spokenLanguages: string[];
   specialInterests: string[];
+  // Toggle for the Fun Facts block (rooms / languages / interests)
+  // in the proposal showcase. Default true so existing properties
+  // keep rendering as before.
+  funFactsVisible: boolean;
 
   // Internal
   internalNotes: string;
@@ -92,6 +96,7 @@ export const EMPTY_FORM: PropertyForm = {
   totalRooms: null,
   spokenLanguages: [],
   specialInterests: [],
+  funFactsVisible: true,
   internalNotes: "",
   archived: false,
   images: [],

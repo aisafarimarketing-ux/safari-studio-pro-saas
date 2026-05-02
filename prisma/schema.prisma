@@ -604,6 +604,11 @@ model Property {
   totalRooms       Int?
   spokenLanguages  String[]
   specialInterests String[]
+  // Per-property visibility toggle for the "Fun Facts" block (rooms /
+  // languages / interests). Default true so existing properties keep
+  // their current rendering; operators flip it off when those facts
+  // aren't a fit for a particular lodge.
+  funFactsVisible  Boolean  @default(true)
 
   // Camp reservations email — used by the supplier-hold workflow
   // (Step 8). Operator enters once, re-used on every hold request.

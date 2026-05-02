@@ -727,6 +727,7 @@ export const useProposalStore = create<ProposalState>()(
           totalRooms: p.totalRooms ?? undefined,
           spokenLanguages: p.spokenLanguages ?? [],
           specialInterests: p.specialInterests ?? [],
+          funFactsVisible: p.funFactsVisible ?? true,
           rooms: (p.rooms ?? []).map(
             (r: { id: string; name: string; bedConfig?: string | null; description?: string | null; imageUrls?: string[] }) => ({
               id: r.id,

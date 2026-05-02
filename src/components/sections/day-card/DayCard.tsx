@@ -255,6 +255,14 @@ export function DayCard({
           onAddAfter={() => onRequestAddAfter?.()}
           onDuplicate={() => onRequestDuplicate?.()}
           onDelete={() => removeDay(day.id)}
+          locationImageSide={day.locationImageSide}
+          propertyImageSide={day.propertyImageSide}
+          onSetLocationImageSide={(next) =>
+            updateDay(day.id, { locationImageSide: next })
+          }
+          onSetPropertyImageSide={(next) =>
+            updateDay(day.id, { propertyImageSide: next })
+          }
         />
       )}
       {/* Section colour editor moved to SectionChrome (top-right of

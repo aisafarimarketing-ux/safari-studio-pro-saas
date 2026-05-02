@@ -38,7 +38,7 @@ import type {
 // All fields are contentEditable in editor mode; in share view the
 // carousel arrows/dots are the only interactive bits.
 
-type Tab = "stats" | "rooms" | "information";
+type Tab = "stats" | "information";
 
 export function PropertyShowcaseSection({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
@@ -132,7 +132,6 @@ function PropertyBlock({
 }) {
   const {
     updateProperty,
-    addPropertyRoom,
     refreshPropertyFromLibrary,
   } = useProposalStore();
   const [activeTab, setActiveTab] = useState<Tab>("stats");
@@ -218,28 +217,22 @@ function PropertyBlock({
         background: tokens.sectionSurface,
       }}
     >
+      {/* Per-property header band — title text removed per operator
+          spec ("first accommodation title is redundant with the big
+          h3 below"). The band stays only as a coloured spacer that
+          carries the headerBg picker's colour and hosts the refresh-
+          from-library pill in editor mode. In preview / share where
+          the pill is gone, the band collapses to zero height so the
+          property reads cleanly without a phantom strip. */}
       <div
-        className="w-full flex items-center gap-3 px-8 md:px-12 mb-4 md:mb-6"
-        style={{ background: headerBg, height: 40, color: propertyHeaderText }}
+        className="w-full flex items-center justify-end gap-3 px-8 md:px-12"
+        style={{
+          background: headerBg,
+          height: isEditor && property.libraryPropertyId ? 40 : 0,
+          color: propertyHeaderText,
+          marginBottom: isEditor && property.libraryPropertyId ? "1rem" : 0,
+        }}
       >
-        <span
-          className="font-bold uppercase tracking-[0.24em] truncate"
-          style={{ fontSize: 11.5 }}
-        >
-          {property.name || "Property"}
-        </span>
-        {property.location && (
-          <span
-            className="uppercase tracking-[0.2em] truncate opacity-80"
-            style={{ fontSize: 9.5 }}
-          >
-            · {property.location}
-          </span>
-        )}
-        {/* Refresh-from-library pill — visible only in editor mode
-            and only when the property carries a libraryPropertyId.
-            Hand-typed properties (no library origin) hide it
-            silently. */}
         {isEditor && property.libraryPropertyId && (
           <button
             type="button"
@@ -274,63 +267,6 @@ function PropertyBlock({
         )}
       </div>
       <div className="max-w-6xl mx-auto px-8 md:px-12">
-        {/* Editorial standfirst — promotes whyWeChoseThis from the
-            INFORMATION tab to a magazine-quality pull-quote above the
-            property block. Italic display serif, centred, hairline
-            ornaments either side. Hidden in preview when blank;
-            visible in editor with a subtle hint so operators see the
-            slot. The aim is a moment of editorial voice ABOVE every
-            property — the thing Safari Portal / Safari Office don't
-            do. */}
-        {(property.whyWeChoseThis || isEditor) && (
-          <div className="mb-8 md:mb-10 max-w-3xl mx-auto">
-            <div className="flex items-center gap-4">
-              <span
-                aria-hidden
-                className="flex-1 h-px"
-                style={{ background: tokens.border }}
-              />
-              <div
-                className="text-center italic outline-none leading-snug"
-                style={{
-                  color: tokens.headingText,
-                  fontFamily: `'${theme.displayFont}', serif`,
-                  fontSize: "clamp(16px, 1.85vw, 21px)",
-                  opacity: property.whyWeChoseThis ? 0.92 : 0.5,
-                  maxWidth: "60ch",
-                }}
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) =>
-                  useProposalStore.getState().updateProperty(property.id, {
-                    whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
-                  })
-                }
-              >
-                {property.whyWeChoseThis ||
-                  (isEditor
-                    ? "Why this lodge for these guests? One editorial line."
-                    : "")}
-              </div>
-              <span
-                aria-hidden
-                className="flex-1 h-px"
-                style={{ background: tokens.border }}
-              />
-            </div>
-            {isEditor && (
-              <div className="text-center mt-2">
-                <LibrarySourceHint
-                  libraryPropertyId={property.libraryPropertyId}
-                  tab="story"
-                  field="Why we chose this"
-                  tokens={tokens}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}
           <div>
@@ -408,9 +344,55 @@ function PropertyBlock({
               )}
             </div>
 
+            {/* Brief / why-we-chose-this — moved out of the centred
+                pull-quote slot and into the left column under the
+                property name & metadata, just above Your Stay. The
+                operator's "brief information" sits where the eye
+                already is, instead of as a redundant header line.
+                Hidden in preview when empty. */}
+            {(property.whyWeChoseThis || isEditor) && (
+              <div className="mt-5 mb-1">
+                <div
+                  className="text-[14px] italic leading-[1.6] outline-none"
+                  style={{
+                    color: tokens.bodyText,
+                    fontFamily: `'${theme.displayFont}', serif`,
+                    opacity: property.whyWeChoseThis ? 0.92 : 0.5,
+                  }}
+                  contentEditable={isEditor}
+                  suppressContentEditableWarning
+                  onBlur={(e) =>
+                    useProposalStore.getState().updateProperty(property.id, {
+                      whyWeChoseThis: e.currentTarget.textContent?.trim() ?? "",
+                    })
+                  }
+                >
+                  {property.whyWeChoseThis ||
+                    (isEditor
+                      ? "Why this lodge for these guests? One editorial line."
+                      : "")}
+                </div>
+                {isEditor && (
+                  <LibrarySourceHint
+                    libraryPropertyId={property.libraryPropertyId}
+                    tab="story"
+                    field="Why we chose this"
+                    tokens={tokens}
+                  />
+                )}
+              </div>
+            )}
+
             {/* Your Stay */}
             <FactBlock label="Your Stay" tokens={tokens}>
               <FactRow label="Nights" value={nightsCount ? String(nightsCount) : "—"} tokens={tokens} />
+              <FactRow
+                label="Room Type"
+                value={property.roomType || "—"}
+                tokens={tokens}
+                isEditor={isEditor}
+                onChange={(v) => updateProperty(property.id, { roomType: v })}
+              />
               <FactRow
                 label="Meal"
                 value={property.mealPlan || "—"}
@@ -486,7 +468,10 @@ function PropertyBlock({
               </div>
             )}
 
-            {/* Fun Facts */}
+            {/* Fun Facts — hidden per-property when funFactsVisible
+                is false on the library record. Treat undefined as
+                true so legacy snapshots keep their current rendering. */}
+            {(property.funFactsVisible ?? true) && (
             <FactBlock label="Fun Facts" tokens={tokens}>
               <FactRow
                 label="No. of rooms"
@@ -529,6 +514,7 @@ function PropertyBlock({
                 }
               />
             </FactBlock>
+            )}
           </div>
 
           {/* ── Right column ──────────────────────────────────────── */}
@@ -587,15 +573,6 @@ function PropertyBlock({
                 tokens={tokens}
               />
             )}
-            {activeTab === "rooms" && (
-              <RoomsTab
-                property={property}
-                isEditor={isEditor}
-                tokens={tokens}
-                theme={theme}
-                onAddRoom={() => addPropertyRoom(property.id)}
-              />
-            )}
             {activeTab === "information" && (
               <InformationTab property={property} isEditor={isEditor} tokens={tokens} />
             )}
@@ -626,7 +603,6 @@ function TabBar({
 }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "stats", label: "Stats" },
-    { id: "rooms", label: "Rooms" },
     { id: "information", label: "Information" },
   ];
   return (
@@ -1306,10 +1282,18 @@ function FactRow({
   // Slightly bigger row + extra leading so the data column carries
   // visual weight that matches the taller right-column gallery. Was
   // 12.5px tight rows; now 13px with 1.6 leading.
+  // Operator brief: every fact row reads "Label: value" — the colon
+  // is hard editorial chrome, not part of the contentEditable value.
+  // Keep it OUTSIDE the editable cell so a) clicking the value doesn't
+  // accidentally select the colon as text, b) the colon never leaks
+  // back into onChange when the operator types.
   return (
-    <div className="grid grid-cols-[auto_1fr] gap-3 text-[13px] leading-[1.6]">
+    <div className="grid grid-cols-[auto_auto_1fr] gap-x-1.5 gap-y-1 text-[13px] leading-[1.6]">
       <div className="tabular-nums" style={{ color: tokens.mutedText }}>
         {label}
+      </div>
+      <div className="select-none" style={{ color: tokens.mutedText }}>
+        :
       </div>
       <div
         className="min-w-0 outline-none"

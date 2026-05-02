@@ -236,7 +236,7 @@ function InteractiveMap({
           )}
           <div
             className="mt-2.5 flex items-baseline gap-2"
-            style={{ borderBottom: `1px solid ${tokens.border}`, paddingBottom: 8 }}
+            style={{ paddingBottom: 8 }}
           >
             <div
               className="text-[9px] uppercase tracking-[0.24em] font-semibold"
@@ -265,7 +265,6 @@ function InteractiveMap({
           against the map below. */}
       <div
         style={{
-          borderTop: `1px solid ${tokens.border}`,
           background: tokens.cardBg,
         }}
       >

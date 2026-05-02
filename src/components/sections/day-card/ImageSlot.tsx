@@ -77,11 +77,24 @@ export function ImageSlot({
   }, [position]);
 
   const repositionEnabled = isEditor && !!url && !!onPositionChange;
+  // A click that doesn't move past CLICK_SLOP_PX is treated as a tap-to-
+  // replace (operator brief: "single click should change the photo").
+  // Anything past the threshold is a reposition drag. Without this
+  // distinction operators couldn't replace an image without using the
+  // tiny "Change" pill or right-click — both undiscoverable.
+  const CLICK_SLOP_PX = 4;
   const onImageMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!repositionEnabled || e.button !== 0) return;
+    if (!isEditor || e.button !== 0) return;
+    // If repositioning isn't supported on this slot, just open the
+    // picker on click.
+    if (!repositionEnabled) {
+      triggerPicker();
+      return;
+    }
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const [bx, by] = parseObjectPosition(livePosition);
+    let moved = false;
     dragPosRef.current = {
       baseX: bx,
       baseY: by,
@@ -96,6 +109,8 @@ export function ImageSlot({
       if (!d) return;
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < CLICK_SLOP_PX) return;
+      moved = true;
       // Drag image right → visible window slides left → object-position X falls.
       const nx = clampPct(d.baseX - (dx / d.rectW) * 100);
       const ny = clampPct(d.baseY - (dy / d.rectH) * 100);
@@ -108,6 +123,10 @@ export function ImageSlot({
       window.removeEventListener("mouseup", onUp);
       const finalPos = dragPosRef.current?.final;
       dragPosRef.current = null;
+      if (!moved) {
+        triggerPicker();
+        return;
+      }
       if (finalPos && finalPos !== position) onPositionChange?.(finalPos);
     };
     window.addEventListener("mousemove", onMove);

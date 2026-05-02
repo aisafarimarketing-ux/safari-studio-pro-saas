@@ -122,12 +122,14 @@ export function InlineTextToolbar() {
   const hostRef = useRef<HTMLElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const [sizeInput, setSizeInput] = useState<string>("");
-  // Track the most-recently-applied size so we can skip a redundant
-  // re-apply on input blur. Without this guard, typing 18 + Enter
-  // wraps the selection once; tabbing out of the field then triggers
-  // onBlur which wraps it AGAIN, nesting spans and compounding
-  // visual jitter the operator reads as a "glitch".
-  const lastAppliedSizeRef = useRef<string>("");
+  // Live-preview debounce timer for the size input. Operator brief:
+  // "size applies only once then disappears, not time to play around
+  // and adjust the sizes and see in real time the changes long enough
+  // to make decisions." Every keystroke schedules a 220ms apply so
+  // typing 18 → 20 → 22 each shows live; we no longer dedupe, so
+  // operators can re-apply the same size to recover from a stray
+  // click that lost the wrap.
+  const sizeApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [openMenu, setOpenMenu] = useState<
     null | "color" | "highlight" | "font" | "align"
   >(null);
@@ -236,8 +238,7 @@ export function InlineTextToolbar() {
       // range, host, and (re)position the toolbar. The toolbar lives
       // in the LEFT lane: clamped to the left half of the viewport
       // so it never collides with the FloatingColorPicker on the
-      // right. Popover direction recomputes whenever the toolbar
-      // moves so a long font list never runs off-screen.
+      // right.
       const rect = range.getBoundingClientRect();
       const W = 560;
       const TOOLBAR_H = 52;
@@ -254,15 +255,29 @@ export function InlineTextToolbar() {
       if (top < margin) top = rect.bottom + 12;
       if (top + TOOLBAR_H > vh - margin) top = Math.max(margin, vh - TOOLBAR_H - margin);
 
-      // Smarter direction:
-      //   • toolbar bottom past 60% of viewport → open popovers UP
-      //   • toolbar top in upper 25% of viewport → force DOWN
-      //   • otherwise prefer DOWN (default)
-      const toolbarBottom = top + TOOLBAR_H;
-      const dir =
-        toolbarBottom > vh * 0.6 ? "up" : top < vh * 0.25 ? "down" : "down";
-      setPopoverDir(dir);
-      setPos({ top, left });
+      // Position hysteresis. Operator brief: "the text editor flips
+      // a lot, does not stay long enough for one to see the changes."
+      // Tiny selection-rect drifts (cursor blink, browser sub-pixel
+      // jitter, contentEditable autoplay) used to nudge the toolbar
+      // a few pixels each frame and visually felt like a constant
+      // dance. Hold position when the new spot is within 80px of the
+      // current one; only re-anchor on bigger jumps (operator selects
+      // a different paragraph, scrolls the canvas a long way, etc.).
+      // Popover direction is recomputed only on those big jumps so
+      // the panel doesn't flip up↔down mid-edit.
+      setPos((prev) => {
+        if (!prev) {
+          const toolbarBottom = top + TOOLBAR_H;
+          setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
+          return { top, left };
+        }
+        const dx = Math.abs(prev.left - left);
+        const dy = Math.abs(prev.top - top);
+        if (dx < 80 && dy < 80) return prev;
+        const toolbarBottom = top + TOOLBAR_H;
+        setPopoverDir(toolbarBottom > vh * 0.6 ? "up" : "down");
+        return { top, left };
+      });
       rangeRef.current = range.cloneRange();
       hostRef.current = host;
     };
@@ -427,11 +442,31 @@ export function InlineTextToolbar() {
   const applySize = (raw: string) => {
     const n = parseInt(raw, 10);
     if (!isFinite(n) || n < 6 || n > 200) return;
-    const px = `${n}px`;
-    if (lastAppliedSizeRef.current === px) return; // dedupe blur after Enter
-    wrapInSpan({ fontSize: px });
-    lastAppliedSizeRef.current = px;
+    wrapInSpan({ fontSize: `${n}px` });
   };
+
+  // Debounced live-preview for the size input. Operator brief: "size
+  // applies only once then disappears, not time to play around and
+  // adjust the sizes and see in real time the changes long enough to
+  // make decisions." 220ms is short enough to feel responsive while
+  // typing two-digit numbers (18, 20, 22) and long enough that a
+  // brief pause commits cleanly. The patch path inside wrapInSpan is
+  // idempotent — re-applying the same size on the same span just
+  // overwrites font-size on that one span, no nesting.
+  const scheduleSizeApply = (raw: string) => {
+    if (sizeApplyTimerRef.current) clearTimeout(sizeApplyTimerRef.current);
+    if (!raw.trim()) return;
+    sizeApplyTimerRef.current = setTimeout(() => {
+      applySize(raw);
+    }, 220);
+  };
+  // Flush any pending debounce on unmount so a half-typed size doesn't
+  // apply long after the toolbar dismounts.
+  useEffect(() => {
+    return () => {
+      if (sizeApplyTimerRef.current) clearTimeout(sizeApplyTimerRef.current);
+    };
+  }, []);
 
   // ── Alignment ──────────────────────────────────────────────────────
   // text-align is a BLOCK-level property; applied to a span it does
@@ -557,20 +592,47 @@ export function InlineTextToolbar() {
                 max={200}
                 placeholder="--"
                 value={sizeInput}
+                onFocus={() => {
+                  // Restore the saved range so the operator's
+                  // selection survives a click into the size input
+                  // (otherwise re-clicking the input after typing
+                  // would lose the wrap target and the next change
+                  // would create a stray span elsewhere).
+                  restoreRange();
+                }}
                 onChange={(e) => {
-                  setSizeInput(e.target.value);
-                  // New value typed — clear the dedupe so the next
-                  // commit (Enter or blur) is allowed to apply.
-                  lastAppliedSizeRef.current = "";
+                  const v = e.target.value;
+                  setSizeInput(v);
+                  scheduleSizeApply(v);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
+                    if (sizeApplyTimerRef.current) {
+                      clearTimeout(sizeApplyTimerRef.current);
+                    }
                     applySize(sizeInput);
                   }
-                }}
-                onBlur={() => {
-                  if (sizeInput) applySize(sizeInput);
+                  // Up / down arrow keys nudge the size by ±1 with
+                  // immediate live-preview — operators can land on
+                  // the right size by tap-tap-tapping rather than
+                  // re-typing. Bypasses the debounce because the
+                  // value is intentional, not a typo in flight.
+                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const cur = parseInt(sizeInput, 10);
+                    const base = isFinite(cur) ? cur : 14;
+                    const next = Math.max(
+                      6,
+                      Math.min(200, base + (e.key === "ArrowUp" ? 1 : -1)),
+                    );
+                    const v = String(next);
+                    setSizeInput(v);
+                    if (sizeApplyTimerRef.current) {
+                      clearTimeout(sizeApplyTimerRef.current);
+                    }
+                    applySize(v);
+                  }
                 }}
                 className="w-12 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[12px] text-white text-center outline-none focus:border-white/30 transition-colors"
               />

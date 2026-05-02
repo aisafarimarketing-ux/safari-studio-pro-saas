@@ -1045,6 +1045,7 @@ async function processParsedResponse(
         totalRooms: true,
         spokenLanguages: true,
         specialInterests: true,
+        funFactsVisible: true,
         location: { select: { name: true, country: true } },
         images: {
           orderBy: { order: "asc" },
@@ -1134,6 +1135,7 @@ async function processParsedResponse(
         totalRooms: p.totalRooms ?? undefined,
         spokenLanguages: p.spokenLanguages ?? [],
         specialInterests: p.specialInterests ?? [],
+        funFactsVisible: p.funFactsVisible ?? true,
         rooms: p.rooms.map((r) => ({
           id: r.id,
           name: r.name,

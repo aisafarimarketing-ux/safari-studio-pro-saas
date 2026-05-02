@@ -519,6 +519,8 @@ function SafariReadyLayout(p: VariantProps) {
     letter,
     availability,
     ctaLabel,
+    ctaBg,
+    ctaTextColor,
     operator,
     client,
     trip,
@@ -535,6 +537,7 @@ function SafariReadyLayout(p: VariantProps) {
     onLetterChange,
     onAvailabilityChange,
     onCtaLabelChange,
+    onCtaBgChange,
   } = p;
 
   // Keep the destination caption strip useful: prefer the trip's
@@ -667,29 +670,27 @@ function SafariReadyLayout(p: VariantProps) {
               )}
             </div>
 
-            {captionDestination && (
+            {/* Footer caption replaced with the editorial cue
+                "Your Safari Awaits" per operator spec. The trip
+                destination already reads above (in the meta strip);
+                a static call-out here lands as a closing line, not a
+                redundant data row. */}
+            <div
+              className="mt-3 pt-3 text-center"
+              style={{ borderTop: "1px dashed rgba(94, 70, 36, 0.28)" }}
+            >
               <div
-                className="mt-3 pt-3 text-center"
-                style={{ borderTop: "1px dashed rgba(94, 70, 36, 0.28)" }}
+                className="text-[12.5px]"
+                style={{
+                  color: "#3d2c10",
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontStyle: "italic",
+                  letterSpacing: "0.02em",
+                }}
               >
-                <div
-                  className="text-[10px] uppercase tracking-[0.32em] font-semibold"
-                  style={{ color: "#5e4624" }}
-                >
-                  Destination
-                </div>
-                <div
-                  className="text-[12.5px] mt-0.5"
-                  style={{
-                    color: "#3d2c10",
-                    fontFamily: `'${theme.displayFont}', serif`,
-                    fontStyle: "italic",
-                  }}
-                >
-                  {captionDestination}
-                </div>
+                Your Safari Awaits
               </div>
-            )}
+            </div>
           </div>
 
           {/* Title block — right column. */}
@@ -734,54 +735,23 @@ function SafariReadyLayout(p: VariantProps) {
               </SafariReadyMetaRow>
             </div>
 
-            {/* Wax-seal-styled CTA. Same WhatsApp deep-link as the
-                other variants' primary CTA (operator-trip-aware
-                pre-filled message). */}
-            <button
-              type="button"
+            {/* Primary CTA. The button colour was previously
+                hard-coded to a dark wax-seal gradient — operator
+                spec calls for full colour control on this button
+                across all variants. Defaults to the same dark wax-
+                seal feel via ctaBg fallback so existing proposals
+                keep their look; operators can override per-section
+                via the swatch button on hover. */}
+            <PrimaryCta
+              label={ctaLabel}
+              isEditor={isEditor}
+              tokens={tokens}
               onClick={onSecure}
-              className="inline-flex items-center gap-2.5 px-6 py-3 rounded-lg font-semibold transition shadow-md hover:shadow-lg active:scale-[0.99] group"
-              style={{
-                background: "linear-gradient(180deg, #2a1d08 0%, #1a1306 100%)",
-                color: "#f4ede0",
-                fontSize: 14,
-                letterSpacing: "0.04em",
-                border: "1px solid rgba(94, 70, 36, 0.45)",
-                fontFamily: `'${theme.bodyFont}', sans-serif`,
-              }}
-            >
-              <span
-                aria-hidden
-                className="inline-flex items-center justify-center"
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: "50%",
-                  background: "#c9a84c",
-                  color: "#2a1d08",
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                ✓
-              </span>
-              <span
-                contentEditable={isEditor}
-                suppressContentEditableWarning
-                onBlur={(e) => onCtaLabelChange(e.currentTarget.textContent ?? "")}
-                onClick={(e) => isEditor && e.stopPropagation()}
-                style={{ outline: "none" }}
-              >
-                {ctaLabel}
-              </span>
-              <span
-                aria-hidden
-                className="transition-transform group-hover:translate-x-0.5"
-                style={{ opacity: 0.85 }}
-              >
-                →
-              </span>
-            </button>
+              onLabelChange={onCtaLabelChange}
+              ctaBg={ctaBg ?? "#2a1d08"}
+              ctaTextColor={ctaTextColor ?? "#f4ede0"}
+              onCtaBgChange={onCtaBgChange}
+            />
           </div>
         </div>
       </div>

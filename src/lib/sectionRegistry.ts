@@ -156,7 +156,7 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // booking. The three older variants (split-card / gallery-row /
     // stack) stay registered so legacy proposals keep their look.
     variants: ["editorial-close", "safari-ready", "split-card", "gallery-row", "stack"],
-    defaultVariant: "editorial-close",
+    defaultVariant: "safari-ready",
     defaultContent: {
       headline: "Your journey is ready",
       letter:

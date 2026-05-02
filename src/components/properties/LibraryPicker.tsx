@@ -22,6 +22,7 @@ type LibraryProperty = {
   amenities?: string[];
   mealPlan?: string | null;
   suggestedNights?: number | null;
+  funFactsVisible?: boolean | null;
   location: LocationLite | null;
   images: { id: string; url: string }[];
   tags: { tag: TagLite }[];
@@ -362,6 +363,7 @@ function snapshotFromLibrary(p: LibraryProperty & {
     amenities: p.amenities ?? [],
     mealPlan: mealPlanLabel(p.mealPlan ?? null),
     nights: p.suggestedNights ?? 2,
+    funFactsVisible: p.funFactsVisible ?? true,
     leadImageUrl: lead,
     galleryUrls: gallery,
   };

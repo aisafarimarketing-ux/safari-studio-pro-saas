@@ -237,6 +237,7 @@ function sanitizeProperty(body: Record<string, unknown>) {
   setIf("totalRooms", int(body.totalRooms));
   setIf("spokenLanguages", stringArray(body.spokenLanguages));
   setIf("specialInterests", stringArray(body.specialInterests));
+  setIf("funFactsVisible", bool(body.funFactsVisible));
   setIf("internalNotes", str(body.internalNotes));
   setIf("archived", bool(body.archived));
 

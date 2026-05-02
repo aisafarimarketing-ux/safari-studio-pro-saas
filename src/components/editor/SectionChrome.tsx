@@ -112,6 +112,26 @@ export function SectionChrome({ section, children }: Props) {
         swatch: overrides?.accent ?? themeTokens.accent,
       },
     );
+  } else if (section.type === "personalNote") {
+    // Personal Note carries multiple sub-surfaces beyond the section
+    // bg: the side-image cell + consultant-photo tile (cardBg), and
+    // the consultant-initial fallback glyph (accent). Expose them as
+    // dedicated pills so the operator's colour change actually
+    // re-themes every visible patch — section bg alone left the side
+    // image cell + photo tile painting a stale cardBg, which read as
+    // "section colour didn't apply."
+    pickerSpecs.push(
+      {
+        token: "cardBg",
+        title: "Image / photo tile background",
+        swatch: overrides?.cardBg ?? themeTokens.cardBg,
+      },
+      {
+        token: "accent",
+        title: "Accent — consultant initial fallback",
+        swatch: overrides?.accent ?? themeTokens.accent,
+      },
+    );
   }
 
   const handlePickerClick = (

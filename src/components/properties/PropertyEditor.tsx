@@ -703,12 +703,15 @@ function StorySection({
           maxLength={280}
         />
       </Field>
-      <Field label="What makes it special">
+      <Field
+        label="About this property"
+        hint="Shown as the lead paragraph in the proposal's Information tab — the property's setting, character, service, and style."
+      >
         <TextArea
           value={form.whatMakesSpecial}
           onChange={(v) => update({ whatMakesSpecial: v })}
-          placeholder="Direct conservancy access — fewer vehicles, off-road permitted, night drives included."
-          rows={4}
+          placeholder="Eight tents on a private conservancy ridge, run by a lifelong Mara guide. Direct conservancy access — fewer vehicles, off-road permitted, night drives included."
+          rows={5}
         />
       </Field>
       <Field label="Why we choose this">
@@ -934,6 +937,30 @@ function ShowcaseFactsSection({
           className="w-full px-3 py-2 rounded-lg border border-black/12 bg-white text-sm text-black/85 focus:outline-none focus:border-[#1b3a2d] focus:ring-2 focus:ring-[#1b3a2d]/12 transition"
         />
       </Field>
+
+      {/* Per-property toggle for the Fun Facts block. When off, the
+          rooms / languages / interests sub-block disappears from the
+          proposal showcase for this property — useful for lodges
+          where those facts aren't a fit (private mobile camps,
+          uncommon language coverage, etc.). */}
+      <label className="flex items-start gap-3 cursor-pointer pt-1">
+        <input
+          type="checkbox"
+          checked={form.funFactsVisible}
+          onChange={(e) => update({ funFactsVisible: e.target.checked })}
+          className="mt-0.5 h-4 w-4 accent-[#1b3a2d]"
+        />
+        <span>
+          <span className="block text-sm font-medium text-black/80">
+            Show &ldquo;Fun Facts&rdquo; in the proposal
+          </span>
+          <span className="block text-[12px] text-black/50 mt-0.5">
+            Includes total rooms, spoken languages, and special interests in the
+            property showcase. Turn off for properties where these facts
+            aren&rsquo;t relevant.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -1192,6 +1219,7 @@ type LoadedProperty = {
   totalRooms?: number | null;
   spokenLanguages?: unknown;
   specialInterests?: unknown;
+  funFactsVisible?: boolean | null;
   internalNotes?: string | null;
   archived?: boolean;
   images?: { id: string; url: string; caption: string | null; order: number; isCover: boolean }[];
@@ -1225,6 +1253,7 @@ function hydrateForm(p: LoadedProperty | null): PropertyForm {
     totalRooms: typeof p.totalRooms === "number" ? p.totalRooms : null,
     spokenLanguages: Array.isArray(p.spokenLanguages) ? (p.spokenLanguages as string[]) : [],
     specialInterests: Array.isArray(p.specialInterests) ? (p.specialInterests as string[]) : [],
+    funFactsVisible: p.funFactsVisible ?? true,
     internalNotes: p.internalNotes ?? "",
     archived: Boolean(p.archived),
     images: (p.images ?? []).map((img) => ({
@@ -1270,6 +1299,7 @@ function serialize(form: PropertyForm) {
     totalRooms: form.totalRooms,
     spokenLanguages: form.spokenLanguages,
     specialInterests: form.specialInterests,
+    funFactsVisible: form.funFactsVisible,
     internalNotes: form.internalNotes,
     archived: form.archived,
     images: form.images.map((img, i) => ({

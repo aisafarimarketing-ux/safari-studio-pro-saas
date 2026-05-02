@@ -74,6 +74,8 @@ export function resolveDayCard(
     property,
     optionalActivities: day.optionalActivities ?? [],
     layoutVariant: getDayCardVariant(sectionLayoutVariant),
+    locationImageSide: day.locationImageSide,
+    propertyImageSide: day.propertyImageSide,
   };
 }
 

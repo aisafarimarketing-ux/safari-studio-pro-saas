@@ -160,11 +160,11 @@ export function CoverSection({ section }: { section: Section }) {
     }
   };
 
-  // Right-click anywhere on the hero image opens a hidden file input. Makes
-  // uploading + replacing feel like a desktop app.
-  const handleImageContextMenu = (e: React.MouseEvent) => {
+  // Open a hidden file picker and write the result onto heroImageUrl.
+  // Used for both single-click-to-replace (operator brief: "click should
+  // change the photo") and the legacy right-click flow.
+  const triggerHeroPicker = () => {
     if (!isEditor) return;
-    e.preventDefault();
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -179,6 +179,12 @@ export function CoverSection({ section }: { section: Section }) {
       }
     };
     input.click();
+  };
+
+  const handleImageContextMenu = (e: React.MouseEvent) => {
+    if (!isEditor) return;
+    e.preventDefault();
+    triggerHeroPicker();
   };
 
   // ── Hero-letter — minimal editorial cover ─────────────────────────────
@@ -228,6 +234,7 @@ export function CoverSection({ section }: { section: Section }) {
                 position={heroPosition}
                 onPositionChange={onHeroPositionChange}
                 isEditor={isEditor}
+                onSingleClick={triggerHeroPicker}
               />
             ) : isEditor ? (
               <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center">
@@ -279,7 +286,7 @@ export function CoverSection({ section }: { section: Section }) {
             </div>
 
             {heroUrl && isEditor && (
-              <label className="absolute top-4 right-4 z-10 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+              <label className="absolute top-4 right-4 z-[750] cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
                 <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
                 Change image
               </label>
@@ -409,6 +416,7 @@ export function CoverSection({ section }: { section: Section }) {
               position={heroPosition}
               onPositionChange={onHeroPositionChange}
               isEditor={isEditor}
+              onSingleClick={triggerHeroPicker}
             />
           ) : isEditor ? (
             <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
@@ -425,7 +433,7 @@ export function CoverSection({ section }: { section: Section }) {
           ) : null}
           {heroUrl && isEditor && (
             <label
-              className="absolute top-4 left-4 z-10 cursor-pointer bg-black/50 text-white text-[11px] px-2.5 py-1 rounded-md hover:bg-black/70 transition backdrop-blur-sm"
+              className="absolute top-4 left-4 z-[750] cursor-pointer bg-black/50 text-white text-[11px] px-2.5 py-1 rounded-md hover:bg-black/70 transition backdrop-blur-sm"
               title="Click to upload · right-click the image anywhere to replace"
             >
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -534,7 +542,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Hero */}
         {heroUrl ? (
-          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} onSingleClick={triggerHeroPicker} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group bg-black/30">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -646,7 +654,7 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         {heroUrl && isEditor && (
-          <label className="absolute top-4 right-4 z-30 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+          <label className="absolute top-4 right-4 z-[750] cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
             Change image
           </label>
@@ -664,7 +672,7 @@ export function CoverSection({ section }: { section: Section }) {
       >
         {/* Full-bleed hero */}
         {heroUrl ? (
-          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} onSingleClick={triggerHeroPicker} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center group">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -677,7 +685,7 @@ export function CoverSection({ section }: { section: Section }) {
         ) : null}
         {/* Change-image button — visible only when hero is set, editor only */}
         {heroUrl && isEditor && (
-          <label className="absolute top-4 right-4 z-30 cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
+          <label className="absolute top-4 right-4 z-[750] cursor-pointer bg-black/55 text-white text-[11px] px-3 py-1.5 rounded-md hover:bg-black/75 transition backdrop-blur-sm font-semibold">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
             Change image
           </label>
@@ -870,7 +878,7 @@ export function CoverSection({ section }: { section: Section }) {
         style={{ background: tokens.accent }}
       >
         {heroUrl ? (
-          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
+          <DraggableImage src={heroUrl} alt="Cover" className="absolute inset-0 w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} onSingleClick={triggerHeroPicker} />
         ) : isEditor ? (
           <label className="absolute inset-0 cursor-pointer flex items-center justify-center">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -971,7 +979,7 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         {heroUrl && isEditor && (
-          <label className="absolute bottom-5 right-5 z-20 cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
+          <label className="absolute bottom-5 right-5 z-[750] cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
             Change image
           </label>
@@ -987,7 +995,7 @@ export function CoverSection({ section }: { section: Section }) {
         {/* Full-bleed image */}
         <div className="absolute inset-0">
           {heroUrl ? (
-            <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
+            <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} onSingleClick={triggerHeroPicker} />
           ) : isEditor ? (
             <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer" style={{ background: tokens.accent }}>
               <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
@@ -1071,7 +1079,7 @@ export function CoverSection({ section }: { section: Section }) {
         </div>
 
         {heroUrl && isEditor && (
-          <label className="absolute bottom-5 left-5 z-20 cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
+          <label className="absolute bottom-5 left-5 z-[750] cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
             <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
             Change image
           </label>
@@ -1086,7 +1094,7 @@ export function CoverSection({ section }: { section: Section }) {
       {/* Right: full-bleed image */}
       <div className="absolute inset-0">
         {heroUrl ? (
-          <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} />
+          <DraggableImage src={heroUrl} alt="Cover" className="w-full h-full object-cover" position={heroPosition} onPositionChange={onHeroPositionChange} isEditor={isEditor} onSingleClick={triggerHeroPicker} />
         ) : isEditor ? (
           <label
             className="w-full h-full flex flex-col items-center justify-center cursor-pointer"
@@ -1192,7 +1200,7 @@ export function CoverSection({ section }: { section: Section }) {
 
       {/* Change image button (editor) */}
       {heroUrl && isEditor && (
-        <label className="absolute bottom-5 right-5 z-20 cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
+        <label className="absolute bottom-5 right-5 z-[750] cursor-pointer bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-black/70 transition backdrop-blur-sm">
           <input type="file" accept="image/*" className="hidden" onChange={handleHeroUpload} />
           Change image
         </label>

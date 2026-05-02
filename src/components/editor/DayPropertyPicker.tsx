@@ -32,6 +32,7 @@ type LibraryProperty = {
   totalRooms?: number | null;
   spokenLanguages?: string[];
   specialInterests?: string[];
+  funFactsVisible?: boolean | null;
   rooms?: {
     id: string;
     name: string;
@@ -66,6 +67,10 @@ export function DayPropertyPicker({
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [useLocationFilter, setUseLocationFilter] = useState(true);
+  // True when the strict location filter is on but `dayDestination`
+  // didn't resolve to a library Location row. We surface a tailored
+  // empty-state instead of an empty list with no explanation.
+  const [unresolvedLocation, setUnresolvedLocation] = useState(false);
   const [selecting, setSelecting] = useState<string | null>(null);
 
   // Load ranked candidates. Try matching the day's destination first; if
@@ -73,18 +78,37 @@ export function DayPropertyPicker({
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setUnresolvedLocation(false);
     (async () => {
       try {
         // First, resolve destination to a location id if possible.
+        // Operator brief: when "Only {location}" is checked, the picker
+        // must show ONLY properties tagged to that location — no
+        // fallback to unfiltered, no fuzzy-match leakage. If the
+        // destination doesn't match a library Location row, surface
+        // that explicitly instead of silently broadening.
         let locationId: string | undefined;
         if (useLocationFilter && dayDestination.trim()) {
           const locRes = await fetch("/api/locations", { cache: "no-store" });
           if (locRes.ok) {
             const data = await locRes.json();
-            const match = (data.locations ?? []).find(
-              (l: LocationLite) => l.name.toLowerCase() === dayDestination.trim().toLowerCase(),
+            const target = dayDestination.trim().toLowerCase();
+            const locations = (data.locations ?? []) as LocationLite[];
+            // Exact match first; if none, try a contains match so
+            // "Zanzibar" matches a "Zanzibar Island" location row.
+            const exact = locations.find((l) => l.name.toLowerCase() === target);
+            const fuzzy = exact ?? locations.find(
+              (l) => l.name.toLowerCase().includes(target) || target.includes(l.name.toLowerCase()),
             );
-            if (match) locationId = match.id;
+            if (fuzzy) locationId = fuzzy.id;
+          }
+          if (!locationId) {
+            // Strict mode + unknown destination — return empty with a
+            // clear empty-state hint, don't silently show every lodge.
+            setRanked([]);
+            setUnresolvedLocation(true);
+            setLoading(false);
+            return;
           }
         }
 
@@ -107,21 +131,7 @@ export function DayPropertyPicker({
         if (rankRes.status === 409) { window.location.href = "/select-organization"; return; }
         if (!rankRes.ok) throw new Error(`HTTP ${rankRes.status}`);
         const rankData = await rankRes.json();
-        let list: RankedRow[] = rankData.ranked ?? [];
-
-        // If location filter produced nothing, fall back to unfiltered.
-        if (list.length === 0 && locationId) {
-          const fallback = await fetch("/api/properties/rank", {
-            method: "POST",
-            cache: "no-store",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ limit: 30 }),
-          });
-          if (fallback.ok) {
-            const d = await fallback.json();
-            list = d.ranked ?? [];
-          }
-        }
+        const list: RankedRow[] = rankData.ranked ?? [];
         setRanked(list);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load library");
@@ -199,6 +209,7 @@ export function DayPropertyPicker({
         totalRooms: p.totalRooms ?? undefined,
         spokenLanguages: p.spokenLanguages ?? [],
         specialInterests: p.specialInterests ?? [],
+        funFactsVisible: p.funFactsVisible ?? true,
         rooms: (p.rooms ?? []).map((r) => ({
           id: r.id,
           name: r.name,
@@ -287,9 +298,33 @@ export function DayPropertyPicker({
           )}
           {!loading && !error && ranked.length === 0 && (
             <div className="p-10 text-center">
-              <p className="text-small text-black/55">
-                Your library is empty.
-              </p>
+              {unresolvedLocation ? (
+                <>
+                  <p className="text-small text-black/65">
+                    No properties tagged to <strong>{dayDestination}</strong> in
+                    your library.
+                  </p>
+                  <p className="text-[12px] text-black/45 mt-1.5">
+                    Uncheck &ldquo;Only {dayDestination}&rdquo; to browse the
+                    full library, or add this destination as a Location and tag
+                    properties to it.
+                  </p>
+                </>
+              ) : useLocationFilter && dayDestination.trim() ? (
+                <>
+                  <p className="text-small text-black/65">
+                    No properties tagged to <strong>{dayDestination}</strong>{" "}
+                    yet.
+                  </p>
+                  <p className="text-[12px] text-black/45 mt-1.5">
+                    Uncheck &ldquo;Only {dayDestination}&rdquo; to see
+                    properties from other locations, or add a property tagged
+                    to this destination.
+                  </p>
+                </>
+              ) : (
+                <p className="text-small text-black/55">Your library is empty.</p>
+              )}
               <Link
                 href="/properties/new"
                 className="inline-block mt-3 px-4 py-2 rounded-lg bg-[#1b3a2d] text-white text-small font-medium hover:bg-[#2d5a40] transition"

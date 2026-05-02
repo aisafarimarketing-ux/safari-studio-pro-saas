@@ -471,6 +471,7 @@ type PropertyWithJoins = {
   totalRooms: number | null;
   spokenLanguages: string[];
   specialInterests: string[];
+  funFactsVisible: boolean;
   rooms: {
     id: string;
     name: string;
@@ -521,6 +522,7 @@ function buildSnapshotFromLibrary(p: PropertyWithJoins): Record<string, unknown>
     totalRooms: p.totalRooms ?? undefined,
     spokenLanguages: p.spokenLanguages ?? [],
     specialInterests: p.specialInterests ?? [],
+    funFactsVisible: p.funFactsVisible ?? true,
     rooms: (p.rooms ?? []).map((r) => ({
       id: r.id,
       name: r.name,

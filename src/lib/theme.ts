@@ -81,18 +81,43 @@ export const BODY_FONTS = [
 // ─── Google Fonts URL ─────────────────────────────────────────────────────────
 
 export function buildGoogleFontsUrl(): string {
+  // Includes every theme font (the named pairs above) AND every entry
+  // in the InlineTextToolbar's font menu so picking, say, Pacifico
+  // actually loads it — operators reported "fonts don't apply" because
+  // the menu offered families the page never fetched. Single source
+  // of truth for `<link rel="stylesheet">` injection.
   const families = [
+    // ── Theme display / serif faces ──────────────────────────────────
     "Cormorant:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600",
     "Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400",
     "EB+Garamond:ital,wght@0,400;0,500;0,600;1,400",
     "DM+Serif+Display:ital@0;1",
     "Libre+Baskerville:ital,wght@0,400;0,700;1,400",
+    "Lora:ital,wght@0,400;0,500;0,600;0,700;1,400",
+    "Merriweather:ital,wght@0,300;0,400;0,700;1,400",
+    "Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400",
+    "Source+Serif+Pro:ital,wght@0,400;0,600;1,400",
+    // ── Theme body / sans faces ──────────────────────────────────────
     "Jost:wght@300;400;500;600",
     "Outfit:wght@300;400;500;600",
     "Inter:wght@300;400;500;600",
     "Lato:ital,wght@0,300;0,400;0,700;1,400",
     "Nunito+Sans:wght@300;400;600",
     "Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400",
+    "Montserrat:wght@300;400;500;600;700",
+    "Roboto:wght@300;400;500;700",
+    "Open+Sans:wght@300;400;600;700",
+    "Poppins:wght@300;400;500;600;700",
+    "Raleway:wght@300;400;500;600;700",
+    "Work+Sans:wght@300;400;500;600",
+    "IBM+Plex+Sans:wght@300;400;500;600",
+    // ── Display / poster faces ───────────────────────────────────────
+    "Bebas+Neue",
+    "Oswald:wght@300;400;500;600;700",
+    // ── Handwriting / script faces ──────────────────────────────────
+    "Caveat:wght@400;600;700",
+    "Pacifico",
+    "Italianno",
   ];
   return `https://fonts.googleapis.com/css2?${families.map((f) => `family=${f}`).join("&")}&display=swap`;
 }

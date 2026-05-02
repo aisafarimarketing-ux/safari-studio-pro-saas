@@ -34,8 +34,8 @@ export function SignaturePad({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-    const cssW = 560;
-    const cssH = 200;
+    const cssW = 380;
+    const cssH = 140;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     canvas.style.width = `${cssW}px`;
@@ -176,7 +176,7 @@ export function SignaturePad({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-[640px] overflow-hidden"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-[460px] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 pt-5 pb-4 flex items-baseline justify-between border-b border-black/5">
@@ -198,7 +198,7 @@ export function SignaturePad({
         </div>
 
         <div className="p-6">
-          <div className="relative mx-auto" style={{ width: 560, height: 200 }}>
+          <div className="relative mx-auto" style={{ width: 380, height: 140 }}>
             <canvas
               ref={canvasRef}
               onPointerDown={startStroke}
@@ -206,11 +206,11 @@ export function SignaturePad({
               onPointerUp={endStroke}
               onPointerLeave={endStroke}
               className="touch-none border border-black/10 rounded-md bg-white cursor-crosshair"
-              style={{ width: 560, height: 200 }}
+              style={{ width: 380, height: 140 }}
             />
             <div
               className="absolute left-4 right-4 pointer-events-none"
-              style={{ bottom: 28, borderBottom: "1px dashed rgba(0,0,0,0.18)" }}
+              style={{ bottom: 22, borderBottom: "1px dashed rgba(0,0,0,0.18)" }}
             />
           </div>
 

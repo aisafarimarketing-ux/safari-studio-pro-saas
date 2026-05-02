@@ -197,6 +197,14 @@ export interface Day {
    *  short text like "→ 2.5 hr scenic drive · Manyara to Tarangire".
    *  Day 1 ignores this (no preceding day). */
   driveTimeBefore?: string;
+  /** Per-day overrides for the flip card's image-side placement.
+   *  Operator brief: "Allow editor to function the location layout
+   *  and the day's accommodation separately to give different
+   *  variation for the day layouts." When unset, FlipCard falls back
+   *  to the section-level flip direction (Act II using the opposite
+   *  side from Act I). */
+  locationImageSide?: "left" | "right";
+  propertyImageSide?: "left" | "right";
   tiers: {
     classic: Accommodation;
     premier: Accommodation;
@@ -244,6 +252,11 @@ export interface Property {
   totalRooms?: number;
   spokenLanguages?: string[];
   specialInterests?: string[];
+  /** Per-property toggle for the Fun Facts block in the proposal
+   *  showcase. Defaults true at the Prisma layer; treat undefined here
+   *  as "true" so legacy snapshots taken before the field existed
+   *  keep their current rendering. */
+  funFactsVisible?: boolean;
   rooms?: PropertyRoom[];
   /** Link back to the source row in the operator's Property Library.
    *  When present, the showcase exposes a "Refresh from library"

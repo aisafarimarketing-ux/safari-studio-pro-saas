@@ -80,6 +80,14 @@ export type DayCardData = {
 
   // Layout hint set by the editor
   layoutVariant: DayCardLayoutVariant;
+
+  /** Per-day flip override for the location act (left = image left,
+   *  right = image right). Layouts fall back to the section-level
+   *  flip when undefined. */
+  locationImageSide?: "left" | "right";
+  /** Per-day flip override for the property act. Falls back to the
+   *  opposite of the section-level flip when undefined. */
+  propertyImageSide?: "left" | "right";
 };
 
 // Shared props every layout component accepts. Layouts never touch the
