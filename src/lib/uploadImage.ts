@@ -41,11 +41,37 @@ export async function uploadImage(
       const data = (await res.json()) as { url?: string };
       if (data.url) return data.url;
     }
-    // 503 = Storage not configured on the server. 4xx / 5xx = treat as
-    // transient and fall back to the data URL so the operator can keep
-    // editing. The autosave size guard will surface oversized payloads.
+    // 401 = expired Clerk session. CRITICAL: do NOT silently fall back
+    // to a data URL here. Operators reported "images not showing in
+    // preview / webview" — the root cause was a chain of:
+    //   (1) session expired
+    //   (2) /api/upload-image 401 → silent data-URL fallback
+    //   (3) /api/proposals/[id] auto-save 401 → save fails silently
+    //   (4) on reload, proposal in DB is whatever was saved BEFORE the
+    //       session expired, with the new image data URLs lost.
+    // Throwing here surfaces the error in the editor's image upload
+    // handler (which alerts) and signals the auth-watcher to prompt
+    // the operator to re-sign-in BEFORE more changes silently
+    // disappear. 503 (storage misconfigured) still falls back to
+    // data URL because that's a server-config issue, not auth.
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
+      throw new Error("Your session has expired — sign in again to save uploads.");
+    }
+    if (res.status === 402) {
+      window.location.href = "/account-suspended";
+      throw new Error("Account suspended");
+    }
+    if (res.status === 409) {
+      window.location.href = "/select-organization";
+      throw new Error("Select an organization to continue");
+    }
     return dataUrl;
-  } catch {
+  } catch (err) {
+    // Re-throw auth errors so the caller's try/catch surfaces them.
+    if (err instanceof Error && /session has expired/i.test(err.message)) {
+      throw err;
+    }
     return dataUrl;
   }
 }

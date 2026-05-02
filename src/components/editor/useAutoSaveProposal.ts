@@ -160,7 +160,16 @@ export function useAutoSaveProposal(enabled: boolean): {
           res = await postOnce();
         }
         if (res.status === 401) {
-          throw new Error("Session expired — refresh the page to sign in again.");
+          // Persistent 401 — fire the global auth-expired event so the
+          // editor surfaces a banner (or whatever the auth-watcher
+          // does) rather than just throwing into the save indicator.
+          // Operators reported images "missing in preview/webview" —
+          // root cause was silent save failures while the session was
+          // expired. Saved-indicator's "Session expired" message went
+          // unnoticed and the operator kept making changes that
+          // never persisted.
+          window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
+          throw new Error("Session expired — sign in again to save changes.");
         }
         if (res.status === 402) { window.location.href = "/account-suspended"; return; }
         if (res.status === 409) { window.location.href = "/select-organization"; return; }

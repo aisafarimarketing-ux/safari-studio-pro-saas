@@ -10,6 +10,7 @@ import { ProposalCanvas } from "./ProposalCanvas";
 import { AISelectionToolbar } from "./AISelectionToolbar";
 import { ContextPanel } from "./ContextPanel";
 import { useAutoSaveProposal } from "./useAutoSaveProposal";
+import { AuthExpiredBanner } from "./AuthExpiredBanner";
 import { NewProposalDialog } from "@/components/ui/NewProposalDialog";
 import { InlineTextToolbar } from "@/components/ui/InlineTextToolbar";
 import { FloatingColorPicker } from "@/components/ui/FloatingColorPicker";
@@ -176,6 +177,7 @@ export function ProposalEditor() {
   if (mode === "preview") {
     return (
       <div className="min-h-screen bg-white">
+        <AuthExpiredBanner />
         {/* Preview exit button */}
         <div className="fixed top-4 right-4 z-50">
           <button
@@ -194,6 +196,7 @@ export function ProposalEditor() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
+      <AuthExpiredBanner />
       <EditorToolbar
         autoSaveState={autoSave.state}
         autoSaveError={autoSave.error}
