@@ -437,6 +437,27 @@ function CoverChapter({
           />
         </ChapterChrome>
       )}
+
+      {/* Literary opener — operator-set quote + attribution. Renders
+          as a magazine-style pull quote at the top of the cover.
+          Hidden in non-editor mode when blank; in editor mode an
+          empty placeholder hints at where to type. Same pattern
+          Safari Portal uses ("India is a place where colour is
+          doubly bright… — Kiran Millwood Hargrave"). */}
+      {cover && (
+        <CoverQuote
+          quote={(cover.content?.literaryQuote as string | undefined) ?? ""}
+          attribution={(cover.content?.literaryQuoteAttribution as string | undefined) ?? ""}
+          isEditor={isEditor}
+          tokens={tokens}
+          theme={theme}
+          onChangeQuote={(v) => updateSectionContent(cover.id, { literaryQuote: v })}
+          onChangeAttribution={(v) =>
+            updateSectionContent(cover.id, { literaryQuoteAttribution: v })
+          }
+        />
+      )}
+
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
         style={{ color: tokens.mutedText }}
@@ -771,6 +792,14 @@ function MapChapter({
             </ol>
           </div>
         )}
+
+        {/* Key Dates — accommodations with their check-in dates,
+            mirroring the Safari Portal example's "1) January 16:
+            The Oberoi, Gurgaon" structure. Auto-derives from the
+            day-by-day data: groups consecutive same-camp days, uses
+            the FIRST day's date as the check-in. Hidden when no
+            camps are assigned. */}
+        <KeyDatesList proposal={proposal} tokens={tokens} />
       </div>
     </div>
   );
@@ -1031,6 +1060,152 @@ function shortDate(d: Date): string {
   const month = d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
   const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
   return `${month} ${day}`;
+}
+
+// Long form: "January 16" — used in Key Dates where the date column
+// is the focal element of each row.
+function longDate(d: Date): string {
+  const month = d.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  return `${month} ${day}`;
+}
+
+// ─── CoverQuote ─────────────────────────────────────────────────────────
+//
+// Magazine-style literary pull quote at the top of the Cover chapter.
+// Operator-curated; falls through to nothing when blank in client
+// view, or shows a hint placeholder in editor mode so operators see
+// the slot. Two contentEditable spans — quote body + attribution.
+
+function CoverQuote({
+  quote,
+  attribution,
+  isEditor,
+  tokens,
+  theme,
+  onChangeQuote,
+  onChangeAttribution,
+}: {
+  quote: string;
+  attribution: string;
+  isEditor: boolean;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  onChangeQuote: (v: string) => void;
+  onChangeAttribution: (v: string) => void;
+}) {
+  if (!quote.trim() && !isEditor) return null;
+  return (
+    <div className="mb-10 max-w-[34ch]">
+      <blockquote
+        className="text-[18px] md:text-[20px] italic leading-[1.45] outline-none"
+        style={{
+          color: tokens.headingText,
+          fontFamily: `'${theme.displayFont}', serif`,
+          opacity: quote.trim() ? 0.92 : 0.45,
+        }}
+        contentEditable={isEditor}
+        suppressContentEditableWarning
+        onBlur={(e) => onChangeQuote(e.currentTarget.textContent?.trim() ?? "")}
+      >
+        {quote ||
+          (isEditor
+            ? "“A literary line that captures the trip's spirit.”"
+            : "")}
+      </blockquote>
+      {(attribution.trim() || isEditor) && (
+        <div
+          className="mt-2 text-[12.5px] outline-none"
+          style={{ color: tokens.mutedText, opacity: attribution.trim() ? 1 : 0.6 }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) => onChangeAttribution(e.currentTarget.textContent?.trim() ?? "")}
+        >
+          {attribution || (isEditor ? "— Author / source" : "")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── KeyDatesList ───────────────────────────────────────────────────────
+//
+// Accommodations enumerated with check-in dates — mirrors Safari
+// Portal's "1) January 16: The Oberoi, Gurgaon" pattern at the foot
+// of the Map chapter. Auto-derived from days[] + trip.arrivalDate:
+// consecutive days at the same camp collapse into one row using the
+// FIRST day's date.
+
+function KeyDatesList({
+  proposal,
+  tokens,
+}: {
+  proposal: Proposal;
+  tokens: ThemeTokens;
+}) {
+  const sorted = [...proposal.days].sort((a, b) => a.dayNumber - b.dayNumber);
+  const arrivalISO = proposal.trip?.arrivalDate;
+
+  // Walk days, group consecutive same-camp runs.
+  const stays: Array<{ day: Day; camp: string }> = [];
+  for (const d of sorted) {
+    const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim();
+    if (!camp) continue;
+    const prev = stays[stays.length - 1];
+    if (prev && prev.camp.toLowerCase() === camp.toLowerCase()) continue;
+    stays.push({ day: d, camp });
+  }
+  if (stays.length === 0) return null;
+
+  return (
+    <div className="mt-8 pt-6" style={{ borderTop: `1px solid ${tokens.border}` }}>
+      <div
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
+        style={{ color: tokens.mutedText }}
+      >
+        Key Dates
+      </div>
+      <ol className="space-y-2.5">
+        {stays.map((s, i) => {
+          const explicit = s.day.date?.trim();
+          let dateLabel = "";
+          if (explicit) {
+            const parsed = parseISODate(explicit);
+            dateLabel = parsed ? longDate(parsed) : explicit;
+          } else if (arrivalISO) {
+            const start = parseISODate(arrivalISO);
+            if (start) {
+              start.setUTCDate(start.getUTCDate() + Math.max(0, s.day.dayNumber - 1));
+              dateLabel = longDate(start);
+            }
+          }
+          return (
+            <li
+              key={s.day.id}
+              className="grid grid-cols-[28px_minmax(0,1fr)] gap-2 items-baseline text-[13.5px]"
+              style={{ color: tokens.bodyText }}
+            >
+              <span
+                className="text-[11px] font-bold tabular-nums"
+                style={{ color: tokens.accent }}
+              >
+                {i + 1})
+              </span>
+              <span>
+                <span className="font-semibold">{dateLabel || `Day ${s.day.dayNumber}`}</span>
+                {dateLabel && <span>: </span>}
+                {!dateLabel && <span> · </span>}
+                {s.camp}
+                {s.day.destination && (
+                  <span style={{ color: tokens.mutedText }}>, {s.day.destination}</span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
 }
 
 // One day block on the right column. Reports its in-view state up to
