@@ -1,4 +1,5 @@
 import { fileToOptimizedDataUrl } from "./fileToDataUrl";
+import { authFetch } from "./authFetch";
 
 // Two-stage upload helper.
 //
@@ -33,7 +34,10 @@ export async function uploadImage(
   form.append("file", blob, safeName);
 
   try {
-    const res = await fetch("/api/upload-image", {
+    // authFetch retries transient 401s (Clerk JWT mid-refresh) with
+    // exponential backoff so a single brief refresh window doesn't
+    // surface as an upload failure to the operator.
+    const res = await authFetch("/api/upload-image", {
       method: "POST",
       body: form,
     });
@@ -41,21 +45,17 @@ export async function uploadImage(
       const data = (await res.json()) as { url?: string };
       if (data.url) return data.url;
     }
-    // 401 = expired Clerk session. CRITICAL: do NOT silently fall back
-    // to a data URL here. Operators reported "images not showing in
-    // preview / webview" — the root cause was a chain of:
-    //   (1) session expired
-    //   (2) /api/upload-image 401 → silent data-URL fallback
-    //   (3) /api/proposals/[id] auto-save 401 → save fails silently
-    //   (4) on reload, proposal in DB is whatever was saved BEFORE the
-    //       session expired, with the new image data URLs lost.
-    // Throwing here surfaces the error in the editor's image upload
-    // handler (which alerts) and signals the auth-watcher to prompt
-    // the operator to re-sign-in BEFORE more changes silently
-    // disappear. 503 (storage misconfigured) still falls back to
-    // data URL because that's a server-config issue, not auth.
+    // 401 only reaches us here AFTER authFetch has retried with
+    // exponential backoff. So it's a real expired session, not a
+    // transient mid-refresh. authFetch already dispatched the
+    // auth-expired event; we just need to throw so the operator's
+    // upload handler alerts them clearly. CRITICAL: do NOT silently
+    // fall back to a data URL — operators reported "images missing in
+    // preview" because data-URL uploads never persisted (auto-save
+    // also 401'd, so the URL never reached the DB). 503 (storage
+    // misconfigured) still falls back to data URL because that's a
+    // server-config issue, not auth.
     if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
       throw new Error("Your session has expired — sign in again to save uploads.");
     }
     if (res.status === 402) {

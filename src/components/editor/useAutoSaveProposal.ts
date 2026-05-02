@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { recompressProposalImages } from "@/lib/recompressProposalImages";
+import { authFetch } from "@/lib/authFetch";
 
 // Auto-save hook for the proposal editor. Subscribes to the proposal store,
 // debounces changes by 800ms, and POSTs the full proposal to /api/proposals
@@ -140,35 +141,18 @@ export function useAutoSaveProposal(enabled: boolean): {
       setState("saving");
       setError(null);
       try {
-        const postOnce = () =>
-          fetch("/api/proposals", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: payload,
-          });
+        // authFetch absorbs transient 401s with exponential backoff
+        // (1.5s, 4s, 10s) — that's the window Clerk needs to refresh
+        // a stale JWT. Only after all retries fail do we get a real
+        // 401 back, at which point authFetch has already dispatched
+        // the auth-expired event and the banner is showing.
+        const res = await authFetch("/api/proposals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        });
 
-        let res = await postOnce();
-
-        // Transient 401s happen when a Clerk session token is refreshing
-        // mid-flight. Retrying once after a short pause lets the new token
-        // attach. Auto-redirecting on the first 401 used to yank the user
-        // out of the editor mid-edit — the sign-in page sees them as still
-        // signed in and bounces them to /dashboard, which presents as the
-        // editor "randomly jumping to dashboard". Don't do that.
         if (res.status === 401) {
-          await new Promise((r) => setTimeout(r, 1500));
-          res = await postOnce();
-        }
-        if (res.status === 401) {
-          // Persistent 401 — fire the global auth-expired event so the
-          // editor surfaces a banner (or whatever the auth-watcher
-          // does) rather than just throwing into the save indicator.
-          // Operators reported images "missing in preview/webview" —
-          // root cause was silent save failures while the session was
-          // expired. Saved-indicator's "Session expired" message went
-          // unnoticed and the operator kept making changes that
-          // never persisted.
-          window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
           throw new Error("Session expired — sign in again to save changes.");
         }
         if (res.status === 402) { window.location.href = "/account-suspended"; return; }

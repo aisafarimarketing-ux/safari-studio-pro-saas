@@ -18,6 +18,14 @@ import { useEffect, useState } from "react";
 //   The banner gives the operator a chance to copy out anything they
 //   absolutely need before re-authenticating, with a one-click
 //   "Sign in" button that opens in a new tab so the editor stays put.
+//
+// Also runs a 60-second session-ping keep-alive: hits
+// /api/session-ping while the tab is foregrounded so the Clerk JWT
+// stays warm even when the operator is reading rather than typing.
+// On 401 from the ping, we fire the auth-expired event ourselves —
+// catching the expiry BEFORE the operator's next save fails.
+
+const KEEPALIVE_INTERVAL_MS = 60 * 1000;
 
 export function AuthExpiredBanner() {
   const [open, setOpen] = useState(false);
@@ -26,6 +34,44 @@ export function AuthExpiredBanner() {
     const handler = () => setOpen(true);
     window.addEventListener("safari-studio:auth-expired", handler);
     return () => window.removeEventListener("safari-studio:auth-expired", handler);
+  }, []);
+
+  // Session keep-alive. Pings every 60s while the document is
+  // visible (skipping when the tab is backgrounded so we don't
+  // burn requests on tabs the operator forgot about). On 401 we
+  // dispatch auth-expired ourselves — proactive warning instead of
+  // waiting for the next save / upload to fail.
+  useEffect(() => {
+    let cancelled = false;
+
+    const ping = async () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/session-ping", { cache: "no-store" });
+        if (res.status === 401) {
+          window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
+        }
+      } catch {
+        // Network blip — ignore. The next save attempt will surface
+        // any real problem.
+      }
+    };
+
+    const timer = setInterval(ping, KEEPALIVE_INTERVAL_MS);
+    // Also ping immediately on tab focus — catches the case where
+    // the operator left the tab idle for hours and is just coming
+    // back to it. We want the banner BEFORE they start typing.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void ping();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   if (!open) return null;
