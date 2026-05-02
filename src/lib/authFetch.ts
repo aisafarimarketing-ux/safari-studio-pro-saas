@@ -4,13 +4,16 @@
 //   Clerk JWTs are short-lived (60s) and auto-refreshed by the
 //   client SDK. A fetch that fires DURING a refresh sees a stale
 //   cookie and returns 401, even though the user is still legitimately
-//   signed in. The previous "wait 1500ms and retry once" approach
-//   surfaced as random red save errors that confused operators and
-//   their clients.
+//   signed in. This helper retries 401s with exponential backoff so a
+//   slow refresh has time to land before we surface the failure.
 //
-//   This helper retries 401s with exponential backoff (1.5s, 4s, 10s)
-//   so a slow refresh has time to land, and only fires the global
-//   auth-expired event when EVERY retry has been exhausted.
+// Operator brief: the previous "session expired" banner + 60s
+// keep-alive ping flooded the operator's console with 401s and
+// alarmed clients seeing the page over their shoulder. The banner
+// is gone; this helper now retries silently and returns the final
+// Response. The auto-save toast in EditorToolbar handles the rare
+// case where every retry fails so the operator sees a single
+// targeted error instead of a constant top-of-page warning.
 //
 // Usage:
 //   const res = await authFetch("/api/proposals", { method: "POST", body });
@@ -18,31 +21,24 @@
 
 const BACKOFF_MS = [1500, 4000, 10000];
 
-export interface AuthFetchOptions extends RequestInit {
-  /** When true, dispatch the global auth-expired event after all
-   *  retries fail. Defaults to true for primary save / upload flows;
-   *  set false for low-priority background pings that shouldn't
-   *  trigger banners on flaky connections. */
-  signalExpired?: boolean;
-}
+export type AuthFetchOptions = RequestInit;
 
 export async function authFetch(
   input: string,
   init: AuthFetchOptions = {},
 ): Promise<Response> {
-  const { signalExpired = true, ...rest } = init;
-  let res = await fetch(input, rest);
+  let res = await fetch(input, init);
   if (res.status !== 401) return res;
 
   for (const delay of BACKOFF_MS) {
     await new Promise((r) => setTimeout(r, delay));
-    res = await fetch(input, rest);
+    res = await fetch(input, init);
     if (res.status !== 401) return res;
   }
 
-  // All retries exhausted. The session is genuinely expired.
-  if (signalExpired && typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("safari-studio:auth-expired"));
-  }
+  // All retries exhausted. The session is genuinely expired. The
+  // caller (auto-save / upload helpers) surfaces this through its
+  // own error UI; we no longer dispatch a global event because the
+  // page-wide banner that listened for it is gone.
   return res;
 }

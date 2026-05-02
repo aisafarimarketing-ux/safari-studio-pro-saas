@@ -69,6 +69,12 @@ export function EditorToolbar({
   // user's saved images exceed the body-size cap. Only that specific
   // error is fixable by re-encoding; others need different handling.
   const isSizeError = Boolean(autoSaveError?.startsWith("Proposal is "));
+  // Detect the auth-expired error message that authFetch surfaces
+  // after every retry has failed. We show a Sign-in action on the
+  // toast instead of a separate top-of-page banner. Operator brief:
+  // "get rid of this error forever — clients have complained."
+  const isAuthError =
+    !!autoSaveError && /session (has )?expired|sign in/i.test(autoSaveError);
 
   const handleCompressImages = async () => {
     setCompressing(true);
@@ -419,10 +425,26 @@ export function EditorToolbar({
         <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#b34334] text-white px-4 py-3 rounded-lg shadow-lg flex items-start gap-3">
           <div className="text-lg leading-none">⚠</div>
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-sm">Auto-save failed</div>
-            <div className="text-[13px] text-white/85 mt-0.5 break-words">
-              {autoSaveError} — your next change will retry automatically.
+            <div className="font-semibold text-sm">
+              {isAuthError ? "Please sign in again" : "Auto-save failed"}
             </div>
+            <div className="text-[13px] text-white/85 mt-0.5 break-words">
+              {isAuthError
+                ? "Your session expired — open Sign in, then return to this tab and your next edit will save."
+                : `${autoSaveError} — your next change will retry automatically.`}
+            </div>
+            {isAuthError && (
+              <div className="mt-2.5">
+                <a
+                  href="/sign-in"
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-block text-[12px] font-semibold px-3 py-1.5 rounded-md bg-white text-[#b34334] hover:bg-white/90 transition"
+                >
+                  Open Sign in →
+                </a>
+              </div>
+            )}
             {isSizeError && (
               <div className="mt-2.5">
                 <button
