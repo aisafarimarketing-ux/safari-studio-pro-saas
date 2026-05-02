@@ -1596,13 +1596,26 @@ function CrossfadeChapter({
   void theme;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
-  const editable = !!(isEditor && onActiveImageUpload && activeId);
+
+  // SAFE-ACTIVE-ID: when the activeId from props doesn't match any
+  // current item — either because IntersectionObserver hasn't fired
+  // yet on first paint (preview/share mode), the items list changed
+  // shape (operator added/removed a property), or the parent's
+  // useState initial value got computed before hydration — fall back
+  // to the FIRST item. Without this, every item's opacity is 0 and
+  // the chapter renders as a blank/colored cell with no photo. THIS
+  // is the actual root cause of "images don't show in preview" that
+  // we've been chasing — the data was always there, but the opacity
+  // gate hid every item.
+  const safeActiveId =
+    items.find((it) => it.id === activeId)?.id ?? items[0]?.id ?? null;
+  const editable = !!(isEditor && onActiveImageUpload && safeActiveId);
   const onFile = async (file: File | undefined) => {
-    if (!file || !activeId || !onActiveImageUpload) return;
+    if (!file || !safeActiveId || !onActiveImageUpload) return;
     setBusy(true);
     try {
       const url = await uploadImage(file);
-      onActiveImageUpload(activeId, url);
+      onActiveImageUpload(safeActiveId, url);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Image upload failed");
     } finally {
@@ -1613,12 +1626,9 @@ function CrossfadeChapter({
   // Whether the active item resolves to a real image URL. When ALL
   // fallback tiers fail (proposal has zero usable images anywhere) we
   // paint the photo cell with the chapter's section surface so it
-  // reads as intentional rather than as a broken empty rectangle —
-  // operator-flagged: "images not showing in preview / webview" was
-  // a missing-fallback issue compounded by the bg-black default
-  // looking jarring next to the brown right column.
+  // reads as intentional rather than as a broken empty rectangle.
   const activeHasImage =
-    (items.find((it) => it.id === activeId)?.srcs ?? []).filter(
+    (items.find((it) => it.id === safeActiveId)?.srcs ?? []).filter(
       (s) => s && s.trim().length > 0,
     ).length > 0;
   const fallbackBg = rightBackground || tokens.sectionSurface;
@@ -1644,8 +1654,8 @@ function CrossfadeChapter({
           <div
             key={it.id}
             className="absolute inset-0 transition-opacity duration-500"
-            style={{ opacity: it.id === activeId ? 1 : 0 }}
-            aria-hidden={it.id !== activeId}
+            style={{ opacity: it.id === safeActiveId ? 1 : 0 }}
+            aria-hidden={it.id !== safeActiveId}
           >
             <SmartImage
               srcs={it.srcs}
@@ -1653,7 +1663,7 @@ function CrossfadeChapter({
               className="absolute inset-0 w-full h-full object-cover"
               style={{ objectPosition: it.imagePosition || "50% 50%" }}
               fallback={
-                it.id === activeId && editable ? (
+                it.id === safeActiveId && editable ? (
                   <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
@@ -1680,7 +1690,7 @@ function CrossfadeChapter({
         />
         {/* Change-image pill — fades in on hover when editable AND the
             active item already has at least one fallback URL. */}
-        {editable && (items.find((i) => i.id === activeId)?.srcs ?? []).some((s) => s?.trim()) && (
+        {editable && (items.find((i) => i.id === safeActiveId)?.srcs ?? []).some((s) => s?.trim()) && (
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
