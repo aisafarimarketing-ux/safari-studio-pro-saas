@@ -859,6 +859,19 @@ function DayByDayChapter({
         );
       })()}
     >
+      {/* Itinerary at a glance — condensed date-by-date list at the
+          top of the chapter so the operator and guest can scan the
+          whole trip arc in a screen before scrolling through the
+          per-day deep-dives below. Mirrors what Safari Portal puts
+          at the top of their itinerary chapter; ours auto-pulls from
+          proposal.days + trip.arrivalDate. */}
+      <ItineraryAtAGlance
+        days={sorted}
+        proposal={proposal}
+        tokens={tokens}
+        theme={theme}
+      />
+
       {sorted.map((day, idx) => (
         <DayInlineBlock
           key={day.id}
@@ -874,6 +887,116 @@ function DayByDayChapter({
       ))}
     </CrossfadeChapter>
   );
+}
+
+// ─── ItineraryAtAGlance ─────────────────────────────────────────────────
+//
+// Tight day-by-date list rendered above the Day-by-Day deep-dive in
+// spread mode. Pulls everything from existing data:
+//   • Day number + computed date (trip.arrivalDate + offset)
+//   • Headline activity (day.subtitle, falls back to destination)
+//   • Overnight lodge (day.tiers[activeTier].camp)
+//
+// Same convention Safari Portal's "Itinerary at a glance" follows;
+// ours is structured + automatic so operators don't maintain it by
+// hand. Hidden when there are 0 days.
+
+function ItineraryAtAGlance({
+  days,
+  proposal,
+  tokens,
+  theme,
+}: {
+  days: Day[];
+  proposal: Proposal;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+}) {
+  if (days.length === 0) return null;
+  const arrivalISO = proposal.trip?.arrivalDate;
+  return (
+    <div
+      className="mb-12 pb-10"
+      style={{ borderBottom: `1px solid ${tokens.border}` }}
+    >
+      <div
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-4"
+        style={{ color: tokens.mutedText }}
+      >
+        — Itinerary at a glance
+      </div>
+      <div className="space-y-3">
+        {days.map((d) => {
+          const dateLabel = computeDayDateLabel(d, arrivalISO);
+          const headline =
+            d.subtitle?.trim() || d.destination?.trim() || `Day ${d.dayNumber}`;
+          const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim();
+          return (
+            <div
+              key={d.id}
+              className="grid grid-cols-[64px_minmax(0,1fr)] gap-4 items-baseline"
+            >
+              <div
+                className="text-[11px] uppercase tracking-[0.18em] font-bold tabular-nums"
+                style={{ color: tokens.accent }}
+              >
+                {dateLabel || `Day ${d.dayNumber}`}
+              </div>
+              <div className="min-w-0">
+                <div
+                  className="text-[14px] font-semibold leading-snug"
+                  style={{
+                    color: tokens.headingText,
+                    fontFamily: `'${theme.displayFont}', serif`,
+                  }}
+                >
+                  {headline}
+                </div>
+                {camp && (
+                  <div
+                    className="text-[11.5px] mt-0.5"
+                    style={{ color: tokens.mutedText }}
+                  >
+                    Overnight · {camp}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Compute the calendar label for a day. Prefers an operator-typed
+// `day.date` when set; falls back to trip.arrivalDate + (dayNumber - 1).
+// Returns a short "Jan 16" form so the at-a-glance list reads at a
+// glance.
+function computeDayDateLabel(day: Day, arrivalISO: string | undefined): string {
+  if (day.date?.trim()) {
+    const parsed = parseISODate(day.date);
+    if (parsed) return shortDate(parsed);
+    return day.date.trim();
+  }
+  if (!arrivalISO) return "";
+  const start = parseISODate(arrivalISO);
+  if (!start) return "";
+  start.setUTCDate(start.getUTCDate() + Math.max(0, day.dayNumber - 1));
+  return shortDate(start);
+}
+
+function parseISODate(iso: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function shortDate(d: Date): string {
+  const month = d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "UTC" });
+  return `${month} ${day}`;
 }
 
 // One day block on the right column. Reports its in-view state up to
