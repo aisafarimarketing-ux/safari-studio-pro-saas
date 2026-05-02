@@ -1724,23 +1724,157 @@ function PropertyInlineBlock({
           </MetaCell>
         )}
       </div>
-      {(property.amenities ?? []).length > 0 && (
-        <div className="mt-6">
+      {/* Fast Facts — operator-curated standout points (Highlights)
+          + factual specs (Quick facts) in a magazine-feature
+          two-column block. Same pattern Safari Portal uses on every
+          property; ours pulls from existing structured fields so
+          there's no extra operator effort. */}
+      <PropertyFastFacts property={property} nightsCount={nightsCount} tokens={tokens} />
+
+      {/* Library-defined custom sections (Sustainability, Family
+          policies, Butler service, Experience & Activities, etc.).
+          Each renders as its own sub-headed block — exactly like
+          Safari Portal's "Butler Service" / "Experience & Activities"
+          inline sub-sections. Operator-controlled. */}
+      {(property.customSections ?? []).map((sec) => (
+        <section key={sec.id ?? sec.title} className="mt-7">
           <div
             className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
             style={{ color: tokens.mutedText }}
           >
-            At a glance
+            {sec.title}
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {(property.amenities ?? []).slice(0, 8).map((a) => (
-              <span key={a} className="text-[13px]" style={{ color: tokens.bodyText }}>
-                · {a}
-              </span>
-            ))}
+          <div
+            className="text-[13.5px] leading-[1.75] whitespace-pre-line"
+            style={{ color: tokens.bodyText }}
+          >
+            {sec.body}
           </div>
-        </div>
-      )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// ─── PropertyFastFacts ──────────────────────────────────────────────────
+//
+// Two-column Fast Facts block. Highlights = operator-curated
+// standout points (suitability tags, special interests, propertyClass,
+// trip-style fit). Quick facts = factual specs (room count, meal plan,
+// check-in/out, languages, amenities). Both populated from existing
+// Property fields — operators don't fill in a new structure.
+
+function PropertyFastFacts({
+  property,
+  nightsCount,
+  tokens,
+}: {
+  property: Property;
+  nightsCount: number;
+  tokens: ThemeTokens;
+}) {
+  // Highlights — composed from operator-curated descriptors. We start
+  // with propertyClass (capital-case eyebrow), then the suitability
+  // tags ("Couples", "Family-friendly"), then any specialInterests
+  // tags ("Photography", "Conservation"). Each becomes a bullet.
+  const highlights: string[] = [];
+  if (property.propertyClass?.trim()) highlights.push(property.propertyClass.trim());
+  for (const s of property.suitability ?? []) {
+    if (s?.trim()) highlights.push(s.trim());
+  }
+  for (const s of property.specialInterests ?? []) {
+    if (s?.trim() && !highlights.includes(s.trim())) highlights.push(s.trim());
+  }
+
+  // Quick facts — factual / operational. Each row is one bullet so
+  // the list reads scannably even when a few are missing.
+  const quickFacts: string[] = [];
+  if (property.totalRooms) {
+    quickFacts.push(
+      `${property.totalRooms} ${property.totalRooms === 1 ? "room" : "rooms"} & suites`,
+    );
+  }
+  if (property.mealPlan?.trim()) quickFacts.push(property.mealPlan.trim());
+  if (nightsCount > 0) {
+    quickFacts.push(`${nightsCount} ${nightsCount === 1 ? "night" : "nights"}`);
+  }
+  if (property.checkInTime?.trim() || property.checkOutTime?.trim()) {
+    const ci = property.checkInTime?.trim() || "—";
+    const co = property.checkOutTime?.trim() || "—";
+    quickFacts.push(`Check-in ${ci} · Check-out ${co}`);
+  }
+  if ((property.spokenLanguages ?? []).length > 0) {
+    quickFacts.push(`Languages: ${(property.spokenLanguages ?? []).join(", ")}`);
+  }
+  // Amenities go below; the top bullets are the structured facts so
+  // operators get a clear, magazine-style fact sheet.
+  for (const a of (property.amenities ?? []).slice(0, 8)) {
+    if (a?.trim()) quickFacts.push(a.trim());
+  }
+
+  if (highlights.length === 0 && quickFacts.length === 0) return null;
+
+  return (
+    <div
+      className="mt-7 pt-6"
+      style={{ borderTop: `1px solid ${tokens.border}` }}
+    >
+      <div
+        className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-4"
+        style={{ color: tokens.mutedText }}
+      >
+        Fast Facts
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+        {highlights.length > 0 && (
+          <FactList label="Highlights" items={highlights} tokens={tokens} />
+        )}
+        {quickFacts.length > 0 && (
+          <FactList label="Quick facts" items={quickFacts} tokens={tokens} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FactList({
+  label,
+  items,
+  tokens,
+}: {
+  label: string;
+  items: string[];
+  tokens: ThemeTokens;
+}) {
+  return (
+    <div>
+      <div
+        className="text-[9.5px] uppercase tracking-[0.28em] font-bold mb-2.5"
+        style={{ color: tokens.accent }}
+      >
+        {label}
+      </div>
+      <ul className="space-y-2">
+        {items.map((item, i) => (
+          <li
+            key={i}
+            className="flex items-start gap-2.5 text-[13px] leading-snug"
+            style={{ color: tokens.bodyText }}
+          >
+            <span
+              className="mt-1.5 inline-block rounded-full"
+              style={{
+                width: 5,
+                height: 5,
+                background: tokens.accent,
+                flexShrink: 0,
+              }}
+              aria-hidden
+            />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
