@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AICommentApplyDialog } from "./AICommentApplyDialog";
 
 // Operator side of the comment system. Bell-icon toggle in the editor
 // toolbar that opens a right-side drawer listing every comment, newest
@@ -26,6 +27,9 @@ export function CommentsDrawer({ proposalId }: { proposalId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // AI comment-apply dialog state. Only one comment is being applied
+  // at a time; this stores the in-flight target.
+  const [applyTarget, setApplyTarget] = useState<{ id: string; body: string } | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -164,6 +168,9 @@ export function CommentsDrawer({ proposalId }: { proposalId: string }) {
                   onResolve={() => setStatus(c.id, "resolved")}
                   onReopen={() => setStatus(c.id, "open")}
                   onDelete={() => deleteComment(c.id)}
+                  onApplyWithAI={() =>
+                    setApplyTarget({ id: c.id, body: c.body })
+                  }
                 />
               ))}
             </div>
@@ -194,6 +201,20 @@ export function CommentsDrawer({ proposalId }: { proposalId: string }) {
           </aside>
         </>
       )}
+
+      {/* AI comment-apply dialog — opens when the operator clicks
+          "✦ Apply with AI" on a client comment. Refreshes the
+          drawer once the patch is applied so the comment shows as
+          resolved. */}
+      <AICommentApplyDialog
+        open={applyTarget !== null}
+        comment={applyTarget?.body ?? ""}
+        commentId={applyTarget?.id}
+        onClose={() => setApplyTarget(null)}
+        onApplied={() => {
+          void refresh();
+        }}
+      />
     </>
   );
 }
@@ -203,11 +224,13 @@ function CommentRow({
   onResolve,
   onReopen,
   onDelete,
+  onApplyWithAI,
 }: {
   comment: Comment;
   onResolve: () => void;
   onReopen: () => void;
   onDelete: () => void;
+  onApplyWithAI: () => void;
 }) {
   const isOp = comment.authorIsOperator;
   const author = comment.authorName ?? (isOp ? "You" : "Client");
@@ -243,7 +266,7 @@ function CommentRow({
       <div className="text-[13px] text-black/80 leading-relaxed whitespace-pre-wrap break-words">
         {comment.body}
       </div>
-      <div className="mt-2 flex items-center gap-1">
+      <div className="mt-2 flex items-center gap-1 flex-wrap">
         {resolved ? (
           <button
             onClick={onReopen}
@@ -253,12 +276,29 @@ function CommentRow({
           </button>
         ) : (
           !isOp && (
-            <button
-              onClick={onResolve}
-              className="px-2 py-0.5 text-[11px] rounded-md text-[#1b3a2d] hover:bg-[#1b3a2d]/[0.07] transition font-medium"
-            >
-              Mark resolved
-            </button>
+            <>
+              {/* ✦ Apply with AI — proposes a typed patch from the
+                  comment + proposal context, opens a diff modal for
+                  the operator to confirm. The marquee differentiator. */}
+              <button
+                onClick={onApplyWithAI}
+                className="px-2 py-0.5 text-[11px] rounded-md font-medium transition inline-flex items-center gap-1"
+                style={{
+                  background: "rgba(201,168,76,0.16)",
+                  color: "#8a7125",
+                }}
+                title="Have AI propose edits for this comment"
+              >
+                <span aria-hidden style={{ color: "#c9a84c" }}>✦</span>
+                <span>Apply with AI</span>
+              </button>
+              <button
+                onClick={onResolve}
+                className="px-2 py-0.5 text-[11px] rounded-md text-[#1b3a2d] hover:bg-[#1b3a2d]/[0.07] transition font-medium"
+              >
+                Mark resolved
+              </button>
+            </>
           )
         )}
         <button
