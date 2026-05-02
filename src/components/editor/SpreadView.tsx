@@ -1650,35 +1650,62 @@ function CrossfadeChapter({
           inputRef.current?.click();
         }}
       >
-        {items.map((it) => (
-          <div
-            key={it.id}
-            className="absolute inset-0 transition-opacity duration-500"
-            style={{ opacity: it.id === safeActiveId ? 1 : 0 }}
-            aria-hidden={it.id !== safeActiveId}
-          >
-            <SmartImage
-              srcs={it.srcs}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ objectPosition: it.imagePosition || "50% 50%" }}
-              fallback={
-                it.id === safeActiveId && editable ? (
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
-                  >
-                    <div className="text-4xl mb-2 opacity-70">+</div>
-                    <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
-                      Click to upload photo
-                    </div>
-                  </button>
-                ) : null
-              }
-            />
-          </div>
-        ))}
+        {/* Photo rendering strategy:
+         *   In editor mode we keep the multi-stack crossfade so the
+         *   operator can scroll through chapters and watch the photo
+         *   smoothly swap with each block they pass.
+         *   In share/preview mode we render ONLY the active item with
+         *   no opacity stacking. After six attempts to fix "images
+         *   missing in preview", the operator's instinct nailed it:
+         *   the opacity:0/1 gate was hiding everything when the
+         *   activeId state didn't match. Eliminating the stack
+         *   removes that whole class of bug — the image is either
+         *   rendered or it isn't. No invisible-but-present cells. */}
+        {isEditor ? (
+          items.map((it) => (
+            <div
+              key={it.id}
+              className="absolute inset-0 transition-opacity duration-500"
+              style={{ opacity: it.id === safeActiveId ? 1 : 0 }}
+              aria-hidden={it.id !== safeActiveId}
+            >
+              <SmartImage
+                srcs={it.srcs}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ objectPosition: it.imagePosition || "50% 50%" }}
+                fallback={
+                  it.id === safeActiveId && editable ? (
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      className="absolute inset-0 flex flex-col items-center justify-center text-white/65 hover:text-white transition cursor-pointer"
+                    >
+                      <div className="text-4xl mb-2 opacity-70">+</div>
+                      <div className="text-[11px] uppercase tracking-[0.22em] font-semibold">
+                        Click to upload photo
+                      </div>
+                    </button>
+                  ) : null
+                }
+              />
+            </div>
+          ))
+        ) : (
+          (() => {
+            const active = items.find((it) => it.id === safeActiveId) ?? items[0];
+            if (!active) return null;
+            return (
+              <SmartImage
+                srcs={active.srcs}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ objectPosition: active.imagePosition || "50% 50%" }}
+                fallback={null}
+              />
+            );
+          })()
+        )}
         {/* Soft top-and-bottom gradient so overlay text reads. */}
         <div
           aria-hidden
