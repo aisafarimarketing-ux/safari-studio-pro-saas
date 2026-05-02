@@ -112,6 +112,10 @@ interface SpreadRowProps {
    *  a data-URL fallback). */
   onImageUpload?: (url: string) => void;
   isEditor?: boolean;
+  /** Right-column background. Each chapter passes its own
+   *  tokens.sectionSurface (resolved with section overrides) so the
+   *  Chapter Colours pill can repaint the right side. */
+  rightBackground?: string;
 }
 
 // One row of the spread. Left column is `position: sticky` for the
@@ -128,6 +132,7 @@ function SpreadRow({
   minHeight = 320,
   onImageUpload,
   isEditor,
+  rightBackground,
 }: SpreadRowProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 items-start">
@@ -143,8 +148,13 @@ function SpreadRow({
         isEditor={isEditor}
       />
 
-      {/* Right — scrolling content */}
-      <div className="px-8 md:px-12 py-12 md:py-16 min-h-screen relative">
+      {/* Right — scrolling content. Background pulled from the
+          chapter's resolved tokens.sectionSurface so the Colours
+          pill recolours the right side of the spread visibly. */}
+      <div
+        className="px-8 md:px-12 py-12 md:py-16 min-h-screen relative"
+        style={rightBackground ? { background: rightBackground } : undefined}
+      >
         {children}
       </div>
     </div>
@@ -383,6 +393,7 @@ function CoverChapter({
       imageUrl={heroUrl}
       imagePosition={heroPos}
       isEditor={isEditor}
+      rightBackground={tokens.sectionSurface}
       onImageUpload={
         cover
           ? (url) => updateSectionContent(cover.id, { heroImageUrl: url })
@@ -529,6 +540,7 @@ function WelcomeChapter({
       eyebrow="— A note from us"
       label="WELCOME"
       isEditor={isEditor}
+      rightBackground={tokens.sectionSurface}
       onImageUpload={(url) => useProposalStore.getState().updateOperator({ consultantPhoto: url })}
     >
       {isEditor && (
@@ -791,6 +803,7 @@ function DayByDayChapter({
       }))}
       activeId={activeId}
       isEditor={isEditor}
+      rightBackground={tokens.sectionSurface}
       onActiveImageUpload={(dayId, url) => updateDay(dayId, { heroImageUrl: url })}
       topRightChrome={
         isEditor ? (
@@ -1125,6 +1138,7 @@ function CrossfadeChapter({
   topRightChrome,
   isEditor,
   onActiveImageUpload,
+  rightBackground,
   children,
 }: {
   eyebrow?: string;
@@ -1143,6 +1157,9 @@ function CrossfadeChapter({
    *  Parent wires it to updateDay / updateProperty. */
   isEditor?: boolean;
   onActiveImageUpload?: (itemId: string, url: string) => void;
+  /** Right-column background — pulled from the chapter's resolved
+   *  tokens.sectionSurface so the Colours pill recolours visibly. */
+  rightBackground?: string;
   children: React.ReactNode;
 }) {
   void theme;
@@ -1274,7 +1291,10 @@ function CrossfadeChapter({
 
       {/* Right column — stacked sub-blocks. Each block's
           IntersectionObserver swaps the sticky image to its own. */}
-      <div className="relative px-8 md:px-12 py-12 md:py-16">
+      <div
+        className="relative px-8 md:px-12 py-12 md:py-16"
+        style={rightBackground ? { background: rightBackground } : undefined}
+      >
         {topRightChrome}
         <div
           className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-2"
@@ -1371,6 +1391,7 @@ function AccommodationsChapter({
       }))}
       activeId={activeId}
       isEditor={isEditor}
+      rightBackground={tokens.sectionSurface}
       onActiveImageUpload={(propertyId, url) =>
         updateProperty(propertyId, { leadImageUrl: url })
       }
@@ -1620,6 +1641,7 @@ function PricingChapter({
       imageUrl={coverHero(proposal) || firstDayHero(proposal)}
       eyebrow="— Investment"
       label="PRICING"
+      rightBackground={tokens.sectionSurface}
     >
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
@@ -1705,6 +1727,7 @@ function GoodToKnowChapter({
       imageUrl={coverHero(proposal) || firstDayHero(proposal)}
       eyebrow="— Good to know"
       label="PRE-TRAVEL INFORMATION"
+      rightBackground={tokens.sectionSurface}
     >
       <div
         className="text-[10.5px] uppercase tracking-[0.32em] font-semibold mb-3"
@@ -1822,6 +1845,7 @@ function ClosingChapter({
       eyebrow="— Secure your trip"
       label={proposal.trip.tripStyle?.toUpperCase() || "READY?"}
       isEditor={isEditor}
+      rightBackground={tokens.sectionSurface}
       onImageUpload={(url) =>
         updateSectionContent(closing.id, { themeImageUrl: url })
       }

@@ -110,11 +110,22 @@ export function resolveToken(
 /**
  * Merge section-level style overrides over global theme tokens.
  * Priority: section override > global token > theme default.
+ *
+ * Filters out null / undefined / empty-string override values so a
+ * "reset to theme" (which writes `undefined` for the cleared field)
+ * doesn't leave the merged token as undefined — that would paint
+ * nothing where the global default was wanted.
  */
 export function resolveTokens(
   tokens: ThemeTokens,
-  overrides?: Partial<ThemeTokens>
+  overrides?: Partial<ThemeTokens>,
 ): ThemeTokens {
-  if (!overrides || Object.keys(overrides).length === 0) return tokens;
-  return { ...tokens, ...overrides } as ThemeTokens;
+  if (!overrides) return tokens;
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === undefined || v === null || v === "") continue;
+    cleaned[k] = v;
+  }
+  if (Object.keys(cleaned).length === 0) return tokens;
+  return { ...tokens, ...cleaned } as ThemeTokens;
 }

@@ -651,7 +651,29 @@ export const useProposalStore = create<ProposalState>()(
     updateProperty: (id, patch) =>
       set((state) => {
         const p = state.proposal.properties.find((p) => p.id === id);
-        if (p) Object.assign(p, patch);
+        if (!p) return;
+        const oldName = p.name;
+        Object.assign(p, patch);
+        // If the name changed, walk every day's tier assignments and
+        // rename any reference that still pointed at the old name.
+        // Day-card lookups match by case-insensitive name, so without
+        // this step a property rename leaves the day cards orphaned —
+        // they fall through to the phantom-property branch and render
+        // with no image. Operator-flagged: renames silently broke the
+        // property image in preview / share view.
+        if (typeof patch.name === "string" && patch.name !== oldName) {
+          const lcOld = oldName.trim().toLowerCase();
+          for (const day of state.proposal.days) {
+            for (const tier of Object.values(day.tiers ?? {})) {
+              if (
+                typeof tier?.camp === "string" &&
+                tier.camp.trim().toLowerCase() === lcOld
+              ) {
+                tier.camp = patch.name;
+              }
+            }
+          }
+        }
       }),
 
     refreshPropertyFromLibrary: async (propertyId: string) => {
