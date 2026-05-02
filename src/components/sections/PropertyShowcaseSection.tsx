@@ -153,9 +153,32 @@ function PropertyBlock({
   // Nights is derived the same way.
   const nightsCount = countNightsFor(property, proposal, proposal.activeTier as TierKey);
 
-  const carouselImages = [property.leadImageUrl, ...(property.galleryUrls ?? [])].filter(
-    (u): u is string => Boolean(u),
+  // Carousel images. When the property has no own images at all
+  // (autopilot left leadImageUrl / galleryUrls empty), fall back
+  // to the day's hero of any day this property is assigned to so
+  // guests see *something*. Operator-flagged: "some properties in
+  // the property section lose their images completely in preview
+  // / webview" — this is the magazine-side fix.
+  const ownImages = [property.leadImageUrl, ...(property.galleryUrls ?? [])].filter(
+    (u): u is string => typeof u === "string" && u.trim().length > 0,
   );
+  const carouselImages = (() => {
+    if (ownImages.length > 0) return ownImages;
+    const lcName = property.name.trim().toLowerCase();
+    const fallback = proposal.days
+      .filter(
+        (d) =>
+          d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase() === lcName,
+      )
+      .map((d) => d.heroImageUrl)
+      .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+    if (fallback.length > 0) return fallback.slice(0, 3);
+    // Last-ditch: cover hero so the property block never reads as
+    // a blank slot in non-editor view.
+    const cover = proposal.sections.find((s) => s.type === "cover");
+    const heroUrl = (cover?.content?.heroImageUrl as string | undefined) ?? "";
+    return heroUrl.trim() ? [heroUrl] : [];
+  })();
   const activeCarouselImage = carouselImages[carouselIndex] ?? null;
   const goPrev = () =>
     setCarouselIndex((i) => (i <= 0 ? Math.max(0, carouselImages.length - 1) : i - 1));

@@ -855,7 +855,13 @@ function DayByDayChapter({
       theme={theme}
       items={sorted.map((d) => ({
         id: d.id,
-        imageUrl: d.heroImageUrl ?? null,
+        // Coerce empty strings to null AND fall back to the cover
+        // hero so days without their own photo still show something
+        // on the sticky-left pane. Operator-flagged: "daycards lose
+        // images in preview/webview". Empty string was the actual
+        // root cause — autopilot writes "" for missing images, and
+        // ?? null doesn't catch it.
+        imageUrl: nonEmptyUrl(d.heroImageUrl) ?? coverHero(proposal),
         imagePosition: d.heroImagePosition,
       }))}
       activeId={activeId}
@@ -1733,10 +1739,28 @@ function AccommodationsChapter({
       label="ACCOMMODATIONS"
       tokens={tokens}
       theme={theme}
-      items={visible.map((p) => ({
-        id: p.id,
-        imageUrl: p.leadImageUrl ?? null,
-      }))}
+      items={visible.map((p) => {
+        // Image fallback chain — leadImageUrl → first gallery URL
+        // → first day's hero where this property is assigned →
+        // cover hero. Empty strings (autopilot's legacy fallback)
+        // coerce to null. Operator-flagged: "some properties in
+        // the property section lose their images completely in
+        // preview / webview".
+        const lcName = p.name.trim().toLowerCase();
+        const dayHero = nonEmptyUrl(
+          proposal.days.find(
+            (d) =>
+              d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase() ===
+              lcName,
+          )?.heroImageUrl,
+        );
+        const fallback =
+          nonEmptyUrl(p.leadImageUrl) ??
+          nonEmptyUrl(p.galleryUrls?.[0]) ??
+          dayHero ??
+          coverHero(proposal);
+        return { id: p.id, imageUrl: fallback };
+      })}
       activeId={activeId}
       isEditor={isEditor}
       rightBackground={tokens.sectionSurface}
