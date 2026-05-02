@@ -151,6 +151,7 @@ function SpreadRow({
         overlay={overlay}
         onImageUpload={onImageUpload}
         isEditor={isEditor}
+        fallbackBg={rightBackground}
       />
 
       {/* Right — scrolling content. Background pulled from the
@@ -187,6 +188,7 @@ function StickyPhotoCell({
   overlay,
   onImageUpload,
   isEditor,
+  fallbackBg,
 }: {
   imageUrl: string | null;
   imagePosition?: string;
@@ -196,6 +198,10 @@ function StickyPhotoCell({
   overlay?: React.ReactNode;
   onImageUpload?: (url: string) => void;
   isEditor?: boolean;
+  /** When set + imageUrl is missing, paint the cell with this colour
+   *  instead of bg-black so the cell reads as intentional rather than
+   *  as a broken cream rectangle in preview / share view. */
+  fallbackBg?: string;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -214,8 +220,11 @@ function StickyPhotoCell({
   const editable = !!(isEditor && onImageUpload);
   return (
     <div
-      className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black group"
-      style={{ minHeight }}
+      className={`relative md:sticky md:top-0 md:h-screen overflow-hidden group ${imageUrl ? "bg-black" : ""}`}
+      style={{
+        minHeight,
+        ...(imageUrl ? {} : fallbackBg ? { background: fallbackBg } : {}),
+      }}
       onContextMenu={(e) => {
         if (!editable) return;
         e.preventDefault();
@@ -328,15 +337,37 @@ function findPersonalNoteSection(proposal: Proposal): Section | undefined {
 
 function coverHero(proposal: Proposal): string | null {
   const cover = findCoverSection(proposal);
-  return (cover?.content?.heroImageUrl as string | undefined) ?? null;
+  // CRITICAL: filter empty strings as well as undefined/null. Autopilot
+  // and the new-proposal defaults sometimes write "" for missing
+  // images, and the original `?? null` only caught undefined/null —
+  // empty string slipped through and broke every downstream fallback
+  // chain that ended in `?? coverHero(proposal)`. Operator-flagged:
+  // properties + days losing images in preview/webview.
+  return nonEmptyUrl(cover?.content?.heroImageUrl as string | undefined);
 }
 function firstDayHero(proposal: Proposal): string | null {
   return (
     proposal.days
       .slice()
       .sort((a, b) => a.dayNumber - b.dayNumber)
-      .find((d) => d.heroImageUrl)?.heroImageUrl ?? null
+      .map((d) => nonEmptyUrl(d.heroImageUrl))
+      .find((u): u is string => u !== null) ?? null
   );
+}
+// Last-ditch fallback for chapters that should never read as a
+// completely empty slot in preview / share view. Walks every property
+// snapshot, then every day's hero — the first non-empty URL we find
+// is better than nothing.
+function anyImageInProposal(proposal: Proposal): string | null {
+  for (const p of proposal.properties) {
+    const lead = nonEmptyUrl(p.leadImageUrl);
+    if (lead) return lead;
+    for (const g of p.galleryUrls ?? []) {
+      const u = nonEmptyUrl(g);
+      if (u) return u;
+    }
+  }
+  return firstDayHero(proposal) ?? coverHero(proposal);
 }
 
 function uniqueOrderedDestinations(proposal: Proposal): string[] {
@@ -855,13 +886,27 @@ function DayByDayChapter({
       theme={theme}
       items={sorted.map((d) => ({
         id: d.id,
-        // Coerce empty strings to null AND fall back to the cover
-        // hero so days without their own photo still show something
-        // on the sticky-left pane. Operator-flagged: "daycards lose
-        // images in preview/webview". Empty string was the actual
-        // root cause — autopilot writes "" for missing images, and
-        // ?? null doesn't catch it.
-        imageUrl: nonEmptyUrl(d.heroImageUrl) ?? coverHero(proposal),
+        // Five-tier fallback: own hero → assigned property's lead →
+        // assigned property's first gallery → cover hero → any image
+        // in the proposal. Empty strings always coerce to null first.
+        // Operator-flagged: "daycards lose images in preview/webview"
+        // — was: `d.heroImageUrl ?? null`, where `??` doesn't catch
+        // autopilot's "" empty-string writes.
+        imageUrl: (() => {
+          const own = nonEmptyUrl(d.heroImageUrl);
+          if (own) return own;
+          const camp = d.tiers?.[proposal.activeTier as TierKey]?.camp?.trim().toLowerCase();
+          if (camp) {
+            const property = proposal.properties.find(
+              (p) => p.name.trim().toLowerCase() === camp,
+            );
+            const lead = nonEmptyUrl(property?.leadImageUrl);
+            if (lead) return lead;
+            const gallery = nonEmptyUrl(property?.galleryUrls?.[0]);
+            if (gallery) return gallery;
+          }
+          return coverHero(proposal) ?? anyImageInProposal(proposal);
+        })(),
         imagePosition: d.heroImagePosition,
       }))}
       activeId={activeId}
@@ -1533,14 +1578,27 @@ function CrossfadeChapter({
     }
   };
 
+  // Whether the active item resolves to a real image URL. When ALL
+  // fallback tiers fail (proposal has zero usable images anywhere) we
+  // paint the photo cell with the chapter's section surface so it
+  // reads as intentional rather than as a broken empty rectangle —
+  // operator-flagged: "images not showing in preview / webview" was
+  // a missing-fallback issue compounded by the bg-black default
+  // looking jarring next to the brown right column.
+  const activeHasImage = !!items.find((it) => it.id === activeId)?.imageUrl;
+  const fallbackBg = rightBackground || tokens.sectionSurface;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 items-start">
       {/* Sticky photo pane — all images stacked, only the active one
           visible. Opacity transition gives a clean crossfade as
           IntersectionObserver toggles activeId. */}
       <div
-        className="relative md:sticky md:top-0 md:h-screen overflow-hidden bg-black group"
-        style={{ minHeight: 360 }}
+        className={`relative md:sticky md:top-0 md:h-screen overflow-hidden group ${activeHasImage ? "bg-black" : ""}`}
+        style={{
+          minHeight: 360,
+          ...(activeHasImage ? {} : { background: fallbackBg }),
+        }}
         onContextMenu={(e) => {
           if (!editable) return;
           e.preventDefault();
@@ -1754,11 +1812,21 @@ function AccommodationsChapter({
               lcName,
           )?.heroImageUrl,
         );
+        // Five-tier fallback for accommodations-chapter sticky photo:
+        //   1. property's own lead image
+        //   2. property's first gallery image
+        //   3. hero of any day this property is assigned to
+        //   4. cover hero (now empty-string-filtered)
+        //   5. any non-empty image anywhere in the proposal
+        // Step 5 covers the "operator imported a proposal whose cover
+        // image is also blank" case — anything's better than reading
+        // as a totally empty cell in preview / share.
         const fallback =
           nonEmptyUrl(p.leadImageUrl) ??
           nonEmptyUrl(p.galleryUrls?.[0]) ??
           dayHero ??
-          coverHero(proposal);
+          coverHero(proposal) ??
+          anyImageInProposal(proposal);
         return { id: p.id, imageUrl: fallback };
       })}
       activeId={activeId}

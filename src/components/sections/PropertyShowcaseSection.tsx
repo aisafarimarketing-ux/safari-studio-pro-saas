@@ -173,11 +173,28 @@ function PropertyBlock({
       .map((d) => d.heroImageUrl)
       .filter((u): u is string => typeof u === "string" && u.trim().length > 0);
     if (fallback.length > 0) return fallback.slice(0, 3);
-    // Last-ditch: cover hero so the property block never reads as
-    // a blank slot in non-editor view.
+    // Last-ditch: cover hero, then any other day's hero, then any
+    // other property's images. The property block never reads as a
+    // completely blank slot in non-editor view — operators flagged
+    // this repeatedly. Whitespace-only strings filter to nothing so
+    // autopilot's "" empties don't slip through.
     const cover = proposal.sections.find((s) => s.type === "cover");
-    const heroUrl = (cover?.content?.heroImageUrl as string | undefined) ?? "";
-    return heroUrl.trim() ? [heroUrl] : [];
+    const heroUrl = (cover?.content?.heroImageUrl as string | undefined)?.trim() || "";
+    if (heroUrl) return [heroUrl];
+    const anyDayHero = proposal.days
+      .map((d) => d.heroImageUrl?.trim() || "")
+      .find((u) => u.length > 0);
+    if (anyDayHero) return [anyDayHero];
+    for (const other of proposal.properties) {
+      if (other.id === property.id) continue;
+      const otherLead = other.leadImageUrl?.trim() || "";
+      if (otherLead) return [otherLead];
+      const otherGallery = (other.galleryUrls ?? [])
+        .map((u) => u.trim())
+        .find((u) => u.length > 0);
+      if (otherGallery) return [otherGallery];
+    }
+    return [];
   })();
   const activeCarouselImage = carouselImages[carouselIndex] ?? null;
   const goPrev = () =>
