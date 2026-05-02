@@ -5,6 +5,7 @@ import { ImageSlot } from "../ImageSlot";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { RichEditable } from "@/components/editor/RichEditable";
 import { sanitizeRichText } from "@/lib/sanitizeRichText";
+import { PropertyImageCarousel } from "../shared/PropertyImageCarousel";
 import type { DayCardLayoutProps } from "../types";
 
 // FlipCard — magazine-spread day card.
@@ -433,7 +434,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
   );
 }
 
-// ─── Property gallery — 1 large + small grid ─────────────────────────────
+// ─── Property gallery — single big lead image, click-to-next ────────────
+//
+// Operator brief: "in property section in the day card have one big
+// lead image on all layouts with allow to click to see next." Wraps
+// PropertyImageCarousel (lead + galleryUrls in order) and adds a
+// "Replace" affordance for the operator on top of the lead. Onclick
+// of the image cycles through the property's photos; the carousel
+// component renders an index pill and indicator dots so guests
+// understand the image is interactive.
 
 function PropertyGallery({
   property,
@@ -448,105 +457,39 @@ function PropertyGallery({
   onUpload: (file: File) => void;
   onPickProperty: () => void;
 }) {
-  const lead = property?.leadImageUrl;
-  const thumbs = (property?.galleryUrls ?? []).slice(0, 2);
-
-  if (!property) {
-    return (
-      <button
-        type="button"
-        onClick={onPickProperty}
-        disabled={!isEditor}
-        className="w-full h-full flex items-center justify-center text-[11.5px] uppercase tracking-[0.22em] transition disabled:opacity-50"
-        style={{
-          aspectRatio: "3 / 2",
-          minHeight: "100%",
-          background: tokens.cardBg,
-          border: `1px dashed ${tokens.border}`,
-          borderRadius: 8,
-          color: tokens.mutedText,
-        }}
-      >
-        {isEditor ? "+ Pick property" : "Property to be confirmed"}
-      </button>
-    );
-  }
+  const urls = property
+    ? [property.leadImageUrl, ...(property.galleryUrls ?? [])]
+    : [];
 
   return (
-    <div
-      className="grid gap-2 h-full"
-      style={{
-        gridTemplateColumns: thumbs.length > 0 ? "2fr 1fr" : "1fr",
-      }}
-    >
-      <div
-        className="relative overflow-hidden h-full"
-        style={{
-          // Lead photo follows Act I's 3:2 cinematic ratio when there
-          // are no thumbs (single hero); when thumbs are present the
-          // lead is square (1:1) and the thumbs stack to its right.
-          aspectRatio: thumbs.length > 0 ? "1 / 1" : "3 / 2",
-          background: tokens.cardBg,
-          borderRadius: 8,
-        }}
-      >
-        {lead ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={lead}
-            alt={property.name}
-            className="w-full h-full object-cover"
+    <div className="relative w-full h-full">
+      <PropertyImageCarousel
+        urls={urls}
+        alt={property?.name ?? ""}
+        isEditor={isEditor}
+        tokens={tokens}
+        onPickProperty={onPickProperty}
+        aspect="3 / 2"
+        radius={8}
+      />
+      {isEditor && property?.leadImageUrl && (
+        <label
+          className="absolute top-3 right-3 cursor-pointer text-[10px] uppercase tracking-[0.2em] font-semibold px-2 py-1 rounded backdrop-blur-sm z-10"
+          style={{ background: "rgba(0,0,0,0.55)", color: "white" }}
+          onClick={(e) => e.stopPropagation()}
+          title="Replace this property's lead image"
+        >
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onUpload(f);
+            }}
           />
-        ) : (
-          <button
-            type="button"
-            onClick={onPickProperty}
-            disabled={!isEditor}
-            className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-[0.22em]"
-            style={{ color: tokens.mutedText }}
-          >
-            {isEditor ? "+ Add lead photo" : ""}
-          </button>
-        )}
-        {isEditor && lead && (
-          <label
-            className="absolute bottom-2 right-2 cursor-pointer text-[10px] uppercase tracking-[0.2em] font-semibold px-2 py-1 rounded backdrop-blur-sm"
-            style={{ background: "rgba(0,0,0,0.55)", color: "white" }}
-          >
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onUpload(f);
-              }}
-            />
-            Replace
-          </label>
-        )}
-      </div>
-      {thumbs.length > 0 && (
-        <div className="grid grid-rows-2 gap-2">
-          {thumbs.map((url, i) => (
-            <div
-              key={i}
-              className="overflow-hidden"
-              style={{
-                background: tokens.cardBg,
-                borderRadius: 8,
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt=""
-                className="w-full h-full object-cover"
-                style={{ aspectRatio: "1 / 1" }}
-              />
-            </div>
-          ))}
-        </div>
+          Replace
+        </label>
       )}
     </div>
   );

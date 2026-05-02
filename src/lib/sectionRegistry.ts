@@ -93,13 +93,19 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "dayJourney",
     label: "Day-by-Day Journey",
     icon: "✦",
-    description: "Magazine flow — single column or alternating spreads",
-    // editorial-stack: classic single column (existing).
-    // right-flip / left-flip: image on right or left, consistent across
-    // every day. trip-flip: alternates per day for magazine rhythm
-    // (odd → right, even → left). All four variants share the same
-    // content (location narrative + property narrative + photos).
-    variants: ["editorial-stack", "right-flip", "left-flip", "trip-flip"],
+    description: "Magazine spread — image and narrative side by side, never overlapping",
+    // Operator brief: "all the other day card layouts to follow RF
+    // neat and no writing on the images." Only side-by-side flip
+    // variants are offered now — every day reads as image | text or
+    // text | image, never with text overlaying the photo.
+    //   right-flip — image on the right of every day (RF)
+    //   left-flip  — image on the left of every day
+    //   trip-flip  — alternates side per day for magazine rhythm
+    // editorial-stack (image-on-top + text-below) was removed because
+    // it produced visual collisions on phones; legacy proposals that
+    // still carry the variant string render through DayCard.tsx's
+    // fallback and look the same as right-flip.
+    variants: ["right-flip", "left-flip", "trip-flip"],
     defaultVariant: "trip-flip",
     defaultContent: {},
     dataSource: "days",

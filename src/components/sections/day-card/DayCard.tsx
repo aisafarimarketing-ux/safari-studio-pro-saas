@@ -291,6 +291,14 @@ export function DayCard({
 type ConcreteLayoutVariant = Exclude<DayCardLayoutVariant, "auto" | "trip-flip">;
 
 function renderLayout(variant: ConcreteLayoutVariant, props: DayCardLayoutProps) {
+  // Operator brief: "all the other day card layouts to follow RF neat
+  // and no writing on the images." editorial-stack is no longer
+  // offered to operators (see sectionRegistry — only right-flip,
+  // left-flip, trip-flip are picker options). Existing proposals
+  // saved with editorial-stack still render their old EditorialStack-
+  // Card layout so optional-activity blocks already authored on
+  // those days don't disappear; new proposals always get a flip
+  // variant.
   switch (variant) {
     case "right-flip":
       return <FlipCard {...props} flip="right" />;

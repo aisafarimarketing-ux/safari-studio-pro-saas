@@ -4,6 +4,7 @@ import { ImageSlot } from "../ImageSlot";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { RichEditable } from "@/components/editor/RichEditable";
 import { sanitizeRichText } from "@/lib/sanitizeRichText";
+import { PropertyImageCarousel } from "../shared/PropertyImageCarousel";
 import type { DayCardLayoutProps } from "../types";
 import type { OptionalActivity } from "@/lib/types";
 
@@ -398,7 +399,6 @@ function AccommodationBlock(props: DayCardLayoutProps) {
     tokens,
     theme,
     onOpenPropertyPicker,
-    onPropertyImageUpload,
   } = props;
   const property = data.property;
 
@@ -477,32 +477,25 @@ function AccommodationBlock(props: DayCardLayoutProps) {
             </div>
           </div>
 
-          {/* Image strip — three equal tiles spanning the full card width.
-              Negative horizontal margin breaks out of the AccommodationBlock's
-              mx-10/14 container so each tile gains the full card width
-              (~25% more pixels per image). The day card's overflow-hidden
-              outer wrapper clips cleanly. */}
+          {/* Single big lead image with click-to-next. Operator brief:
+              "one big lead image on all layouts with allow to click to
+              see next." Negative horizontal margin lets it span the
+              full card width. Day card's overflow-hidden clips cleanly. */}
           <div
-            className="-mx-5 md:-mx-14 grid grid-cols-3 gap-1.5"
+            className="-mx-5 md:-mx-14"
             style={{ background: tokens.cardBg }}
           >
-            {[
-              property.leadImageUrl ?? null,
-              property.galleryUrls?.[0] ?? null,
-              property.galleryUrls?.[1] ?? null,
-            ].map((url, i) => (
-              <ImageSlot
-                key={i}
-                url={url}
-                alt={i === 0 ? property.name : ""}
-                isEditor={isEditor}
-                tokens={tokens}
-                onUpload={onPropertyImageUpload}
-                placeholderLabel={i === 0 ? "Add property photo" : "Gallery photo"}
-                style={{ aspectRatio: "1 / 1" }}
-                showChangePill={Boolean(url)}
-              />
-            ))}
+            <PropertyImageCarousel
+              urls={[
+                property.leadImageUrl ?? null,
+                ...(property.galleryUrls ?? []),
+              ]}
+              alt={property.name}
+              isEditor={isEditor}
+              tokens={tokens}
+              aspect="16 / 9"
+              radius={0}
+            />
           </div>
 
           {isEditor && (
