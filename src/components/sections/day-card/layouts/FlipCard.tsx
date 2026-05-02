@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { ImageSlot } from "../ImageSlot";
 import { AIWriteButton } from "@/components/editor/AIWriteButton";
 import { RichEditable } from "@/components/editor/RichEditable";
@@ -104,7 +105,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
     data.propertyBgPerDay ?? propertyBg ?? tokens.sectionSurface;
 
   return (
-    <div className="flex flex-col" style={{ background: locationBg }}>
+    // overflow-hidden as a structural guard so absolutely-positioned
+    // chrome (AI pills, per-act editors, etc.) and any oddly-sized
+    // child can never bleed across the card boundary into another
+    // day. Without it, the operator's stale screenshots showed
+    // narrative text bleeding INTO the destination image cell.
+    <div
+      className="flex flex-col relative overflow-hidden"
+      style={{ background: locationBg }}
+    >
       {/* Top strip — same as editorial-stack so trip-flip + stack
           variants on the same proposal stay visually consistent.
           Background honours the dayHeadBg override when set. */}
@@ -219,7 +228,16 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       )}
 
       {/* ── Act I: Location ─────────────────────────────────────────── */}
-      <div className="px-10 md:px-14 pt-6 pb-10">
+      <div className="relative group/act px-10 md:px-14 pt-6 pb-10">
+        {isEditor && props.onSetLocationImageSide && props.onSetLocationBg && (
+          <ActHoverEditor
+            label="Location"
+            imageSide={data.locationImageSide}
+            onImageSideChange={props.onSetLocationImageSide}
+            bg={data.locationBg}
+            onBgChange={props.onSetLocationBg}
+          />
+        )}
         {/* `.ss-act-grid` (defined in globals.css) renders single-column
             on narrow viewports and switches to the inline-set md
             columns on md+. Drives off the --act-cols-md custom prop
@@ -306,7 +324,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
       {/* ── Act II: Property ────────────────────────────────────────── */}
       {(data.property || isEditor) && (
         <div
-          className="px-10 md:px-14 pt-8 pb-12"
+          className="relative group/act px-10 md:px-14 pt-8 pb-12"
           style={{
             // Per-day propertyBgPerDay wins, then section-level
             // propertyBg, then the section's own sectionSurface.
@@ -314,6 +332,15 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
             borderTop: `1px solid ${tokens.border}`,
           }}
         >
+          {isEditor && props.onSetPropertyImageSide && props.onSetPropertyBgPerDay && (
+            <ActHoverEditor
+              label="Accommodation"
+              imageSide={data.propertyImageSide}
+              onImageSideChange={props.onSetPropertyImageSide}
+              bg={data.propertyBgPerDay}
+              onBgChange={props.onSetPropertyBgPerDay}
+            />
+          )}
           <div
             className="ss-act-grid"
             style={{ "--act-cols-md": actIICols } as React.CSSProperties}
@@ -523,4 +550,154 @@ function PropertyGallery({
       )}
     </div>
   );
+}
+
+// ─── ActHoverEditor — per-act hover-revealed chrome ─────────────────────
+//
+// Operator brief: "we have editor for daycards there but separate so if
+// you hover over the accommodation section you see the editor for that
+// section, and if you hover over the destination you meet the
+// destination hover."
+//
+// Sits at the top-right of either Act I (Location) or Act II
+// (Accommodation). Only the act being hovered shows its own editor;
+// the unhovered act stays clean. Each editor lets the operator:
+//   • flip the image side independently for that act (Auto / Left /
+//     Right) — overrides the section-level trip-flip rhythm
+//   • set a per-day background for that act, with a Reset that drops
+//     back to the section default
+//
+// `group/act` is set on the parent so we can use Tailwind's named-
+// group hover (group-hover/act:opacity-100) to scope the reveal to
+// THIS act only — hovering Act II doesn't show Act I's editor and
+// vice versa.
+
+function ActHoverEditor({
+  label,
+  imageSide,
+  onImageSideChange,
+  bg,
+  onBgChange,
+}: {
+  label: string;
+  imageSide: "left" | "right" | undefined;
+  onImageSideChange: (next: "left" | "right" | undefined) => void;
+  bg: string | undefined;
+  onBgChange: (next: string | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div
+      data-editor-chrome
+      className="absolute top-3 right-3 z-30 opacity-0 group-hover/act:opacity-100 focus-within:opacity-100 transition"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="px-2.5 py-1 rounded-full text-[10.5px] uppercase tracking-[0.18em] font-semibold bg-black/55 text-white hover:bg-black/75 transition backdrop-blur-sm shadow-md flex items-center gap-1.5"
+        title={`Edit ${label.toLowerCase()} layout & colour`}
+      >
+        <span aria-hidden>✎</span>
+        <span>{label}</span>
+      </button>
+      {open && (
+        <div
+          ref={popRef}
+          className="absolute right-0 mt-2 w-[240px] bg-[#0d0d0d] text-white/90 rounded-xl shadow-2xl border border-white/10 p-3"
+          style={{ fontSize: 12 }}
+        >
+          <div className="text-[10px] uppercase tracking-[0.22em] text-[#c9a84c] mb-2 font-semibold">
+            {label}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 mb-1.5 font-semibold">
+              Image side
+            </div>
+            <div className="flex gap-1.5">
+              {(
+                [
+                  { target: undefined, text: "Auto" },
+                  { target: "left", text: "Left" },
+                  { target: "right", text: "Right" },
+                ] as { target: "left" | "right" | undefined; text: string }[]
+              ).map(({ target, text }) => {
+                const active =
+                  imageSide === target ||
+                  (target === undefined && imageSide === undefined);
+                return (
+                  <button
+                    key={text}
+                    type="button"
+                    onClick={() => onImageSideChange(target)}
+                    className={`flex-1 px-2 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-[0.16em] transition ${
+                      active
+                        ? "bg-[#c9a84c] text-black"
+                        : "bg-white/5 text-white/65 hover:bg-white/10"
+                    }`}
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 mb-1.5 font-semibold">
+              Background
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={hexFor(bg) || "#f8f5ef"}
+                onChange={(e) => onBgChange(e.target.value)}
+                className="w-7 h-7 rounded border border-white/15 cursor-pointer p-0 bg-transparent"
+                title={`Custom ${label.toLowerCase()} background`}
+              />
+              <input
+                type="text"
+                value={bg ?? ""}
+                onChange={(e) => onBgChange(e.target.value || undefined)}
+                placeholder="theme"
+                className="flex-1 bg-white/5 border border-white/10 rounded-md px-2 py-1 text-[11px] text-white/85 outline-none focus:border-white/30 transition-colors font-mono uppercase"
+              />
+              {bg && (
+                <button
+                  type="button"
+                  onClick={() => onBgChange(undefined)}
+                  className="text-[10px] text-white/55 hover:text-white/85 px-2 py-1 rounded hover:bg-white/5 transition"
+                  title="Reset to section default"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] text-white/45 leading-snug">
+            Affects this {label.toLowerCase()} only. Auto / theme = follow the
+            section default.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hexFor(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const m = /^#([0-9a-f]{6})$/i.exec(v.trim());
+  return m ? `#${m[1]}` : undefined;
 }

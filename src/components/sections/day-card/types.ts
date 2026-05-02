@@ -129,6 +129,15 @@ export type DayCardLayoutProps = {
   onOpenPropertyPicker: () => void;
   onPropertyImageUpload: (file: File) => void;  // replaces property.leadImageUrl
 
+  // Per-act editor callbacks. FlipCard surfaces them as a hover-
+  // revealed chrome inside each act so operators can edit the
+  // location and accommodation halves independently. Optional so
+  // EditorialStackCard / preview paths don't have to plumb them.
+  onSetLocationImageSide?: (next: "left" | "right" | undefined) => void;
+  onSetLocationBg?: (next: string | undefined) => void;
+  onSetPropertyImageSide?: (next: "left" | "right" | undefined) => void;
+  onSetPropertyBgPerDay?: (next: string | undefined) => void;
+
   // Optional-activity actions (editor + guest)
   onAddOptionalActivity: () => void;
   onUpdateOptionalActivity: (activityId: string, patch: Partial<OptionalActivity>) => void;

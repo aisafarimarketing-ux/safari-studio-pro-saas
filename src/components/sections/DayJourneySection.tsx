@@ -106,19 +106,20 @@ export function DayJourneySection({ section }: { section: Section }) {
           <div className="space-y-2 md:space-y-3">
             {days.map((day, i) => (
               <div key={day.id}>
-                {/* Day-to-day divider — single hairline between every
-                    pair of consecutive days. Operator brief: "introduce
-                    divider between day to day." Drawn on top of the
-                    drive-time chip column so it reads as editorial
-                    rule, never a hard wall. Skipped above day 1. */}
+                {/* Day-to-day divider — visible band between every
+                    pair of consecutive days. Operator brief:
+                    "introduce on default at generation divider for
+                    days. each day separated by divider." Same #5e4f33
+                    palette as the section-level divider band; sits
+                    above the drive-time chip. Skipped above day 1. */}
                 {i > 0 && (
-                  <div className="px-8 md:px-12 mt-1 mb-1">
+                  <div className="px-8 md:px-12 mt-3 mb-3">
                     <div
                       aria-hidden
                       style={{
-                        height: 1,
+                        height: 2,
                         background: "#5e4f33",
-                        opacity: 0.55,
+                        borderRadius: 1,
                       }}
                     />
                   </div>

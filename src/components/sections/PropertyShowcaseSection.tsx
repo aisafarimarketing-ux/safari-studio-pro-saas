@@ -98,20 +98,18 @@ export function PropertyShowcaseSection({ section }: { section: Section }) {
       </div>
       {properties.map((property, idx) => (
         <div key={property.id}>
-          {/* Hairline divider between property blocks. Operator
-              brief: "all dividers should generate default with this
-              colour #5e4f33." Single source of truth for the rule
-              colour kept here so future operator-driven theme tweaks
-              only need to update one constant. Skipped above the
-              first block. */}
+          {/* Visible band divider between property blocks. Operator
+              brief: "introduce on default at generation divider for
+              properties." Same colour + thickness as the day-to-day
+              rule so the proposal reads as one rhythm. */}
           {idx > 0 && (
-            <div className="px-8 md:px-12">
+            <div className="px-8 md:px-12 my-3">
               <div
                 aria-hidden
                 style={{
-                  height: 1,
+                  height: 2,
                   background: "#5e4f33",
-                  opacity: 0.6,
+                  borderRadius: 1,
                 }}
               />
             </div>

@@ -225,6 +225,10 @@ export function DayCard({
     onToggleAddOn: (activityId) => toggleAddOnSelection(day.id, activityId),
     isAddOnSelected,
     onRequestActivityInComments,
+    onSetLocationImageSide: (next) => updateDay(day.id, { locationImageSide: next }),
+    onSetLocationBg: (next) => updateDay(day.id, { locationBg: next }),
+    onSetPropertyImageSide: (next) => updateDay(day.id, { propertyImageSide: next }),
+    onSetPropertyBgPerDay: (next) => updateDay(day.id, { propertyBgPerDay: next }),
   };
 
   return (
@@ -256,20 +260,6 @@ export function DayCard({
           onAddAfter={() => onRequestAddAfter?.()}
           onDuplicate={() => onRequestDuplicate?.()}
           onDelete={() => removeDay(day.id)}
-          locationImageSide={day.locationImageSide}
-          propertyImageSide={day.propertyImageSide}
-          onSetLocationImageSide={(next) =>
-            updateDay(day.id, { locationImageSide: next })
-          }
-          onSetPropertyImageSide={(next) =>
-            updateDay(day.id, { propertyImageSide: next })
-          }
-          locationBg={day.locationBg}
-          propertyBgPerDay={day.propertyBgPerDay}
-          onSetLocationBg={(next) => updateDay(day.id, { locationBg: next })}
-          onSetPropertyBgPerDay={(next) =>
-            updateDay(day.id, { propertyBgPerDay: next })
-          }
         />
       )}
       {/* Section colour editor moved to SectionChrome (top-right of
