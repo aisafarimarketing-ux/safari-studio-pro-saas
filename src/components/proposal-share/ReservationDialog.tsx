@@ -4,6 +4,27 @@ import { useEffect, useMemo, useState } from "react";
 import { ensureSessionId } from "@/components/proposal-share/ViewTracker";
 import type { Proposal, ThemeTokens, ProposalTheme } from "@/lib/types";
 
+// ─── Safe modal palette ─────────────────────────────────────────────────
+//
+// The reservation modal used to inherit `tokens.pageBg / .headingText /
+// .border` from the proposal's theme. When an operator's brand uses a
+// dark page bg or low-contrast text colours, the modal text became
+// unreadable. We now lock the modal surface + text to a fixed
+// neutral-warm palette regardless of brand, and use the operator's
+// brand colour only as an ACCENT (logo, CTA — and only when contrast
+// against white text is safe). If the brand colour fails contrast,
+// the CTA falls back to a safe deep green.
+
+const SAFE_BG = "#F7F3E8";                   // warm ivory modal surface
+const SAFE_INK = "#0a1411";                  // primary headings
+const SAFE_INK_2 = "rgba(10,20,17,0.78)";    // body
+const SAFE_INK_3 = "rgba(10,20,17,0.55)";    // muted / labels / placeholder
+const SAFE_BORDER = "rgba(0,0,0,0.10)";      // header divider, soft borders
+const SAFE_INPUT_BG = "#ffffff";
+const SAFE_INPUT_BORDER = "rgba(0,0,0,0.16)";
+const FALLBACK_CTA_BG = "#1b3a2d";           // deep green fallback when brand fails contrast
+const FALLBACK_CTA_TEXT = "#ffffff";
+
 // ─── ReservationDialog — client booking popup ───────────────────────────
 //
 // Opens from the Closing section's "Secure This Safari" CTA. Captures
@@ -120,6 +141,14 @@ export function ReservationDialog({
     "our team";
   const operatorLogoUrl = proposal.operator.logoUrl?.trim() || null;
 
+  // CTA color — brand-adaptive but contrast-safe. We use the operator's
+  // theme accent only when white text against it clears WCAG AA;
+  // otherwise we fall back to deep green so a low-contrast brand can
+  // never produce an unreadable button.
+  const brandAccent = tokens.accent;
+  const ctaBg = isSafeForWhiteText(brandAccent) ? brandAccent : FALLBACK_CTA_BG;
+  const ctaText = FALLBACK_CTA_TEXT;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -188,7 +217,8 @@ export function ReservationDialog({
       <div
         className="w-full md:max-w-[640px] max-h-[92vh] overflow-y-auto rounded-t-2xl md:rounded-2xl shadow-2xl"
         style={{
-          background: tokens.pageBg,
+          background: SAFE_BG,
+          color: SAFE_INK,
           fontFamily: `'${theme.bodyFont}', sans-serif`,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -196,14 +226,15 @@ export function ReservationDialog({
         {/* ── Header ── */}
         <div
           className="flex items-center justify-between gap-3 px-5 md:px-7 pt-5 pb-3"
-          style={{ borderBottom: `1px solid ${tokens.border}` }}
+          style={{ borderBottom: `1px solid ${SAFE_BORDER}` }}
         >
           <div className="flex items-center gap-3 min-w-0">
             {operatorLogoUrl && (
-              // Operator logo — surfaces org branding in the popup so
-              // the client sees who they're booking with at a glance.
-              // Stays small (max 40px) so it complements the title
-              // rather than competing with it.
+              // Operator logo — uses brand colours by definition; this
+              // is exactly the kind of accent surface where brand
+              // belongs. Background stays transparent so the logo's
+              // own background (or transparency) renders cleanly on
+              // the safe ivory modal surface.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={operatorLogoUrl}
@@ -215,14 +246,14 @@ export function ReservationDialog({
             <div className="min-w-0">
               <div
                 className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
-                style={{ color: tokens.mutedText }}
+                style={{ color: SAFE_INK_3 }}
               >
                 Make a reservation
               </div>
               <h2
                 className="font-bold leading-[1.1] mt-0.5 truncate"
                 style={{
-                  color: tokens.headingText,
+                  color: SAFE_INK,
                   fontFamily: `'${theme.displayFont}', serif`,
                   fontSize: "clamp(1.2rem, 2.4vw, 1.6rem)",
                   letterSpacing: "-0.005em",
@@ -236,7 +267,7 @@ export function ReservationDialog({
             type="button"
             onClick={onClose}
             className="text-2xl leading-none transition hover:opacity-75 shrink-0"
-            style={{ color: tokens.mutedText }}
+            style={{ color: SAFE_INK_3 }}
             aria-label="Close"
           >
             ×
@@ -245,14 +276,14 @@ export function ReservationDialog({
 
         {done ? (
           <div className="px-5 md:px-7 py-8">
-            {renderSuccessMessage(form.firstName, senderLabel, emailDelivery, tokens)}
+            {renderSuccessMessage(form.firstName, senderLabel, emailDelivery)}
             <button
               type="button"
               onClick={onClose}
               className="mt-7 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
               style={{
-                background: tokens.accent,
-                color: "white",
+                background: ctaBg,
+                color: ctaText,
               }}
             >
               Done
@@ -263,7 +294,7 @@ export function ReservationDialog({
             {/* Reassuring intro — sets expectation before the form */}
             <p
               className="text-[13.5px] leading-[1.55] -mt-1"
-              style={{ color: tokens.bodyText }}
+              style={{ color: SAFE_INK_2 }}
             >
               Tell us about your trip — we&rsquo;ll confirm availability and next
               steps shortly.
@@ -372,7 +403,7 @@ export function ReservationDialog({
             <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
               <p
                 className="text-[11.5px] flex-1 min-w-[180px] leading-[1.55]"
-                style={{ color: tokens.mutedText }}
+                style={{ color: SAFE_INK_3 }}
               >
                 No payment required now. We&rsquo;ll confirm availability and
                 guide you through the next step.
@@ -382,8 +413,8 @@ export function ReservationDialog({
                 disabled={submitting}
                 className="px-5 py-2.5 rounded-lg text-[14px] font-semibold transition shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-wait"
                 style={{
-                  background: tokens.accent,
-                  color: "white",
+                  background: ctaBg,
+                  color: ctaText,
                 }}
               >
                 {submitting ? "Sending…" : "Request reservation →"}
@@ -455,38 +486,38 @@ function renderSuccessMessage(
   senderLabel: string,
   // Kept in the signature so callers don't have to be updated, and
   // future copy passes can re-introduce delivery-specific lines.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _delivery: EmailDelivery | null,
-  tokens: ThemeTokens,
 ): React.ReactNode {
   return (
     <>
       <p
         className="text-[15px] leading-[1.65]"
-        style={{ color: tokens.bodyText }}
+        style={{ color: SAFE_INK_2 }}
       >
-        Thanks, <strong style={{ color: tokens.headingText }}>{firstName}</strong>.
+        Thanks, <strong style={{ color: SAFE_INK }}>{firstName}</strong>.
         Your request has been received and is already being reviewed.
       </p>
       <p
         className="text-[15px] leading-[1.65] mt-3"
-        style={{ color: tokens.bodyText }}
+        style={{ color: SAFE_INK_2 }}
       >
         We&rsquo;ll confirm availability and next steps within 24 hours —
         often much sooner.
       </p>
       <p
         className="text-[13px] leading-[1.6] mt-5"
-        style={{ color: tokens.mutedText }}
+        style={{ color: SAFE_INK_3 }}
       >
         If your trip is time-sensitive, we recommend checking your email or
         WhatsApp for a faster response.
       </p>
       <p
         className="text-[13px] leading-[1.6] mt-2.5"
-        style={{ color: tokens.bodyText }}
+        style={{ color: SAFE_INK_2 }}
       >
         You&rsquo;re now in touch with{" "}
-        <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>,
+        <strong style={{ color: SAFE_INK }}>{senderLabel}</strong>,
         who will guide you through the booking.
       </p>
     </>
@@ -650,7 +681,12 @@ function Input({
   placeholder,
   autoFocus,
   min,
-  tokens,
+  // Tokens prop kept for API compat with existing call sites but
+  // ignored — input chrome uses the safe modal palette so a brand
+  // with low-contrast border/text colours can't make fields
+  // unreadable.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tokens: _tokens,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -668,11 +704,11 @@ function Input({
       placeholder={placeholder}
       autoFocus={autoFocus}
       min={min}
-      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition"
+      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition placeholder:text-[color:rgba(10,20,17,0.45)]"
       style={{
-        background: "white",
-        border: `1px solid ${tokens.border}`,
-        color: tokens.headingText,
+        background: SAFE_INPUT_BG,
+        border: `1px solid ${SAFE_INPUT_BORDER}`,
+        color: SAFE_INK,
       }}
     />
   );
@@ -683,7 +719,8 @@ function Textarea({
   onChange,
   placeholder,
   rows = 3,
-  tokens,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  tokens: _tokens,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -697,12 +734,80 @@ function Textarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition resize-y"
+      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition resize-y placeholder:text-[color:rgba(10,20,17,0.45)]"
       style={{
-        background: "white",
-        border: `1px solid ${tokens.border}`,
-        color: tokens.headingText,
+        background: SAFE_INPUT_BG,
+        border: `1px solid ${SAFE_INPUT_BORDER}`,
+        color: SAFE_INK,
       }}
     />
   );
+}
+
+// ─── Contrast helpers ───────────────────────────────────────────────────
+//
+// Decide whether the operator's brand accent is safe to render under
+// white CTA text. Uses the standard WCAG sRGB luminance formula and
+// returns true only when the contrast ratio is >= 4.5:1 (AA for
+// normal text). Buttons are typically large enough that 3:1 (AA for
+// large) would technically suffice, but we pick the stricter 4.5
+// floor so a borderline brand can never produce a button that's
+// "technically passing" but visually mushy.
+//
+// Defensive about input shape — accepts hex (#rgb / #rrggbb), rgb()/
+// rgba() strings. Anything else (CSS vars, "transparent", oklch, …)
+// is treated as unknown and the caller falls back to deep green.
+
+function isSafeForWhiteText(bg: string | undefined | null): boolean {
+  if (!bg) return false;
+  const ratio = contrastRatio(bg, "#ffffff");
+  return ratio !== null && ratio >= 4.5;
+}
+
+function contrastRatio(a: string, b: string): number | null {
+  const ca = parseColor(a);
+  const cb = parseColor(b);
+  if (!ca || !cb) return null;
+  const la = relativeLuminance(ca);
+  const lb = relativeLuminance(cb);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function relativeLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
+  const channel = (n: number) => {
+    const v = n / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function parseColor(input: string): { r: number; g: number; b: number } | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  // #rgb shorthand
+  const short = /^#([a-f\d])([a-f\d])([a-f\d])$/i.exec(trimmed);
+  if (short) {
+    return {
+      r: parseInt(short[1] + short[1], 16),
+      g: parseInt(short[2] + short[2], 16),
+      b: parseInt(short[3] + short[3], 16),
+    };
+  }
+  // #rrggbb (alpha trailing chars are dropped; we only need rgb)
+  const long = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(trimmed);
+  if (long) {
+    return {
+      r: parseInt(long[1], 16),
+      g: parseInt(long[2], 16),
+      b: parseInt(long[3], 16),
+    };
+  }
+  // rgb() / rgba()
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i.exec(trimmed);
+  if (rgb) {
+    return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) };
+  }
+  return null;
 }
