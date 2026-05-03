@@ -32,6 +32,16 @@ type Analytics = {
     medianResponseMinutes: number | null;
   }[];
   byDay: { date: string; received: number; booked: number }[];
+  proposals: {
+    total: number;
+    byStatus: Record<string, number>;
+    withReservation: number;
+    conversion: number;
+  };
+  reservations: {
+    total: number;
+    byStatus: Record<string, number>;
+  };
 };
 
 const STAGE_ORDER: { key: string; label: string }[] = [
@@ -41,6 +51,19 @@ const STAGE_ORDER: { key: string; label: string }[] = [
   { key: "booked",     label: "Booked" },
   { key: "completed",  label: "Completed" },
   { key: "not_booked", label: "Not Booked" },
+];
+
+const PROPOSAL_STAGES: { key: string; label: string }[] = [
+  { key: "draft",    label: "Draft" },
+  { key: "sent",     label: "Sent" },
+  { key: "accepted", label: "Accepted" },
+];
+
+const RESERVATION_STAGES: { key: string; label: string }[] = [
+  { key: "new",       label: "New" },
+  { key: "contacted", label: "Contacted" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "lost",      label: "Lost" },
 ];
 
 export function AnalyticsPage() {
@@ -111,14 +134,46 @@ export function AnalyticsPage() {
 
         {data && (
           <>
-            {/* KPIs */}
+            {/* KPIs — now keyed off the actual product activity, not
+                just inbound CRM requests. Operators who skip the
+                request inbox and create proposals directly were
+                previously seeing 0s here. */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              <KPI label="Requests received" value={String(data.totals.received)} />
-              <KPI label="Booked" value={String(data.totals.booked)} />
-              <KPI label="Conversion" value={`${Math.round(data.totals.conversion * 100)}%`} />
               <KPI
-                label="Median response"
-                value={data.totals.medianResponseMinutes != null ? formatMinutes(data.totals.medianResponseMinutes) : "—"}
+                label="Proposals"
+                value={String(data.proposals.total)}
+                hint={
+                  data.proposals.total > 0
+                    ? `${data.proposals.byStatus.draft ?? 0} draft · ${data.proposals.byStatus.sent ?? 0} sent`
+                    : undefined
+                }
+              />
+              <KPI
+                label="Bookings"
+                value={String(data.reservations.total)}
+                hint={
+                  data.reservations.total > 0
+                    ? `${data.reservations.byStatus.new ?? 0} new · ${data.reservations.byStatus.confirmed ?? 0} confirmed`
+                    : undefined
+                }
+              />
+              <KPI
+                label="Proposal → booking"
+                value={`${Math.round(data.proposals.conversion * 100)}%`}
+                hint={
+                  data.proposals.total > 0
+                    ? `${data.proposals.withReservation} of ${data.proposals.total}`
+                    : undefined
+                }
+              />
+              <KPI
+                label="Inbound requests"
+                value={String(data.totals.received)}
+                hint={
+                  data.totals.received > 0
+                    ? `${data.totals.booked} booked · ${Math.round(data.totals.conversion * 100)}% conv`
+                    : "CRM inbox"
+                }
               />
             </div>
 
@@ -146,23 +201,39 @@ export function AnalyticsPage() {
               )}
             </section>
 
-            {/* Funnel */}
+            {/* Pipelines — all three flows the operator runs in one
+                view. Previously only the Request inbox funnel was
+                shown, which read empty for operators who skip the
+                CRM inbox and create proposals directly. */}
             <section className="bg-white rounded-2xl border border-black/8 p-5 mb-6">
-              <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55 mb-4">
-                Pipeline snapshot
-              </div>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                {STAGE_ORDER.map((s) => (
-                  <div key={s.key} className="text-center">
-                    <div className="text-[22px] font-bold tabular-nums" style={{ color: "#1b3a2d" }}>
-                      {data.funnel[s.key] ?? 0}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-[0.22em] font-semibold text-black/50 mt-0.5">
-                      {s.label}
-                    </div>
+              <div className="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55">
+                    Pipeline snapshot
                   </div>
-                ))}
+                  <div className="text-[12px] text-black/45 mt-0.5">
+                    Three flows: inbound requests, proposals you ship, bookings clients submit.
+                  </div>
+                </div>
               </div>
+
+              <PipelineRow
+                label="Proposals"
+                stages={PROPOSAL_STAGES}
+                counts={data.proposals.byStatus}
+              />
+              <div className="my-4 h-px bg-black/8" />
+              <PipelineRow
+                label="Bookings"
+                stages={RESERVATION_STAGES}
+                counts={data.reservations.byStatus}
+              />
+              <div className="my-4 h-px bg-black/8" />
+              <PipelineRow
+                label="Inbound requests"
+                stages={STAGE_ORDER}
+                counts={data.funnel}
+              />
             </section>
 
             {/* Source + Specialist tables side-by-side */}
@@ -202,7 +273,15 @@ export function AnalyticsPage() {
 
 // ─── Tiny UI helpers ──────────────────────────────────────────────────────
 
-function KPI({ label, value }: { label: string; value: string }) {
+function KPI({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div className="bg-white rounded-xl border border-black/8 px-4 py-3">
       <div className="text-[9.5px] uppercase tracking-[0.28em] font-semibold text-black/50 mb-1">
@@ -210,6 +289,57 @@ function KPI({ label, value }: { label: string; value: string }) {
       </div>
       <div className="text-[22px] font-bold tracking-tight text-black/85 tabular-nums">
         {value}
+      </div>
+      {hint && (
+        <div className="text-[11px] text-black/45 mt-1 truncate">{hint}</div>
+      )}
+    </div>
+  );
+}
+
+// Single-row pipeline visualisation. Used three times on the analytics
+// page (Proposals / Bookings / Inbound requests) so each flow shares
+// the same shape: small label on the left, stage tiles spread across
+// the right.
+function PipelineRow({
+  label,
+  stages,
+  counts,
+}: {
+  label: string;
+  stages: { key: string; label: string }[];
+  counts: Record<string, number>;
+}) {
+  const total = stages.reduce((acc, s) => acc + (counts[s.key] ?? 0), 0);
+  return (
+    <div>
+      <div className="flex items-baseline gap-3 mb-3">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.24em] font-semibold text-black/55"
+        >
+          {label}
+        </div>
+        <div className="text-[11px] tabular-nums text-black/40">
+          {total} total
+        </div>
+      </div>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}
+      >
+        {stages.map((s) => (
+          <div key={s.key} className="text-center">
+            <div
+              className="text-[20px] font-bold tabular-nums"
+              style={{ color: "#1b3a2d" }}
+            >
+              {counts[s.key] ?? 0}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.22em] font-semibold text-black/50 mt-0.5">
+              {s.label}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

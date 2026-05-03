@@ -32,25 +32,50 @@ export async function GET() {
   const since = new Date();
   since.setDate(since.getDate() - WINDOW_DAYS);
 
-  // Pull all requests in the window once, then compute rollups in JS.
-  // A 90-day window for a typical operator is a few hundred rows — cheap.
-  const requests = await prisma.request.findMany({
-    where: { organizationId: orgId, receivedAt: { gte: since } },
-    select: {
-      id: true,
-      status: true,
-      source: true,
-      assignedToUserId: true,
-      receivedAt: true,
-      firstReplyAt: true,
-    },
-  });
+  // Pull requests, proposals, and reservations in parallel. Each
+  // table is the source of one column in the analytics rollup:
+  //   Request               → CRM inbox funnel + bySource/bySpecialist
+  //   Proposal              → drafts / sent / accepted activity
+  //   ProposalReservation   → bookings funnel + by-status counts
+  // Most operators ship 100s of rows per quarter — these are cheap.
+  const [requests, proposals, reservations, memberships] = await Promise.all([
+    prisma.request.findMany({
+      where: { organizationId: orgId, receivedAt: { gte: since } },
+      select: {
+        id: true,
+        status: true,
+        source: true,
+        assignedToUserId: true,
+        receivedAt: true,
+        firstReplyAt: true,
+      },
+    }),
+    prisma.proposal.findMany({
+      where: { organizationId: orgId, createdAt: { gte: since } },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        // Whether this proposal has at least one client booking — drives
+        // proposal→booking conversion without a second join.
+        proposalReservations: { select: { id: true }, take: 1 },
+      },
+    }),
+    prisma.proposalReservation.findMany({
+      where: { organizationId: orgId, createdAt: { gte: since } },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+      },
+    }),
+    prisma.orgMembership.findMany({
+      where: { organizationId: orgId },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    }),
+  ]);
 
   // Members lookup so bySpecialist rows have names.
-  const memberships = await prisma.orgMembership.findMany({
-    where: { organizationId: orgId },
-    include: { user: { select: { id: true, name: true, email: true } } },
-  });
   const memberById = new Map(memberships.map((m) => [m.userId, m.user]));
 
   // ── Funnel ──────────────────────────────────────────────────────────────
@@ -139,6 +164,40 @@ export async function GET() {
   for (const [date, v] of buckets.entries()) byDay.push({ date, ...v });
   byDay.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
+  // ── Proposal rollups (independent of Request) ─────────────────────────
+  // Counts every proposal created in the window — captures drafts the
+  // operator made directly from "+ New proposal" without an inbound
+  // Request to back them. Without this, those proposals were
+  // invisible to analytics and the dashboard showed 0s.
+  const proposalsTotal = proposals.length;
+  const proposalsByStatus: Record<string, number> = { draft: 0, sent: 0, accepted: 0 };
+  for (const p of proposals) {
+    if (p.status in proposalsByStatus) proposalsByStatus[p.status] += 1;
+  }
+  // A proposal "with reservation" means at least one client booking
+  // came back via the share view. proposalReservations is preloaded
+  // (take:1) so this is a no-op walk.
+  const proposalsWithReservation = proposals.filter(
+    (p) => p.proposalReservations.length > 0,
+  ).length;
+
+  // ── Reservation rollups (the real "bookings" pipeline) ─────────────────
+  const reservationsTotal = reservations.length;
+  const reservationsByStatus: Record<string, number> = {
+    new: 0,
+    contacted: 0,
+    confirmed: 0,
+    lost: 0,
+  };
+  for (const r of reservations) {
+    if (r.status in reservationsByStatus) reservationsByStatus[r.status] += 1;
+  }
+
+  // Proposal → booking conversion. The operator's actual win rate when
+  // they're sending proposals directly (not via the CRM inbox).
+  const proposalConversion =
+    proposalsTotal > 0 ? proposalsWithReservation / proposalsTotal : 0;
+
   return NextResponse.json({
     windowDays: WINDOW_DAYS,
     totals: {
@@ -151,6 +210,18 @@ export async function GET() {
     bySource,
     bySpecialist,
     byDay,
+    // New rollups — populated by the proposal/reservation pipelines
+    // that the legacy Request-based analytics didn't see.
+    proposals: {
+      total: proposalsTotal,
+      byStatus: proposalsByStatus,
+      withReservation: proposalsWithReservation,
+      conversion: proposalConversion,
+    },
+    reservations: {
+      total: reservationsTotal,
+      byStatus: reservationsByStatus,
+    },
   });
 }
 
