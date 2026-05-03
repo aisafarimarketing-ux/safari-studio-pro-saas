@@ -334,57 +334,146 @@ export async function notifyReservationReceived(params: {
     const trackingId = params.trackingId;
     const tripTitle = params.proposalTitle?.trim() || "Untitled proposal";
     const consultantLabel = params.consultantName?.trim() || "Unassigned";
+    const firstName = params.clientName.split(/\s+/)[0] || params.clientName;
     const subject =
-      `[Reservation #${trackingId}] ${tripTitle} — ${params.clientName} ` +
-      `(Consultant: ${consultantLabel})`;
+      `🔥 [Reservation #${trackingId}] ${params.clientName} ready to confirm — ${tripTitle}`;
 
-    // Body — clean dl-style table inside the branded shell so every
-    // field is scannable at a glance. Dates render in the server's TZ
-    // as ISO date strings (YYYY-MM-DD) since the form captured them
-    // that way and we don't want timezone drift in an internal email.
+    // Pull the activity summary so the signal line reflects what the
+    // client actually did pre-booking (Viewed pricing, Tapped
+    // itinerary, etc.) rather than a static string. Best-effort —
+    // missing summary just means the signal line shows the booking
+    // submission alone.
+    const summary = await prisma.proposalActivitySummary.findUnique({
+      where: { proposalId: params.proposalId },
+      select: {
+        priceViewed: true,
+        itineraryClicked: true,
+        clickedReservation: true,
+      },
+    });
+    const signals: string[] = [];
+    if (summary?.priceViewed) signals.push("Viewed pricing");
+    if (summary?.itineraryClicked) signals.push("Tapped itinerary");
+    if (summary?.clickedReservation) signals.push("Started booking form");
+    signals.push("Submitted reservation");
+    const signalText = signals.join(" + ");
+
     const arrival = params.arrivalDate.toISOString().slice(0, 10);
     const departure = params.departureDate.toISOString().slice(0, 10);
-    const rows: Array<[string, string]> = [
-      ["Tracking", `#${trackingId}`],
-      ["Reservation ID", params.reservationId],
-      ["Proposal", tripTitle],
-      ["Consultant", consultantLabel],
-      ["Client", params.clientName],
-      ["Phone", params.clientPhone],
-      ["Email", params.clientEmail],
-      ["Nationality", params.nationality || "—"],
-      ["Arrival", arrival],
-      ["Departure", departure],
-      ["Travelers", params.travelers || "—"],
-      ["Notes", params.notes || "—"],
-    ];
-    const body = `
-      <p>A client just submitted a reservation request from their proposal.</p>
-      <table cellpadding="0" cellspacing="0" role="presentation" style="margin-top:14px;font-size:14px;color:rgba(0,0,0,0.78);">
-        ${rows
-          .map(
-            ([label, value]) => `
-        <tr>
-          <td style="padding:5px 14px 5px 0;color:rgba(0,0,0,0.5);vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
-          <td style="padding:5px 0;font-weight:500;white-space:pre-wrap;">${escapeHtml(value)}</td>
-        </tr>`,
-          )
-          .join("")}
-      </table>
-      <p style="margin-top:18px;color:rgba(0,0,0,0.55);font-size:13px;">
-        Reach out within 24 hours to confirm availability — that&apos;s the promise the client saw on the
-        booking screen.
-      </p>`;
+    const tripNights = Math.max(
+      1,
+      Math.round(
+        (params.departureDate.getTime() - params.arrivalDate.getTime()) /
+          86_400_000,
+      ),
+    );
 
-    const ctaHref = APP_URL
+    const studioUrl = APP_URL
       ? `${APP_URL}/studio/${params.proposalId}`
       : `/studio/${params.proposalId}`;
+    const dashboardUrl = APP_URL ? `${APP_URL}/dashboard` : `/dashboard`;
+
+    // Re-usable section header — small uppercase eyebrow above each
+    // grouped block. Inline so every email client renders it.
+    const sectionLabel = (label: string) =>
+      `<div style="font-size:10.5px;color:rgba(0,0,0,0.45);font-weight:700;letter-spacing:0.22em;text-transform:uppercase;margin:22px 0 8px;">${escapeHtml(label)}</div>`;
+    const row = (label: string, value: string) =>
+      `<tr>
+        <td style="padding:4px 14px 4px 0;color:rgba(0,0,0,0.5);vertical-align:top;white-space:nowrap;font-size:13.5px;">${escapeHtml(label)}</td>
+        <td style="padding:4px 0;color:rgba(0,0,0,0.85);font-weight:500;white-space:pre-wrap;font-size:13.5px;">${escapeHtml(value)}</td>
+      </tr>`;
+
+    // Body — sales-alert structure: subtext → priority block →
+    // grouped sections (Trip / Client / Context) → next-step block →
+    // dual CTAs. No data-dump table; each section answers one
+    // question the consultant has when this lands.
+    const body = `
+      <!-- Subtext -->
+      <p style="margin:0 0 18px;color:rgba(0,0,0,0.7);font-size:14.5px;line-height:1.55;">
+        ${escapeHtml(firstName)} just submitted a booking request and is waiting for confirmation.
+      </p>
+
+      <!-- Priority block -->
+      <table cellpadding="0" cellspacing="0" role="presentation" style="background:#fef2f2;border:1px solid rgba(220,38,38,0.22);border-left:4px solid #dc2626;border-radius:10px;width:100%;margin:0 0 6px;">
+        <tr>
+          <td style="padding:14px 18px;">
+            <div style="font-size:10.5px;color:#991b1b;font-weight:700;letter-spacing:0.20em;text-transform:uppercase;margin-bottom:8px;">
+              <span style="display:inline-block;background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%);color:#fff;padding:3px 8px;border-radius:4px;letter-spacing:0.18em;margin-right:6px;">Status · Very hot</span>
+            </div>
+            <table cellpadding="0" cellspacing="0" role="presentation" style="font-size:13px;color:rgba(0,0,0,0.78);">
+              <tr><td style="padding:2px 12px 2px 0;color:rgba(0,0,0,0.55);font-weight:600;white-space:nowrap;">Signal</td><td style="padding:2px 0;">${escapeHtml(signalText)}</td></tr>
+              <tr><td style="padding:2px 12px 2px 0;color:rgba(0,0,0,0.55);font-weight:600;white-space:nowrap;">Timing</td><td style="padding:2px 0;">Just now</td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Trip -->
+      ${sectionLabel("Trip")}
+      <table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+        ${row("Proposal", tripTitle)}
+        ${row("Tracking", `#${trackingId}`)}
+        ${row("Dates", `${arrival} → ${departure} · ${tripNights} ${tripNights === 1 ? "night" : "nights"}`)}
+        ${row("Travelers", params.travelers || "—")}
+      </table>
+
+      <!-- Client -->
+      ${sectionLabel("Client")}
+      <table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+        ${row("Name", params.clientName)}
+        ${row("Phone", params.clientPhone)}
+        ${row("Email", params.clientEmail)}
+        ${row("Nationality", params.nationality || "—")}
+      </table>
+
+      <!-- Context -->
+      ${sectionLabel("Context")}
+      <table cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+        ${row("Consultant", consultantLabel)}
+        ${row("Reservation ID", params.reservationId)}
+        ${params.notes ? row("Notes", params.notes) : ""}
+      </table>
+
+      <!-- Next step -->
+      <table cellpadding="0" cellspacing="0" role="presentation" style="background:#f0fdf4;border:1px solid rgba(22,163,74,0.22);border-left:4px solid #16a34a;border-radius:10px;width:100%;margin:24px 0 6px;">
+        <tr>
+          <td style="padding:14px 18px;">
+            <div style="font-size:10.5px;color:#166534;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;margin-bottom:8px;">
+              Next step
+            </div>
+            <ul style="margin:0;padding-left:20px;font-size:13px;color:rgba(0,0,0,0.8);line-height:1.6;">
+              <li>Send payment instructions or confirm availability immediately.</li>
+              <li>Follow up within 1–2 hours for highest conversion.</li>
+            </ul>
+          </td>
+        </tr>
+      </table>
+
+      <!-- CTAs -->
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:22px 0 0;">
+        <tr>
+          <td style="padding-right:6px;">
+            <a href="${escapeHtml(studioUrl)}" style="display:inline-block;background:#1b3a2d;color:#ffffff;text-decoration:none;font-size:13.5px;font-weight:700;padding:12px 22px;border-radius:8px;letter-spacing:0.005em;">
+              Confirm booking →
+            </a>
+          </td>
+          <td>
+            <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;color:#1b3a2d;text-decoration:none;font-size:13px;font-weight:600;padding:12px 14px;">
+              View full activity →
+            </a>
+          </td>
+        </tr>
+      </table>`;
+
     const html = renderBrandedEmail({
-      title: `Reservation · ${params.clientName}`,
-      preview: `New booking from ${params.clientName} for ${tripTitle}`,
+      title: "🔥 New reservation request — ready to confirm",
+      preview: `${params.clientName} just submitted a booking — ${tripTitle}`,
       body,
-      ctaLabel: "View in Safari Studio",
-      ctaHref,
+      // CTAs are inline in the body so the consultant sees both
+      // "Confirm booking" and "View full activity" without scrolling.
+      // Override the default footer with the conversion nudge.
+      footer:
+        "Clients who receive a response within 1 hour are far more likely to book.",
     });
 
     const result = await sendEmail({
