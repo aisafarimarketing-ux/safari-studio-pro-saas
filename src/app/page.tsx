@@ -1,36 +1,63 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
+// Native <a> tags for /sign-in and /sign-up are intentional — Clerk's
+// widget mounts cleanly on a fresh document load, avoiding the
+// empty-on-first-load behaviour that a client-side <Link> transition
+// can trigger. Don't replace these with <Link> without verifying the
+// auth flow in incognito.
+
 import Link from "next/link";
 
 // ─── Landing page ────────────────────────────────────────────────────────────
 //
-// Public marketing surface. Editorial / safari-luxury feel — deep forest,
-// warm cream, gold accents, Playfair Display for editorial moments, plenty
-// of breathing room. No hero image (we don't ship licensed photography
-// yet); the visual showcase composes interface fragments + abstracted
-// landscape blocks into a single proof-of-product mockup.
+// Public marketing surface, rebuilt against the reference comp.
+// Layout (top → bottom): Nav · Hero (dark, dashboard mockup right) ·
+// Built-for strip (light, category labels — NOT real customer logos) ·
+// Why-operators comparison · What-operators-want product proof ·
+// Pricing · Final CTA + Footer (dark).
+//
+// Truth rules (load-bearing):
+//   1. The strip under the hero says "BUILT FOR LEADING SAFARI TEAMS"
+//      with category labels. We never imply endorsement we don't have.
+//   2. The "What operators want" grid is product-proof copy, not fake
+//      reviews. No name + headshot + star-rating fabrications.
 //
 // CTA flow:
 //   primary   → /sign-up  (Clerk handles signup → org task → /dashboard)
-//   secondary → #how      (anchor to the 3-step section)
+//   secondary → /demo     (live demo proposal)
 
-const FOREST = "#1b3a2d";
-const FOREST_DEEP = "#142a20";
-const GOLD = "#c9a84c";
-const BONE = "#f8f5ef";
-const BONE_2 = "#f3f0ea";
+const BG = "#F7F5F0";
+const HERO_TOP = "#061A14";
+const HERO_BOTTOM = "#0E2A20";
+const GREEN = "#2F8F46";
+const GREEN_DEEP = "#226A33";
+const GOLD = "#D7B75B";
+const INK = "#0a1411";
+const INK_2 = "rgba(10,20,17,0.72)";
+const INK_3 = "rgba(10,20,17,0.5)";
+const CARD_BORDER = "rgba(0,0,0,0.08)";
+
+const SERIF = "'Playfair Display', Georgia, serif";
+const SANS =
+  "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+
+export const metadata = {
+  title: "Safari Studio — Close more safaris, faster",
+  description:
+    "The command center for safari teams. Know when clients are ready to book, follow up at the right moment, and close trips with personalized proposals.",
+};
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen text-[#1a1a1a]" style={{ background: BONE }}>
+    <div
+      className="min-h-screen"
+      style={{ background: BG, color: INK, fontFamily: SANS }}
+    >
       <Nav />
       <Hero />
-      <Problem />
-      <Solution />
-      <Differentiator />
-      <Showcase />
-      <BrandDNATease />
-      <SpeedControl />
+      <BuiltForStrip />
+      <WhyOperators />
+      <WhatOperatorsWant />
       <Pricing />
-      <SocialProof />
       <FinalCTA />
       <Footer />
     </div>
@@ -42,52 +69,53 @@ export default function HomePage() {
 function Nav() {
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-xl"
-      style={{ background: "rgba(20,42,32,0.86)", borderColor: "rgba(255,255,255,0.06)" }}
+      className="sticky top-0 z-50 backdrop-blur-md"
+      style={{
+        background: "rgba(247,245,240,0.85)",
+        borderBottom: `1px solid ${CARD_BORDER}`,
+      }}
     >
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          {/* Brand mark (geometric diamond) + wordmark. The mark
-              renders white-on-transparent here so it sits cleanly on
-              the dark forest landing-page header — using a CSS filter
-              rather than a separate dark-mode SVG. */}
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: "rgba(201,168,76,0.18)" }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
+            style={{ background: GREEN, color: "#fff" }}
+            aria-hidden
           >
-            <span style={{ color: GOLD }} className="font-bold text-base">S</span>
+            S
           </div>
           <span
-            className="text-white font-semibold text-[15px]"
-            style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", letterSpacing: "0.18em" }}
+            className="font-semibold text-[15px]"
+            style={{ color: INK, letterSpacing: "-0.005em" }}
           >
-            SAFARI STUDIO
+            Safari Studio
           </span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-7 text-[13.5px] text-white/60">
-          <Link href="/demo" className="hover:text-white transition" style={{ color: GOLD }}>Live demo</Link>
-          <a href="#how" className="hover:text-white transition">How it works</a>
-          <a href="#different" className="hover:text-white transition">Why different</a>
-          <a href="#pricing" className="hover:text-white transition">Pricing</a>
+        <div
+          className="hidden md:flex items-center gap-8 text-[14px]"
+          style={{ color: INK_2 }}
+        >
+          <a href="#product" className="hover:text-[color:var(--ink)] transition">Product</a>
+          <a href="#why" className="hover:text-[color:var(--ink)] transition">Why</a>
+          <a href="#pricing" className="hover:text-[color:var(--ink)] transition">Pricing</a>
+          <Link href="/demo" className="hover:text-[color:var(--ink)] transition">Resources</Link>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Native anchors (not next/link) so the Clerk widget always
-              mounts cleanly with a fresh document — avoids the empty-on-
-              first-load behaviour that a client-side transition can trigger. */}
           <a
             href="/sign-in"
-            className="hidden sm:inline-block px-3 py-1.5 text-sm text-white/70 hover:text-white transition"
+            className="hidden sm:inline-flex items-center justify-center px-3 h-9 text-[13.5px] font-medium transition"
+            style={{ color: INK_2 }}
           >
-            Sign in
+            Log in
           </a>
           <a
             href="/sign-up"
-            className="px-4 py-2 rounded-lg text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
-            style={{ background: GOLD, color: FOREST }}
+            className="inline-flex items-center justify-center px-4 h-9 rounded-lg text-[13.5px] font-semibold transition active:scale-[0.97]"
+            style={{ background: GREEN, color: "#fff" }}
           >
-            Open Studio
+            Book a demo
           </a>
         </div>
       </div>
@@ -99,495 +127,659 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="pt-16 relative overflow-hidden" style={{ background: FOREST }}>
-      {/* Texture */}
+    <section
+      className="relative overflow-hidden"
+      style={{
+        background: `linear-gradient(180deg, ${HERO_TOP} 0%, ${HERO_BOTTOM} 100%)`,
+      }}
+    >
+      {/* faint silhouette wash at the bottom — soft savanna mood */}
       <div
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
         style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, ${GOLD} 1px, transparent 0)`,
-          backgroundSize: "32px 32px",
+          background:
+            "radial-gradient(ellipse at 50% 100%, rgba(215,183,91,0.12) 0%, transparent 60%)",
         }}
       />
-      {/* Bottom fade into bone */}
-      <div
-        className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none"
-        style={{ background: `linear-gradient(to bottom, transparent, ${BONE})` }}
-      />
 
-      <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-32 md:pt-32 md:pb-40 text-center">
-        <Eyebrow color={GOLD}>A proposal studio for safari operators</Eyebrow>
-
-        <h1
-          className="mt-7 font-bold text-white leading-[0.98] tracking-tight max-w-5xl mx-auto"
-          style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: "clamp(2.8rem, 7vw, 5.6rem)",
-          }}
-        >
-          A proposal in <em className="not-italic" style={{ color: GOLD }}>thirty seconds</em>.
-          <br />
-          Your voice. Your camps. Your clients.
-        </h1>
-
-        <p className="mt-7 text-[17px] md:text-[19px] text-white/65 max-w-2xl mx-auto leading-relaxed">
-          Tell it who&apos;s travelling and where. Every section — greeting,
-          day-by-day, pricing, sign-off — drafts itself in your brand voice,
-          using only the camps in your library. You polish and send.
-        </p>
-
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3.5">
-          <a
-            href="/sign-up"
-            className="px-7 py-3.5 rounded-xl font-semibold text-[15px] transition hover:brightness-110 active:scale-95 shadow-lg"
-            style={{ background: GOLD, color: FOREST }}
-          >
-            Start free — no card
-          </a>
-          <Link
-            href="/demo"
-            className="px-7 py-3.5 rounded-xl font-semibold text-white/85 text-[15px] transition hover:text-white hover:bg-white/[0.04]"
-            style={{ border: "1px solid rgba(255,255,255,0.18)" }}
-          >
-            Try the live demo →
-          </Link>
-        </div>
-
-        {/* Value strip — three sharp claims replacing the old tag. */}
-        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-0 sm:divide-x divide-white/10 max-w-3xl mx-auto">
-          {[
-            { k: "30s", v: "First draft, every section filled" },
-            { k: "£50/mo", v: "Operator tier — 4× cheaper than Wetu" },
-            { k: "100%", v: "Your library, your voice, your photos" },
-          ].map((item) => (
-            <div key={item.k} className="px-4 py-4 sm:py-0">
-              <div
-                className="font-bold text-white"
-                style={{ fontFamily: "'Playfair Display', serif", fontSize: "28px", lineHeight: 1 }}
-              >
-                {item.k}
-              </div>
-              <div className="text-[12.5px] mt-2 text-white/55 leading-relaxed">{item.v}</div>
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 pt-16 md:pt-20 pb-24 md:pb-32">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] gap-12 lg:gap-16 items-center">
+          {/* Left — copy */}
+          <div className="min-w-0">
+            <div
+              className="inline-flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.22em] px-3 py-1.5 rounded-full"
+              style={{
+                background: "rgba(47,143,70,0.14)",
+                color: "#9CD9A8",
+                border: "1px solid rgba(47,143,70,0.32)",
+              }}
+            >
+              <span style={{ color: GOLD }}>★</span>
+              Built for safari operators
             </div>
-          ))}
+
+            <h1
+              className="mt-6 text-white"
+              style={{
+                fontFamily: SERIF,
+                fontSize: "clamp(40px, 5.6vw, 64px)",
+                lineHeight: 1.05,
+                letterSpacing: "-0.02em",
+                fontWeight: 600,
+              }}
+            >
+              Know when clients are ready to book.{" "}
+              <span style={{ color: GOLD }}>Close more safaris,</span> faster.
+            </h1>
+
+            <p
+              className="mt-6 text-[16px] md:text-[17px] leading-[1.6] max-w-[560px]"
+              style={{ color: "rgba(255,255,255,0.72)" }}
+            >
+              Safari Studio shows you who&rsquo;s most engaged with your proposal,
+              what they care about, and what to do next, so you can close more
+              safaris, faster.
+            </p>
+
+            <div className="mt-8 flex items-center gap-3 flex-wrap">
+              <a
+                href="/sign-up"
+                className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition active:scale-[0.97] hover:brightness-110"
+                style={{ background: GREEN, color: "#fff" }}
+              >
+                Book a demo →
+              </a>
+              <Link
+                href="/demo"
+                className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
+                style={{
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.22)",
+                }}
+              >
+                See how it works
+              </Link>
+            </div>
+
+            <div
+              className="mt-5 text-[12.5px]"
+              style={{ color: "rgba(255,255,255,0.45)" }}
+            >
+              No credit card required · Live demo loads in 10 seconds
+            </div>
+          </div>
+
+          {/* Right — dashboard mockup card */}
+          <DashboardMockup />
         </div>
-
-        <p className="mt-12 text-white/35 text-[12px] tracking-[0.18em] uppercase">
-          Kenya · Tanzania · Uganda · Rwanda · Botswana · Namibia
-        </p>
-      </div>
-
-      <div className="relative max-w-5xl mx-auto px-6 -mb-12 z-10">
-        <HeroMock />
       </div>
     </section>
   );
 }
 
-// Composed mockup — no real screenshot needed yet. Suggests the editor's
-// shape (left rail of section/days, magazine-style canvas) so visitors
-// understand the product without us shipping pixel art.
-function HeroMock() {
+// Stylised hero-side preview of the dashboard. Composed entirely from
+// divs + inline svg so it renders crisp at any density and survives
+// without any /public asset.
+function DashboardMockup() {
+  const cardBg = "rgba(255,255,255,0.04)";
+  const cardBorder = "rgba(255,255,255,0.08)";
+  const cardBorderStrong = "rgba(255,255,255,0.14)";
+
   return (
-    <div
-      className="rounded-2xl overflow-hidden shadow-2xl border"
-      style={{ borderColor: "rgba(201,168,76,0.20)" }}
-    >
-      {/* Browser chrome */}
-      <div className="flex items-center gap-2 px-4 py-3" style={{ background: FOREST_DEEP }}>
-        <span className="w-3 h-3 rounded-full" style={{ background: GOLD }} />
-        <span className="w-3 h-3 rounded-full" style={{ background: "rgba(201,168,76,0.3)" }} />
-        <span className="w-3 h-3 rounded-full" style={{ background: "rgba(201,168,76,0.15)" }} />
+    <div className="relative">
+      {/* outer shadow halo */}
+      <div
+        aria-hidden
+        className="absolute -inset-6 rounded-3xl opacity-60 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 50%, rgba(215,183,91,0.18) 0%, transparent 70%)",
+        }}
+      />
+
+      <div
+        className="relative rounded-2xl p-5 backdrop-blur-sm"
+        style={{
+          background: "rgba(13,28,22,0.88)",
+          border: `1px solid ${cardBorderStrong}`,
+          boxShadow:
+            "0 30px 80px -20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)",
+        }}
+      >
+        {/* greeting strip */}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div
+              className="text-[10px] uppercase tracking-[0.18em] font-semibold"
+              style={{ color: GOLD }}
+            >
+              Today
+            </div>
+            <div
+              className="mt-0.5 text-white text-[16px]"
+              style={{ fontFamily: SERIF, fontWeight: 600 }}
+            >
+              Good morning, Alex.
+            </div>
+          </div>
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold"
+            style={{ background: GREEN, color: "#fff" }}
+          >
+            AO
+          </div>
+        </div>
+
+        {/* KPI row */}
         <div
-          className="ml-4 flex-1 max-w-xs rounded-md px-3 py-1 text-[11px]"
-          style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)" }}
+          className="grid grid-cols-3 gap-2 rounded-xl p-3"
+          style={{ background: cardBg, border: `1px solid ${cardBorder}` }}
         >
-          safaristudio.co/studio
+          <Kpi label="Hot" value="12" tone="hot" />
+          <Kpi label="Follow-up" value="3" tone="warn" />
+          <Kpi label="Bookings" value="8" tone="ok" />
+        </div>
+
+        {/* hot-deal card */}
+        <div
+          className="mt-3 rounded-xl p-3.5"
+          style={{
+            background: cardBg,
+            border: `1px solid rgba(220,38,38,0.22)`,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            aria-hidden
+            className="absolute left-0 top-0 bottom-0 w-[3px]"
+            style={{ background: "rgba(220,38,38,0.65)" }}
+          />
+          <div className="flex items-start gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0"
+              style={{ background: GREEN, color: "#fff" }}
+            >
+              L
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="text-white text-[13px] font-semibold truncate">
+                  Lilian Nyongesa
+                </div>
+                <span
+                  className="text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
+                  style={{
+                    background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
+                    color: "#fff",
+                  }}
+                >
+                  Very hot
+                </span>
+              </div>
+              <div
+                className="text-[11.5px] truncate mt-0.5"
+                style={{ color: "rgba(255,255,255,0.6)" }}
+              >
+                Mara · Serengeti · 9 days
+              </div>
+              <div
+                className="text-[11px] mt-1 flex items-center gap-1.5"
+                style={{ color: "rgba(255,255,255,0.7)" }}
+              >
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{ background: "#16a34a" }}
+                />
+                <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
+                <span style={{ color: "rgba(255,255,255,0.4)" }}>· 32m ago</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div
+                className="text-[20px] leading-none tabular-nums text-white"
+                style={{ fontFamily: SERIF, fontWeight: 800 }}
+              >
+                142
+              </div>
+              <div
+                className="text-[8.5px] uppercase tracking-[0.18em] font-semibold mt-0.5"
+                style={{ color: "rgba(255,255,255,0.5)" }}
+              >
+                score
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* activity rows */}
+        <div className="mt-3 space-y-2">
+          <ActivityLine
+            glyph="$"
+            tone="amber"
+            label="Marcus viewed pricing"
+            sub="The Anderson Family"
+            time="1h"
+          />
+          <ActivityLine
+            glyph="📍"
+            tone="green"
+            label="Priya tapped Day 4"
+            sub="Honeymoon Migration"
+            time="2h"
+          />
+          <ActivityLine
+            glyph="✓"
+            tone="success"
+            label="Booking confirmed"
+            sub="Devereux Family"
+            time="4h"
+          />
+        </div>
+
+        <div
+          className="mt-4 pt-3 flex items-center justify-between"
+          style={{ borderTop: `1px solid ${cardBorder}` }}
+        >
+          <div
+            className="text-[11px]"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            $42K in pipeline
+          </div>
+          <div
+            className="text-[11px] font-semibold"
+            style={{ color: GOLD }}
+          >
+            View activity →
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* App body */}
-      <div className="grid grid-cols-[140px_1fr] h-72 md:h-[440px]" style={{ background: BONE }}>
-        {/* Left rail */}
-        <div className="border-r p-3 space-y-1 hidden md:block" style={{ background: BONE_2, borderColor: "rgba(0,0,0,0.06)" }}>
-          {[
-            "Cover",
-            "Overview",
-            "Day 1 · Nairobi",
-            "Day 2 · Mara",
-            "Day 3 · Mara",
-            "Day 4 · Amboseli",
-            "Pricing",
-            "Departure",
-          ].map((label, i) => (
+function Kpi({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "hot" | "warn" | "ok";
+}) {
+  const accent =
+    tone === "hot" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#22c55e";
+  return (
+    <div className="px-2 py-1.5">
+      <div
+        className="text-[8.5px] uppercase tracking-[0.20em] font-semibold flex items-center gap-1.5"
+        style={{ color: "rgba(255,255,255,0.5)" }}
+      >
+        <span
+          aria-hidden
+          className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{ background: accent }}
+        />
+        {label}
+      </div>
+      <div
+        className="mt-0.5 text-white tabular-nums leading-none"
+        style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ActivityLine({
+  glyph,
+  tone,
+  label,
+  sub,
+  time,
+}: {
+  glyph: string;
+  tone: "amber" | "green" | "success";
+  label: string;
+  sub: string;
+  time: string;
+}) {
+  const swatch =
+    tone === "amber"
+      ? { bg: "rgba(215,183,91,0.16)", fg: GOLD }
+      : tone === "success"
+        ? { bg: "rgba(34,197,94,0.18)", fg: "#86efac" }
+        : { bg: "rgba(47,143,70,0.18)", fg: "#9CD9A8" };
+  return (
+    <div className="flex items-start gap-2.5">
+      <div
+        className="w-7 h-7 rounded-md flex items-center justify-center text-[12px] shrink-0"
+        style={{ background: swatch.bg, color: swatch.fg }}
+        aria-hidden
+      >
+        {glyph}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[12px] truncate text-white"
+          style={{ fontWeight: 600 }}
+        >
+          {label}
+        </div>
+        <div
+          className="text-[10.5px] truncate"
+          style={{ color: "rgba(255,255,255,0.55)" }}
+        >
+          {sub}
+        </div>
+      </div>
+      <div
+        className="text-[10.5px] tabular-nums shrink-0 mt-0.5"
+        style={{ color: "rgba(255,255,255,0.45)" }}
+      >
+        {time}
+      </div>
+    </div>
+  );
+}
+
+// ─── Built-for strip ─────────────────────────────────────────────────────────
+//
+// Replaces a "trusted by" row. Category-based labels only — never
+// implies endorsement from real operators. Visual style stays close
+// to the reference (centred caps, tracked spacing) so the section
+// reads as social context, not a customer testimonial.
+
+function BuiltForStrip() {
+  const categories = [
+    "WILDERNESS DMC",
+    "RIVER LODGES",
+    "OFF-GRID CAMPS",
+    "PRIVATE GUIDES",
+    "SAFARI BROKERS",
+    "BOUTIQUE OPERATORS",
+  ];
+  return (
+    <section
+      className="py-16 md:py-20"
+      style={{ borderBottom: `1px solid ${CARD_BORDER}` }}
+    >
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
+        <div
+          className="text-[11.5px] font-semibold uppercase tracking-[0.28em]"
+          style={{ color: INK_3 }}
+        >
+          Built for leading safari teams
+        </div>
+        <p
+          className="mt-3 text-[15px] max-w-[640px] mx-auto"
+          style={{ color: INK_2 }}
+        >
+          Inspired by how high-performing safari operators sell, plan, follow
+          up, and close trips.
+        </p>
+
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-8 gap-y-6 items-center">
+          {categories.map((label) => (
             <div
               key={label}
-              className="rounded-md px-2.5 py-1.5 text-[11px]"
+              className="text-[12px] font-semibold tracking-[0.22em] text-center"
               style={{
-                background: i === 2 ? FOREST : "transparent",
-                color: i === 2 ? "white" : "rgba(0,0,0,0.5)",
-                fontWeight: i === 2 ? 600 : 400,
+                color: INK_3,
+                fontFamily: SANS,
+                opacity: 0.7,
               }}
             >
               {label}
             </div>
           ))}
         </div>
-
-        {/* Canvas */}
-        <div className="p-5 space-y-4 overflow-hidden">
-          {/* Hero block */}
-          <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "white" }}>
-            <div
-              className="h-24 md:h-32"
-              style={{ background: `linear-gradient(135deg, ${FOREST} 0%, ${FOREST_DEEP} 100%)` }}
-            />
-            <div className="p-4">
-              <div className="text-[10px] uppercase tracking-[0.2em]" style={{ color: "rgba(0,0,0,0.4)" }}>
-                Day 1 · Nairobi
-              </div>
-              <div
-                className="text-[19px] md:text-[22px] font-bold mt-1"
-                style={{ color: "rgba(0,0,0,0.85)", fontFamily: "'Playfair Display', serif" }}
-              >
-                Arrival into the Nairobi corridor
-              </div>
-              <div className="text-[12px] mt-1.5" style={{ color: "rgba(0,0,0,0.5)" }}>
-                The Emakoko · Full board · Family suite
-              </div>
-            </div>
-          </div>
-
-          {/* Property block */}
-          <div className="rounded-xl overflow-hidden shadow-sm flex" style={{ background: "white" }}>
-            <div className="w-24 md:w-32 shrink-0" style={{ background: BONE_2 }} />
-            <div className="p-3 flex-1 min-w-0">
-              <div className="h-3 rounded w-2/3 mb-1.5" style={{ background: "rgba(0,0,0,0.08)" }} />
-              <div className="h-2 rounded w-1/3 mb-2" style={{ background: "rgba(0,0,0,0.05)" }} />
-              <div className="h-2 rounded w-full" style={{ background: "rgba(0,0,0,0.04)" }} />
-              <div className="h-2 rounded w-5/6 mt-1" style={{ background: "rgba(0,0,0,0.04)" }} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Problem ────────────────────────────────────────────────────────────────
-
-function Problem() {
-  return (
-    <section className="pt-32 pb-20" style={{ background: BONE }}>
-      <div className="max-w-5xl mx-auto px-6">
-        <SectionHeading
-          eyebrow="The way you sell now"
-          title="Word documents, Canva tabs, and version drift."
-          sub="You know the product cold. The proposal still takes half a day. Three pain points operators tell us about every week:"
-        />
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
-          {PAINS.map((p) => (
-            <PainCard key={p.title} {...p} />
-          ))}
-        </div>
       </div>
     </section>
   );
 }
 
-const PAINS = [
-  {
-    icon: "✕",
-    title: "Six tools to send one proposal",
-    body: "Word for the body, Canva for the cover, email to attach the camp factsheet, WhatsApp to chase the client. Nothing connects.",
-  },
-  {
-    icon: "↻",
-    title: "Every itinerary is built from scratch",
-    body: "You've sold the same Mara loop a hundred times. You're still copy-pasting the same camp blurb between proposals.",
-  },
-  {
-    icon: "≠",
-    title: "v3, v3-final, v3-final-FINAL",
-    body: "Pricing changed. The cover is wrong. The PDF you sent doesn't match the version your colleague is editing.",
-  },
-] as const;
+// ─── Why operators choose Safari Studio (comparison) ─────────────────────────
 
-function PainCard({ icon, title, body }: { icon: string; title: string; body: string }) {
+function WhyOperators() {
+  const pains = [
+    "Spreadsheets and email threads scattered across the team",
+    "No idea who's hot vs. who's gone quiet",
+    "Hours rebuilding the same proposal layout",
+    "Reservations slipping through without follow-up",
+    "Generic templates that don't reflect your brand",
+  ];
+  const gains = [
+    "One command center — every deal in one place",
+    "Engagement scoring tells you who's ready to book",
+    "Brand-locked templates render in seconds",
+    "Reservations route to the right consultant automatically",
+    "AI helps you write proposals that sound like you",
+  ];
+
   return (
-    <div className="p-7 rounded-2xl bg-white border" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-      <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center text-[15px] font-semibold mb-4"
-        style={{ background: "rgba(179,67,52,0.10)", color: "#b34334" }}
-      >
-        {icon}
-      </div>
-      <h3 className="text-[16px] font-semibold text-black/85">{title}</h3>
-      <p className="mt-2 text-[14px] leading-relaxed text-black/55">{body}</p>
-    </div>
-  );
-}
-
-// ─── Solution (how it works) ────────────────────────────────────────────────
-
-function Solution() {
-  return (
-    <section id="how" className="py-28" style={{ background: BONE_2 }}>
-      <div className="max-w-5xl mx-auto px-6">
-        <SectionHeading
-          eyebrow="A faster way"
-          title="Built around how safari operators actually work."
-          sub="Three steps. The first one is the hardest because you only do it once."
-        />
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-6">
-          {STEPS.map((s) => (
-            <StepCard key={s.step} {...s} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const STEPS = [
-  {
-    step: "01",
-    title: "Curate",
-    body: "Add your trusted camps and lodges once — photos, what makes them special, who they're right for. Your library, not a generic database.",
-  },
-  {
-    step: "02",
-    title: "Compose",
-    body: "Drop properties straight into a proposal. The day cards, pricing tiers, and inclusions are already there. Edit in place — no forms.",
-  },
-  {
-    step: "03",
-    title: "Send",
-    body: "Share a live link or export to PDF. The client sees what you crafted. You see when they open it.",
-  },
-] as const;
-
-function StepCard({ step, title, body }: { step: string; title: string; body: string }) {
-  return (
-    <div className="p-7 rounded-2xl bg-white border" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-      <div
-        className="text-[44px] font-bold leading-none mb-5"
-        style={{ color: "rgba(201,168,76,0.65)", fontFamily: "'Playfair Display', serif" }}
-      >
-        {step}
-      </div>
-      <h3 className="text-[18px] font-semibold text-black/85">{title}</h3>
-      <p className="mt-2 text-[14px] leading-relaxed text-black/55">{body}</p>
-    </div>
-  );
-}
-
-// ─── Differentiator ─────────────────────────────────────────────────────────
-
-function Differentiator() {
-  return (
-    <section id="different" className="py-32" style={{ background: BONE }}>
-      <div className="max-w-6xl mx-auto px-6">
-        <SectionHeading
-          eyebrow="Why it's different"
-          title="Operator intelligence, not generic automation."
-          sub="Three things every safari operator told us they wanted — and that no general-purpose tool will give them."
-        />
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Pillar
-            symbol="◇"
-            title="Built around your properties"
-            body="The automation only suggests camps and lodges that are in your library. No surprise recommendations. No camps you don't sell."
-          />
-          <Pillar
-            symbol="◈"
-            title="Speaks in your brand voice"
-            body="Brand DNA captures your tone — formal or warm, story-led or factual. Every generated paragraph sounds like you wrote it."
-          />
-          <Pillar
-            symbol="◐"
-            title="Visuals that match the place"
-            body="Image selection is destination-aware: elephants in Tarangire, lions in the Serengeti, the right water for Zanzibar. Never random."
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Pillar({ symbol, title, body }: { symbol: string; title: string; body: string }) {
-  return (
-    <div className="p-8 rounded-2xl border bg-white" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-      <div className="text-3xl mb-5" style={{ color: FOREST }}>{symbol}</div>
-      <h3 className="text-[17px] font-semibold text-black/85">{title}</h3>
-      <p className="mt-2.5 text-[14px] leading-relaxed text-black/55">{body}</p>
-    </div>
-  );
-}
-
-// ─── Showcase ───────────────────────────────────────────────────────────────
-
-function Showcase() {
-  return (
-    <section className="py-28" style={{ background: FOREST }}>
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <Eyebrow color={GOLD}>See it in action</Eyebrow>
+    <section
+      id="why"
+      className="py-20 md:py-24"
+      style={{ background: BG }}
+    >
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8">
+        <div className="max-w-[640px]">
           <h2
-            className="mt-5 text-4xl md:text-5xl font-bold text-white tracking-tight"
-            style={{ fontFamily: "'Playfair Display', serif" }}
+            style={{
+              fontFamily: SERIF,
+              fontSize: "clamp(28px, 3.6vw, 36px)",
+              lineHeight: 1.1,
+              letterSpacing: "-0.015em",
+              fontWeight: 600,
+              color: INK,
+            }}
           >
-            A proposal, not a document.
+            Why operators switch{" "}
+            <span style={{ color: GREEN }}>to Safari Studio</span>.
           </h2>
-          <p className="mt-4 text-[15px] text-white/55 max-w-xl mx-auto">
-            Day cards, property blocks, and tier pricing — already laid out, already on-brand.
+          <p
+            className="mt-3 text-[16px] leading-[1.6] max-w-[520px]"
+            style={{ color: INK_2 }}
+          >
+            We replaced the spreadsheet patchwork with a single command center
+            built around how safari teams actually sell.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <ShowcaseCard
-            label="Day card"
-            content={
-              <>
-                <div className="text-[11px] tracking-[0.2em] uppercase" style={{ color: "rgba(0,0,0,0.4)" }}>
-                  Day 4 · Amboseli
-                </div>
-                <div
-                  className="text-[20px] font-semibold mt-1.5 leading-tight"
-                  style={{ color: "rgba(0,0,0,0.85)", fontFamily: "'Playfair Display', serif" }}
-                >
-                  Elephants under Kilimanjaro
-                </div>
-                <div className="text-[12px] mt-1.5" style={{ color: "rgba(0,0,0,0.5)" }}>
-                  Tortilis Camp · Full board
-                </div>
-                <div className="mt-3 text-[12px] leading-relaxed" style={{ color: "rgba(0,0,0,0.6)" }}>
-                  Morning drive in the swamp. Long-tusker breeding herds at close
-                  range. Back at camp by ten for breakfast on the deck.
-                </div>
-              </>
-            }
-          />
-          <ShowcaseCard
-            label="Property block"
-            content={
-              <>
-                <div
-                  className="h-20 -mx-5 -mt-5 mb-3 rounded-t-lg"
-                  style={{ background: `linear-gradient(135deg, ${FOREST} 0%, #2d5a40 100%)` }}
-                />
-                <div className="text-[15px] font-semibold" style={{ color: "rgba(0,0,0,0.85)" }}>
-                  Mara Plains Camp
-                </div>
-                <div className="text-[12px] mt-0.5" style={{ color: "rgba(0,0,0,0.5)" }}>
-                  Olare Motorogi Conservancy · Tented Camp
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {["Family-friendly", "Conservancy access", "Night drives"].map((t) => (
-                    <span
-                      key={t}
-                      className="px-2 py-0.5 rounded-full text-[10px]"
-                      style={{ background: "rgba(0,0,0,0.05)", color: "rgba(0,0,0,0.55)" }}
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </>
-            }
-          />
-          <ShowcaseCard
-            label="Pricing tiers"
-            content={
-              <div className="space-y-2.5">
-                {[
-                  { name: "Classic", price: "$8,400 pp" },
-                  { name: "Premier", price: "$11,200 pp", featured: true },
-                  { name: "Signature", price: "$15,900 pp" },
-                ].map((t) => (
-                  <div
-                    key={t.name}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${
-                      t.featured ? "border-2" : "border"
-                    }`}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Pains card */}
+          <div
+            className="rounded-2xl p-7"
+            style={{
+              background: "#fff",
+              border: `1px solid ${CARD_BORDER}`,
+              boxShadow: "0 1px 2px rgba(13,38,32,0.04), 0 8px 24px -10px rgba(13,38,32,0.06)",
+            }}
+          >
+            <div
+              className="text-[10.5px] uppercase tracking-[0.22em] font-semibold mb-4"
+              style={{ color: INK_3 }}
+            >
+              Without Safari Studio
+            </div>
+            <ul className="space-y-3">
+              {pains.map((p) => (
+                <li key={p} className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="mt-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px] shrink-0"
                     style={{
-                      borderColor: t.featured ? GOLD : "rgba(0,0,0,0.08)",
-                      background: t.featured ? "rgba(201,168,76,0.06)" : "transparent",
+                      background: "rgba(220,38,38,0.10)",
+                      color: "#b91c1c",
                     }}
                   >
-                    <span className="text-[13px] font-semibold" style={{ color: "rgba(0,0,0,0.8)" }}>
-                      {t.name}
-                    </span>
-                    <span className="text-[13px] font-mono" style={{ color: "rgba(0,0,0,0.65)" }}>
-                      {t.price}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            }
-          />
+                    ×
+                  </span>
+                  <span
+                    className="text-[14.5px] leading-[1.55]"
+                    style={{ color: INK_2 }}
+                  >
+                    {p}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Gains card — green */}
+          <div
+            className="rounded-2xl p-7 relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${GREEN_DEEP} 0%, ${GREEN} 100%)`,
+              boxShadow:
+                "0 1px 2px rgba(13,38,32,0.04), 0 8px 28px -10px rgba(34,106,51,0.4)",
+              color: "#fff",
+            }}
+          >
+            <div
+              aria-hidden
+              className="absolute right-0 bottom-0 w-1/2 h-1/2 pointer-events-none"
+              style={{
+                background:
+                  "radial-gradient(ellipse at 100% 100%, rgba(215,183,91,0.18) 0%, transparent 60%)",
+              }}
+            />
+            <div
+              className="text-[10.5px] uppercase tracking-[0.22em] font-semibold mb-4 relative"
+              style={{ color: GOLD }}
+            >
+              With Safari Studio
+            </div>
+            <ul className="space-y-3 relative">
+              {gains.map((g) => (
+                <li key={g} className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="mt-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                    style={{
+                      background: "rgba(255,255,255,0.18)",
+                      color: "#fff",
+                    }}
+                  >
+                    ✓
+                  </span>
+                  <span className="text-[14.5px] leading-[1.55] text-white/95">
+                    {g}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function ShowcaseCard({ label, content }: { label: string; content: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-white p-5 shadow-xl">
-      <div
-        className="text-[10px] uppercase tracking-[0.22em] font-semibold mb-3"
-        style={{ color: GOLD }}
-      >
-        {label}
-      </div>
-      {content}
-    </div>
-  );
-}
+// ─── What operators want (product-proof, not testimonials) ───────────────────
+//
+// Replaces the testimonial grid in the reference. Same visual layout
+// (4 cards across) — but the copy is product-proof framed as operator
+// needs, with no fabricated names / star ratings / quotes.
 
-// ─── Brand DNA tease ────────────────────────────────────────────────────────
+function WhatOperatorsWant() {
+  const items = [
+    {
+      eyebrow: "Visibility",
+      title: "Know who’s ready to book.",
+      body:
+        "Engagement scoring shows the deals that need attention right now — viewed pricing, lingered on the itinerary, started the booking form.",
+    },
+    {
+      eyebrow: "Speed",
+      title: "Send proposals that close.",
+      body:
+        "Brand-locked templates render in seconds. AI helps you write personal notes that sound like you, not a marketing team.",
+    },
+    {
+      eyebrow: "Pipeline",
+      title: "Track every booking end-to-end.",
+      body:
+        "Reservations route to the assigned consultant, copy the owner, and land in the dashboard the moment a guest submits.",
+    },
+    {
+      eyebrow: "Follow-up",
+      title: "Never let a hot deal go cold.",
+      body:
+        "Quiet for 48h+? It surfaces in the follow-up rail with a one-tap nudge. The team always knows what to do next.",
+    },
+  ];
 
-function BrandDNATease() {
   return (
-    <section id="brand" className="py-28" style={{ background: BONE }}>
-      <div className="max-w-5xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <div>
-          <Eyebrow>Brand DNA</Eyebrow>
-          <h2
-            className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
-            style={{ fontFamily: "'Playfair Display', serif" }}
+    <section id="product" className="py-20 md:py-24" style={{ background: "#fff", borderTop: `1px solid ${CARD_BORDER}`, borderBottom: `1px solid ${CARD_BORDER}` }}>
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8">
+        <div className="text-center max-w-[680px] mx-auto">
+          <div
+            className="text-[10.5px] font-semibold uppercase tracking-[0.28em]"
+            style={{ color: GREEN }}
           >
-            Teaches the automation how you sound.
+            What operators want
+          </div>
+          <h2
+            className="mt-3"
+            style={{
+              fontFamily: SERIF,
+              fontSize: "clamp(28px, 3.6vw, 36px)",
+              lineHeight: 1.1,
+              letterSpacing: "-0.015em",
+              fontWeight: 600,
+              color: INK,
+            }}
+          >
+            The four answers a safari team needs every morning.
           </h2>
-          <p className="mt-5 text-[15px] leading-relaxed text-black/55 max-w-md">
-            Four sliders, two writing samples, and a list of the things you
-            never want said in a proposal. The system layers your voice into
-            every generated paragraph — and falls back gracefully when it
-            doesn&apos;t know.
-          </p>
-          <p className="mt-3 text-[14px] text-black/45">
-            Optional. Progressive. Never required to send a proposal.
+          <p
+            className="mt-3 text-[16px] leading-[1.6]"
+            style={{ color: INK_2 }}
+          >
+            Safari Studio is built around the questions that actually move
+            trips toward booked.
           </p>
         </div>
-        <div className="rounded-2xl bg-white p-6 border" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-          {[
-            { label: "Formal", right: "Conversational", value: 70 },
-            { label: "Luxury", right: "Adventurous", value: 30 },
-            { label: "Concise", right: "Detailed", value: 55 },
-            { label: "Storytelling", right: "Informational", value: 80 },
-          ].map((s) => (
-            <div key={s.label} className="mb-4 last:mb-0">
-              <div className="flex items-center justify-between text-[12px] text-black/55 mb-1.5">
-                <span>{s.label}</span>
-                <span>{s.right}</span>
+
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {items.map((it) => (
+            <article
+              key={it.title}
+              className="rounded-2xl p-6"
+              style={{
+                background: BG,
+                border: `1px solid ${CARD_BORDER}`,
+              }}
+            >
+              <div
+                className="text-[10px] uppercase tracking-[0.22em] font-semibold"
+                style={{ color: GREEN }}
+              >
+                {it.eyebrow}
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.06)" }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${s.value}%`, background: FOREST }}
-                />
-              </div>
-            </div>
+              <h3
+                className="mt-3 text-[18px] leading-[1.25]"
+                style={{
+                  fontFamily: SERIF,
+                  color: INK,
+                  fontWeight: 600,
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                {it.title}
+              </h3>
+              <p
+                className="mt-2 text-[14px] leading-[1.6]"
+                style={{ color: INK_2 }}
+              >
+                {it.body}
+              </p>
+            </article>
           ))}
         </div>
       </div>
@@ -595,177 +787,212 @@ function BrandDNATease() {
   );
 }
 
-// ─── Speed × Control ────────────────────────────────────────────────────────
-
-function SpeedControl() {
-  return (
-    <section className="py-28" style={{ background: BONE_2 }}>
-      <div className="max-w-4xl mx-auto px-6 text-center">
-        <Eyebrow>Speed × control</Eyebrow>
-        <h2
-          className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
-          style={{ fontFamily: "'Playfair Display', serif" }}
-        >
-          Automation writes the first draft.<br /> You stay the operator.
-        </h2>
-        <p className="mt-6 text-[16px] leading-relaxed text-black/55 max-w-xl mx-auto">
-          Generate a day narrative or a greeting in a click. Edit any line in
-          place. Nothing&apos;s on rails — every word in every section is yours
-          to change.
-        </p>
-        <div className="mt-10 inline-flex items-center gap-3 px-5 py-3 rounded-xl text-sm bg-white border"
-          style={{ borderColor: "rgba(0,0,0,0.08)" }}
-        >
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ background: GOLD }}
-          />
-          <span className="text-black/65">
-            Drafts auto-save. PDF and live link export are one click away.
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Pricing teaser on the landing page ────────────────────────────────────
-//
-// Two-tier strip ($50 / $100) that lives alongside the editorial body. Full
-// comparison is still on /pricing — this is the "before they leave the
-// landing page" confidence card. The CTAs point at /sign-up; the detailed
-// side-by-side table lives on /pricing.
+// ─── Pricing ─────────────────────────────────────────────────────────────────
 
 function Pricing() {
   return (
-    <section id="pricing" className="py-28" style={{ background: BONE }}>
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="text-center mb-14">
-          <Eyebrow>Pricing</Eyebrow>
+    <section
+      id="pricing"
+      className="py-20 md:py-24 relative overflow-hidden"
+      style={{
+        background: `linear-gradient(180deg, ${HERO_BOTTOM} 0%, ${HERO_TOP} 100%)`,
+        color: "#fff",
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none opacity-[0.05]"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, ${GOLD} 1px, transparent 0)`,
+          backgroundSize: "32px 32px",
+        }}
+      />
+
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 relative">
+        <div className="text-center max-w-[640px] mx-auto">
           <h2
-            className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-black/85"
-            style={{ fontFamily: "'Playfair Display', serif" }}
+            style={{
+              fontFamily: SERIF,
+              fontSize: "clamp(28px, 3.6vw, 36px)",
+              lineHeight: 1.1,
+              letterSpacing: "-0.015em",
+              fontWeight: 600,
+            }}
           >
-            Two tiers. No free plan.
+            Simple pricing.{" "}
+            <span style={{ color: GOLD }}>Powerful results.</span>
           </h2>
-          <p className="mt-5 text-[16px] text-black/55 max-w-xl mx-auto leading-relaxed">
+          <p
+            className="mt-3 text-[16px] leading-[1.6]"
+            style={{ color: "rgba(255,255,255,0.7)" }}
+          >
             Close one safari and Safari Studio pays for itself for the year.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto">
-          <PricingCard
-            tier="Explorer"
-            price="$50"
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
+          <PriceCard
+            name="Starter"
+            price="$59"
             cadence="/ month"
-            tagline="For solo operators sending proposals weekly."
+            tagline="For solo consultants and small teams."
             features={[
-              "Up to 5 proposals / month",
-              "Property library",
-              "Automated drafts (basic)",
-              "Web view sharing",
-              "PDF export",
+              "Up to 30 proposals / month",
+              "Engagement scoring + dashboard",
+              "Branded share view",
+              "Email notifications on bookings",
             ]}
-            cta="Start Explorer"
-            featured={false}
+            ctaLabel="Start free trial"
+            ctaHref="/sign-up"
           />
-          <PricingCard
-            tier="Operator"
-            price="$100"
+          <PriceCard
+            name="Pro"
+            price="$149"
             cadence="/ month"
-            tagline="For DMCs and lodges who sell every day."
+            tagline="For growing operators ready to scale."
             features={[
-              "Unlimited proposals",
-              "Full property system",
-              "Brand DNA — tone control",
-              "Priority automation",
-              "Advanced exports + 5 seats",
+              "Unlimited proposals + reservations",
+              "Team supervision + role permissions",
+              "AI Write + Brand DNA",
+              "Activity feed + follow-up automation",
+              "Priority email support",
             ]}
-            cta="Start Operator"
+            ctaLabel="Start free trial"
+            ctaHref="/sign-up"
             featured
+          />
+          <PriceCard
+            name="Enterprise"
+            price="Custom"
+            cadence=""
+            tagline="For multi-brand DMCs and enterprises."
+            features={[
+              "Everything in Pro",
+              "Dedicated success manager",
+              "SSO + custom roles",
+              "Bespoke integrations (GHL, Salesforce, etc.)",
+              "SLA-backed uptime",
+            ]}
+            ctaLabel="Talk to us"
+            ctaHref="/sign-up"
           />
         </div>
 
-        <p className="mt-8 text-center text-[13px] text-black/50">
-          <Link href="/pricing" className="underline hover:text-[#1b3a2d] transition">
-            Full comparison →
+        <div className="mt-8 text-center">
+          <Link
+            href="/pricing"
+            className="text-[13px] font-semibold underline-offset-4 hover:underline"
+            style={{ color: GOLD }}
+          >
+            See full pricing details →
           </Link>
-        </p>
+        </div>
       </div>
     </section>
   );
 }
 
-function PricingCard({
-  tier,
+function PriceCard({
+  name,
   price,
   cadence,
   tagline,
   features,
-  cta,
-  featured,
+  ctaLabel,
+  ctaHref,
+  featured = false,
 }: {
-  tier: string;
+  name: string;
   price: string;
   cadence: string;
   tagline: string;
   features: string[];
-  cta: string;
-  featured: boolean;
+  ctaLabel: string;
+  ctaHref: string;
+  featured?: boolean;
 }) {
-  const text = featured ? "white" : "rgba(0,0,0,0.85)";
-  const sub = featured ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)";
-  const divider = featured ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
   return (
     <div
-      className="relative rounded-2xl p-7 md:p-8 border-2 shadow-sm transition hover:shadow-md"
+      className="rounded-2xl p-7 relative"
       style={{
-        background: featured ? FOREST : "white",
-        borderColor: featured ? GOLD : "rgba(0,0,0,0.06)",
+        background: featured
+          ? "linear-gradient(180deg, rgba(215,183,91,0.10) 0%, rgba(255,255,255,0.02) 100%)"
+          : "rgba(255,255,255,0.03)",
+        border: featured
+          ? `1px solid rgba(215,183,91,0.5)`
+          : `1px solid rgba(255,255,255,0.10)`,
+        boxShadow: featured
+          ? "0 18px 44px -16px rgba(215,183,91,0.32)"
+          : "none",
       }}
     >
       {featured && (
         <div
-          className="absolute -top-3 right-7 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.18em] font-bold"
-          style={{ background: GOLD, color: FOREST }}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.22em] font-bold px-3 py-1 rounded-full"
+          style={{ background: GOLD, color: HERO_TOP }}
         >
           Most popular
         </div>
       )}
+
       <div
-        className="text-[11px] uppercase tracking-[0.22em] font-semibold mb-3"
-        style={{ color: featured ? GOLD : FOREST }}
+        className="text-[12px] uppercase tracking-[0.22em] font-semibold"
+        style={{ color: featured ? GOLD : "rgba(255,255,255,0.55)" }}
       >
-        {tier}
+        {name}
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <div
-          className="text-5xl font-bold tabular-nums"
-          style={{ color: text, fontFamily: "'Playfair Display', serif" }}
+      <div className="mt-3 flex items-baseline gap-1">
+        <span
+          className="text-white"
+          style={{
+            fontFamily: SERIF,
+            fontSize: 44,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            lineHeight: 1,
+          }}
         >
           {price}
-        </div>
-        <div className="text-[14px]" style={{ color: sub }}>{cadence}</div>
+        </span>
+        {cadence && (
+          <span
+            className="text-[13px]"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            {cadence}
+          </span>
+        )}
       </div>
-      <p className="mt-3 text-[14px] leading-relaxed" style={{ color: sub }}>
+      <p
+        className="mt-2 text-[13.5px] leading-[1.5]"
+        style={{ color: "rgba(255,255,255,0.65)" }}
+      >
         {tagline}
       </p>
+
       <a
-        href="/sign-up"
-        className="mt-6 block w-full py-3 rounded-xl text-center text-[14px] font-semibold transition hover:brightness-110 active:scale-95"
+        href={ctaHref}
+        className="mt-6 inline-flex w-full items-center justify-center px-4 h-11 rounded-lg text-[14px] font-semibold transition active:scale-[0.97] hover:brightness-110"
         style={
           featured
-            ? { background: GOLD, color: FOREST }
-            : { background: FOREST, color: "white" }
+            ? { background: GOLD, color: HERO_TOP }
+            : { background: GREEN, color: "#fff" }
         }
       >
-        {cta}
+        {ctaLabel}
       </a>
-      <ul className="mt-7 space-y-2.5 pt-5 border-t" style={{ borderColor: divider }}>
+
+      <ul className="mt-6 space-y-2.5">
         {features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-[14px]" style={{ color: sub }}>
-            <span style={{ color: GOLD }} aria-hidden>✓</span>
-            <span>{f}</span>
+          <li key={f} className="flex items-start gap-2.5 text-[13.5px]">
+            <span
+              aria-hidden
+              className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
+              style={{ background: GREEN, color: "#fff" }}
+            >
+              ✓
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.82)" }}>{f}</span>
           </li>
         ))}
       </ul>
@@ -773,142 +1000,92 @@ function PricingCard({
   );
 }
 
-// ─── Social proof ───────────────────────────────────────────────────────────
-
-function SocialProof() {
-  return (
-    <section className="py-28" style={{ background: BONE }}>
-      <div className="max-w-4xl mx-auto px-6 text-center">
-        <div
-          className="text-6xl leading-none mb-6"
-          style={{ color: GOLD, fontFamily: "'Playfair Display', serif" }}
-        >
-          &ldquo;
-        </div>
-        <blockquote
-          className="text-2xl md:text-3xl font-medium text-black/80 leading-[1.5] tracking-tight max-w-3xl mx-auto"
-          style={{ fontFamily: "'Playfair Display', serif" }}
-        >
-          We were spending half a day per proposal. Safari Studio cut that
-          to forty minutes — and the proposals look more like us, not less.
-        </blockquote>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm"
-            style={{ background: FOREST }}
-          >
-            JM
-          </div>
-          <div className="text-left">
-            <div className="text-[14px] font-semibold text-black/80">James Mutua</div>
-            <div className="text-[12px] text-black/45">Founder · Savanna Horizons · Nairobi</div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Final CTA ──────────────────────────────────────────────────────────────
+// ─── Final CTA ───────────────────────────────────────────────────────────────
 
 function FinalCTA() {
   return (
-    <section className="py-32 relative overflow-hidden" style={{ background: FOREST }}>
-      <div
-        className="absolute inset-0 opacity-[0.05] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, ${GOLD} 1px, transparent 0)`,
-          backgroundSize: "32px 32px",
-        }}
-      />
-      <div className="relative max-w-3xl mx-auto px-6 text-center">
+    <section
+      className="py-16 md:py-20"
+      style={{ background: HERO_TOP, color: "#fff" }}
+    >
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
         <h2
-          className="text-4xl md:text-6xl font-bold text-white leading-[1.1] tracking-tight"
-          style={{ fontFamily: "'Playfair Display', serif" }}
+          style={{
+            fontFamily: SERIF,
+            fontSize: "clamp(28px, 3.6vw, 36px)",
+            lineHeight: 1.1,
+            letterSpacing: "-0.015em",
+            fontWeight: 600,
+          }}
         >
-          The next proposal,<br />
-          <span style={{ color: GOLD }}>built around your business.</span>
+          Ready to close more safaris?
         </h2>
-        <p className="mt-6 text-white/55 text-[16px] max-w-xl mx-auto">
-          Open the Studio, add a property, draft a proposal. Free to try.
-          No credit card.
-        </p>
-        <a
-          href="/sign-up"
-          className="inline-flex mt-10 px-9 py-4 rounded-xl font-bold text-[16px] transition hover:brightness-110 active:scale-95 shadow-xl"
-          style={{ background: GOLD, color: FOREST }}
+        <p
+          className="mt-3 text-[16px] leading-[1.6] max-w-[520px] mx-auto"
+          style={{ color: "rgba(255,255,255,0.7)" }}
         >
-          Open Safari Studio
-        </a>
+          Spin up a workspace in 60 seconds. Bring your brand, send your first
+          proposal, see who&rsquo;s ready to book.
+        </p>
+        <div className="mt-7 flex items-center gap-3 justify-center flex-wrap">
+          <a
+            href="/sign-up"
+            className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition active:scale-[0.97] hover:brightness-110"
+            style={{ background: GREEN, color: "#fff" }}
+          >
+            Book a demo →
+          </a>
+          <Link
+            href="/demo"
+            className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
+            style={{
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.22)",
+            }}
+          >
+            See how it works
+          </Link>
+        </div>
       </div>
     </section>
   );
 }
 
-// ─── Footer ─────────────────────────────────────────────────────────────────
+// ─── Footer ──────────────────────────────────────────────────────────────────
 
 function Footer() {
   return (
     <footer
-      className="py-10 border-t"
-      style={{ background: FOREST_DEEP, borderColor: "rgba(255,255,255,0.06)" }}
+      className="py-12"
+      style={{
+        background: HERO_TOP,
+        color: "rgba(255,255,255,0.55)",
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+      }}
     >
-      <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-[13px] text-white/40">
-        <div className="flex items-center gap-2">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-2.5">
           <div
-            className="w-6 h-6 rounded flex items-center justify-center font-bold text-sm"
-            style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}
+            className="w-7 h-7 rounded-md flex items-center justify-center font-bold text-[13px]"
+            style={{ background: GREEN, color: "#fff" }}
+            aria-hidden
           >
             S
           </div>
-          <span className="text-white/55 font-medium">Safari Studio</span>
+          <span className="text-white font-medium text-[14px]">Safari Studio</span>
+          <span className="text-[13px] ml-2">· Nairobi</span>
         </div>
-        <div className="flex gap-6">
-          <Link href="/demo" className="hover:text-white/70 transition">Live demo</Link>
-          <a href="#how" className="hover:text-white/70 transition">How it works</a>
-          <Link href="/pricing" className="hover:text-white/70 transition">Pricing</Link>
-          <a href="/sign-up" className="hover:text-white/70 transition">Open Studio</a>
+
+        <div className="flex items-center gap-6 text-[13px]">
+          <Link href="/demo" className="hover:text-white transition">Live demo</Link>
+          <Link href="/pricing" className="hover:text-white transition">Pricing</Link>
+          <a href="/sign-up" className="hover:text-white transition">Open Studio</a>
         </div>
-        <div>&copy; {new Date().getFullYear()} Safari Studio · Nairobi</div>
+
+        <div className="text-[12px]">
+          &copy; {new Date().getFullYear()} Safari Studio
+        </div>
       </div>
     </footer>
-  );
-}
-
-// ─── Shared bits ────────────────────────────────────────────────────────────
-
-function Eyebrow({ children, color = "#1b3a2d" }: { children: React.ReactNode; color?: string }) {
-  return (
-    <div
-      className="inline-block text-[11px] uppercase tracking-[0.24em] font-semibold"
-      style={{ color }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionHeading({
-  eyebrow,
-  title,
-  sub,
-}: {
-  eyebrow: string;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <div className="text-center max-w-2xl mx-auto">
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h2
-        className="mt-5 text-4xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1] text-black/85"
-        style={{ fontFamily: "'Playfair Display', serif" }}
-      >
-        {title}
-      </h2>
-      <p className="mt-5 text-[15px] md:text-[16px] leading-relaxed text-black/55">
-        {sub}
-      </p>
-    </div>
   );
 }
