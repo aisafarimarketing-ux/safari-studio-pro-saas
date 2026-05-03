@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { planProposalLimit, planLabel, type PlanKey } from "@/lib/billing/plans";
 import { nextProposalTrackingId } from "@/lib/proposalTracking";
+import { ensureRequestForProposal } from "@/lib/requestForProposal";
 
 // Enforce the monthly proposal limit tied to the org's paid plan. Returns
 // a 402 response when the limit is hit; otherwise null. Trial / pilot
@@ -192,5 +193,21 @@ export async function POST(req: Request) {
     },
     select: { id: true, title: true, trackingId: true, updatedAt: true },
   });
+
+  // Unified pipeline: every new proposal participates in the CRM
+  // journey. ensureRequestForProposal is idempotent — if the
+  // proposal already has a requestId (e.g. drafted from /api/
+  // requests/[id]/quote) it returns that id without creating a
+  // duplicate. Only fires on first create so save edits don't churn
+  // the inbox. Best-effort: a counter race / DB hiccup logs but
+  // doesn't fail the proposal save.
+  if (!existing) {
+    try {
+      await ensureRequestForProposal(saved.id);
+    } catch (err) {
+      console.warn("[proposals] ensureRequestForProposal failed:", err);
+    }
+  }
+
   return NextResponse.json({ proposal: saved });
 }

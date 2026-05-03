@@ -186,6 +186,36 @@ export async function POST(
     });
   }
 
+  // ── Pipeline stage bump ────────────────────────────────────────────────
+  // Move the linked Request from "new"/"working" to "open" — the
+  // closest existing status that maps to "booking requested but
+  // not yet operator-confirmed". Skip when the Request has already
+  // moved past "open" (booked / completed / not_booked) so we never
+  // regress the pipeline. lastActivityAt bumps so the inbox sort
+  // surfaces this booking. Best-effort.
+  if (proposal.requestId) {
+    try {
+      await prisma.request.updateMany({
+        where: {
+          id: proposal.requestId,
+          status: { in: ["new", "working"] },
+        },
+        data: { status: "open", lastActivityAt: new Date() },
+      });
+      // Always bump lastActivityAt even if status didn't change, so
+      // the inbox surfaces the new reservation activity at the top.
+      await prisma.request.update({
+        where: { id: proposal.requestId },
+        data: { lastActivityAt: new Date() },
+      });
+    } catch (err) {
+      console.warn("[reserve] Request status bump failed:", err, {
+        requestId: proposal.requestId,
+        reservationId: reservation.id,
+      });
+    }
+  }
+
   // ── Internal copy — Message row for inbox visibility ────────────────────
   // Stores a snapshot of the booking as a system-channel inbound
   // message so the future inbox UI can render it conversation-style

@@ -400,6 +400,20 @@ function RequestCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-[14px] text-black/85">{name}</span>
+              {row.source === "proposal" && (
+                // Proposal-origin requests skip the CRM intake step —
+                // surface that visually so the operator knows the
+                // journey already has a draft attached.
+                <span
+                  className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded"
+                  style={{
+                    background: "rgba(47,143,70,0.12)",
+                    color: "#1b3a2d",
+                  }}
+                >
+                  From proposal
+                </span>
+              )}
               {typeof travelers === "number" && (
                 <span className="text-[12px] text-black/55">· {travelers} Traveler{travelers === 1 ? "" : "s"}</span>
               )}
@@ -410,7 +424,9 @@ function RequestCard({
             <div className="text-[12.5px] text-black/55 mt-1 truncate">{trip}</div>
             <div className="text-[11.5px] text-black/40 mt-1 flex items-center gap-3 flex-wrap">
               <span>#{row.referenceNumber}</span>
-              {row.source && <span>Source: {row.source}</span>}
+              {row.source && row.source !== "proposal" && (
+                <span>Source: {row.source}</span>
+              )}
               {row._count.notes > 0 && <span>{row._count.notes} note{row._count.notes === 1 ? "" : "s"}</span>}
               {row._count.proposals > 0 && <span>{row._count.proposals} quote{row._count.proposals === 1 ? "" : "s"}</span>}
             </div>

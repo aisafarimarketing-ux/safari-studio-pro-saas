@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
 import { applyIdentityToOperator } from "@/lib/consultantIdentity";
 import { nextProposalTrackingId } from "@/lib/proposalTracking";
+import { ensureRequestForProposal } from "@/lib/requestForProposal";
 import {
   applyBrandDefaultsToTheme,
   applyBrandDefaultsToSections,
@@ -152,6 +153,15 @@ export async function POST(req: Request) {
     },
     select: { id: true, title: true, status: true, trackingId: true, updatedAt: true, createdAt: true },
   });
+
+  // Unified pipeline: link every template-cloned proposal to a
+  // Request so it appears in the inbox journey alongside inbound
+  // leads. Best-effort — failure logs but doesn't fail the response.
+  try {
+    await ensureRequestForProposal(saved.id);
+  } catch (err) {
+    console.warn("[proposals/from-template] ensureRequestForProposal failed:", err);
+  }
 
   return NextResponse.json({ proposal: saved });
 }

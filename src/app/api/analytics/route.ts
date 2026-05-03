@@ -78,6 +78,15 @@ export async function GET() {
   // Members lookup so bySpecialist rows have names.
   const memberById = new Map(memberships.map((m) => [m.userId, m.user]));
 
+  // Split requests for double-count protection. Proposal-origin
+  // Requests (source="proposal") are auto-created by ensureRequestForProposal
+  // when an operator drafts a proposal directly — they exist purely
+  // to give the proposal a slot in the inbox journey, not as inbound
+  // leads. Counting them as "inbound" would double-count the proposal
+  // pipeline. The funnel + bySpecialist still see all rows so the
+  // pipeline-stage view stays honest.
+  const inboundRequests = requests.filter((r) => r.source !== "proposal");
+
   // ── Funnel ──────────────────────────────────────────────────────────────
   const funnel: Record<string, number> = {
     new: 0, working: 0, open: 0, booked: 0, completed: 0, not_booked: 0,
@@ -86,17 +95,23 @@ export async function GET() {
     if (r.status in funnel) funnel[r.status] += 1;
   }
 
-  // ── Overall totals ──────────────────────────────────────────────────────
-  const received = requests.length;
-  const booked = requests.filter((r) => r.status === "booked" || r.status === "completed").length;
+  // ── Overall totals (INBOUND requests only) ────────────────────────────
+  // Built off inboundRequests so proposal-origin auto-Requests don't
+  // inflate the inbound lead count or pull median-response down.
+  const received = inboundRequests.length;
+  const booked = inboundRequests.filter(
+    (r) => r.status === "booked" || r.status === "completed",
+  ).length;
   const conversion = received > 0 ? booked / received : 0;
-  const responseDeltas = requests
+  const responseDeltas = inboundRequests
     .filter((r) => r.firstReplyAt)
     .map((r) => ((r.firstReplyAt as Date).getTime() - r.receivedAt.getTime()) / 60000)
     .filter((m) => m >= 0);
   const medianResponseMinutes = responseDeltas.length > 0 ? median(responseDeltas) : null;
 
   // ── By source ───────────────────────────────────────────────────────────
+  // Includes ALL requests (proposal-origin too) so the operator can
+  // see how much of the pipeline is proposal-led vs. inbound-channel-led.
   const sourceTally = new Map<string, { received: number; booked: number }>();
   for (const r of requests) {
     const key = r.source?.trim() || "Unknown";
@@ -153,7 +168,10 @@ export async function GET() {
     d.setDate(d.getDate() + i);
     buckets.set(isoDate(d), { received: 0, booked: 0 });
   }
-  for (const r of requests) {
+  // Sparkline counts inbound only — matches the inbound totals at the
+  // top of the page so the trend line and the headline number tell
+  // the same story.
+  for (const r of inboundRequests) {
     const key = isoDate(r.receivedAt);
     const b = buckets.get(key);
     if (b) {
