@@ -124,6 +124,23 @@ type Task = {
 
 type TasksResponse = { tasks: Task[]; counts: { open: number; overdue: number } };
 
+type ReservationRow = {
+  id: string;
+  clientName: string;
+  arrivalDate: string;
+  departureDate: string;
+  status: string;
+  createdAt: string;
+  proposal: { id: string; title: string | null } | null;
+  assignedTo: { id: string; name: string | null; email: string | null } | null;
+};
+
+type ReservationsResponse = {
+  reservations: ReservationRow[];
+  scope: "mine" | "all";
+  canViewAll: boolean;
+};
+
 // ─── Component ───────────────────────────────────────────────────────────
 
 export function CommandCenter() {
@@ -131,6 +148,8 @@ export function CommandCenter() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [data, setData] = useState<PrioritiesResponse | null>(null);
   const [tasksData, setTasksData] = useState<TasksResponse | null>(null);
+  const [reservationsData, setReservationsData] = useState<ReservationsResponse | null>(null);
+  const [reservationsScope, setReservationsScope] = useState<"mine" | "all">("mine");
   const [loadFailed, setLoadFailed] = useState(false);
   const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | "sending" | undefined>>({});
   const [flash, setFlash] = useState<{ requestId: string; message: string; tone: "success" | "info" } | null>(null);
@@ -199,6 +218,26 @@ export function CommandCenter() {
     const interval = setInterval(load, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  // ── Reservations list — refetches when the operator flips the
+  //    Mine/All toggle. 30s polling so a fresh booking surfaces
+  //    without a manual refresh; matches the tasks rail cadence.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `/api/dashboard/reservations?scope=${reservationsScope}&limit=20`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        if (!cancelled) setReservationsData((await res.json()) as ReservationsResponse);
+      } catch { /* secondary */ }
+    };
+    void load();
+    const interval = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [reservationsScope]);
 
   const refreshPriorities = async () => {
     const json = await loadPriorities(filter);
@@ -408,6 +447,12 @@ export function CommandCenter() {
             </ul>
           )}
         </section>
+
+        <NewReservationsSection
+          data={reservationsData}
+          scope={reservationsScope}
+          onScopeChange={setReservationsScope}
+        />
       </main>
 
       <CommandTaskRail
@@ -1433,6 +1478,172 @@ function TaskRow({ task }: { task: Task }) {
       </Link>
     </li>
   );
+}
+
+// ─── New Reservations section ───────────────────────────────────────────
+//
+// Lightweight list of recent ProposalReservation rows. Default scope is
+// the calling consultant ("mine"); owners and admins get a Mine/All
+// toggle that flips the API filter. The point is visibility — a booking
+// landing in the DB has to be impossible to miss.
+
+function NewReservationsSection({
+  data,
+  scope,
+  onScopeChange,
+}: {
+  data: ReservationsResponse | null;
+  scope: "mine" | "all";
+  onScopeChange: (s: "mine" | "all") => void;
+}) {
+  const reservations = data?.reservations ?? [];
+  const canViewAll = data?.canViewAll ?? false;
+
+  return (
+    <section className="mt-8">
+      <div className="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
+        <div>
+          <h2
+            className="text-[18px] md:text-[20px] font-bold leading-tight"
+            style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
+          >
+            New reservations
+            {data && reservations.length > 0 && (
+              <span
+                className="ml-2 text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full align-middle"
+                style={{ background: "rgba(27,58,45,0.10)", color: PALETTE.forest }}
+              >
+                {reservations.length}
+              </span>
+            )}
+          </h2>
+          <div className="text-[12px] mt-0.5" style={{ color: PALETTE.muted }}>
+            Bookings clients have submitted from their proposal.
+          </div>
+        </div>
+        {canViewAll && (
+          <div className="flex items-center gap-1.5">
+            <Pill
+              label="Mine"
+              count={0}
+              active={scope === "mine"}
+              onClick={() => onScopeChange("mine")}
+            />
+            <Pill
+              label="All"
+              count={0}
+              active={scope === "all"}
+              onClick={() => onScopeChange("all")}
+            />
+          </div>
+        )}
+      </div>
+
+      {data === null ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-14 rounded-xl animate-pulse"
+              style={{ background: PALETTE.lineSoft }}
+            />
+          ))}
+        </div>
+      ) : reservations.length === 0 ? (
+        <EmptyCard
+          message={
+            scope === "mine"
+              ? "No reservations assigned to you yet. New bookings will land here the moment a client submits."
+              : "No reservations in this workspace yet."
+          }
+        />
+      ) : (
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: PALETTE.cardBg,
+            boxShadow: `0 1px 0 ${PALETTE.line}, 0 4px 14px -8px rgba(13,38,32,0.10)`,
+          }}
+        >
+          <ul>
+            {reservations.map((r, i) => (
+              <ReservationRow key={r.id} row={r} divider={i > 0} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReservationRow({ row, divider }: { row: ReservationRow; divider: boolean }) {
+  const dates = `${formatShortDate(row.arrivalDate)} → ${formatShortDate(row.departureDate)}`;
+  const assignee =
+    row.assignedTo?.name?.trim() ||
+    row.assignedTo?.email?.split("@")[0] ||
+    "Unassigned";
+  const tripTitle = row.proposal?.title?.trim() || "Untitled proposal";
+  const href = row.proposal ? `/studio/${row.proposal.id}` : "#";
+  return (
+    <li>
+      <Link
+        href={href}
+        className="grid grid-cols-1 md:grid-cols-[1.4fr_1.6fr_1.2fr_1fr_auto] gap-3 md:gap-4 items-baseline px-5 py-3.5 transition"
+        style={{
+          background: "transparent",
+          borderTop: divider ? `1px solid ${PALETTE.lineSoft}` : "none",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        <div className="min-w-0">
+          <div
+            className="text-[13.5px] font-semibold truncate"
+            style={{ color: PALETTE.ink }}
+          >
+            {row.clientName}
+          </div>
+          <div
+            className="text-[11px] mt-0.5 truncate md:hidden"
+            style={{ color: PALETTE.muted }}
+          >
+            {tripTitle}
+          </div>
+        </div>
+        <div
+          className="text-[12.5px] truncate hidden md:block"
+          style={{ color: PALETTE.body }}
+          title={tripTitle}
+        >
+          {tripTitle}
+        </div>
+        <div
+          className="text-[12px] tabular-nums whitespace-nowrap"
+          style={{ color: PALETTE.body }}
+        >
+          {dates}
+        </div>
+        <div
+          className="text-[12px] truncate"
+          style={{ color: PALETTE.muted }}
+        >
+          {assignee}
+        </div>
+        <div
+          className="text-[11px] tabular-nums whitespace-nowrap text-right"
+          style={{ color: PALETTE.muted }}
+        >
+          {formatRelative(row.createdAt)}
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────

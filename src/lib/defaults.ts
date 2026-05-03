@@ -274,7 +274,12 @@ export function buildDefaultProposal(): Proposal {
       status: "draft",
     },
     operator: {
-      companyName: "Safari Studio",
+      // Blank by default — the Brand DNA / onboarding flow sets the real
+      // company name, and any client-facing surface (e.g. the
+      // ReservationDialog) falls back to "our team" when this is empty.
+      // Previously hard-coded to "Safari Studio", which leaked the
+      // platform brand into white-labeled client UIs.
+      companyName: "",
       consultantName: "Amina Oduya",
       email: "amina@safaristudio.co",
       phone: "+254 700 000 000",

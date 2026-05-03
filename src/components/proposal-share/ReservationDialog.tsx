@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ensureSessionId } from "@/components/proposal-share/ViewTracker";
 import type { Proposal, ThemeTokens, ProposalTheme } from "@/lib/types";
 
 // ─── ReservationDialog — client booking popup ───────────────────────────
@@ -58,6 +59,13 @@ export function ReservationDialog({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  // Resolve a guaranteed session id. The prop is the first choice (matches
+  // the engagement-tracker session for the rest of /p/[id]), but we
+  // fall back to ensureSessionId / a one-shot local id so funnel events
+  // can never silently drop. resolvedSessionId is what every track()
+  // call uses — never the bare prop.
+  const resolvedSessionId = useMemo(() => resolveSessionId(sessionId), [sessionId]);
+
   // Reset whenever the dialog re-opens for a fresh attempt.
   useEffect(() => {
     if (open) {
@@ -66,10 +74,14 @@ export function ReservationDialog({
       setError(null);
       setDone(false);
       // Fire-and-forget tracker event so the operator's funnel
-      // shows "started" vs "completed" reservations.
-      track(proposalId, sessionId, "reservation_started");
+      // shows "started" vs "completed" reservations. Once-per-session
+      // per proposal so re-opens during the same view session don't
+      // double-count.
+      if (markStartedOnce(proposalId, resolvedSessionId)) {
+        track(proposalId, resolvedSessionId, "reservation_started");
+      }
     }
-  }, [open, initial, proposalId, sessionId]);
+  }, [open, initial, proposalId, resolvedSessionId]);
 
   // ESC closes; outside-click on the backdrop closes too.
   useEffect(() => {
@@ -84,6 +96,16 @@ export function ReservationDialog({
   if (!open) return null;
 
   const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  // White-label sender label. Prefer consultant name → company name →
+  // "our team". The legacy default "Safari Studio" gets stripped here
+  // too so a proposal seeded before the default-removal fix doesn't
+  // leak the platform brand into the client UI.
+  const senderLabel =
+    cleanBrand(proposal.operator.consultantName) ||
+    cleanBrand(proposal.operator.companyName) ||
+    "our team";
+  const operatorLogoUrl = proposal.operator.logoUrl?.trim() || null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +142,7 @@ export function ReservationDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          sessionId,
+          sessionId: resolvedSessionId,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -129,7 +151,7 @@ export function ReservationDialog({
         setSubmitting(false);
         return;
       }
-      track(proposalId, sessionId, "reservation_completed");
+      track(proposalId, resolvedSessionId, "reservation_completed");
       setDone(true);
       setSubmitting(false);
     } catch {
@@ -154,32 +176,47 @@ export function ReservationDialog({
       >
         {/* ── Header ── */}
         <div
-          className="flex items-baseline justify-between gap-3 px-5 md:px-7 pt-5 pb-3"
+          className="flex items-center justify-between gap-3 px-5 md:px-7 pt-5 pb-3"
           style={{ borderBottom: `1px solid ${tokens.border}` }}
         >
-          <div>
-            <div
-              className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
-              style={{ color: tokens.mutedText }}
-            >
-              Make a reservation
+          <div className="flex items-center gap-3 min-w-0">
+            {operatorLogoUrl && (
+              // Operator logo — surfaces org branding in the popup so
+              // the client sees who they're booking with at a glance.
+              // Stays small (max 40px) so it complements the title
+              // rather than competing with it.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={operatorLogoUrl}
+                alt={cleanBrand(proposal.operator.companyName) || "Operator logo"}
+                className="shrink-0 w-10 h-10 object-contain rounded-md"
+                style={{ background: "transparent" }}
+              />
+            )}
+            <div className="min-w-0">
+              <div
+                className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
+                style={{ color: tokens.mutedText }}
+              >
+                Make a reservation
+              </div>
+              <h2
+                className="font-bold leading-[1.1] mt-0.5 truncate"
+                style={{
+                  color: tokens.headingText,
+                  fontFamily: `'${theme.displayFont}', serif`,
+                  fontSize: "clamp(1.2rem, 2.4vw, 1.6rem)",
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                {done ? "We're on it" : proposal.trip.title || "Your safari"}
+              </h2>
             </div>
-            <h2
-              className="font-bold leading-[1.1] mt-0.5"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(1.2rem, 2.4vw, 1.6rem)",
-                letterSpacing: "-0.005em",
-              }}
-            >
-              {done ? "We're on it" : proposal.trip.title || "Your safari"}
-            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-2xl leading-none transition hover:opacity-75"
+            className="text-2xl leading-none transition hover:opacity-75 shrink-0"
             style={{ color: tokens.mutedText }}
             aria-label="Close"
           >
@@ -195,9 +232,7 @@ export function ReservationDialog({
             >
               Thank you, {form.firstName}. Your reservation request has been
               sent to{" "}
-              <strong style={{ color: tokens.headingText }}>
-                {proposal.operator.consultantName || proposal.operator.companyName || "the team"}
-              </strong>
+              <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>
               . You&rsquo;ll hear from us within 24 hours to confirm
               availability and walk you through the next step.
             </p>
@@ -319,11 +354,8 @@ export function ReservationDialog({
                 className="text-[11.5px] flex-1 min-w-[180px]"
                 style={{ color: tokens.mutedText }}
               >
-                Submitting sends your details directly to{" "}
-                {proposal.operator.consultantName ||
-                  proposal.operator.companyName ||
-                  "the team"}
-                . No payment is taken at this step.
+                Submitting sends your details directly to {senderLabel}.
+                No payment is taken at this step.
               </p>
               <button
                 type="submit"
@@ -346,9 +378,22 @@ export function ReservationDialog({
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function track(proposalId: string, sessionId: string | undefined, kind: string) {
-  if (!sessionId) return;
-  // Best-effort, never blocks the UI.
+// Strip the legacy "Safari Studio" platform-brand seed from the
+// operator profile so it never reaches a client-facing surface. Empty
+// strings come back as empty so the caller's "|| 'our team'" fallback
+// can take over. Trims whitespace defensively — operator profiles
+// occasionally arrive with trailing spaces from copy/paste.
+function cleanBrand(name: string | undefined): string {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return "";
+  if (/^safari studio(\b|$)/i.test(trimmed)) return "";
+  return trimmed;
+}
+
+function track(proposalId: string, sessionId: string, kind: string) {
+  // sessionId is guaranteed non-empty by resolveSessionId — the
+  // previous "no sessionId → silently no-op" path has been removed so
+  // funnel events can never disappear.
   try {
     void fetch(`/api/public/proposals/${proposalId}/track`, {
       method: "POST",
@@ -358,6 +403,48 @@ function track(proposalId: string, sessionId: string | undefined, kind: string) 
     });
   } catch {
     /* swallow — tracking is best-effort */
+  }
+}
+
+// Resolve a usable session id with three layers of fallback so the
+// dialog can NEVER drop an event:
+//   1. Prop from the parent (matches the engagement-tracker session)
+//   2. ensureSessionId() — reads / writes sessionStorage so a reload
+//      stays the same session and the tracker sees the same id
+//   3. A volatile in-memory id when sessionStorage is unavailable
+//      (private mode, sandboxed iframes)
+function resolveSessionId(prop: string | undefined): string {
+  if (prop && prop.trim().length > 0) return prop;
+  if (typeof window === "undefined") {
+    // SSR path — the dialog is `if (!open) return null` so this is
+    // never actually reached during render, but keep the guard so
+    // hooks called pre-mount don't crash.
+    return `srv-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  try {
+    return ensureSessionId();
+  } catch {
+    return `anon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+}
+
+// Records that reservation_started has fired for this (proposal,
+// session) pair so re-opens of the dialog within the same view
+// session don't re-fire the event. Returns true on the first call,
+// false on subsequent calls. sessionStorage scoping means a reload =
+// same key, a fresh tab = new key — matches the engagement tracker's
+// semantics exactly.
+function markStartedOnce(proposalId: string, sessionId: string): boolean {
+  if (typeof window === "undefined") return true;
+  const key = `ss-reservation-started-${proposalId}-${sessionId}`;
+  try {
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+    return true;
+  } catch {
+    // sessionStorage unavailable — fall back to firing every time.
+    // Better to over-count than silently miss a started funnel event.
+    return true;
   }
 }
 
