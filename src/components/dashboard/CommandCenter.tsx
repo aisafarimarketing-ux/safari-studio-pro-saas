@@ -232,7 +232,7 @@ function CommandCenterShell() {
         />
       )}
 
-      <main className="px-5 py-6 md:px-10 md:py-9 min-w-0 space-y-10">
+      <main className="px-5 py-5 md:px-7 md:py-6 min-w-0 space-y-5">
         <CommandTopBar onOpenSidebar={() => setMobileNavOpen(true)} />
 
         <Hero
@@ -242,19 +242,25 @@ function CommandCenterShell() {
           onScopeChange={setActivityScope}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] gap-10">
-          <div className="min-w-0 space-y-10">
+        {/* Dense 2-col content grid: left = hot + (followup | bookings),
+            right = activity + tasks. Tighter gaps and per-section row
+            caps inside each component keep the whole dashboard inside
+            one viewport on a 1080p+ screen without scrolling. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-5">
+          <div className="min-w-0 space-y-5">
             <HotDealsSection cards={activity?.hot ?? null} loadFailed={loadFailed} />
-            <NeedsFollowupSection
-              cards={activity?.needsFollowup ?? null}
-              loadFailed={loadFailed}
-            />
-            <BookingsSection
-              rows={activity?.reservations ?? null}
-              loadFailed={loadFailed}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <NeedsFollowupSection
+                cards={activity?.needsFollowup ?? null}
+                loadFailed={loadFailed}
+              />
+              <BookingsSection
+                rows={activity?.reservations ?? null}
+                loadFailed={loadFailed}
+              />
+            </div>
           </div>
-          <aside className="min-w-0 space-y-8">
+          <aside className="min-w-0 space-y-5">
             <ActivityFeed events={activity?.recentActivity ?? null} />
             <TasksCard tasks={tasksData?.tasks ?? null} counts={tasksData?.counts ?? null} />
           </aside>
@@ -577,66 +583,58 @@ function Hero({
 
   return (
     <section
-      className="relative overflow-hidden rounded-2xl px-7 py-7 md:px-10 md:py-9"
+      className="relative overflow-hidden rounded-xl px-6 py-4 md:px-7 md:py-5"
       style={{
         background: tokens.heroBg,
-        boxShadow: "0 12px 36px -16px rgba(13,38,32,0.45)",
+        boxShadow: "0 8px 24px -14px rgba(13,38,32,0.5)",
       }}
     >
-      {/* Soft dot grid + corner glow for the alive feel. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-[0.06] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, ${tokens.accent} 1px, transparent 0)`,
-          backgroundSize: "28px 28px",
-        }}
-      />
+      {/* Subtle corner glow only — dot grid removed for crispness. */}
       <div
         aria-hidden
         className="absolute right-0 bottom-0 w-1/2 h-full pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at 100% 100%, rgba(212,183,101,0.22) 0%, transparent 60%)`,
+          background: `radial-gradient(ellipse at 100% 100%, rgba(212,183,101,0.18) 0%, transparent 55%)`,
         }}
       />
 
-      <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 flex-1">
+      <div className="relative flex items-center gap-5 flex-wrap lg:flex-nowrap">
+        {/* Eyebrow + scope toggle — vertical stack on the left so the
+            stats own the centre of the hero. */}
+        <div className="shrink-0">
           <div
-            className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] font-semibold"
+            className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.26em] font-semibold whitespace-nowrap"
             style={{ color: tokens.accent }}
           >
             <span aria-hidden>🔥</span> Today&apos;s focus
           </div>
-
-          <div className="mt-5 grid grid-cols-3 gap-5 md:gap-9 max-w-2xl">
-            <Stat label="Hot deals" value={hotCount} loading={!activity && !loadFailed} />
-            <Stat
-              label="Needs follow-up"
-              value={followupCount}
-              loading={!activity && !loadFailed}
-            />
-            <Stat
-              label="Reservations"
-              value={reservationsCount}
-              loading={!activity && !loadFailed}
-            />
-          </div>
-
           {canViewAll && (
-            <div className="mt-5 inline-flex items-center gap-1.5 rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)" }}>
+            <div
+              className="mt-2 inline-flex items-center gap-1 rounded-full p-0.5"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+            >
               <ScopePill active={scope === "mine"} onClick={() => onScopeChange("mine")} label="Mine" />
-              <ScopePill active={scope === "all"} onClick={() => onScopeChange("all")} label="Whole team" />
+              <ScopePill active={scope === "all"} onClick={() => onScopeChange("all")} label="Team" />
             </div>
           )}
         </div>
 
+        {/* Stats — three numbers inline, the visual centre of the hero. */}
+        <div className="flex items-center gap-6 md:gap-9 flex-1 min-w-0">
+          <Stat label="Hot" value={hotCount} loading={!activity && !loadFailed} />
+          <Divider />
+          <Stat label="Follow-up" value={followupCount} loading={!activity && !loadFailed} />
+          <Divider />
+          <Stat label="Bookings" value={reservationsCount} loading={!activity && !loadFailed} />
+        </div>
+
+        {/* CTAs — pinned right, never wrap below stats on lg+. */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             type="button"
             onClick={() => scrollToId("dash-hot-deals")}
             disabled={hotCount === 0}
-            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold transition-[filter,transform,background] duration-[120ms] ease-out disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
+            className="px-3.5 h-9 rounded-md text-[12.5px] font-semibold transition-[filter,transform,background] duration-[120ms] ease-out disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
             style={{ background: tokens.accent, color: "#1a1a1a" }}
           >
             View hot deals →
@@ -644,7 +642,7 @@ function Hero({
           <button
             type="button"
             onClick={() => scrollToId("dash-followup")}
-            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold text-white transition-[filter,transform,background] duration-[120ms] ease-out hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
+            className="px-3.5 h-9 rounded-md text-[12.5px] font-semibold text-white transition-[filter,transform,background] duration-[120ms] ease-out hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "1px solid rgba(255,255,255,0.22)",
@@ -655,6 +653,18 @@ function Hero({
         </div>
       </div>
     </section>
+  );
+}
+
+// Hairline between hero stats so the three numbers read as a row of
+// linked metrics rather than disconnected blocks.
+function Divider() {
+  return (
+    <div
+      aria-hidden
+      className="w-px h-9 shrink-0"
+      style={{ background: "rgba(255,255,255,0.12)" }}
+    />
   );
 }
 
@@ -670,21 +680,21 @@ function Stat({
   return (
     <div className="min-w-0">
       <div
-        className="text-[10.5px] uppercase tracking-[0.24em] font-semibold text-white/60"
+        className="text-[9.5px] uppercase tracking-[0.22em] font-semibold text-white/55"
       >
         {label}
       </div>
       <div
-        className="mt-2.5 leading-[0.95] tabular-nums text-white"
+        className="mt-1 leading-[0.95] tabular-nums text-white"
         style={{
           fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: "clamp(44px, 6vw, 56px)",
+          fontSize: "clamp(28px, 3.6vw, 38px)",
           fontWeight: 800,
-          letterSpacing: "-0.025em",
+          letterSpacing: "-0.022em",
         }}
       >
         {loading ? (
-          <span className="inline-block w-14 h-12 rounded animate-pulse bg-white/10" />
+          <span className="inline-block w-10 h-8 rounded animate-pulse bg-white/10" />
         ) : (
           value
         )}
@@ -726,6 +736,10 @@ function HotDealsSection({
   cards: ActivityCard[] | null;
   loadFailed: boolean;
 }) {
+  // Cap visible cards at 4 (a 2x2 grid) so the section stays inside
+  // one viewport. Anything beyond bubbles up via the count chip on
+  // the section header.
+  const visible = cards?.slice(0, 4);
   return (
     <section id="dash-hot-deals">
       <SectionHeader
@@ -736,16 +750,16 @@ function HotDealsSection({
       />
       {loadFailed ? (
         <EmptyCard message="Couldn't load. Refresh to try again." />
-      ) : cards === null ? (
+      ) : visible === undefined ? (
         <CardGrid>
           <DealCardSkeleton />
           <DealCardSkeleton />
         </CardGrid>
-      ) : cards.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyCard message="Quiet right now. New hot deals appear here as engagement builds." />
       ) : (
         <CardGrid>
-          {cards.map((c) => (
+          {visible.map((c) => (
             <DealCard key={c.proposalId} card={c} />
           ))}
         </CardGrid>
@@ -768,55 +782,53 @@ function DealCard({ card }: { card: ActivityCard }) {
   const isFresh = isRecent(card.lastEventAt, 10 * 60_000);
   const statusLabel = isVeryHot ? "VERY HOT" : isHot ? "HOT" : card.status.toUpperCase();
 
-  // Warm-tinted background for HOT / VERY HOT cards so they pop above
-  // the rest of the dashboard. VERY HOT gets a slightly heavier wash
-  // and an accent ring to read as a tier above HOT at a glance.
-  const baseBg = tokens.tileBg;
-  const warmTint = isVeryHot
-    ? `linear-gradient(135deg, rgba(220,38,38,0.07) 0%, rgba(255,255,255,0) 60%), ${baseBg}`
+  // Crisp 1px outer border instead of the warm wash. Hot cards
+  // signal status via a 3px left accent strip + the StatusPill, not a
+  // background gradient — keeps every card's edge sharp and lets the
+  // grid read as a clean row of tiles.
+  const accentStrip = isVeryHot
+    ? "#dc2626"
     : isHot
-      ? `linear-gradient(135deg, rgba(220,38,38,0.04) 0%, rgba(255,255,255,0) 55%), ${baseBg}`
-      : baseBg;
-  const ring = isVeryHot
-    ? "rgba(220,38,38,0.32)"
-    : isHot
-      ? "rgba(220,38,38,0.18)"
-      : tokens.ring;
-  const ringHover = isHot || isVeryHot ? "rgba(220,38,38,0.45)" : tokens.ringHover;
+      ? "rgba(220,38,38,0.55)"
+      : "transparent";
+  const border = isHot || isVeryHot ? "rgba(220,38,38,0.22)" : tokens.ringHover;
 
-  // VERY HOT cards animate the existing ss-hot-pulse keyframe so the
-  // most-active deals visibly throb on the page. "Just touched" deals
-  // (event in the last ~10min) layer the ss-fresh ring on top so an
-  // operator's eye catches the freshest movement first.
-  const animClass = isVeryHot
-    ? "ss-hot-pulse"
-    : isFresh
-      ? "ss-fresh"
-      : "";
+  // VERY HOT cards animate the ss-hot-pulse keyframe (existing).
+  // "Just touched" deals (event in the last ~10min) get ss-fresh.
+  const animClass = isVeryHot ? "ss-hot-pulse" : isFresh ? "ss-fresh" : "";
 
   return (
     <article
-      className={`rounded-2xl p-6 transition-all duration-150 ease-out ${animClass}`}
+      className={`relative rounded-xl p-4 overflow-hidden transition-all duration-150 ease-out ${animClass}`}
       style={{
-        background: warmTint,
-        boxShadow: `inset 0 0 0 1px ${ring}, ${tokens.shadow}`,
+        background: tokens.tileBg,
+        border: `1px solid ${border}`,
+        boxShadow: tokens.shadow,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = `inset 0 0 0 1px ${ringHover}, ${tokens.shadowHover}`;
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.boxShadow = tokens.shadowHover;
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = `inset 0 0 0 1px ${ring}, ${tokens.shadow}`;
+        e.currentTarget.style.boxShadow = tokens.shadow;
       }}
     >
-      <div className="flex items-start gap-4">
+      {/* Left accent strip — flags HOT/VERY HOT without tinting the
+          card body, so the surface stays calm and contrast stays high. */}
+      <div
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0 w-[3px]"
+        style={{ background: accentStrip }}
+      />
+
+      <div className="flex items-start gap-3">
         <Avatar initial={initial} tokens={tokens} />
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3
-              className="text-[17px] truncate"
+              className="text-[14.5px] truncate"
               style={{
                 color: tokens.heading,
                 fontWeight: 700,
@@ -829,15 +841,14 @@ function DealCard({ card }: { card: ActivityCard }) {
             <StatusPill label={statusLabel} variant={isVeryHot ? "very-hot" : isHot ? "hot" : "neutral"} />
           </div>
           <div
-            className="text-[13px] truncate mt-1"
+            className="text-[11.5px] truncate mt-0.5"
             style={{ color: tokens.body }}
             title={tripSummary}
           >
             {tripSummary}
           </div>
           <div
-            className="text-[12.5px] mt-2 flex items-center gap-1.5 flex-wrap"
-            style={{ color: tokens.body }}
+            className="text-[11.5px] mt-1.5 flex items-center gap-1.5 flex-wrap"
           >
             {isRecent(card.lastEventAt, 5 * 60_000) && (
               <span className="ss-recency-dot" aria-label="Activity in the last 5 minutes" />
@@ -850,7 +861,7 @@ function DealCard({ card }: { card: ActivityCard }) {
 
         <div className="text-right shrink-0">
           <div
-            className="text-[34px] leading-none tabular-nums"
+            className="text-[26px] leading-none tabular-nums"
             style={{
               color: tokens.heading,
               fontFamily: "'Playfair Display', Georgia, serif",
@@ -861,7 +872,7 @@ function DealCard({ card }: { card: ActivityCard }) {
             {card.engagementScore}
           </div>
           <div
-            className="text-[10px] uppercase tracking-[0.24em] font-semibold mt-1"
+            className="text-[9px] uppercase tracking-[0.22em] font-semibold mt-0.5"
             style={{ color: tokens.muted }}
           >
             score
@@ -869,18 +880,18 @@ function DealCard({ card }: { card: ActivityCard }) {
         </div>
       </div>
 
-      <div
-        className="mt-5 px-3.5 py-2.5 rounded-lg text-[12.5px]"
-        style={{ background: tokens.primarySoft, color: tokens.primary }}
-      >
-        <span style={{ fontWeight: 700 }}>Best move:</span> {card.nextAction}
-      </div>
-
-      <div className="mt-5 flex items-center gap-2.5">
+      <div className="mt-3 flex items-center gap-2">
         <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
           Open proposal
         </PrimaryBtn>
         <GhostBtn href={`/studio/${card.proposalId}`}>Follow up</GhostBtn>
+        <div
+          className="ml-auto text-[11px] truncate min-w-0"
+          style={{ color: tokens.muted }}
+          title={card.nextAction}
+        >
+          <span className="font-semibold">Next:</span> {card.nextAction}
+        </div>
       </div>
     </article>
   );
@@ -891,15 +902,14 @@ function Avatar({ initial, tokens }: { initial: string; tokens: DashboardTokens 
     <div
       className="shrink-0 flex items-center justify-center font-bold"
       style={{
-        width: 48,
-        height: 48,
+        width: 36,
+        height: 36,
         borderRadius: "50%",
         // Avatar surface uses primaryStrong (deep forest in both
-        // modes) so the white initial stays readable in dark — primary
-        // alone lifts to sage in dark, which would lose contrast.
+        // modes) so the white initial stays readable in dark.
         background: tokens.primaryStrong,
         color: "#fff",
-        fontSize: 18,
+        fontSize: 14,
         letterSpacing: "0.02em",
       }}
       aria-hidden
@@ -990,29 +1000,33 @@ function NeedsFollowupSection({
   loadFailed: boolean;
 }) {
   const { tokens } = useDashboardTheme();
+  // Cap to 4 visible rows; the count chip on the header surfaces the
+  // total when there are more.
+  const visible = cards?.slice(0, 4);
   return (
     <section id="dash-followup">
       <SectionHeader
-        title="Needs follow-up"
+        title="Follow-up"
         emoji="⚠️"
-        subtitle="Viewed but quiet for 48h+. A nudge is overdue."
+        subtitle="Quiet 48h+."
         count={cards?.length}
       />
       {loadFailed ? (
-        <EmptyCard message="Couldn't load. Refresh to try again." />
-      ) : cards === null ? (
+        <EmptyCard message="Couldn't load." />
+      ) : visible === undefined ? (
         <ListSkeleton rows={3} />
-      ) : cards.length === 0 ? (
-        <EmptyCard message="Nothing waiting on you. Every active deal has had recent attention." />
+      ) : visible.length === 0 ? (
+        <EmptyCard message="Every active deal has had recent attention." />
       ) : (
         <ul
-          className="rounded-2xl overflow-hidden"
+          className="rounded-xl overflow-hidden"
           style={{
             background: tokens.tileBg,
-            boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+            border: `1px solid ${tokens.ring}`,
+            boxShadow: tokens.shadow,
           }}
         >
-          {cards.map((c, i) => (
+          {visible.map((c, i) => (
             <FollowupRow key={c.proposalId} card={c} divider={i > 0} />
           ))}
         </ul>
@@ -1023,13 +1037,12 @@ function NeedsFollowupSection({
 
 function FollowupRow({ card, divider }: { card: ActivityCard; divider: boolean }) {
   const { tokens } = useDashboardTheme();
-  const tripSummary = card.title?.trim() || "Untitled proposal";
   const sinceLabel = card.lastEventAt
-    ? `Viewed ${formatRelative(card.lastEventAt)}`
-    : "Viewed recently";
+    ? formatRelative(card.lastEventAt)
+    : "recently";
   return (
     <li
-      className="grid grid-cols-1 md:grid-cols-[1.4fr_1.6fr_1fr_auto] items-baseline gap-4 px-6 py-4 transition"
+      className="flex items-center gap-3 px-3.5 py-2.5 transition"
       style={{ borderTop: divider ? `1px solid ${tokens.ring}` : "none" }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.primarySoft;
@@ -1038,32 +1051,19 @@ function FollowupRow({ card, divider }: { card: ActivityCard; divider: boolean }
         e.currentTarget.style.background = "transparent";
       }}
     >
-      <div className="min-w-0">
+      <div className="flex-1 min-w-0">
         <div
-          className="text-[14.5px] truncate"
-          style={{ color: tokens.heading, fontWeight: 700 }}
+          className="text-[13px] truncate"
+          style={{ color: tokens.heading, fontWeight: 600 }}
         >
           {card.client?.name ?? "Unknown client"}
         </div>
         <div
-          className="text-[11.5px] mt-0.5 truncate md:hidden"
+          className="text-[11px] truncate mt-0.5"
           style={{ color: tokens.muted }}
         >
-          {tripSummary}
+          Viewed {sinceLabel} · no reply
         </div>
-      </div>
-      <div
-        className="text-[12.5px] truncate hidden md:block"
-        style={{ color: tokens.body }}
-      >
-        {tripSummary}
-      </div>
-      <div
-        className="text-[11.5px]"
-        style={{ color: tokens.muted }}
-      >
-        <div className="tabular-nums">{sinceLabel}</div>
-        <div className="opacity-75">No response yet</div>
       </div>
       <div className="shrink-0">
         <PrimaryBtn href={`/studio/${card.proposalId}`}>Follow up</PrimaryBtn>
@@ -1082,29 +1082,37 @@ function BookingsSection({
   loadFailed: boolean;
 }) {
   const { tokens } = useDashboardTheme();
+  // Show 3 rows fully; if there's a 4th+, scroll inside the card so
+  // the dashboard's vertical rhythm stays predictable.
+  const visible = rows?.slice(0, 6);
+  const overflowsScroll = (rows?.length ?? 0) > 3;
   return (
     <section id="dash-bookings">
       <SectionHeader
-        title="New bookings"
+        title="Bookings"
         emoji="💰"
-        subtitle="Reservations clients have submitted from their proposal."
+        subtitle="Submitted from proposal."
         count={rows?.length}
       />
       {loadFailed ? (
-        <EmptyCard message="Couldn't load. Refresh to try again." />
-      ) : rows === null ? (
+        <EmptyCard message="Couldn't load." />
+      ) : visible === undefined ? (
         <ListSkeleton rows={2} />
-      ) : rows.length === 0 ? (
-        <EmptyCard message="No bookings yet. New reservations land here the moment a client submits." />
+      ) : visible.length === 0 ? (
+        <EmptyCard message="No bookings yet." />
       ) : (
         <ul
-          className="rounded-2xl overflow-hidden"
+          className={`rounded-xl ${overflowsScroll ? "overflow-y-auto" : "overflow-hidden"}`}
           style={{
             background: tokens.tileBg,
-            boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+            border: `1px solid ${tokens.ring}`,
+            boxShadow: tokens.shadow,
+            // Cap height at exactly 3 rows when more exist, so the
+            // section reads as bounded and the rest scrolls.
+            maxHeight: overflowsScroll ? "calc(3 * 60px)" : undefined,
           }}
         >
-          {rows.map((r, i) => (
+          {visible.map((r, i) => (
             <BookingRow key={r.id} row={r} divider={i > 0} />
           ))}
         </ul>
@@ -1116,14 +1124,10 @@ function BookingsSection({
 function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean }) {
   const { tokens } = useDashboardTheme();
   const dates = `${formatShortDate(row.arrivalDate)} → ${formatShortDate(row.departureDate)}`;
-  const consultant =
-    row.assignedTo?.name?.trim() ||
-    row.assignedTo?.email?.split("@")[0] ||
-    "Unassigned";
   const href = row.proposal ? `/studio/${row.proposal.id}` : "#";
   return (
     <li
-      className="grid grid-cols-1 md:grid-cols-[1.4fr_1.2fr_1fr_auto] items-baseline gap-4 px-6 py-4 transition"
+      className="flex items-center gap-3 px-3.5 py-2.5 transition"
       style={{ borderTop: divider ? `1px solid ${tokens.ring}` : "none" }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = tokens.primarySoft;
@@ -1132,34 +1136,22 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
         e.currentTarget.style.background = "transparent";
       }}
     >
-      <div className="min-w-0">
+      <div className="flex-1 min-w-0">
         <div
-          className="text-[14.5px] truncate"
-          style={{ color: tokens.heading, fontWeight: 700 }}
+          className="text-[13px] truncate"
+          style={{ color: tokens.heading, fontWeight: 600 }}
         >
           {row.clientName}
         </div>
         <div
-          className="text-[11px] mt-0.5 truncate uppercase tracking-[0.06em]"
+          className="text-[11px] truncate mt-0.5 tabular-nums"
           style={{ color: tokens.muted }}
         >
-          {row.proposal?.trackingId ?? ""}
+          {dates}
         </div>
       </div>
-      <div
-        className="text-[12.5px] tabular-nums whitespace-nowrap"
-        style={{ color: tokens.body }}
-      >
-        {dates}
-      </div>
-      <div
-        className="text-[12px] truncate"
-        style={{ color: tokens.muted }}
-      >
-        {consultant}
-      </div>
       <div className="shrink-0">
-        <SecondaryBtn href={href}>View details</SecondaryBtn>
+        <SecondaryBtn href={href}>View</SecondaryBtn>
       </div>
     </li>
   );
@@ -1171,47 +1163,46 @@ function ActivityFeed({ events }: { events: RecentEvent[] | null }) {
   const { tokens } = useDashboardTheme();
   return (
     <section
-      className="rounded-2xl p-5"
+      className="rounded-xl p-4"
       style={{
         background: tokens.tileBg,
-        boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+        border: `1px solid ${tokens.ring}`,
+        boxShadow: tokens.shadow,
       }}
     >
-      <div className="flex items-baseline justify-between gap-2 mb-3">
+      <div className="flex items-baseline justify-between gap-2 mb-2.5">
         <h3
-          className="text-[15px] font-semibold"
+          className="text-[14px] font-semibold"
           style={{
             color: tokens.heading,
             fontFamily: "'Playfair Display', Georgia, serif",
+            letterSpacing: "-0.005em",
           }}
         >
           Client activity
         </h3>
+        <Link
+          href="/analytics"
+          className="text-[11px] font-semibold"
+          style={{ color: tokens.primary }}
+        >
+          View all →
+        </Link>
       </div>
 
       {events === null ? (
         <ListSkeleton rows={4} compact />
       ) : events.length === 0 ? (
-        <div className="py-6 text-[12.5px]" style={{ color: tokens.muted }}>
-          Quiet so far. Views, scrolls, and clicks land here as guests engage.
+        <div className="py-4 text-[12px]" style={{ color: tokens.muted }}>
+          Quiet so far. Views and clicks land here as guests engage.
         </div>
       ) : (
-        <ul className="space-y-3">
-          {events.slice(0, 8).map((e) => (
+        <ul className="space-y-2.5">
+          {events.slice(0, 6).map((e) => (
             <ActivityRow key={e.id} event={e} />
           ))}
         </ul>
       )}
-
-      <div className="mt-4">
-        <Link
-          href="/analytics"
-          className="text-[12px] font-semibold inline-flex items-center gap-1"
-          style={{ color: tokens.primary }}
-        >
-          View all activity <span aria-hidden>→</span>
-        </Link>
-      </div>
     </section>
   );
 }
@@ -1271,25 +1262,27 @@ function TasksCard({
   const { tokens } = useDashboardTheme();
   return (
     <section
-      className="rounded-2xl p-5"
+      className="rounded-xl p-4"
       style={{
         background: tokens.tileBg,
-        boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+        border: `1px solid ${tokens.ring}`,
+        boxShadow: tokens.shadow,
       }}
     >
-      <div className="flex items-baseline justify-between gap-2 mb-3">
+      <div className="flex items-baseline justify-between gap-2 mb-2.5">
         <h3
-          className="text-[15px] font-semibold"
+          className="text-[14px] font-semibold"
           style={{
             color: tokens.heading,
             fontFamily: "'Playfair Display', Georgia, serif",
+            letterSpacing: "-0.005em",
           }}
         >
           Today&apos;s tasks
         </h3>
         {counts && counts.overdue > 0 && (
           <span
-            className="text-[10.5px] tabular-nums px-2 py-0.5 rounded-full font-semibold"
+            className="text-[10px] tabular-nums px-1.5 py-0.5 rounded font-semibold"
             style={{ background: "#fee2e2", color: "#b91c1c" }}
           >
             {counts.overdue} overdue
@@ -1301,20 +1294,20 @@ function TasksCard({
         <ListSkeleton rows={3} compact />
       ) : tasks.length === 0 ? (
         <div
-          className="py-5 text-[12.5px] text-center"
+          className="py-3 text-[12px] text-center"
           style={{ color: tokens.muted }}
         >
           No open tasks. Add one from a deal.
         </div>
       ) : (
-        <ul className="space-y-1.5">
-          {tasks.slice(0, 6).map((t) => (
+        <ul className="space-y-1">
+          {tasks.slice(0, 4).map((t) => (
             <TaskRow key={t.id} task={t} />
           ))}
         </ul>
       )}
 
-      <div className="mt-4">
+      <div className="mt-3">
         <PrimaryBtn href="/requests" full>
           + Add task
         </PrimaryBtn>
@@ -1382,24 +1375,24 @@ function SectionHeader({
 }) {
   const { tokens } = useDashboardTheme();
   return (
-    <div className="flex items-baseline justify-between gap-3 mb-5">
+    <div className="flex items-baseline justify-between gap-3 mb-3">
       <div className="min-w-0">
         <h2
-          className="text-[22px] md:text-[26px] leading-[1.05]"
+          className="text-[16px] md:text-[18px] leading-[1.1]"
           style={{
             color: tokens.heading,
             fontFamily: "'Playfair Display', Georgia, serif",
             fontWeight: 700,
-            letterSpacing: "-0.018em",
+            letterSpacing: "-0.012em",
           }}
         >
-          <span aria-hidden className="mr-2">
+          <span aria-hidden className="mr-1.5">
             {emoji}
           </span>
           {title}
           {typeof count === "number" && count > 0 && (
             <span
-              className="ml-2.5 text-[12px] font-bold tabular-nums px-2.5 py-1 rounded-full align-middle"
+              className="ml-2 text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-full align-middle"
               style={{ background: tokens.primarySoft, color: tokens.primary }}
             >
               {count}
@@ -1407,7 +1400,7 @@ function SectionHeader({
           )}
         </h2>
         <div
-          className="text-[12.5px] mt-1.5"
+          className="text-[11.5px] mt-1"
           style={{ color: tokens.muted }}
         >
           {subtitle}
