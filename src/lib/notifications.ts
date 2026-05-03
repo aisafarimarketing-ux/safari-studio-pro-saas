@@ -205,9 +205,38 @@ export async function notifyOverdue(params: {
 //   • owner email missing       → TO consultant only (no CC)
 //   • both missing              → log + no-op, never throw
 //
-// All errors are caught and logged. The reservation row is already
-// persisted by the time this runs — the response to the client never
-// depends on email delivery.
+// All errors are caught and logged. Returns a structured result so the
+// reserve route can surface the delivery status honestly to the client
+// — we don't claim "sent" in the dialog when the mailer was actually
+// skipped because RESEND_API_KEY isn't set.
+//
+// Reservation persistence is independent of this function — by the
+// time we run, the row is already saved.
+
+export type ReservationDeliveryResult =
+  | {
+      status: "sent";
+      to: string;
+      cc: string | null;
+    }
+  | {
+      status: "skipped";
+      /** Why the mailer no-op'd. "mailer-not-configured" means
+       *  RESEND_API_KEY or MAIL_FROM is missing on the server. */
+      reason: "mailer-not-configured";
+      to: string;
+      cc: string | null;
+    }
+  | {
+      status: "no-recipient";
+      reason: "no-consultant-or-owner-email";
+    }
+  | {
+      status: "failed";
+      reason: string;
+      to: string;
+      cc: string | null;
+    };
 
 export async function notifyReservationReceived(params: {
   organizationId: string;
@@ -233,8 +262,24 @@ export async function notifyReservationReceived(params: {
   departureDate: Date;
   travelers: string;
   notes: string | null;
-}): Promise<void> {
+}): Promise<ReservationDeliveryResult> {
   const tag = `[notifications] reservationReceived(${params.reservationId})`;
+
+  // Loud env-check upfront so the cause shows up in Railway logs
+  // before anything else. If RESEND_API_KEY or MAIL_FROM is missing,
+  // the mailer will skip — and the operator will keep wondering why
+  // emails never arrive. Make the missing config impossible to miss.
+  const hasResendKey = Boolean(process.env.RESEND_API_KEY?.trim());
+  const hasMailFrom = Boolean(process.env.MAIL_FROM?.trim());
+  if (!hasResendKey || !hasMailFrom) {
+    console.warn(
+      `${tag} mailer config incomplete — `
+        + `RESEND_API_KEY=${hasResendKey ? "set" : "MISSING"} `
+        + `MAIL_FROM=${hasMailFrom ? "set" : "MISSING"}. `
+        + `Set both as Railway environment variables to enable delivery.`,
+    );
+  }
+
   try {
     // Resolve the org owner via OrgMembership(role="owner"). There can
     // be multiple owners; we take the first by createdAt for stability.
@@ -269,6 +314,8 @@ export async function notifyReservationReceived(params: {
       cc,
       replyTo: consultantEmail,
       proposalId: params.proposalId,
+      consultantEmailPresent: Boolean(consultantEmail),
+      ownerEmailPresent: Boolean(ownerEmail),
     });
 
     if (!to) {
@@ -276,7 +323,7 @@ export async function notifyReservationReceived(params: {
         `${tag} no consultant or owner email available — reservation persisted but no email sent.`,
         { organizationId: params.organizationId, proposalId: params.proposalId },
       );
-      return;
+      return { status: "no-recipient", reason: "no-consultant-or-owner-email" };
     }
 
     // Subject uses the caller-supplied tracking id ("PRO-2026-0042"
@@ -354,13 +401,23 @@ export async function notifyReservationReceived(params: {
 
     if (result.skipped) {
       console.log(`${tag} mailer not configured — would have sent to`, { to, cc });
-    } else if (!result.ok) {
-      console.warn(`${tag} send failed:`, result.error, { to, cc });
-    } else {
-      console.log(`${tag} sent`, { to, cc });
+      return { status: "skipped", reason: "mailer-not-configured", to, cc };
     }
+    if (!result.ok) {
+      console.warn(`${tag} send failed:`, result.error, { to, cc });
+      return {
+        status: "failed",
+        reason: result.error ?? "unknown",
+        to,
+        cc,
+      };
+    }
+    console.log(`${tag} sent`, { to, cc });
+    return { status: "sent", to, cc };
   } catch (err) {
+    const reason = err instanceof Error ? err.message : "unknown";
     console.warn(`${tag} unexpected error:`, err);
+    return { status: "failed", reason, to: "", cc: null };
   }
 }
 

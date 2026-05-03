@@ -234,11 +234,14 @@ export async function POST(
   }
 
   // ── Email fan-out ──────────────────────────────────────────────────────
-  // Fire-and-forget so a slow Resend call never delays the client's
-  // success state. notifyReservationReceived is internally try/catch'd
-  // and logs every failure; the void here just keeps the route from
-  // awaiting it.
-  void notifyReservationReceived({
+  // We await delivery so the response can carry an honest status —
+  // previously this was fire-and-forget and the dialog claimed
+  // "sent to <consultant>" even when RESEND_API_KEY wasn't
+  // configured and the mailer silently skipped. Bounded by a 5s
+  // timeout: if Resend hangs, we return "delayed" and let the
+  // promise keep running in the background (Node lifetime on
+  // Railway will still complete it).
+  const notifyPromise = notifyReservationReceived({
     organizationId: proposal.organizationId,
     proposalId: proposal.id,
     trackingId,
@@ -256,5 +259,29 @@ export async function POST(
     notes: notes ?? null,
   });
 
-  return NextResponse.json({ ok: true, reservationId: reservation.id });
+  const delivery = await Promise.race([
+    notifyPromise,
+    new Promise<{ status: "delayed" }>((resolve) =>
+      setTimeout(() => resolve({ status: "delayed" }), 5_000),
+    ),
+  ]);
+
+  if (delivery.status === "delayed") {
+    console.warn(
+      `[reserve] email delivery >5s for reservation ${reservation.id} — let promise continue in background.`,
+    );
+    // Don't await — the promise keeps the connection-less work alive
+    // until Resend responds; we just stop blocking the HTTP response.
+    notifyPromise.catch((err) => {
+      console.warn("[reserve] background email finally failed:", err);
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    reservationId: reservation.id,
+    // Surface delivery state so the dialog can render honest success
+    // copy (sent / received-but-not-emailed / received-emailed-late).
+    emailDelivery: delivery,
+  });
 }

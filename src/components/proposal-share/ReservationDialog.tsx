@@ -58,6 +58,11 @@ export function ReservationDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // Honest delivery state from the reserve route. Drives the success
+  // copy so we don't claim "sent to <consultant>" when the mailer was
+  // actually skipped (RESEND_API_KEY missing) or the recipient
+  // couldn't be resolved.
+  const [emailDelivery, setEmailDelivery] = useState<EmailDelivery | null>(null);
 
   // Resolve a guaranteed session id. The prop is the first choice (matches
   // the engagement-tracker session for the rest of /p/[id]), but we
@@ -66,13 +71,21 @@ export function ReservationDialog({
   // call uses — never the bare prop.
   const resolvedSessionId = useMemo(() => resolveSessionId(sessionId), [sessionId]);
 
-  // Reset whenever the dialog re-opens for a fresh attempt.
+  // Reset whenever the dialog re-opens for a fresh attempt. The
+  // setState-in-effect pattern is intentional here — we want to
+  // refresh form state every time `open` flips true so a guest who
+  // submits, closes, and reopens gets a clean slate. React's
+  // recommended alternative (key-based remount) would force the
+  // parent to manage the dialog's lifecycle, which is heavier than
+  // the win.
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm(initial);
       setSubmitting(false);
       setError(null);
       setDone(false);
+      setEmailDelivery(null);
       // Fire-and-forget tracker event so the operator's funnel
       // shows "started" vs "completed" reservations. Once-per-session
       // per proposal so re-opens during the same view session don't
@@ -152,6 +165,12 @@ export function ReservationDialog({
         return;
       }
       track(proposalId, resolvedSessionId, "reservation_completed");
+      // Capture the route's honest delivery status so the success
+      // screen reads accurately. Falls back to null when the field
+      // is missing (older deployments) — the success copy then uses
+      // its neutral default.
+      const delivery = parseEmailDelivery(data.emailDelivery);
+      setEmailDelivery(delivery);
       setDone(true);
       setSubmitting(false);
     } catch {
@@ -230,11 +249,7 @@ export function ReservationDialog({
               className="text-[15px] leading-[1.7]"
               style={{ color: tokens.bodyText }}
             >
-              Thank you, {form.firstName}. Your reservation request has been
-              sent to{" "}
-              <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>
-              . You&rsquo;ll hear from us within 24 hours to confirm
-              availability and walk you through the next step.
+              {renderSuccessMessage(form.firstName, senderLabel, emailDelivery, tokens)}
             </p>
             <button
               type="button"
@@ -388,6 +403,72 @@ function cleanBrand(name: string | undefined): string {
   if (!trimmed) return "";
   if (/^safari studio(\b|$)/i.test(trimmed)) return "";
   return trimmed;
+}
+
+// Email delivery status from the reserve route. Matches the union
+// returned by notifyReservationReceived (lib/notifications.ts) plus a
+// "delayed" status the route returns when the notifier promise didn't
+// resolve within 5s and ran on into the background.
+type EmailDelivery =
+  | { status: "sent" }
+  | { status: "skipped" }
+  | { status: "failed" }
+  | { status: "no-recipient" }
+  | { status: "delayed" };
+
+// Parse the route's emailDelivery field defensively — older deploys
+// might not include it, malformed responses shouldn't break the
+// success screen.
+function parseEmailDelivery(raw: unknown): EmailDelivery | null {
+  if (!raw || typeof raw !== "object") return null;
+  const status = (raw as { status?: unknown }).status;
+  if (
+    status === "sent" ||
+    status === "skipped" ||
+    status === "failed" ||
+    status === "no-recipient" ||
+    status === "delayed"
+  ) {
+    return { status };
+  }
+  return null;
+}
+
+// Render the success-screen copy. ONLY the "sent" status claims the
+// email actually went — every other status (skipped because mailer
+// isn't configured, failed, delayed past 5s, no recipient) falls
+// back to a neutral "received, the team will reach out" line so we
+// never lie about delivery.
+function renderSuccessMessage(
+  firstName: string,
+  senderLabel: string,
+  delivery: EmailDelivery | null,
+  tokens: ThemeTokens,
+): React.ReactNode {
+  const senderTag = (
+    <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>
+  );
+
+  if (delivery?.status === "sent") {
+    return (
+      <>
+        Thank you, {firstName}. Your reservation request has been sent to{" "}
+        {senderTag}. You&rsquo;ll hear from us within 24 hours to confirm
+        availability and walk you through the next step.
+      </>
+    );
+  }
+
+  // Every other status (skipped / failed / delayed / no-recipient /
+  // unknown): the row is persisted, the operator can see it in the
+  // dashboard, but we don't claim an email went out.
+  return (
+    <>
+      Thank you, {firstName}. Your reservation request has been received and is
+      with {senderTag}. They&rsquo;ll be in touch within 24 hours to confirm
+      availability and walk you through the next step.
+    </>
+  );
 }
 
 function track(proposalId: string, sessionId: string, kind: string) {
