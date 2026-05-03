@@ -4,18 +4,25 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/properties/AppHeader";
 
-// ─── Live team supervision dashboard ──────────────────────────────────────
+// ─── Live team performance command center ─────────────────────────────────
 //
-// Two panels:
-//   1. Left — roster. One row per member: avatar, name, role, online
-//      status dot, current activity, workload mini-bar (new/working/open),
-//      median response minutes, bookings this month.
-//   2. Right — activity feed. Scrolls in newest-first; admins see the
-//      whole org, members see only their own events.
+// Three layers, top → bottom:
+//   1. Top-performers strip — three ranking cards (bookings, pipeline,
+//      fastest response). Surfaces who to celebrate / who's leading at
+//      a glance.
+//   2. Player cards grid — one card per member with: name + role +
+//      online dot, action score, 2x2 metric grid (Proposals / Hot /
+//      Follow-up / Bookings), median response, signal chips (🔥 ⏳ ⚠️),
+//      badges, suggested actions, last activity.
+//   3. Activity feed — org-wide event stream, scrollable.
 //
-// Polls /api/team every 15s and /api/activity every 20s. Lightweight
-// enough for now — we'll swap to Supabase Realtime if team size makes
-// polling wasteful.
+// Polls /api/team every 15s and /api/activity every 20s.
+
+const FOREST = "#1b3a2d";
+const GREEN_BRIGHT = "#34a04c";
+const GOLD = "#c9a84c";
+const HOT = "#dc2626";
+const WARN = "#f59e0b";
 
 type TeamMember = {
   userId: string;
@@ -34,6 +41,32 @@ type TeamMember = {
   workload: { new: number; working: number; open: number; total: number };
   medianResponseMinutes: number | null;
   bookedThisMonth: number;
+  metrics: {
+    proposalsActive: number;
+    hotDeals: number;
+    needsFollowup: number;
+    atRisk: number;
+    bookingsThisMonth: number;
+    bookingsAllTime: number;
+    medianResponseMinutes: number | null;
+    actionScore: number;
+  };
+  badges: string[];
+  suggestedActions: { label: string; tone: "hot" | "warn" | "info" }[];
+  lastActivity: { description: string; at: string } | null;
+};
+
+type Ranking = { userId: string; name: string | null; value: number };
+
+type TeamResponse = {
+  team: TeamMember[];
+  rankings: {
+    topByBookings: Ranking[];
+    topByPipeline: Ranking[];
+    fastestResponse: Ranking[];
+  };
+  orgId: string;
+  you: { userId: string; role: "owner" | "admin" | "member" };
 };
 
 type ActivityEvent = {
@@ -46,31 +79,12 @@ type ActivityEvent = {
   user: { id: string; name: string | null; email: string | null } | null;
 };
 
-type PerformanceMember = {
-  userId: string;
-  name: string | null;
-  email: string | null;
-  role: "owner" | "admin" | "member";
-  roleTitle: string | null;
-  profilePhotoUrl: string | null;
-  metrics: {
-    proposalsThisMonth: number;
-    proposalsLastMonth: number;
-    depositsThisMonthCents: number;
-    engagementMedianSeconds: number;
-    engagementSampleSize: number;
-    pipelineValueCents: number;
-  };
-};
-
 export function TeamSupervisionPage() {
-  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [data, setData] = useState<TeamResponse | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
-  const [you, setYou] = useState<{ userId: string; role: "owner" | "admin" | "member" } | null>(null);
-  const [performance, setPerformance] = useState<PerformanceMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load team list + poll.
+  // Team poll — 15s.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -79,538 +93,662 @@ export function TeamSupervisionPage() {
         if (res.status === 401) { window.location.href = "/sign-in"; return; }
         if (res.status === 409) { window.location.href = "/select-organization"; return; }
         if (!res.ok) throw new Error(`Team load failed (HTTP ${res.status})`);
-        const data = await res.json();
+        const json = (await res.json()) as TeamResponse;
         if (!cancelled) {
-          setTeam(data.team);
-          setYou(data.you);
+          setData(json);
           setError(null);
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Team load failed");
       }
     };
-    load();
-    const interval = setInterval(load, 15_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    void load();
+    const t = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
-  // Load activity feed + poll.
+  // Activity poll — 20s.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch("/api/activity?limit=50", { cache: "no-store" });
+        const res = await fetch("/api/activity?limit=30", { cache: "no-store" });
         if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setEvents(data.events);
-      } catch {
-        // swallow — activity feed is best-effort
-      }
+        const json = await res.json();
+        if (!cancelled) setEvents(json.events ?? []);
+      } catch { /* secondary surface — silent */ }
     };
-    load();
-    const interval = setInterval(load, 20_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    void load();
+    const t = setInterval(load, 20_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
-  // Load per-member performance metrics. Refreshes on a slower cadence
-  // than presence — the numbers don't move minute-to-minute.
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/team/performance", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setPerformance(data.members as PerformanceMember[]);
-      } catch {
-        // best-effort
-      }
-    };
-    load();
-    const interval = setInterval(load, 60_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  const team = data?.team ?? null;
+  const rankings = data?.rankings ?? null;
+  const youRole = data?.you?.role ?? "member";
 
-  // Summary stats for the top strip.
-  const summary = useMemo(() => {
-    if (!team) return null;
-    const online = team.filter((m) => m.presence.status === "online").length;
-    const totalOpen = team.reduce((sum, m) => sum + m.workload.total, 0);
-    const totalBooked = team.reduce((sum, m) => sum + m.bookedThisMonth, 0);
-    const responses = team
-      .map((m) => m.medianResponseMinutes)
-      .filter((v): v is number => typeof v === "number");
-    const teamMedian = responses.length ? median(responses) : null;
-    return { online, total: team.length, totalOpen, totalBooked, teamMedian };
+  // Sort the player-card grid by action score so top performers
+  // surface first. Tiebreak on bookings → hot deals → name.
+  const sortedTeam = useMemo(() => {
+    if (!team) return [];
+    return [...team].sort((a, b) => {
+      if (b.metrics.actionScore !== a.metrics.actionScore) {
+        return b.metrics.actionScore - a.metrics.actionScore;
+      }
+      if (b.metrics.bookingsThisMonth !== a.metrics.bookingsThisMonth) {
+        return b.metrics.bookingsThisMonth - a.metrics.bookingsThisMonth;
+      }
+      if (b.metrics.hotDeals !== a.metrics.hotDeals) {
+        return b.metrics.hotDeals - a.metrics.hotDeals;
+      }
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
   }, [team]);
 
-  const isAdmin = you?.role === "admin" || you?.role === "owner";
-
   return (
-    <div className="min-h-screen bg-[#f8f5ef]">
+    <div className="min-h-screen" style={{ background: "#f8f5ef" }}>
       <AppHeader />
       <main className="max-w-[1280px] mx-auto px-6 py-10">
-        <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
+        <header className="mb-8 flex items-baseline justify-between flex-wrap gap-4">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.3em] text-black/50">Supervision</div>
-            <h1 className="mt-2 text-[32px] md:text-[40px] font-bold tracking-tight text-black/85" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-black/50">
               Team
+            </div>
+            <h1
+              className="mt-2 text-[32px] md:text-[40px] font-bold tracking-tight text-black/85"
+              style={{ fontFamily: "'Playfair Display', serif", letterSpacing: "-0.02em" }}
+            >
+              Performance command center
             </h1>
-            <p className="mt-2 text-[14px] text-black/55 max-w-xl">
-              Who has what, who&apos;s online, response time, pending work. Updated live.
+            <p className="mt-2 text-[14px] text-black/55 max-w-[640px]">
+              Who&rsquo;s leading the week, where the money is, who needs a
+              nudge. Polls live every 15 seconds.
             </p>
           </div>
-          <Link
-            href="/settings/team"
-            className="text-[12px] text-black/45 hover:text-[#1b3a2d] transition"
-          >
-            Manage seats &amp; invites →
-          </Link>
-        </div>
+          {(youRole === "owner" || youRole === "admin") && (
+            <Link
+              href="/settings/team"
+              className="text-[12.5px] font-semibold transition hover:text-[#1b3a2d]"
+              style={{ color: GOLD }}
+            >
+              Manage seats →
+            </Link>
+          )}
+        </header>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-4 text-[13px] text-[#b34334]">
+          <div
+            className="mb-6 rounded-xl p-4 text-[13px]"
+            style={{
+              background: "rgba(179,67,52,0.08)",
+              color: "#b34334",
+              border: "1px solid rgba(179,67,52,0.22)",
+            }}
+          >
             {error}
           </div>
         )}
 
-        {/* Top summary strip */}
-        {summary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <Stat label="Online" value={`${summary.online} / ${summary.total}`} />
-            <Stat label="Open work" value={String(summary.totalOpen)} />
-            <Stat label="Booked this month" value={String(summary.totalBooked)} />
-            <Stat
-              label="Team median response"
-              value={summary.teamMedian != null ? formatMinutes(summary.teamMedian) : "—"}
-            />
-          </div>
-        )}
+        {!data && !error && <LoadingSkeleton />}
 
-        {/* Performance — per-member output. Admin/owner see full table;
-            members see only their own row so they can track themselves
-            without becoming a leaderboard-of-shame for juniors. */}
-        {performance && performance.length > 0 && (
-          <PerformancePanel
-            rows={
-              isAdmin
-                ? performance
-                : performance.filter((m) => m.userId === you?.userId)
-            }
-            isAdmin={isAdmin}
-          />
-        )}
+        {data && (
+          <>
+            {/* ── Top performers strip ──────────────────────────── */}
+            {rankings && <RankingsStrip rankings={rankings} />}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-          {/* Roster */}
-          <section className="bg-white rounded-2xl border border-black/8 overflow-hidden">
-            <header className="px-5 py-4 border-b border-black/8 flex items-center justify-between">
-              <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55">
-                Members · {team?.length ?? 0}
+            {/* ── Player cards grid ─────────────────────────────── */}
+            <section className="mt-8">
+              <div className="flex items-baseline justify-between mb-4 gap-3">
+                <h2
+                  className="text-[20px] font-bold text-black/85"
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                >
+                  The roster
+                </h2>
+                <span className="text-[11.5px] text-black/45 tabular-nums">
+                  {sortedTeam.length} member{sortedTeam.length === 1 ? "" : "s"} · sorted by action score
+                </span>
               </div>
-            </header>
-            {team === null ? (
-              <div className="p-5 space-y-3">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-16 rounded-xl bg-black/5 animate-pulse" />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {sortedTeam.map((m) => (
+                  <PlayerCard key={m.userId} member={m} />
                 ))}
               </div>
-            ) : team.length === 0 ? (
-              <div className="p-10 text-center text-[14px] text-black/45">
-                No team members yet. Invite someone via{" "}
-                <Link href="/settings/team" className="underline text-[#1b3a2d]">
-                  Settings → Team
-                </Link>
-                .
-              </div>
-            ) : (
-              <ul className="divide-y divide-black/5">
-                {team.map((m) => (
-                  <MemberRow key={m.userId} member={m} isSelf={m.userId === you?.userId} />
-                ))}
-              </ul>
-            )}
-          </section>
+            </section>
 
-          {/* Activity feed */}
-          <aside className="bg-white rounded-2xl border border-black/8 overflow-hidden lg:sticky lg:top-6 self-start max-h-[70vh] flex flex-col">
-            <header className="px-5 py-4 border-b border-black/8 flex items-center justify-between shrink-0">
-              <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55">
-                {isAdmin ? "Activity · Live" : "Your activity"}
+            {/* ── Activity feed ────────────────────────────────── */}
+            <section className="mt-10">
+              <h2
+                className="text-[20px] font-bold text-black/85 mb-4"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
+                Live activity
+              </h2>
+              <div
+                className="rounded-2xl bg-white"
+                style={{
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                }}
+              >
+                {events === null ? (
+                  <div className="p-6 text-[13px] text-black/45">Loading…</div>
+                ) : events.length === 0 ? (
+                  <div className="p-6 text-[13px] text-black/45 text-center">
+                    No team activity in the last hour. The feed updates every 20 seconds.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-black/5">
+                    {events.slice(0, 20).map((e) => (
+                      <ActivityItem key={e.id} event={e} />
+                    ))}
+                  </ul>
+                )}
               </div>
-              <LiveDot />
-            </header>
-            <div className="overflow-y-auto flex-1">
-              {events === null ? (
-                <div className="p-5 space-y-2">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="h-10 rounded-lg bg-black/5 animate-pulse" />
-                  ))}
-                </div>
-              ) : events.length === 0 ? (
-                <div className="p-8 text-center text-[13px] text-black/45">
-                  No recent activity yet.
-                </div>
-              ) : (
-                <ul className="divide-y divide-black/5">
-                  {events.map((e) => (
-                    <ActivityRow key={e.id} event={e} />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </aside>
-        </div>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
 }
 
-// ─── Member row ──────────────────────────────────────────────────────────
+// ─── Top performers strip ────────────────────────────────────────────────
 
-function MemberRow({ member, isSelf }: { member: TeamMember; isSelf: boolean }) {
-  const name = member.name || member.email || "Unnamed";
-  const initial = (name ?? "·").trim().charAt(0).toUpperCase();
-  const activity =
-    member.presence.status === "offline"
-      ? member.presence.lastActiveAt
-        ? `last seen ${timeAgo(member.presence.lastActiveAt)}`
-        : "offline"
-      : member.presence.currentAction || member.presence.currentView || "active";
+function RankingsStrip({ rankings }: { rankings: TeamResponse["rankings"] }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-4 gap-3">
+        <h2
+          className="text-[20px] font-bold text-black/85"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          Top performers · this week
+        </h2>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <RankingCard
+          icon="💰"
+          title="Most bookings"
+          accent={FOREST}
+          rows={rankings.topByBookings}
+          formatValue={(v) => `${v} ${v === 1 ? "booking" : "bookings"}`}
+        />
+        <RankingCard
+          icon="🔥"
+          title="Biggest pipeline"
+          accent={GOLD}
+          rows={rankings.topByPipeline}
+          formatValue={(v) => `${v} active`}
+        />
+        <RankingCard
+          icon="⚡"
+          title="Fastest response"
+          accent="#3a6ea5"
+          rows={rankings.fastestResponse}
+          formatValue={(v) => formatMinutes(v)}
+        />
+      </div>
+    </section>
+  );
+}
+
+function RankingCard({
+  icon,
+  title,
+  accent,
+  rows,
+  formatValue,
+}: {
+  icon: string;
+  title: string;
+  accent: string;
+  rows: Ranking[];
+  formatValue: (value: number) => string;
+}) {
+  return (
+    <div
+      className="rounded-2xl bg-white p-5 relative overflow-hidden"
+      style={{
+        border: "1px solid rgba(0,0,0,0.08)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px -4px rgba(0,0,0,0.05)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={{ background: accent }}
+      />
+      <div className="flex items-center gap-2 mb-3.5">
+        <span className="text-[18px]" aria-hidden>{icon}</span>
+        <div
+          className="text-[10.5px] uppercase font-bold"
+          style={{ color: "rgba(0,0,0,0.55)", letterSpacing: "0.22em" }}
+        >
+          {title}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="text-[12px] text-black/40 py-2">
+          Not enough data yet.
+        </div>
+      ) : (
+        <ol className="space-y-2.5">
+          {rows.map((r, i) => (
+            <li key={r.userId} className="flex items-center gap-3">
+              <span
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold tabular-nums shrink-0"
+                style={{
+                  background: i === 0 ? accent : "rgba(0,0,0,0.06)",
+                  color: i === 0 ? "#fff" : "rgba(0,0,0,0.55)",
+                }}
+              >
+                {i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13.5px] font-semibold text-black/85 truncate">
+                  {r.name ?? "Unnamed"}
+                </div>
+              </div>
+              <div
+                className="text-[12.5px] tabular-nums shrink-0"
+                style={{ color: accent, fontWeight: 600 }}
+              >
+                {formatValue(r.value)}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+// ─── Player card ─────────────────────────────────────────────────────────
+
+function PlayerCard({ member }: { member: TeamMember }) {
+  const m = member;
+  const score = m.metrics.actionScore;
+  // Score colour mirrors the dashboard's status palette: hot above
+  // 70, warm above 40, watching otherwise.
+  const scoreTone = score >= 70 ? "hot" : score >= 40 ? "warm" : "watching";
+  const scoreColor = scoreTone === "hot" ? HOT : scoreTone === "warm" ? WARN : "rgba(0,0,0,0.55)";
+  const scoreBg =
+    scoreTone === "hot"
+      ? "rgba(220,38,38,0.10)"
+      : scoreTone === "warm"
+        ? "rgba(245,158,11,0.10)"
+        : "rgba(0,0,0,0.04)";
 
   return (
-    <li className="px-5 py-4 flex items-center gap-4">
-      {/* Avatar + status dot */}
-      <div className="relative shrink-0">
-        {member.profilePhotoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={member.profilePhotoUrl}
-            alt={name}
-            className="w-11 h-11 rounded-full object-cover"
-          />
-        ) : (
-          <div
-            className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-semibold"
-            style={{ background: "rgba(201,168,76,0.15)", color: "#8a7228" }}
-          >
-            {initial}
+    <article
+      className="rounded-2xl bg-white p-5 transition-all duration-150 hover:-translate-y-0.5"
+      style={{
+        border: "1px solid rgba(0,0,0,0.08)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px -4px rgba(0,0,0,0.06)",
+      }}
+    >
+      {/* ── Header row: avatar / name / role / score ───────────── */}
+      <div className="flex items-start gap-3">
+        <Avatar photo={m.profilePhotoUrl} name={m.name} status={m.presence.status} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[15px] font-bold text-black/90 truncate">
+              {m.name ?? "Unnamed"}
+            </span>
+            <RolePill role={m.role} />
           </div>
-        )}
-        <span
-          className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
-          style={{
-            background:
-              member.presence.status === "online"
-                ? "#2ea04a"
-                : member.presence.status === "idle"
-                  ? "#d6a13a"
-                  : "#b0b0b0",
-          }}
-          title={member.presence.status}
+          <div className="text-[11.5px] text-black/50 truncate mt-0.5">
+            {m.roleTitle || m.email || ""}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div
+            className="text-[24px] leading-none tabular-nums"
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontWeight: 800,
+              color: scoreColor,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {score}
+          </div>
+          <div
+            className="text-[8.5px] uppercase tracking-[0.20em] font-bold mt-0.5 px-1.5 py-0.5 rounded inline-block"
+            style={{ background: scoreBg, color: scoreColor }}
+          >
+            Score
+          </div>
+        </div>
+      </div>
+
+      {/* ── Badges row ─────────────────────────────────────────── */}
+      {m.badges.length > 0 && (
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          {m.badges.map((b) => (
+            <BadgePill key={b} label={b} />
+          ))}
+        </div>
+      )}
+
+      {/* ── 2x2 metric grid ────────────────────────────────────── */}
+      <div
+        className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3"
+      >
+        <Metric label="Proposals" value={m.metrics.proposalsActive} />
+        <Metric label="Bookings · MTD" value={m.metrics.bookingsThisMonth} />
+        <Metric label="Hot deals" value={m.metrics.hotDeals} accent={m.metrics.hotDeals > 0 ? HOT : undefined} />
+        <Metric
+          label="Median reply"
+          stringValue={
+            m.metrics.medianResponseMinutes != null
+              ? formatMinutes(m.metrics.medianResponseMinutes)
+              : "—"
+          }
         />
       </div>
 
-      {/* Name + activity */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-[14px] text-black/85 truncate">{name}</span>
-          <RolePill role={member.role} />
-          {isSelf && (
-            <span className="text-[10px] uppercase tracking-[0.2em] text-black/40">You</span>
-          )}
-        </div>
-        <div className="text-[12px] text-black/50 truncate">{activity}</div>
+      {/* ── Signal chips (🔥 / ⏳ / ⚠️) ──────────────────────── */}
+      <div className="mt-4 flex items-center gap-2 flex-wrap">
+        <SignalChip
+          glyph="🔥"
+          label="Hot"
+          count={m.metrics.hotDeals}
+          tone="hot"
+        />
+        <SignalChip
+          glyph="⏳"
+          label="Follow-up"
+          count={m.metrics.needsFollowup}
+          tone="warn"
+        />
+        <SignalChip
+          glyph="⚠️"
+          label="At risk"
+          count={m.metrics.atRisk}
+          tone="risk"
+        />
       </div>
 
-      {/* Workload */}
-      <div className="hidden sm:flex items-center gap-2 shrink-0 text-[11px] tabular-nums">
-        <Chip label="New" value={member.workload.new} accent="#c9a84c" />
-        <Chip label="Working" value={member.workload.working} accent="#1b3a2d" />
-        <Chip label="Open" value={member.workload.open} accent="#3a5a7a" />
-      </div>
+      {/* ── Suggested actions ──────────────────────────────────── */}
+      {m.suggestedActions.length > 0 && (
+        <div
+          className="mt-4 rounded-lg px-3 py-2.5"
+          style={{
+            background: "rgba(27,58,45,0.04)",
+            border: "1px solid rgba(27,58,45,0.10)",
+          }}
+        >
+          <div
+            className="text-[9.5px] uppercase font-bold mb-1.5"
+            style={{ color: FOREST, letterSpacing: "0.22em" }}
+          >
+            Next moves
+          </div>
+          <ul className="space-y-1">
+            {m.suggestedActions.map((a, i) => (
+              <li key={i} className="flex items-center gap-1.5 text-[12px]">
+                <span
+                  aria-hidden
+                  className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{
+                    background:
+                      a.tone === "hot" ? HOT : a.tone === "warn" ? WARN : FOREST,
+                  }}
+                />
+                <span style={{ color: "rgba(0,0,0,0.78)" }}>{a.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-      {/* Response time + bookings */}
-      <div className="hidden md:block text-right shrink-0 min-w-[110px]">
-        <div className="text-[11.5px] text-black/55 tabular-nums">
-          {member.medianResponseMinutes != null
-            ? `${formatMinutes(member.medianResponseMinutes)} median reply`
-            : "— no data"}
+      {/* ── Last activity strip ────────────────────────────────── */}
+      {m.lastActivity && (
+        <div
+          className="mt-4 pt-3 flex items-center justify-between gap-2 text-[11.5px]"
+          style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}
+        >
+          <span className="text-black/55 truncate">{m.lastActivity.description}</span>
+          <span className="text-black/40 tabular-nums shrink-0">
+            {formatRelative(m.lastActivity.at)}
+          </span>
         </div>
-        <div className="text-[11.5px] text-black/40 tabular-nums mt-0.5">
-          {member.bookedThisMonth} booked · month
+      )}
+    </article>
+  );
+}
+
+// ─── Small helpers ───────────────────────────────────────────────────────
+
+function Avatar({
+  photo,
+  name,
+  status,
+}: {
+  photo: string | null;
+  name: string | null;
+  status: "online" | "idle" | "offline";
+}) {
+  const initial = (name?.trim().charAt(0) ?? "·").toUpperCase();
+  const dotColor =
+    status === "online" ? GREEN_BRIGHT : status === "idle" ? WARN : "rgba(0,0,0,0.30)";
+  return (
+    <div className="relative shrink-0">
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photo}
+          alt={name ?? "Avatar"}
+          className="w-12 h-12 rounded-full object-cover"
+          style={{ border: "1px solid rgba(0,0,0,0.08)" }}
+        />
+      ) : (
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-[16px]"
+          style={{
+            background: `linear-gradient(135deg, ${FOREST} 0%, #142a20 100%)`,
+            color: "#fff",
+          }}
+          aria-hidden
+        >
+          {initial}
         </div>
-      </div>
-    </li>
+      )}
+      <span
+        aria-hidden
+        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
+        style={{
+          background: dotColor,
+          boxShadow: "0 0 0 2px #fff",
+        }}
+      />
+    </div>
   );
 }
 
 function RolePill({ role }: { role: "owner" | "admin" | "member" }) {
-  const label = role === "owner" ? "Owner" : role === "admin" ? "Admin" : "Member";
-  const tone =
-    role === "owner"
-      ? { bg: "rgba(201,168,76,0.18)", fg: "#8a7228" }
-      : role === "admin"
-        ? { bg: "rgba(27,58,45,0.1)", fg: "#1b3a2d" }
-        : { bg: "rgba(0,0,0,0.05)", fg: "rgba(0,0,0,0.5)" };
+  const map: Record<string, { bg: string; fg: string; label: string }> = {
+    owner: { bg: "rgba(201,168,76,0.16)", fg: "#7a5d2e", label: "Owner" },
+    admin: { bg: "rgba(58,110,165,0.14)", fg: "#2c5384", label: "Admin" },
+    member: { bg: "rgba(0,0,0,0.06)", fg: "rgba(0,0,0,0.55)", label: "Member" },
+  };
+  const s = map[role] ?? map.member;
   return (
     <span
-      className="inline-block text-[9.5px] uppercase tracking-[0.18em] font-semibold px-1.5 py-0.5 rounded"
-      style={{ background: tone.bg, color: tone.fg }}
+      className="text-[8.5px] uppercase tracking-[0.20em] font-bold px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: s.bg, color: s.fg }}
     >
+      {s.label}
+    </span>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  stringValue,
+  accent,
+}: {
+  label: string;
+  value?: number;
+  stringValue?: string;
+  accent?: string;
+}) {
+  const display = stringValue ?? String(value ?? 0);
+  return (
+    <div className="min-w-0">
+      <div
+        className="text-[9px] uppercase font-bold mb-1"
+        style={{ color: "rgba(0,0,0,0.45)", letterSpacing: "0.20em" }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[20px] tabular-nums leading-none"
+        style={{
+          fontFamily: "'Playfair Display', serif",
+          fontWeight: 800,
+          letterSpacing: "-0.022em",
+          color: accent ?? "rgba(0,0,0,0.88)",
+        }}
+      >
+        {display}
+      </div>
+    </div>
+  );
+}
+
+function SignalChip({
+  glyph,
+  label,
+  count,
+  tone,
+}: {
+  glyph: string;
+  label: string;
+  count: number;
+  tone: "hot" | "warn" | "risk";
+}) {
+  const palette: Record<string, { bg: string; fg: string }> = {
+    hot: { bg: "rgba(220,38,38,0.10)", fg: "#b91c1c" },
+    warn: { bg: "rgba(245,158,11,0.12)", fg: "#92400e" },
+    risk: { bg: "rgba(220,38,38,0.06)", fg: "#7f1d1d" },
+  };
+  const s = palette[tone];
+  const dim = count === 0;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full"
+      style={{
+        background: dim ? "rgba(0,0,0,0.04)" : s.bg,
+        color: dim ? "rgba(0,0,0,0.4)" : s.fg,
+      }}
+    >
+      <span aria-hidden style={{ filter: dim ? "grayscale(100%)" : undefined, opacity: dim ? 0.5 : 1 }}>
+        {glyph}
+      </span>
+      <span>{label}</span>
+      <span className="tabular-nums">{count}</span>
+    </span>
+  );
+}
+
+function BadgePill({ label }: { label: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+      style={{
+        background: "rgba(201,168,76,0.16)",
+        color: "#7a5d2e",
+        letterSpacing: "0.16em",
+      }}
+    >
+      <span aria-hidden>★</span>
       {label}
     </span>
   );
 }
 
-function Chip({ label, value, accent }: { label: string; value: number; accent: string }) {
-  return (
-    <div className="flex flex-col items-center px-2 py-0.5 rounded min-w-[52px]" style={{ background: "rgba(0,0,0,0.03)" }}>
-      <span className="font-semibold" style={{ color: accent }}>{value}</span>
-      <span className="text-[9.5px] uppercase tracking-[0.18em] text-black/45 leading-none">{label}</span>
-    </div>
-  );
-}
+// ─── Activity feed item ──────────────────────────────────────────────────
 
-// ─── Activity row ────────────────────────────────────────────────────────
-
-function ActivityRow({ event }: { event: ActivityEvent }) {
-  const actor = event.user?.name || event.user?.email || "Someone";
-  const phrase = describeEvent(event);
+function ActivityItem({ event }: { event: ActivityEvent }) {
+  const who = event.user?.name ?? event.user?.email ?? "Someone";
   return (
-    <li className="px-5 py-3 text-[12.5px] leading-snug">
-      <div className="text-black/70">
-        <span className="font-medium text-black/85">{actor}</span>{" "}
-        <span>{phrase}</span>
+    <li className="px-5 py-3 flex items-baseline gap-3 hover:bg-black/[0.02] transition">
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] text-black/85 truncate">
+          <span className="font-semibold">{who}</span>{" "}
+          <span className="text-black/55">— {describeEventType(event.type, event.targetType)}</span>
+        </div>
       </div>
-      <div className="text-[10.5px] text-black/40 mt-0.5 tabular-nums">
-        {timeAgo(event.createdAt)}
-      </div>
+      <span className="text-[11px] text-black/40 tabular-nums shrink-0">
+        {formatRelative(event.createdAt)}
+      </span>
     </li>
   );
 }
 
-function describeEvent(e: ActivityEvent): string {
-  switch (e.type) {
-    case "signin":        return "signed in";
-    case "signout":       return "signed out";
-    case "viewRequest":   return "opened a request";
-    case "createRequest": return `created request ${((e.detail?.referenceNumber as string) ?? "")}`.trim();
+function describeEventType(type: string, targetType: string | null): string {
+  switch (type) {
+    case "signin": return "signed in";
+    case "signout": return "signed out";
+    case "viewRequest": return "opened a request";
+    case "createRequest": return "created a request";
+    case "createQuote": return "drafted a quote";
+    case "sendQuote": return "sent a quote";
     case "assignRequest": return "assigned a request";
-    case "changeStatus":  return `moved a request to ${(e.detail?.to as string) ?? "a new status"}`;
-    case "postNote":      return "posted a note";
-    case "createQuote":   return "created a quote";
-    case "sendQuote":     return "sent a quote";
-    case "editProposal":  return "edited a proposal";
+    case "changeStatus": return "moved a deal";
+    case "postNote": return "left a note";
+    case "editProposal": return "edited a proposal";
     case "archiveProperty": return "archived a property";
-    case "editBrandDNA":  return "updated Brand DNA";
-    case "viewLibrary":   return "browsed the library";
-    case "viewTeam":      return "opened the team view";
-    default:              return e.type;
+    case "editBrandDNA": return "updated Brand DNA";
+    default: return targetType ? `touched a ${targetType}` : "worked on a deal";
   }
 }
 
-// ─── Performance panel ────────────────────────────────────────────────────
-//
-// Per-member output table. Shown in full to admin/owner (ranked by
-// proposals-this-month); members see only their own row.
-//
-// Columns sit in a responsive grid — on narrow screens the secondary
-// metrics collapse to a comma list under the name.
-
-function PerformancePanel({
-  rows,
-  isAdmin,
-}: {
-  rows: PerformanceMember[];
-  isAdmin: boolean;
-}) {
+function LoadingSkeleton() {
   return (
-    <section className="bg-white rounded-2xl border border-black/8 overflow-hidden mb-6">
-      <header className="px-5 py-4 border-b border-black/8 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-[11px] uppercase tracking-[0.28em] font-semibold text-black/55">
-          {isAdmin ? "Performance · per member" : "Your performance"}
-        </div>
-        <div className="text-[11px] text-black/40">This month · 30-day engagement · live pipeline</div>
-      </header>
-
-      {/* Column headers — hidden on mobile, shown from sm breakpoint */}
-      <div
-        className="hidden sm:grid px-5 py-2 text-[10px] uppercase tracking-[0.22em] font-semibold text-black/40 border-b border-black/5"
-        style={{ gridTemplateColumns: "2fr 0.8fr 1fr 1fr 1.1fr" }}
-      >
-        <div>Member</div>
-        <div className="text-right">Proposals</div>
-        <div className="text-right">Revenue</div>
-        <div className="text-right">Engagement</div>
-        <div className="text-right">Pipeline</div>
-      </div>
-
-      <ul className="divide-y divide-black/5">
-        {rows.map((m) => (
-          <PerformanceRow key={m.userId} member={m} />
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-32 rounded-2xl bg-white animate-pulse"
+            style={{ border: "1px solid rgba(0,0,0,0.08)" }}
+          />
         ))}
-      </ul>
-    </section>
-  );
-}
-
-function PerformanceRow({ member }: { member: PerformanceMember }) {
-  const { metrics } = member;
-  const delta = computeProposalDelta(metrics.proposalsThisMonth, metrics.proposalsLastMonth);
-
-  return (
-    <li>
-      <div
-        className="grid items-center gap-3 px-5 py-4 sm:gap-0 hover:bg-black/[0.015] transition"
-        style={{ gridTemplateColumns: "2fr 0.8fr 1fr 1fr 1.1fr" }}
-      >
-        {/* Member */}
-        <div className="flex items-center gap-3 min-w-0">
-          <Avatar photo={member.profilePhotoUrl} name={member.name} />
-          <div className="min-w-0">
-            <div className="text-[14px] font-semibold text-black/85 truncate">
-              {member.name || member.email}
-            </div>
-            {member.roleTitle && (
-              <div className="text-[11px] text-black/45 truncate">{member.roleTitle}</div>
-            )}
-          </div>
-        </div>
-
-        {/* Proposals + MoM delta */}
-        <div className="text-right tabular-nums">
-          <div className="text-[15px] font-semibold text-black/85">
-            {metrics.proposalsThisMonth}
-          </div>
-          {delta && (
-            <div
-              className="text-[10.5px] font-semibold"
-              style={{ color: delta.direction === "up" ? "#1b3a2d" : delta.direction === "down" ? "#b34334" : "rgba(0,0,0,0.4)" }}
-            >
-              {delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "·"} {delta.label}
-            </div>
-          )}
-        </div>
-
-        {/* Revenue (deposits) this month */}
-        <div className="text-right tabular-nums">
-          <div className="text-[14px] font-semibold text-black/85">
-            {metrics.depositsThisMonthCents > 0
-              ? `$${Math.round(metrics.depositsThisMonthCents / 100).toLocaleString()}`
-              : "—"}
-          </div>
-          <div className="text-[10.5px] text-black/40">deposits</div>
-        </div>
-
-        {/* Engagement median */}
-        <div className="text-right tabular-nums">
-          <div className="text-[14px] font-semibold text-black/85">
-            {metrics.engagementMedianSeconds > 0
-              ? formatShortDuration(metrics.engagementMedianSeconds)
-              : "—"}
-          </div>
-          <div className="text-[10.5px] text-black/40">
-            {metrics.engagementSampleSize > 0
-              ? `${metrics.engagementSampleSize} visit${metrics.engagementSampleSize === 1 ? "" : "s"}`
-              : "no visits yet"}
-          </div>
-        </div>
-
-        {/* Pipeline */}
-        <div className="text-right tabular-nums">
-          <div className="text-[14px] font-semibold text-black/85">
-            {metrics.pipelineValueCents > 0
-              ? `$${Math.round(metrics.pipelineValueCents / 100).toLocaleString()}`
-              : "—"}
-          </div>
-          <div className="text-[10.5px] text-black/40">live proposals</div>
-        </div>
       </div>
-    </li>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-72 rounded-2xl bg-white animate-pulse"
+            style={{ border: "1px solid rgba(0,0,0,0.08)" }}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 
-function Avatar({ photo, name }: { photo: string | null; name: string | null }) {
-  if (photo) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photo}
-        alt={name ?? ""}
-        className="w-9 h-9 rounded-full object-cover shrink-0"
-        style={{ background: "rgba(0,0,0,0.05)" }}
-      />
-    );
-  }
-  const initial = (name?.[0] ?? "?").toUpperCase();
-  return (
-    <div
-      className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-semibold text-white shrink-0"
-      style={{ background: "#1b3a2d" }}
-    >
-      {initial}
-    </div>
-  );
+// ─── Format helpers ──────────────────────────────────────────────────────
+
+function formatMinutes(min: number): string {
+  if (!Number.isFinite(min)) return "—";
+  if (min < 60) return `${Math.round(min)}m`;
+  const hrs = min / 60;
+  if (hrs < 24) return `${Math.round(hrs * 10) / 10}h`;
+  return `${Math.round(hrs / 24)}d`;
 }
 
-function computeProposalDelta(now: number, then: number): { direction: "up" | "down" | "flat"; label: string } | null {
-  if (now === 0 && then === 0) return null;
-  if (then === 0) return { direction: "up", label: "new" };
-  const diff = now - then;
-  const pct = Math.round((diff / then) * 100);
-  if (Math.abs(pct) < 1) return { direction: "flat", label: "flat" };
-  return { direction: pct > 0 ? "up" : "down", label: `${Math.abs(pct)}%` };
-}
-
-function formatShortDuration(total: number): string {
-  if (total < 60) return `${total}s`;
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
-
-// ─── Tiny UI helpers ──────────────────────────────────────────────────────
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-black/8 px-4 py-3">
-      <div className="text-[9.5px] uppercase tracking-[0.28em] font-semibold text-black/50 mb-1">{label}</div>
-      <div className="text-[22px] font-bold tracking-tight text-black/85 tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function LiveDot() {
-  return (
-    <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.22em] text-black/45">
-      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: "#2ea04a", boxShadow: "0 0 0 3px rgba(46,160,74,0.2)" }} />
-      live
-    </span>
-  );
-}
-
-// ─── Formatters ──────────────────────────────────────────────────────────
-
-function formatMinutes(m: number): string {
-  if (m < 1) return "<1m";
-  if (m < 60) return `${Math.round(m)}m`;
-  if (m < 60 * 24) return `${(m / 60).toFixed(1)}h`;
-  return `${(m / (60 * 24)).toFixed(1)}d`;
-}
-
-function timeAgo(iso: string): string {
-  const now = Date.now();
-  const t = new Date(iso).getTime();
-  const diff = Math.max(0, now - t) / 1000;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
-  return `${Math.round(diff / 86400)}d ago`;
-}
-
-function median(nums: number[]): number {
-  const sorted = [...nums].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
