@@ -3,6 +3,11 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { refreshStatusForRead, type ProposalStatus } from "@/lib/proposalActivity";
 import { displayTrackingId } from "@/lib/proposalTracking";
+import {
+  classifyMomentum,
+  type DealMomentum,
+  type SuggestedAction,
+} from "@/lib/dealMomentum";
 
 // GET /api/dashboard/activity
 //
@@ -39,6 +44,24 @@ type Card = {
   nextAction: string;
   lastEventAt: string | null;
   lastEventType: string | null;
+  // Deal Momentum System — operator-facing time-based bucket + the
+  // suggested next action. Computed at read time from
+  // ProposalActivitySummary + last operator dispatch on the same deal.
+  momentum: DealMomentum;
+  momentumReason: string;
+  suggestedAction: SuggestedAction;
+  /** Most recent draft (whatsapp/email) the operator can dispatch with
+   *  one click. Null when no draft has been generated yet — the dashboard
+   *  pre-warms drafts for VERY_HOT deals when it loads. */
+  draft:
+    | {
+        id: string;
+        channel: "whatsapp" | "email";
+        text: string;
+        createdAt: string;
+        sentAt: string | null;
+      }
+    | null;
   client: {
     id: string;
     name: string | null;
@@ -106,6 +129,44 @@ export async function GET(req: Request) {
     },
   });
 
+  // Pull every operator-facing follow-up draft for the proposals in
+  // the summary set in one round trip. We map them back to their
+  // proposal afterwards and pick the most recent. This both lights up
+  // the per-card "draft" slot and feeds lastOperatorMessageAt into the
+  // momentum classifier so we don't suggest re-pinging a client we
+  // just messaged.
+  const proposalIds = summariesRaw.map((s) => s.proposalId);
+  const followUpRaw = proposalIds.length
+    ? await prisma.aISuggestion.findMany({
+        where: {
+          organizationId: orgId,
+          kind: "follow-up",
+          targetType: "proposal",
+          targetId: { in: proposalIds },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          targetId: true,
+          input: true,
+          output: true,
+          channel: true,
+          sentAt: true,
+          createdAt: true,
+        },
+      })
+    : [];
+  const latestFollowUpByProposal = new Map<string, (typeof followUpRaw)[number]>();
+  const lastSentByProposal = new Map<string, Date>();
+  for (const row of followUpRaw) {
+    if (!latestFollowUpByProposal.has(row.targetId)) {
+      latestFollowUpByProposal.set(row.targetId, row);
+    }
+    if (row.sentAt && !lastSentByProposal.has(row.targetId)) {
+      lastSentByProposal.set(row.targetId, row.sentAt);
+    }
+  }
+
   const summaries = summariesRaw.map((row) => {
     const refreshed = refreshStatusForRead(
       {
@@ -121,6 +182,25 @@ export async function GET(req: Request) {
       },
       now,
     );
+    const momentum = classifyMomentum({
+      lastEventAt: row.lastEventAt,
+      lastEventType: row.lastEventType,
+      lastOperatorMessageAt: lastSentByProposal.get(row.proposalId) ?? null,
+      reservationCompleted: row.reservationCompleted,
+      priceViewed: row.priceViewed,
+      clickedReservation: row.clickedReservation,
+      now,
+    });
+    const latestDraft = latestFollowUpByProposal.get(row.proposalId) ?? null;
+    const draft: Card["draft"] = latestDraft
+      ? {
+          id: latestDraft.id,
+          channel: latestDraft.channel === "email" ? "email" : "whatsapp",
+          text: latestDraft.output,
+          createdAt: latestDraft.createdAt.toISOString(),
+          sentAt: latestDraft.sentAt?.toISOString() ?? null,
+        }
+      : null;
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({
@@ -133,6 +213,10 @@ export async function GET(req: Request) {
       nextAction: refreshed.nextAction,
       lastEventAt: row.lastEventAt?.toISOString() ?? null,
       lastEventType: row.lastEventType,
+      momentum: momentum.momentum,
+      momentumReason: momentum.reason,
+      suggestedAction: momentum.suggestedAction,
+      draft,
       client: row.client
         ? {
             id: row.client.id,
@@ -158,6 +242,15 @@ export async function GET(req: Request) {
   const hot = summaries.filter((s) => s.status === "hot").slice(0, GROUP_LIMIT);
   const needsFollowup = summaries
     .filter((s) => s.status === "needs_followup")
+    .slice(0, GROUP_LIMIT);
+  // Hot Deals Bar — proposals that need attention NOW. Distinct from
+  // "hot" status (engagement-score driven): these are time-based
+  // VERY_HOT/COOLING/COLD with a SEND_NOW or ASK_QUESTION action.
+  const needsAttention = summaries
+    .filter((s) =>
+      (s.momentum === "VERY_HOT" || s.momentum === "COOLING" || s.momentum === "COLD") &&
+      (s.suggestedAction === "SEND_NOW" || s.suggestedAction === "ASK_QUESTION"),
+    )
     .slice(0, GROUP_LIMIT);
 
   // ── Recent activity — append-only ProposalEvent log, freshest first.
@@ -326,6 +419,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     hot,
     needsFollowup,
+    needsAttention,
     recentActivity,
     reservations,
     pipeline,

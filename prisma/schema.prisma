@@ -1313,8 +1313,23 @@ model AISuggestion {
   input  Json?
   output String
 
+  // Lifecycle. status reflects what the operator did with the draft;
+  // outcome reflects the downstream conversion signal that came back.
+  // Both default to "pending"/null and move forward over time as the
+  // dashboard records sentAt → repliedAt → bookedAt.
   status    String    @default("pending") // "pending" | "applied" | "dismissed"
   appliedAt DateTime?
+
+  // Send + outcome tracking. channel is the channel the operator chose
+  // when dispatching ("whatsapp" | "email"); sentAt fires the moment
+  // they hit "Send now" in the dashboard. repliedAt + bookedAt are
+  // populated by the activity-event pipeline when an inbound reply or
+  // a reservation_completed lands on the same proposal.
+  channel    String?
+  sentAt     DateTime?
+  repliedAt  DateTime?
+  bookedAt   DateTime?
+  outcome    String?  // "sent" | "replied" | "booked" | "no-response"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1322,4 +1337,5 @@ model AISuggestion {
   @@index([organizationId, createdAt])
   @@index([organizationId, kind])
   @@index([targetType, targetId])
+  @@index([targetType, targetId, kind, createdAt])
 }

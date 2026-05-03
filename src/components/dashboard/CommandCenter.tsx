@@ -11,8 +11,17 @@ import {
   type DashboardTokens,
 } from "./DashboardTheme";
 import { PipelineStrip, type PipelineData } from "./PipelineStrip";
-import { FollowUpDialog } from "./FollowUpDialog";
+import { FollowUpPanel } from "./FollowUpPanel";
 import { ReservationSummaryDialog } from "./ReservationSummaryDialog";
+import { ToastHost } from "./Toast";
+import {
+  ACTION_LABEL,
+  MOMENTUM_COLORS,
+  MOMENTUM_ICON,
+  MOMENTUM_LABEL,
+  type DealMomentum,
+  type SuggestedAction,
+} from "@/lib/dealMomentum";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -38,6 +47,16 @@ type ActivityCard = {
   nextAction: string;
   lastEventAt: string | null;
   lastEventType: string | null;
+  momentum: DealMomentum;
+  momentumReason: string;
+  suggestedAction: SuggestedAction;
+  draft: {
+    id: string;
+    channel: "whatsapp" | "email";
+    text: string;
+    createdAt: string;
+    sentAt: string | null;
+  } | null;
   client: {
     id: string;
     name: string | null;
@@ -70,6 +89,7 @@ type ReservationRow = {
 type ActivityResponse = {
   hot: ActivityCard[];
   needsFollowup: ActivityCard[];
+  needsAttention: ActivityCard[];
   recentActivity: RecentEvent[];
   reservations: ReservationRow[];
   pipeline: PipelineData | null;
@@ -273,6 +293,12 @@ function CommandCenterShell() {
           canViewAll={activity?.canViewAll ?? false}
         />
 
+        {/* Hot Deals Bar — Deal Momentum's "what needs you NOW" surface.
+            Sits above the pipeline strip so it's the first thing the
+            operator sees on load. Click any client to scroll to their
+            card in the Hot Deals section below. */}
+        <HotDealsBar deals={activity?.needsAttention ?? null} />
+
         {/* Live Pipeline Strip — replaces the old Hot/Follow-up/
             Pipeline-$ stat tiles with a connected five-stage view of
             the deal journey. Same dark gradient as the previous hero
@@ -308,7 +334,7 @@ function CommandCenterShell() {
       </main>
 
       {followUpTarget && (
-        <FollowUpDialog
+        <FollowUpPanel
           proposalId={followUpTarget.proposalId}
           clientName={followUpTarget.clientName}
           clientPhone={followUpTarget.clientPhone}
@@ -316,6 +342,7 @@ function CommandCenterShell() {
           onClose={() => setFollowUpTarget(null)}
         />
       )}
+      <ToastHost />
       {reservationSummaryTarget && (
         <ReservationSummaryDialog
           reservationId={reservationSummaryTarget.reservationId}
@@ -741,38 +768,40 @@ function DealCard({ card }: { card: ActivityCard }) {
   const { tokens } = useDashboardTheme();
   const initial = (card.client?.name ?? "·").trim().charAt(0).toUpperCase();
   const tripSummary = card.title?.trim() || "Untitled proposal";
-  const reason = formatActivityReason(card.lastEventType, card.lastEventAt);
-  const isHot = card.status === "hot";
-  const isVeryHot = card.engagementScore >= 120;
-  const isFresh = isRecent(card.lastEventAt, 10 * 60_000);
-  const statusLabel = isVeryHot ? "VERY HOT" : isHot ? "HOT" : card.status.toUpperCase();
+  const colors = MOMENTUM_COLORS[card.momentum];
+  const isVeryHot = card.momentum === "VERY_HOT";
+  const accentStrip = isVeryHot ? colors.accent : "transparent";
+  const stripWidth = isVeryHot ? 4 : 0;
+  const animClass = isVeryHot ? "ss-hot-pulse" : "";
+  const hasDraft = Boolean(card.draft);
+  const action = card.suggestedAction;
 
-  // Hot cards signal status via a thick left accent strip + a
-  // tinted border + the StatusPill. Strip is 4px on hot (vs 0 on
-  // neutral) so the urgency reads at a glance even before the eye
-  // resolves the score.
-  const accentStrip = isVeryHot
-    ? "#dc2626"
-    : isHot
-      ? "rgba(220,38,38,0.65)"
-      : "transparent";
-  const stripWidth = isHot || isVeryHot ? 4 : 0;
-  const border = isVeryHot
-    ? "rgba(220,38,38,0.35)"
-    : isHot
-      ? "rgba(220,38,38,0.22)"
-      : tokens.ringHover;
+  const openPanel = () => {
+    window.dispatchEvent(
+      new CustomEvent<FollowUpTarget>("ss:openFollowUp", {
+        detail: {
+          proposalId: card.proposalId,
+          clientName: card.client?.name ?? null,
+          clientPhone: card.client?.phone ?? null,
+          clientEmail: card.client?.email ?? null,
+        },
+      }),
+    );
+  };
 
-  // VERY HOT cards animate the ss-hot-pulse keyframe (existing).
-  // "Just touched" deals (event in the last ~10min) get ss-fresh.
-  const animClass = isVeryHot ? "ss-hot-pulse" : isFresh ? "ss-fresh" : "";
+  // "Send now" path — same dispatch as Edit, but the panel auto-fires
+  // the deep-link the moment the cached draft lands. v1 limitation:
+  // we open WhatsApp / mailto, the operator confirms the send. True
+  // one-click send needs WhatsApp Business API + outbound email infra.
+  const sendNow = () => openPanel();
 
   return (
     <article
+      id={`deal-${card.proposalId}`}
       className={`relative rounded-xl p-4 overflow-hidden transition-all duration-150 ease-out ${animClass}`}
       style={{
         background: tokens.tileBg,
-        border: `1px solid ${border}`,
+        border: `1px solid ${isVeryHot ? colors.accent : tokens.ringHover}`,
         boxShadow: tokens.shadow,
       }}
       onMouseEnter={(e) => {
@@ -784,8 +813,6 @@ function DealCard({ card }: { card: ActivityCard }) {
         e.currentTarget.style.boxShadow = tokens.shadow;
       }}
     >
-      {/* Left accent strip — flags HOT/VERY HOT without tinting the
-          card body, so the surface stays calm and contrast stays high. */}
       <div
         aria-hidden
         className="absolute left-0 top-0 bottom-0"
@@ -808,7 +835,7 @@ function DealCard({ card }: { card: ActivityCard }) {
             >
               {card.client?.name ?? "Unknown client"}
             </h3>
-            <StatusPill label={statusLabel} variant={isVeryHot ? "very-hot" : isHot ? "hot" : "neutral"} />
+            <MomentumBadge momentum={card.momentum} />
           </div>
           <div
             className="text-[11.5px] truncate mt-0.5"
@@ -817,21 +844,14 @@ function DealCard({ card }: { card: ActivityCard }) {
           >
             {tripSummary}
           </div>
-          <div
-            className="text-[11.5px] mt-1.5 flex items-center gap-1.5 flex-wrap"
-          >
-            {isRecent(card.lastEventAt, 5 * 60_000) && (
-              <span className="ss-recency-dot" aria-label="Activity in the last 5 minutes" />
-            )}
-            <span style={{ color: tokens.heading, fontWeight: 600 }}>{reason.action}</span>
-            <span aria-hidden style={{ color: tokens.muted }}>•</span>
-            <span style={{ color: tokens.muted }}>{reason.when}</span>
+          <div className="text-[11.5px] mt-1.5" style={{ color: tokens.muted }}>
+            {card.momentumReason}
           </div>
         </div>
 
         <div className="text-right shrink-0">
           <div
-            className="text-[26px] leading-none tabular-nums"
+            className="text-[22px] leading-none tabular-nums"
             style={{
               color: tokens.heading,
               fontFamily: "'Playfair Display', Georgia, serif",
@@ -850,62 +870,179 @@ function DealCard({ card }: { card: ActivityCard }) {
         </div>
       </div>
 
-      {/* Next action chip — explicitly labelled so the operator
-          always knows what to do next on this deal at a glance,
-          without having to read the activity line and guess. */}
+      {/* Suggested action — operator-readable line that mirrors the
+          deal momentum classifier's call. */}
       <div
-        className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] max-w-full"
+        className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
         style={{
-          background: tokens.primarySoft,
-          color: tokens.primary,
-          border: `1px solid ${tokens.ring}`,
+          background: colors.bg,
+          color: colors.fg,
+          border: `1px solid ${colors.accent}33`,
         }}
       >
-        <span
-          className="text-[9px] uppercase tracking-[0.18em] font-bold shrink-0"
-          style={{ opacity: 0.7 }}
-        >
-          Next
-        </span>
-        <span
-          className="font-semibold truncate"
-          title={card.nextAction}
-        >
-          {card.nextAction}
-        </span>
+        <span aria-hidden>👉</span>
+        <span className="font-semibold truncate">{ACTION_LABEL[action]}</span>
+        {hasDraft && action !== "WAIT" && (
+          <span
+            className="text-[9.5px] uppercase tracking-[0.18em] font-bold ml-1.5 px-1.5 py-0.5 rounded"
+            style={{ background: "rgba(255,255,255,0.55)", color: colors.fg }}
+            title="A Safari Studio AI draft is ready to send."
+          >
+            Draft ready
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
-        <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
-          Open proposal
-        </PrimaryBtn>
-        <button
-          type="button"
-          onClick={() =>
-            window.dispatchEvent(
-              new CustomEvent<FollowUpTarget>("ss:openFollowUp", {
-                detail: {
-                  proposalId: card.proposalId,
-                  clientName: card.client?.name ?? null,
-                  clientPhone: card.client?.phone ?? null,
-                  clientEmail: card.client?.email ?? null,
-                },
-              }),
-            )
-          }
-          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-[12px] font-semibold transition active:scale-[0.97]"
-          style={{
-            background: tokens.primarySoft,
-            color: tokens.primary,
-            border: `1px solid ${tokens.ring}`,
-          }}
-          title="Draft a follow-up message with Safari Studio AI"
-        >
-          <span aria-hidden style={{ opacity: 0.85 }}>✦</span>
-          Draft follow-up
-        </button>
+        {action === "WAIT" ? (
+          <>
+            <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
+              Open proposal
+            </PrimaryBtn>
+            <button
+              type="button"
+              onClick={openPanel}
+              className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-[12px] font-semibold transition active:scale-[0.97]"
+              style={{
+                background: "transparent",
+                color: tokens.muted,
+                border: `1px solid ${tokens.ring}`,
+              }}
+              title="Open the draft anyway"
+            >
+              Edit draft
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={sendNow}
+              className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-md text-[12.5px] font-semibold transition active:scale-[0.97] shadow-sm"
+              style={{ background: colors.accent, color: "#ffffff" }}
+              title="Open the draft and send"
+            >
+              <span aria-hidden style={{ opacity: 0.95 }}>✦</span>
+              Send now
+            </button>
+            <button
+              type="button"
+              onClick={openPanel}
+              className="inline-flex items-center gap-1 px-3 h-9 rounded-md text-[12px] font-semibold transition active:scale-[0.97]"
+              style={{
+                background: "transparent",
+                color: tokens.heading,
+                border: `1px solid ${tokens.ring}`,
+              }}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                /* Wait is a no-op for v1 — operator skips the suggestion.
+                   Future: persist a "snooze until" so the card de-prioritises. */
+              }}
+              className="inline-flex items-center gap-1 px-3 h-9 rounded-md text-[12px] font-medium transition"
+              style={{
+                background: "transparent",
+                color: tokens.muted,
+              }}
+              title="Skip this suggestion for now"
+            >
+              Wait
+            </button>
+          </>
+        )}
       </div>
     </article>
+  );
+}
+
+function MomentumBadge({ momentum }: { momentum: DealMomentum }) {
+  const colors = MOMENTUM_COLORS[momentum];
+  return (
+    <span
+      className="text-[10px] uppercase tracking-[0.20em] font-bold px-2 py-1 rounded-md shrink-0 inline-flex items-center gap-1"
+      style={{ background: colors.accent, color: "#ffffff" }}
+    >
+      <span aria-hidden>{MOMENTUM_ICON[momentum]}</span>
+      {MOMENTUM_LABEL[momentum]}
+    </span>
+  );
+}
+
+function HotDealsBar({ deals }: { deals: ActivityCard[] | null }) {
+  const { tokens } = useDashboardTheme();
+  if (!deals) return null;
+  if (deals.length === 0) {
+    return (
+      <div
+        className="rounded-xl px-4 py-3 flex items-center gap-3"
+        style={{
+          background: tokens.tileBg,
+          border: `1px solid ${tokens.ring}`,
+          color: tokens.muted,
+        }}
+      >
+        <span aria-hidden style={{ fontSize: 16 }}>✓</span>
+        <span className="text-[13px]">No deals need your attention right now.</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="rounded-xl px-4 py-3"
+      style={{
+        background: "linear-gradient(135deg, rgba(220,38,38,0.10) 0%, rgba(202,138,4,0.06) 100%)",
+        border: "1px solid rgba(220,38,38,0.22)",
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div
+          className="text-[13.5px] font-bold"
+          style={{ color: "#b91c1c", fontFamily: "'Playfair Display', Georgia, serif" }}
+        >
+          🔥 {deals.length} {deals.length === 1 ? "deal needs" : "deals need"} attention now
+        </div>
+        <div className="text-[11px]" style={{ color: tokens.muted }}>
+          Click a name to jump to the card.
+        </div>
+      </div>
+      <ul className="mt-2 flex items-center gap-1.5 flex-wrap">
+        {deals.map((d) => (
+          <li key={d.proposalId}>
+            <button
+              type="button"
+              onClick={() => {
+                const target = document.getElementById(`deal-${d.proposalId}`);
+                if (target) {
+                  target.scrollIntoView({ behavior: "smooth", block: "center" });
+                  target.style.outline = `2px solid ${MOMENTUM_COLORS[d.momentum].accent}`;
+                  setTimeout(() => {
+                    target.style.outline = "";
+                  }, 1400);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[12px] font-semibold transition hover:opacity-90 active:scale-[0.97]"
+              style={{
+                background: "rgba(255,255,255,0.6)",
+                color: "#0a1411",
+                border: `1px solid ${MOMENTUM_COLORS[d.momentum].accent}40`,
+              }}
+              title={d.momentumReason}
+            >
+              <span aria-hidden>{MOMENTUM_ICON[d.momentum]}</span>
+              <span className="truncate max-w-[160px]">
+                {d.client?.name ?? "Unknown"}
+              </span>
+              <span aria-hidden style={{ opacity: 0.5 }}>·</span>
+              <span style={{ opacity: 0.7 }}>{d.momentumReason.split(" • ").pop()}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -928,55 +1065,6 @@ function Avatar({ initial, tokens }: { initial: string; tokens: DashboardTokens 
     >
       {initial}
     </div>
-  );
-}
-
-function StatusPill({
-  label,
-  variant,
-}: {
-  label: string;
-  variant: "very-hot" | "hot" | "neutral";
-}) {
-  if (variant === "very-hot") {
-    return (
-      <span
-        className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0 inline-flex items-center gap-1"
-        style={{
-          background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
-          color: "#fff",
-          boxShadow: "0 4px 14px -4px rgba(220,38,38,0.45)",
-        }}
-      >
-        <span aria-hidden style={{ filter: "saturate(1.5)" }}>🔥</span>
-        {label}
-      </span>
-    );
-  }
-  if (variant === "hot") {
-    return (
-      <span
-        className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0"
-        style={{
-          background: "#fee2e2",
-          color: "#b91c1c",
-          boxShadow: "inset 0 0 0 1px rgba(220,38,38,0.18)",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-  return (
-    <span
-      className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0"
-      style={{
-        background: "rgba(0,0,0,0.06)",
-        color: "rgba(0,0,0,0.6)",
-      }}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -1766,33 +1854,6 @@ function formatDueLabel(iso: string | null): string {
   startOfDayAfter.setDate(startOfDayAfter.getDate() + 1);
   if (d < startOfDayAfter) return "Tomorrow";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-// Splits the "why this is hot" line into two pieces so the action
-// can render bold and the timestamp can render light — gives a clear
-// "Started reservation • 30m ago" read instead of one undifferentiated
-// muted string.
-function formatActivityReason(
-  eventType: string | null,
-  lastEventAt: string | null,
-): { action: string; when: string } {
-  const when = lastEventAt ? formatRelative(lastEventAt) : "recently";
-  switch (eventType) {
-    case "price_viewed":
-      return { action: "Viewed pricing", when };
-    case "itinerary_clicked":
-      return { action: "Tapped itinerary", when };
-    case "proposal_scrolled":
-      return { action: "Read past 40%", when };
-    case "proposal_viewed":
-      return { action: "Opened proposal", when };
-    case "reservation_started":
-      return { action: "Started reservation", when };
-    case "reservation_completed":
-      return { action: "Confirmed booking", when };
-    default:
-      return { action: "Last touch", when };
-  }
 }
 
 function activityLabel(event: RecentEvent): string {
