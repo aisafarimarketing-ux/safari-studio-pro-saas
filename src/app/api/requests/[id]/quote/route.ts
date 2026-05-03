@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { buildBlankProposal } from "@/lib/defaults";
 import { recordActivity } from "@/lib/activity";
 import { nextProposalTrackingId } from "@/lib/proposalTracking";
+import { inferTripDuration, seedBlankDays } from "@/lib/tripDefaults";
 
 // POST /api/requests/[id]/quote
 //
@@ -62,21 +63,39 @@ export async function POST(
     operatorNote?: string;
   };
 
-  // Metadata + trip
+  // Metadata + trip — funnel everything through inferTripDuration so a
+  // request without explicit nights/dates still produces a coherent
+  // timeline. This was the source of the "blank day cards" bug:
+  // brief.nights was undefined → trip.nights persisted as 0 → editor
+  // opened with no day cards even though the operator had clear intent
+  // (destinations, style) for a multi-day safari.
+  const inferred = inferTripDuration({
+    nights: brief.nights,
+    dates: brief.dates,
+    destinations: brief.destinations,
+    style: brief.style,
+  });
   const tripTitle = brief.title?.trim() || `${clientName} Safari`;
   proposal.metadata.title = tripTitle;
   proposal.trip.title = tripTitle;
-  proposal.trip.nights = brief.nights ?? 0;
-  proposal.trip.destinations = Array.isArray(brief.destinations) ? brief.destinations : [];
-  proposal.trip.tripStyle = brief.style ?? "Mid-range";
-  proposal.trip.dates = brief.dates ?? "";
+  proposal.trip.nights = inferred.nights;
+  proposal.trip.destinations = inferred.destinations;
+  proposal.trip.tripStyle = inferred.tripStyle;
+  proposal.trip.dates = inferred.dates;
   proposal.trip.subtitle = [
-    brief.nights ? `${brief.nights} night${brief.nights === 1 ? "" : "s"}` : null,
+    `${inferred.nights} night${inferred.nights === 1 ? "" : "s"}`,
     proposal.trip.destinations.slice(0, 3).join(" · ") || null,
   ].filter(Boolean).join(" · ");
   if (brief.operatorNote?.trim()) {
     proposal.trip.operatorNote = brief.operatorNote.trim();
   }
+
+  // Seed real day cards so the editor opens with a usable timeline,
+  // not an empty list. Destinations are spread across days; narratives
+  // stay blank for the operator (or the autopilot) to fill in. The
+  // arrival / departure subtitles on the first and last day make the
+  // shape read sensibly even pre-AI.
+  proposal.days = seedBlankDays(inferred.nights, inferred.destinations);
 
   // Client
   proposal.client.guestNames = clientName;
