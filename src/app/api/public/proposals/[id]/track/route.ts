@@ -74,6 +74,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     typeof body.dwellSeconds === "number" && Number.isFinite(body.dwellSeconds)
       ? Math.max(0, Math.min(3600, Math.round(body.dwellSeconds)))
       : null;
+  // Caller-supplied metadata for org-level event kinds. Plain object
+  // only (no arrays / primitives), capped to a small set of keys we
+  // actually surface. Untrusted input — sanitised before it lands in
+  // ProposalEvent.metadata so a chatty client can't bloat the JSONB
+  // column or sneak in PII.
+  const callerMetadata = sanitiseMetadata(body.metadata);
 
   const userAgent = req.headers.get("user-agent")?.slice(0, 512) ?? null;
   const referrer = req.headers.get("referer")?.slice(0, 512) ?? null;
@@ -156,6 +162,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           sessionId,
           ...(sectionId ? { sectionId } : {}),
           ...(dwellSeconds ? { dwellSeconds } : {}),
+          ...callerMetadata,
         },
       });
     } catch (err) {
@@ -180,4 +187,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   return NextResponse.json({ ok: true });
+}
+
+// Whitelist + cap metadata coming from the public client. The ViewTracker
+// only sends a small fixed set of keys (section, dayNumber, destination)
+// so anything else is dropped silently. Strings are length-clamped;
+// numbers must be finite.
+function sanitiseMetadata(input: unknown): Record<string, string | number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const ALLOWED = new Set(["section", "dayNumber", "destination"]);
+  const out: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (!ALLOWED.has(k)) continue;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t.length > 0) out[k] = t.slice(0, 120);
+    } else if (typeof v === "number" && Number.isFinite(v)) {
+      out[k] = v;
+    }
+  }
+  return out;
 }

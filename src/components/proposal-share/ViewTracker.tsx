@@ -46,13 +46,15 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
     const elements = document.querySelectorAll<HTMLElement>('[id^="section-"], [id^="day-"]');
     elements.forEach((el) => observer.observe(el));
 
-    // ── proposal_scrolled — fire once per session per proposal when
-    //    the viewer crosses 25% of the document height. Cheap pass-
-    //    through to /track; sessionStorage marker dedupes so a long
-    //    scroll session doesn't spam the activity log. Distinct from
-    //    section-dwell events which already exist; this is the org-
-    //    level "they engaged past the hero" signal.
-    let scrollFired = readScrollFired(proposalId, sessionId);
+    // ── proposal_scrolled — fire once per (proposal, session) when
+    //    the viewer crosses 40% of the document height. The threshold
+    //    sits past the cover/hero so a casual ~one-screen glance
+    //    doesn't get counted as engagement; once a guest scrolls
+    //    that far they're meaningfully reading. sessionStorage
+    //    marker dedupes across remounts so a long scroll session or
+    //    a route flip can't re-fire.
+    const SCROLL_THRESHOLD = 0.4;
+    let scrollFired = readOnceMarker(scrolledKey(proposalId, sessionId));
     const onScroll = () => {
       if (scrollFired) return;
       const scrolled = window.scrollY || document.documentElement.scrollTop;
@@ -60,14 +62,91 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
         document.documentElement.scrollHeight - window.innerHeight,
         1,
       );
-      if (scrolled / total >= 0.25) {
+      if (scrolled / total >= SCROLL_THRESHOLD) {
         scrollFired = true;
-        markScrollFired(proposalId, sessionId);
+        writeOnceMarker(scrolledKey(proposalId, sessionId));
         post(proposalId, { sessionId, kind: "proposal_scrolled" });
         window.removeEventListener("scroll", onScroll);
       }
     };
     if (!scrollFired) window.addEventListener("scroll", onScroll, { passive: true });
+
+    // ── price_viewed — IntersectionObserver on any node carrying
+    //    data-section-type="pricing". Fires once per (proposal,
+    //    session) the first time at least 30% of the pricing section
+    //    becomes visible. Disconnects after firing so a scroll back
+    //    over pricing doesn't ping the network again.
+    let priceFired = readOnceMarker(priceKey(proposalId, sessionId));
+    const priceObserver = new IntersectionObserver(
+      (entries) => {
+        if (priceFired) return;
+        const visible = entries.find((e) => e.isIntersecting && e.intersectionRatio >= 0.3);
+        if (!visible) return;
+        priceFired = true;
+        writeOnceMarker(priceKey(proposalId, sessionId));
+        post(proposalId, {
+          sessionId,
+          kind: "price_viewed",
+          metadata: { section: "pricing" },
+        });
+        priceObserver.disconnect();
+      },
+      { threshold: [0.3, 0.5] },
+    );
+    if (!priceFired) {
+      document
+        .querySelectorAll<HTMLElement>('[data-section-type="pricing"]')
+        .forEach((el) => priceObserver.observe(el));
+    }
+
+    // ── itinerary_clicked — delegated click on the document, walking
+    //    up to the nearest [data-section-type] root that counts as
+    //    "itinerary content" (dayJourney / itineraryTable / map).
+    //    Fires once per (proposal, session). Metadata captures the
+    //    section type, day number when present, and destination
+    //    when present so the dashboard activity feed can render
+    //    "Day 3 — Masai Mara" instead of a bare event row.
+    let itineraryFired = readOnceMarker(itineraryKey(proposalId, sessionId));
+    const ITINERARY_TYPES = new Set(["dayJourney", "itineraryTable", "map"]);
+    const onItineraryClick = (e: MouseEvent) => {
+      if (itineraryFired) return;
+      const path = e.composedPath?.() ?? [];
+      // Walk the composed path so a click inside a deeply-nested
+      // element still finds the section root. composedPath is well-
+      // supported in modern browsers; fall back to event.target +
+      // closest() when it's missing (older Safari).
+      let root: HTMLElement | null = null;
+      for (const node of path) {
+        if (node instanceof HTMLElement && node.dataset.sectionType && ITINERARY_TYPES.has(node.dataset.sectionType)) {
+          root = node;
+          break;
+        }
+      }
+      if (!root && e.target instanceof HTMLElement) {
+        root = e.target.closest<HTMLElement>(
+          '[data-section-type="dayJourney"], [data-section-type="itineraryTable"], [data-section-type="map"]',
+        );
+      }
+      if (!root) return;
+      itineraryFired = true;
+      writeOnceMarker(itineraryKey(proposalId, sessionId));
+      const metadata: Record<string, unknown> = {
+        section: root.dataset.sectionType ?? null,
+      };
+      const dayNumber = root.dataset.dayNumber ?? root.closest<HTMLElement>("[data-day-number]")?.dataset.dayNumber;
+      if (dayNumber) metadata.dayNumber = Number(dayNumber);
+      const destination =
+        root.dataset.destination ??
+        root.closest<HTMLElement>("[data-destination]")?.dataset.destination;
+      if (destination) metadata.destination = destination;
+      post(proposalId, {
+        sessionId,
+        kind: "itinerary_clicked",
+        metadata,
+      });
+      document.removeEventListener("click", onItineraryClick);
+    };
+    if (!itineraryFired) document.addEventListener("click", onItineraryClick);
 
     function flushCurrent() {
       if (currentSectionId && sectionEnteredAt != null) {
@@ -106,36 +185,46 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
 
     return () => {
       observer.disconnect();
+      priceObserver.disconnect();
       window.removeEventListener("pagehide", onUnload);
       window.removeEventListener("beforeunload", onUnload);
       window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("click", onItineraryClick);
     };
   }, [proposalId]);
 
   return null;
 }
 
-// Tracks whether proposal_scrolled has fired for this (proposal,
-// session) pair so a re-mount of ViewTracker (route change, theme
-// flip) doesn't re-fire the event.
-function readScrollFired(proposalId: string, sessionId: string): boolean {
+// Once-per-(proposal, session) markers — keyed by the same
+// sessionStorage that drives ensureSessionId, so a reload sees the
+// same marker and a re-mount of ViewTracker (route change, theme
+// flip) doesn't re-fire any of the funnel events. Failures fall back
+// to "fire every time" — better to over-count than silently drop.
+function readOnceMarker(key: string): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return sessionStorage.getItem(scrollKey(proposalId, sessionId)) === "1";
+    return sessionStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
-function markScrollFired(proposalId: string, sessionId: string): void {
+function writeOnceMarker(key: string): void {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(scrollKey(proposalId, sessionId), "1");
+    sessionStorage.setItem(key, "1");
   } catch {
     /* sessionStorage unavailable — overcounting is acceptable */
   }
 }
-function scrollKey(proposalId: string, sessionId: string): string {
+function scrolledKey(proposalId: string, sessionId: string): string {
   return `ss-proposal-scrolled-${proposalId}-${sessionId}`;
+}
+function priceKey(proposalId: string, sessionId: string): string {
+  return `ss-price-viewed-${proposalId}-${sessionId}`;
+}
+function itineraryKey(proposalId: string, sessionId: string): string {
+  return `ss-itinerary-clicked-${proposalId}-${sessionId}`;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

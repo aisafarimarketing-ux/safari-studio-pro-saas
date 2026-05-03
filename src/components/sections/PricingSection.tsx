@@ -95,6 +95,13 @@ export function PricingSection({ section }: { section: Section }) {
 
   return (
     <div
+      // data-section-type="pricing" is the hook the share-view
+      // engagement tracker uses to fire price_viewed when this section
+      // crosses an IntersectionObserver threshold. Carried on the
+      // section root so the marker is present in both the simple
+      // share flow and the SpreadView layout (where the parent
+      // SectionRenderer wrapper isn't applied).
+      data-section-type="pricing"
       className="py-2 md:py-3 px-8 md:px-16"
       style={{ background: tokens.sectionSurface }}
     >

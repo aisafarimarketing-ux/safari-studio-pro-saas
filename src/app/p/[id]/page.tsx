@@ -113,7 +113,17 @@ export default function ClientProposalPage({
           style={{ background: theme.tokens.pageBg }}
         >
           {sorted.map((section: Section) => (
-            <SectionRenderer key={section.id} section={section} />
+            // Wrapper carries the id + data-section-type the
+            // ViewTracker uses to attribute engagement events to a
+            // section. Same shape used by the editor canvas
+            // (SectionChrome) so styling and tracking stay aligned.
+            <div
+              key={section.id}
+              id={`section-${section.id}`}
+              data-section-type={section.type}
+            >
+              <SectionRenderer section={section} />
+            </div>
           ))}
         </div>
       )}
