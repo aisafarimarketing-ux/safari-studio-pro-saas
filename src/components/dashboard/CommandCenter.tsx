@@ -1064,6 +1064,16 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
   // tinted background. The accent surfaces "newest first" without
   // changing the list order or adding a separate section.
   const isNew = isRecent(row.createdAt, 24 * 3_600_000);
+  const submittedLabel = formatRelative(row.createdAt);
+  // "Awaiting confirmation" is shown only while the reservation is
+  // still in its initial "new" state — once the operator marks it
+  // contacted / confirmed / lost the chip steps aside to avoid noise.
+  const awaitingConfirmation = row.status === "new";
+  // Treat any explicit non-"sent" delivery state as a deliverability
+  // concern. "sent" and unknown/null stay quiet.
+  const emailWarning = row.emailStatus
+    ? row.emailStatus !== "sent"
+    : false;
   return (
     <li
       className="flex items-center gap-3 px-3.5 py-2.5 transition"
@@ -1083,8 +1093,16 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
       }}
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          {isNew && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {isNew && awaitingConfirmation && (
+            <span
+              className="text-[8.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
+              style={{ background: "#dcfce7", color: "#166534" }}
+            >
+              NEW — awaiting confirmation
+            </span>
+          )}
+          {isNew && !awaitingConfirmation && (
             <span
               className="text-[8.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
               style={{ background: "#dcfce7", color: "#166534" }}
@@ -1100,12 +1118,22 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
           </div>
         </div>
         <div
-          className="flex items-center gap-2 mt-0.5"
+          className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5"
           style={{ color: tokens.muted }}
         >
           <span className="text-[11px] truncate tabular-nums">{dates}</span>
+          <span aria-hidden className="text-[11px] opacity-50">·</span>
+          <span className="text-[11px]">submitted {submittedLabel}</span>
           <EmailStatusChip status={row.emailStatus} />
         </div>
+        {emailWarning && (
+          <div
+            className="text-[11px] mt-1 leading-snug"
+            style={{ color: "#a16207" }}
+          >
+            Client has not received confirmation email yet.
+          </div>
+        )}
       </div>
       <div className="shrink-0">
         <SecondaryBtn href={href}>Open booking</SecondaryBtn>

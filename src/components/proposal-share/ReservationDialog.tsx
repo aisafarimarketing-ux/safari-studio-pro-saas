@@ -79,11 +79,6 @@ export function ReservationDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  // Honest delivery state from the reserve route. Drives the success
-  // copy so we don't claim "sent to <consultant>" when the mailer was
-  // actually skipped (RESEND_API_KEY missing) or the recipient
-  // couldn't be resolved.
-  const [emailDelivery, setEmailDelivery] = useState<EmailDelivery | null>(null);
 
   // Resolve a guaranteed session id. The prop is the first choice (matches
   // the engagement-tracker session for the rest of /p/[id]), but we
@@ -106,7 +101,6 @@ export function ReservationDialog({
       setSubmitting(false);
       setError(null);
       setDone(false);
-      setEmailDelivery(null);
       // Fire-and-forget tracker event so the operator's funnel
       // shows "started" vs "completed" reservations. Once-per-session
       // per proposal so re-opens during the same view session don't
@@ -194,12 +188,6 @@ export function ReservationDialog({
         return;
       }
       track(proposalId, resolvedSessionId, "reservation_completed");
-      // Capture the route's honest delivery status so the success
-      // screen reads accurately. Falls back to null when the field
-      // is missing (older deployments) — the success copy then uses
-      // its neutral default.
-      const delivery = parseEmailDelivery(data.emailDelivery);
-      setEmailDelivery(delivery);
       setDone(true);
       setSubmitting(false);
     } catch {
@@ -259,7 +247,9 @@ export function ReservationDialog({
                   letterSpacing: "-0.005em",
                 }}
               >
-                {done ? "We're on it" : proposal.trip.title || "Your safari"}
+                {done
+                  ? "We're confirming your safari"
+                  : proposal.trip.title || "Your safari"}
               </h2>
             </div>
           </div>
@@ -275,12 +265,17 @@ export function ReservationDialog({
         </div>
 
         {done ? (
-          <div className="px-5 md:px-7 py-8">
-            {renderSuccessMessage(form.firstName, senderLabel, emailDelivery)}
+          <div className="px-5 md:px-7 py-7">
+            <SuccessBody
+              firstName={form.firstName}
+              senderLabel={senderLabel}
+              operator={proposal.operator}
+              tripTitle={proposal.trip.title || "your safari"}
+            />
             <button
               type="button"
               onClick={onClose}
-              className="mt-7 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
+              className="mt-6 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
               style={{
                 background: ctaBg,
                 color: ctaText,
@@ -441,75 +436,149 @@ function cleanBrand(name: string | undefined): string {
   return trimmed;
 }
 
-// Email delivery status from the reserve route. Matches the union
-// returned by notifyReservationReceived (lib/notifications.ts) plus a
-// "delayed" status the route returns when the notifier promise didn't
-// resolve within 5s and ran on into the background.
-type EmailDelivery =
-  | { status: "sent" }
-  | { status: "skipped" }
-  | { status: "failed" }
-  | { status: "no-recipient" }
-  | { status: "delayed" };
-
-// Parse the route's emailDelivery field defensively — older deploys
-// might not include it, malformed responses shouldn't break the
-// success screen.
-function parseEmailDelivery(raw: unknown): EmailDelivery | null {
-  if (!raw || typeof raw !== "object") return null;
-  const status = (raw as { status?: unknown }).status;
-  if (
-    status === "sent" ||
-    status === "skipped" ||
-    status === "failed" ||
-    status === "no-recipient" ||
-    status === "delayed"
-  ) {
-    return { status };
-  }
-  return null;
-}
-
-// Render the success-screen copy. Three calm paragraphs:
-//   1. Confirmation + 24h promise — the load-bearing line
-//   2. Time-sensitive reassurance — keeps the guest's eye on their
-//      inbox / WhatsApp without manufacturing urgency
-//   3. Confidence line that personalises the moment with the
-//      consultant / company name (senderLabel) so the guest feels
-//      they've been handed to a human, not a queue
-function renderSuccessMessage(
-  firstName: string,
-  senderLabel: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _delivery: EmailDelivery | null,
-): React.ReactNode {
+function SuccessBody({
+  firstName,
+  senderLabel,
+  operator,
+  tripTitle,
+}: {
+  firstName: string;
+  senderLabel: string;
+  operator: Proposal["operator"];
+  tripTitle: string;
+}) {
+  const urgent = buildUrgentContact(operator, firstName, tripTitle);
+  const greetingName = firstName.trim() || "there";
   return (
     <>
-      <p
-        className="text-[15px] leading-[1.65]"
-        style={{ color: SAFE_INK_2 }}
-      >
-        Thanks, <strong style={{ color: SAFE_INK }}>{firstName}</strong>.
-        We&rsquo;ve received your request. We&rsquo;ll confirm availability
-        shortly.
+      <p className="text-[14.5px] leading-[1.6]" style={{ color: SAFE_INK_2 }}>
+        Hi <strong style={{ color: SAFE_INK }}>{greetingName}</strong>. We&rsquo;ve
+        received your request and are checking live availability with our
+        partners.
       </p>
-      <p
-        className="text-[13.5px] leading-[1.6] mt-4"
-        style={{ color: SAFE_INK_3 }}
+
+      <ul className="mt-5 space-y-2">
+        <ProgressRow state="done">Request received</ProgressRow>
+        <ProgressRow state="active">Availability check</ProgressRow>
+        <ProgressRow state="pending">Confirmation &amp; next steps</ProgressRow>
+      </ul>
+
+      <div className="mt-5 space-y-1.5">
+        <p
+          className="text-[12.5px] leading-[1.55]"
+          style={{ color: SAFE_INK_3 }}
+        >
+          You&rsquo;ll receive a confirmation email shortly (can take a few
+          minutes).
+        </p>
+        <p
+          className="text-[12.5px] leading-[1.55]"
+          style={{ color: SAFE_INK_3 }}
+        >
+          Your consultant{senderLabel ? `, ${senderLabel},` : ""} may reach out
+          on WhatsApp or email.
+        </p>
+      </div>
+
+      <div
+        className="mt-6 pt-5"
+        style={{ borderTop: `1px solid ${SAFE_BORDER}` }}
       >
-        You&rsquo;ll receive a confirmation email shortly. It may take a few
-        minutes — check spam if you don&rsquo;t see it.
-      </p>
-      <p
-        className="text-[13px] leading-[1.6] mt-4"
-        style={{ color: SAFE_INK_2 }}
-      >
-        You&rsquo;re now in touch with{" "}
-        <strong style={{ color: SAFE_INK }}>{senderLabel}</strong>,
-        who will guide you through the booking.
-      </p>
+        <div
+          className="text-[10.5px] uppercase tracking-[0.24em] font-semibold mb-2.5"
+          style={{ color: SAFE_INK_3 }}
+        >
+          Next steps
+        </div>
+        <ul className="space-y-1.5 text-[13px] leading-[1.55]" style={{ color: SAFE_INK_2 }}>
+          <li>— We confirm availability (usually within hours).</li>
+          <li>— We hold your dates.</li>
+          <li>— You receive payment details to secure your safari.</li>
+        </ul>
+      </div>
+
+      {urgent && (
+        <div className="mt-5 flex items-baseline flex-wrap gap-x-2 gap-y-1">
+          <span className="text-[12.5px]" style={{ color: SAFE_INK_3 }}>
+            Need this urgently?
+          </span>
+          <a
+            href={urgent.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[13px] font-semibold underline-offset-2 hover:underline"
+            style={{ color: SAFE_INK }}
+          >
+            {urgent.label} →
+          </a>
+        </div>
+      )}
     </>
   );
+}
+
+function ProgressRow({
+  state,
+  children,
+}: {
+  state: "done" | "active" | "pending";
+  children: React.ReactNode;
+}) {
+  const icon = state === "done" ? "✓" : state === "active" ? "⏳" : "⏳";
+  const color =
+    state === "done"
+      ? "#15803d"
+      : state === "active"
+      ? "#a16207"
+      : SAFE_INK_3;
+  const textColor = state === "pending" ? SAFE_INK_3 : SAFE_INK_2;
+  const weight = state === "done" || state === "active" ? 600 : 500;
+  return (
+    <li className="flex items-center gap-2.5 text-[13.5px]">
+      <span
+        aria-hidden
+        className="inline-flex items-center justify-center w-5 text-center shrink-0"
+        style={{ color }}
+      >
+        {icon}
+      </span>
+      <span style={{ color: textColor, fontWeight: weight }}>{children}</span>
+    </li>
+  );
+}
+
+// Build the high-intent fallback link. Prefer WhatsApp (matches the
+// dial-the-consultant tone of the closing CTA), fall back to a mailto
+// when no number is configured. Returns null when neither is set so the
+// "Need this urgently?" row hides cleanly.
+function buildUrgentContact(
+  operator: Proposal["operator"],
+  firstName: string,
+  tripTitle: string,
+): { href: string; label: string } | null {
+  const consultant = cleanBrand(operator.consultantName) || "there";
+  const guest = firstName.trim() || "a guest";
+  const phone = (operator.whatsapp || operator.phone || "")
+    .replace(/[^\d+]/g, "")
+    .replace(/^\+/, "");
+  if (phone) {
+    const msg =
+      `Hi ${consultant}, this is ${guest}. ` +
+      `I just submitted a reservation for ${tripTitle} and wanted to check availability quickly.`;
+    return {
+      href: `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`,
+      label: "Message us on WhatsApp",
+    };
+  }
+  const email = operator.email?.trim();
+  if (email) {
+    const subject = `Reservation — urgent confirmation (${tripTitle})`;
+    return {
+      href: `mailto:${email}?subject=${encodeURIComponent(subject)}`,
+      label: `Email ${cleanBrand(operator.consultantName) || "the team"}`,
+    };
+  }
+  return null;
 }
 
 function track(proposalId: string, sessionId: string, kind: string) {
