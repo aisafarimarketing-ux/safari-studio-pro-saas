@@ -163,6 +163,76 @@
   /* Legacy aliases — kept for files that still reference these names */
   --background:  var(--bone);
   --foreground:  var(--ink);
+
+  /* ── Dashboard tokens (light defaults) ──────────────────────────────────
+     Scoped semantic vars used by the operator-side dashboard. The 8 named
+     in the design spec (--bg-primary, --bg-card, --text-primary,
+     --text-secondary, --accent-green, --accent-amber, --border-subtle,
+     --shadow-soft) are the canonical surface; the rest are supporting
+     tokens for hover / soft-tint / 3rd text level / hero gradient that
+     the dashboard composes from. Dark-mode overrides live under
+     [data-dashboard-theme="dark"] below — never invert these directly.
+
+     Branding boundary: these tokens are the Safari Studio dashboard
+     theme. The client-facing share view (/p/[id], ReservationDialog)
+     reads its own ProposalTheme tokens off proposal.contentJson and
+     stays fully white-labeled — these vars never reach that subtree. */
+  --bg-primary:        #f4f1e8;
+  --bg-card:           #ffffff;
+  --bg-card-hover:     rgba(13, 38, 32, 0.04);
+  --bg-hero:           linear-gradient(135deg, #1b3a2d 0%, #142a20 100%);
+
+  --text-primary:      #0d2620;
+  --text-secondary:    rgba(13, 38, 32, 0.70);
+  --text-muted:        rgba(13, 38, 32, 0.48);
+
+  --accent-green:      #1b3a2d;
+  --accent-green-soft: rgba(27, 58, 45, 0.08);
+  /* Solid surface for filled CTAs. Stays deep in both modes so white
+     text always reads. Distinct from --accent-green which lifts to
+     sage in dark for legibility as a TEXT accent. */
+  --accent-green-cta:  #1b3a2d;
+  --accent-amber:      #c9a84c;
+  --accent-amber-soft: rgba(201, 168, 76, 0.10);
+
+  --border-subtle:     rgba(13, 38, 32, 0.06);
+  --border-strong:     rgba(13, 38, 32, 0.12);
+  --shadow-soft:       0 1px 2px rgba(27, 58, 45, 0.04),
+                       0 8px 24px -10px rgba(27, 58, 45, 0.08);
+  --shadow-elevated:   0 4px 10px rgba(27, 58, 45, 0.06),
+                       0 18px 44px -14px rgba(27, 58, 45, 0.16);
+}
+
+/* ── Dashboard dark theme ─────────────────────────────────────────────────
+   No colour inversion. Deep green-charcoal surfaces, cards one notch
+   lighter than the page, soft-white text with a green undertone (never
+   pure white), brand accents lifted toward sage / dust-gold so they
+   stay legible against the deep bg. */
+[data-dashboard-theme="dark"] {
+  --bg-primary:        #0d1612;
+  --bg-card:           #131c17;
+  --bg-card-hover:     rgba(212, 231, 218, 0.06);
+  --bg-hero:           linear-gradient(135deg, #1f4334 0%, #0d1612 100%);
+
+  --text-primary:      rgba(232, 238, 233, 0.96);
+  --text-secondary:    rgba(232, 238, 233, 0.72);
+  --text-muted:        rgba(232, 238, 233, 0.45);
+
+  --accent-green:      #d4e7da;
+  --accent-green-soft: rgba(212, 231, 218, 0.08);
+  /* Slightly lifted from light's #1b3a2d so the button reads with
+     enough presence against the deep page bg, but still dark enough
+     for white text. */
+  --accent-green-cta:  #2d5a40;
+  --accent-amber:      #d4b765;
+  --accent-amber-soft: rgba(212, 183, 101, 0.10);
+
+  --border-subtle:     rgba(255, 255, 255, 0.06);
+  --border-strong:     rgba(212, 183, 101, 0.32);
+  --shadow-soft:       0 1px 2px rgba(0, 0, 0, 0.4),
+                       0 14px 38px -16px rgba(0, 0, 0, 0.6);
+  --shadow-elevated:   0 6px 14px rgba(0, 0, 0, 0.55),
+                       0 26px 56px -18px rgba(212, 183, 101, 0.18);
 }
 
 @theme inline {

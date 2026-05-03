@@ -2,10 +2,31 @@
 
 import { createContext, useContext, useSyncExternalStore } from "react";
 
-// DashboardTheme — local, dashboard-only light/dark theme. Persists the
-// operator's choice in localStorage; defaults to "light" so first-run
-// matches the rest of the app. Tiles read tokens from this context to
-// keep colour decisions in one place.
+// DashboardTheme — light/dark theme for the operator dashboard.
+// Persists the choice in localStorage; defaults to "light" so first-
+// run matches the rest of the app.
+//
+// The actual colour values now live in globals.css under :root
+// (light defaults) and [data-dashboard-theme="dark"] (dark overrides)
+// as canonical CSS custom properties. The 8 design-spec tokens are
+// --bg-primary, --bg-card, --text-primary, --text-secondary,
+// --accent-green, --accent-amber, --border-subtle, --shadow-soft
+// plus a few supporting vars (--text-muted, --bg-card-hover,
+// --bg-hero, --accent-*-soft, --border-strong, --shadow-elevated).
+//
+// The DashboardTokens object below is now a thin var(--…) façade so
+// existing JS consumers (`tokens.tileBg`, `tokens.heading`, …) keep
+// working unchanged — at paint time the browser resolves each var
+// against whichever scope is active. This means a single token swap
+// in CSS reskins every consumer.
+//
+// Branding boundary: these tokens are the Safari Studio dashboard
+// theme. Org branding only appears as accent surfaces (logo mark,
+// gold pills) — never overrides the underlying tokens. Client-facing
+// share pages (/p/[id], ReservationDialog) read a separate
+// ProposalTheme off proposal.contentJson and stay fully white-
+// labeled; the dashboard tokens never reach that subtree because the
+// data-dashboard-theme attribute is scoped to the dashboard provider.
 
 export type DashboardTheme = "light" | "dark";
 
@@ -14,7 +35,7 @@ export interface DashboardTokens {
   pageBg: string;
   /** Default tile background. */
   tileBg: string;
-  /** Active-proposal hero tile (always dark, regardless of theme). */
+  /** Active-proposal hero tile (dark green gradient in both modes). */
   heroBg: string;
   /** Subtle ring around tiles, drawn as a 1px inner box-shadow. */
   ring: string;
@@ -30,8 +51,15 @@ export interface DashboardTokens {
   body: string;
   /** Eyebrow / meta / dim copy. */
   muted: string;
-  /** Brand green. */
+  /** Brand green — used as a TEXT accent (links, active sidebar item,
+   *  "Best move" chip foreground). Lifts to sage in dark to stay
+   *  legible against deep backgrounds. NOT for filled-button surfaces
+   *  (would fail contrast against white text in dark) — use
+   *  `primaryStrong` instead. */
   primary: string;
+  /** Brand green — solid CTA surface. Stays deep in both modes so
+   *  white text always reads. Use this for filled-button backgrounds. */
+  primaryStrong: string;
   /** Brand gold. */
   accent: string;
   /** Translucent green wash for empty states / hairlines. */
@@ -40,40 +68,26 @@ export interface DashboardTokens {
   accentSoft: string;
 }
 
-const LIGHT: DashboardTokens = {
-  pageBg: "#f4f1e8",
-  tileBg: "#ffffff",
-  heroBg: "linear-gradient(135deg, #1b3a2d 0%, #142a20 100%)",
-  ring: "rgba(13,38,32,0.06)",
-  ringHover: "rgba(13,38,32,0.12)",
-  shadow: "0 1px 2px rgba(27,58,45,0.04), 0 8px 24px -10px rgba(27,58,45,0.08)",
-  shadowHover:
-    "0 4px 10px rgba(27,58,45,0.06), 0 18px 44px -14px rgba(27,58,45,0.16)",
-  heading: "#0d2620",
-  body: "rgba(13,38,32,0.7)",
-  muted: "rgba(13,38,32,0.48)",
-  primary: "#1b3a2d",
-  accent: "#c9a84c",
-  primarySoft: "rgba(27,58,45,0.08)",
-  accentSoft: "rgba(201,168,76,0.10)",
-};
-
-const DARK: DashboardTokens = {
-  pageBg: "#0a100d",
-  tileBg: "linear-gradient(140deg, #141b17 0%, #0e1410 100%)",
-  heroBg: "linear-gradient(135deg, #1f4334 0%, #142a20 100%)",
-  ring: "rgba(255,255,255,0.06)",
-  ringHover: "rgba(212,183,101,0.32)",
-  shadow: "0 1px 2px rgba(0,0,0,0.4), 0 14px 38px -16px rgba(0,0,0,0.6)",
-  shadowHover:
-    "0 6px 14px rgba(0,0,0,0.55), 0 26px 56px -18px rgba(212,183,101,0.18)",
-  heading: "rgba(255,255,255,0.96)",
-  body: "rgba(255,255,255,0.72)",
-  muted: "rgba(255,255,255,0.45)",
-  primary: "#d4e7da",
-  accent: "#d4b765",
-  primarySoft: "rgba(212,231,218,0.06)",
-  accentSoft: "rgba(212,183,101,0.10)",
+// Single token façade — every value is a CSS var() reference. The
+// actual colour swaps when [data-dashboard-theme="dark"] is set on
+// the provider's root element. Both the light and dark constants are
+// gone; globals.css is the single source of truth for resolved values.
+const TOKENS: DashboardTokens = {
+  pageBg:      "var(--bg-primary)",
+  tileBg:      "var(--bg-card)",
+  heroBg:      "var(--bg-hero)",
+  ring:        "var(--border-subtle)",
+  ringHover:   "var(--border-strong)",
+  shadow:      "var(--shadow-soft)",
+  shadowHover: "var(--shadow-elevated)",
+  heading:     "var(--text-primary)",
+  body:        "var(--text-secondary)",
+  muted:       "var(--text-muted)",
+  primary:       "var(--accent-green)",
+  primaryStrong: "var(--accent-green-cta)",
+  accent:        "var(--accent-amber)",
+  primarySoft:   "var(--accent-green-soft)",
+  accentSoft:    "var(--accent-amber-soft)",
 };
 
 interface ThemeContextValue {
@@ -132,25 +146,44 @@ export function DashboardThemeProvider({ children }: { children: React.ReactNode
 
   const value: ThemeContextValue = {
     theme,
-    tokens: theme === "dark" ? DARK : LIGHT,
+    tokens: TOKENS,
     setTheme,
     toggleTheme,
   };
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  // The data-dashboard-theme attribute scopes the CSS var overrides
+  // from globals.css to this subtree. Light is the default (matches
+  // :root) so we still set the attribute for "light" to keep the
+  // selector specificity consistent and so devtools shows the active
+  // theme on the wrapper. min-h-screen so the bg-primary wash covers
+  // the viewport even when the inner main is short.
+  return (
+    <ThemeContext.Provider value={value}>
+      <div
+        data-dashboard-theme={theme}
+        style={{ background: "var(--bg-primary)" }}
+        className="min-h-screen"
+      >
+        {children}
+      </div>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useDashboardTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
-    // Fail soft — return light tokens if a tile somehow renders outside the
-    // provider (eg. rendered through a portal). Logged once.
+    // Fail soft — return the same token façade if a tile somehow
+    // renders outside the provider (eg. rendered through a portal).
+    // The CSS vars resolve to light defaults when the
+    // data-dashboard-theme attribute isn't present, so consumers
+    // still paint cleanly.
     if (typeof console !== "undefined") {
       console.warn("[DashboardTheme] useDashboardTheme called outside provider");
     }
     return {
       theme: "light",
-      tokens: LIGHT,
+      tokens: TOKENS,
       setTheme: () => {},
       toggleTheme: () => {},
     };

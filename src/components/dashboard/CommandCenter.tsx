@@ -894,7 +894,10 @@ function Avatar({ initial, tokens }: { initial: string; tokens: DashboardTokens 
         width: 48,
         height: 48,
         borderRadius: "50%",
-        background: tokens.primary,
+        // Avatar surface uses primaryStrong (deep forest in both
+        // modes) so the white initial stays readable in dark — primary
+        // alone lifts to sage in dark, which would lose contrast.
+        background: tokens.primaryStrong,
         color: "#fff",
         fontSize: 18,
         letterSpacing: "0.02em",
@@ -1433,7 +1436,7 @@ function PrimaryBtn({
     ? "px-5 h-11 rounded-xl text-[13.5px]"
     : "px-3.5 h-9 rounded-lg text-[12.5px]";
   const shadow = emphasis
-    ? `0 8px 22px -10px ${tokens.primary}, 0 2px 6px -2px rgba(13,38,32,0.18)`
+    ? `0 8px 22px -10px ${tokens.primaryStrong}, 0 2px 6px -2px rgba(13,38,32,0.18)`
     : "none";
   return (
     <Link
@@ -1442,7 +1445,7 @@ function PrimaryBtn({
         full ? "w-full" : ""
       }`}
       style={{
-        background: tokens.primary,
+        background: tokens.primaryStrong,
         color: "#fff",
         fontWeight: emphasis ? 700 : 600,
         letterSpacing: emphasis ? "0.005em" : undefined,
