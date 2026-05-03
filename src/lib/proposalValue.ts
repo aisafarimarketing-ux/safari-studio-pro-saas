@@ -1,6 +1,9 @@
-import "server-only";
-
 // ─── Proposal value extraction ───────────────────────────────────────────
+//
+// Importable from BOTH server and client: extractProposalValueCents
+// runs in API routes for rollups, formatMoneyCompact runs in the
+// client TeamSupervisionPage + AnalyticsPage. No Prisma / no Node
+// APIs — just pure JSON-to-money math, so no "server-only" guard.
 //
 // Pulls a money value out of a Proposal.contentJson blob so analytics
 // + team-page rollups can show pipeline $ without a dedicated column.
