@@ -1,115 +1,70 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
-import { UserButton } from "@clerk/nextjs";
+import { useUser, UserButton } from "@clerk/nextjs";
 import { openCommandPalette } from "@/components/CommandPalette";
+import {
+  DashboardThemeProvider,
+  ThemeToggle,
+  useDashboardTheme,
+  type DashboardTokens,
+} from "./DashboardTheme";
 
-// ─── Follow-Up Command Center ─────────────────────────────────────────────
+// ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
-// Three-column deal-closing dashboard:
+// Page chrome   : nav sidebar (left) + main column.
+// Main column   : top bar · hero · 2-col content grid.
+// Content grid  : left (~70%) = Hot deals + Needs follow-up + Bookings.
+//                 right (~30%) = Activity feed + Tasks.
 //
-//   LEFT  (260px, fixed)  — sidebar / control center
-//   CENTER (fluid)        — greeting · hero · priority cards
-//   RIGHT (320px, fixed)  — today's tasks
-//
-// Replaces the old multi-tile dashboard. Reads from
-// /api/dashboard/priorities (priorities + sidebarCounts) and
-// /api/dashboard/tasks. Action Center counts come from the same
-// priorities response so the sidebar stays in lockstep with the
-// main column without a second round-trip.
+// Wired to /api/dashboard/activity (hot, needsFollowup, recentActivity,
+// reservations, scope, canViewAll) plus /api/dashboard/tasks for the
+// right-rail task card. Both endpoints are tenant-scoped server-side.
+// Status / next-action come precomputed off ProposalActivitySummary;
+// no client-side scoring happens here.
 
-const PALETTE = {
-  pageBg: "#F7F5F2",
-  cardBg: "#FFFFFF",
-  forest: "#1b3a2d",
-  forestDeep: "#142a20",
-  forestLine: "#2a4736",
-  gold: "#c9a84c",
-  ink: "#0d2620",
-  body: "#3f463f",
-  muted: "#6b7268",
-  line: "rgba(13,38,32,0.08)",
-  lineSoft: "rgba(13,38,32,0.05)",
-  hot: "#dc2626",
-  warm: "#d97706",
-  cold: "#6b7280",
-  green: "#16a34a",
-};
+// ─── Types — mirror /api/dashboard/activity + /api/dashboard/tasks ──────
 
-// ─── Types (mirror /api/dashboard/priorities response) ───────────────────
-
-type FilterKey = "all" | "hot" | "needs-followup" | "unread" | "at-risk";
-
-type ActiveTask = {
-  id: string; title: string; actionType: string | null;
-  priorityLevel: string | null; dueAt: string | null; auto: boolean;
-  matchesNextAction: boolean;
-};
-
-type NextAction = {
-  type: string; label: string; reason: string; urgent: boolean;
-};
-
-type Priority = {
-  requestId: string;
-  referenceNumber: string;
+type ActivityCard = {
+  proposalId: string;
+  trackingId: string;
+  title: string | null;
   status: string;
-  clientId: string | null;
+  engagementScore: number;
+  nextAction: string;
+  lastEventAt: string | null;
+  lastEventType: string | null;
+  client: { id: string; name: string | null } | null;
+  consultant: { id: string; name: string | null; email: string | null } | null;
+};
+
+type RecentEvent = {
+  id: string;
+  eventType: string;
+  at: string;
+  proposal: { id: string; title: string | null; trackingId: string } | null;
+  client: { id: string; name: string | null } | null;
+};
+
+type ReservationRow = {
+  id: string;
   clientName: string;
-  clientEmail: string | null;
-  proposalId: string | null;
-  proposalTitle: string | null;
-  valueCents: number;
-  currency: string;
-  thumbnailUrl: string | null;
-  insightText: string | null;
-  intentLabel: "high" | "medium" | "low";
-  score: {
-    total: number; engagement: number; recency: number; value: number;
-    label: "hot" | "warm" | "cold";
-    nextAction: NextAction;
-  };
-  engagement: {
-    views: number; totalSeconds: number; pricingViewed: boolean;
-    inboundMessages: number; outboundMessages: number;
-  };
-  unreadCount: number;
-  lastActivityIso: string;
-  needsFollowup: boolean;
-  atRisk: boolean;
-  activeTask: ActiveTask | null;
+  arrivalDate: string;
+  departureDate: string;
+  status: string;
+  createdAt: string;
+  proposal: { id: string; title: string | null; trackingId: string } | null;
+  assignedTo: { id: string; name: string | null; email: string | null } | null;
 };
 
-type SidebarCounts = {
-  requests: number;
-  proposals: number;
-  reservations: number;
-  inboxUnread: number;
-  tasks: number;
-};
-
-type Summary = {
-  hotDealsCount: number;
-  hotDealsValueCents: number;
-  pipelineAtRiskCount: number;
-  pipelineAtRiskValueCents: number;
-  unreadMessages: number;
-  followupsDueCount: number;
-  totalActiveValueCents: number;
-  currency: string;
-  todaysWins: { dealsProgressed: number; bookingsConfirmed: number; tasksCompleted: number; messagesSent: number };
-  autoCreateHotEnabled: boolean;
-  sidebarCounts: SidebarCounts;
-};
-
-type FilterCounts = Record<FilterKey, number>;
-
-type PrioritiesResponse = {
-  summary: Summary;
-  filterCounts: { all: number; hot: number; "needs-followup": number; unread: number };
-  priorities: Priority[];
+type ActivityResponse = {
+  hot: ActivityCard[];
+  needsFollowup: ActivityCard[];
+  recentActivity: RecentEvent[];
+  reservations: ReservationRow[];
+  scope: "mine" | "all";
+  canViewAll: boolean;
 };
 
 type Task = {
@@ -119,488 +74,294 @@ type Task = {
   dueAt: string | null;
   overdue: boolean;
   createdAt: string;
-  request: { id: string; referenceNumber: string; status: string; clientName: string | null } | null;
+  request: {
+    id: string;
+    referenceNumber: string;
+    status: string;
+    clientName: string | null;
+  } | null;
 };
 
 type TasksResponse = { tasks: Task[]; counts: { open: number; overdue: number } };
 
-type ReservationRow = {
-  id: string;
-  clientName: string;
-  arrivalDate: string;
-  departureDate: string;
-  status: string;
-  createdAt: string;
-  proposal: { id: string; title: string | null } | null;
-  assignedTo: { id: string; name: string | null; email: string | null } | null;
+type SidebarCounts = {
+  requests: number;
+  proposals: number;
+  reservations: number;
+  inboxUnread: number;
+  tasks: number;
 };
 
-type ReservationsResponse = {
-  reservations: ReservationRow[];
-  scope: "mine" | "all";
-  canViewAll: boolean;
+type PrioritiesSummary = {
+  hotDealsCount: number;
+  followupsDueCount: number;
+  hotDealsValueCents: number;
+  currency: string;
+  sidebarCounts: SidebarCounts;
 };
 
-// ─── Component ───────────────────────────────────────────────────────────
+type PrioritiesResponse = { summary: PrioritiesSummary };
+
+// ─── Page entry ────────────────────────────────────────────────────────────
 
 export function CommandCenter() {
-  const { user } = useUser();
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [data, setData] = useState<PrioritiesResponse | null>(null);
-  const [tasksData, setTasksData] = useState<TasksResponse | null>(null);
-  const [reservationsData, setReservationsData] = useState<ReservationsResponse | null>(null);
-  const [reservationsScope, setReservationsScope] = useState<"mine" | "all">("mine");
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [busyByRequestId, setBusyByRequestId] = useState<Record<string, "creating" | "completing" | "sending" | undefined>>({});
-  const [flash, setFlash] = useState<{ requestId: string; message: string; tone: "success" | "info" } | null>(null);
-  // Mobile / tablet: sidebar + task rail collapse into slide-in drawers
-  // controlled here. Both default to closed; the top bar's hamburger
-  // and tasks buttons toggle them. lg+ ignores these flags.
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [mobileTaskRailOpen, setMobileTaskRailOpen] = useState(false);
+  return (
+    <DashboardThemeProvider>
+      <CommandCenterShell />
+    </DashboardThemeProvider>
+  );
+}
 
-  // Body scroll-lock while a mobile drawer is open. Re-enables on
-  // close so the desktop view never inherits a frozen body.
+function CommandCenterShell() {
+  const { tokens } = useDashboardTheme();
+  const [activity, setActivity] = useState<ActivityResponse | null>(null);
+  const [activityScope, setActivityScope] = useState<"mine" | "all">("mine");
+  const [tasksData, setTasksData] = useState<TasksResponse | null>(null);
+  const [sidebar, setSidebar] = useState<PrioritiesSummary | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  // Body scroll-lock while the mobile drawer is open.
   useEffect(() => {
-    const anyOpen = mobileSidebarOpen || mobileTaskRailOpen;
     if (typeof document === "undefined") return;
     const previous = document.body.style.overflow;
-    document.body.style.overflow = anyOpen ? "hidden" : previous || "";
-    return () => { document.body.style.overflow = previous || ""; };
-  }, [mobileSidebarOpen, mobileTaskRailOpen]);
-
-  // Close mobile drawers on Esc.
-  useEffect(() => {
-    if (!(mobileSidebarOpen || mobileTaskRailOpen)) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMobileSidebarOpen(false);
-        setMobileTaskRailOpen(false);
-      }
+    document.body.style.overflow = mobileNavOpen ? "hidden" : previous || "";
+    return () => {
+      document.body.style.overflow = previous || "";
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileSidebarOpen, mobileTaskRailOpen]);
+  }, [mobileNavOpen]);
 
-  const loadPriorities = useMemo(() => async (filterKey: FilterKey = filter) => {
-    try {
-      // The API only knows all/hot/needs-followup/unread; "at-risk" is
-      // a client-side filter we apply post-fetch.
-      const apiFilter = filterKey === "at-risk" ? "all" : filterKey;
-      const res = await fetch(`/api/dashboard/priorities?filter=${apiFilter}&limit=20`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return (await res.json()) as PrioritiesResponse;
-    } catch {
-      return null;
-    }
-  }, [filter]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadPriorities(filter).then((json) => {
-      if (cancelled) return;
-      if (json) { setData(json); setLoadFailed(false); }
-      else setLoadFailed(true);
-    });
-    return () => { cancelled = true; };
-  }, [filter, loadPriorities]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/dashboard/tasks?limit=12", { cache: "no-store" });
-        if (!res.ok) return;
-        if (!cancelled) setTasksData((await res.json()) as TasksResponse);
-      } catch { /* secondary */ }
-    };
-    void load();
-    const interval = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-
-  // ── Reservations list — refetches when the operator flips the
-  //    Mine/All toggle. 30s polling so a fresh booking surfaces
-  //    without a manual refresh; matches the tasks rail cadence.
+  // Activity poll — refetches when the operator flips the Mine/All
+  // toggle. 30s cadence so a fresh booking surfaces without a manual
+  // refresh.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
         const res = await fetch(
-          `/api/dashboard/reservations?scope=${reservationsScope}&limit=20`,
+          `/api/dashboard/activity?scope=${activityScope}`,
           { cache: "no-store" },
         );
-        if (!res.ok) return;
-        if (!cancelled) setReservationsData((await res.json()) as ReservationsResponse);
-      } catch { /* secondary */ }
+        if (!res.ok) {
+          if (!cancelled) setLoadFailed(true);
+          return;
+        }
+        if (!cancelled) {
+          setActivity((await res.json()) as ActivityResponse);
+          setLoadFailed(false);
+        }
+      } catch {
+        if (!cancelled) setLoadFailed(true);
+      }
     };
     void load();
     const interval = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [reservationsScope]);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activityScope]);
 
-  const refreshPriorities = async () => {
-    const json = await loadPriorities(filter);
-    if (json) setData(json);
-  };
+  // Tasks — right-rail card.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/dashboard/tasks?limit=12", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        if (!cancelled) setTasksData((await res.json()) as TasksResponse);
+      } catch {
+        /* secondary surface — silent */
+      }
+    };
+    void load();
+    const interval = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
-  const refreshTasks = async () => {
-    try {
-      const res = await fetch("/api/dashboard/tasks?limit=12", { cache: "no-store" });
-      if (res.ok) setTasksData((await res.json()) as TasksResponse);
-    } catch { /* secondary */ }
-  };
-
-  // ── Apply at-risk filter client-side ────────────────────────────────
-  const visiblePriorities = useMemo(() => {
-    if (!data) return [];
-    if (filter === "at-risk") return data.priorities.filter((p) => p.atRisk);
-    return data.priorities;
-  }, [data, filter]);
-
-  // ── Action handlers ─────────────────────────────────────────────────
-
-  const handleQuickReply = async (priority: Priority, body: string) => {
-    if (!priority.clientId || busyByRequestId[priority.requestId]) return;
-    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "sending" }));
-    setFlash({ requestId: priority.requestId, message: "Sending…", tone: "info" });
-    try {
-      const res = await fetch("/api/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId: priority.requestId,
-          clientId: priority.clientId,
-          channel: "email",
-          body,
-          quickReply: true,
-        }),
-      });
-      const json = (await res.json()) as { message?: { status?: string }; error?: string };
-      if (json.message?.status === "failed") throw new Error(json.error || "Send failed.");
-      if (!res.ok && !json.message) throw new Error(json.error || `HTTP ${res.status}`);
-      setFlash({ requestId: priority.requestId, message: "Message sent ✓", tone: "success" });
-      setTimeout(() => setFlash(null), 1800);
-      await refreshPriorities();
-    } catch (err) {
-      setFlash({ requestId: priority.requestId, message: err instanceof Error ? err.message : "Send failed.", tone: "info" });
-      setTimeout(() => setFlash(null), 3000);
-    } finally {
-      setBusyByRequestId((s) => { const next = { ...s }; delete next[priority.requestId]; return next; });
-    }
-  };
-
-  const handleAddTask = async (priority: Priority) => {
-    if (busyByRequestId[priority.requestId]) return;
-    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "creating" }));
-    try {
-      const res = await fetch(`/api/requests/${priority.requestId}/tasks/auto`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actionType: priority.score.nextAction.type,
-          actionLabel: priority.score.nextAction.label,
-          reason: priority.score.nextAction.reason,
-          priorityLevel: priority.score.label,
-        }),
-      });
-      const json = (await res.json()) as { task?: { id: string }; alreadyExisted?: boolean; error?: string };
-      if (!res.ok || !json.task) throw new Error(json.error || `HTTP ${res.status}`);
-      await refreshPriorities();
-      void refreshTasks();
-      setFlash({
-        requestId: priority.requestId,
-        message: json.alreadyExisted ? "Task already active." : "Task added ✓",
-        tone: json.alreadyExisted ? "info" : "success",
-      });
-      setTimeout(() => setFlash(null), 1800);
-    } catch (err) {
-      setFlash({ requestId: priority.requestId, message: err instanceof Error ? err.message : "Couldn't add task.", tone: "info" });
-      setTimeout(() => setFlash(null), 2500);
-    } finally {
-      setBusyByRequestId((s) => { const next = { ...s }; delete next[priority.requestId]; return next; });
-    }
-  };
-
-  const handleMarkDone = async (priority: Priority) => {
-    const task = priority.activeTask;
-    if (!task || busyByRequestId[priority.requestId]) return;
-    if (task.id.startsWith("temp-")) return;
-    setBusyByRequestId((s) => ({ ...s, [priority.requestId]: "completing" }));
-    try {
-      const res = await fetch(`/api/requests/${priority.requestId}/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ done: true }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await refreshPriorities();
-      void refreshTasks();
-      setFlash({ requestId: priority.requestId, message: "Deal progressed ✓", tone: "success" });
-      setTimeout(() => setFlash(null), 2000);
-    } catch (err) {
-      setFlash({ requestId: priority.requestId, message: err instanceof Error ? err.message : "Couldn't complete.", tone: "info" });
-      setTimeout(() => setFlash(null), 2500);
-    } finally {
-      setBusyByRequestId((s) => { const next = { ...s }; delete next[priority.requestId]; return next; });
-    }
-  };
-
-  // ── Render ──────────────────────────────────────────────────────────
-
-  const greetingName = (user?.firstName ?? user?.username ?? "").trim();
-  const summary = data?.summary;
-  const counts = summary?.sidebarCounts;
+  // Sidebar nav badges + currency reading. /api/dashboard/priorities
+  // already aggregates these counts; we read the summary block only.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/dashboard/priorities?filter=all&limit=1", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as PrioritiesResponse;
+        if (!cancelled) setSidebar(data.summary);
+      } catch {
+        /* nav badges stay null on failure — sidebar still renders */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div
       className="min-h-screen lg:grid"
       style={{
-        background: PALETTE.pageBg,
-        gridTemplateColumns: "260px minmax(0, 1fr) 320px",
+        background: tokens.pageBg,
+        gridTemplateColumns: "260px minmax(0, 1fr)",
       }}
     >
       <CommandSidebar
-        currentFilter={filter}
-        onFilter={(f) => { setFilter(f); setMobileSidebarOpen(false); }}
-        sidebarCounts={counts}
-        actionCenter={{
-          hot: summary?.hotDealsCount ?? 0,
-          followups: summary?.followupsDueCount ?? 0,
-          unread: summary?.unreadMessages ?? 0,
-          atRisk: summary?.pipelineAtRiskCount ?? 0,
-        }}
-        mobileOpen={mobileSidebarOpen}
-        onMobileClose={() => setMobileSidebarOpen(false)}
+        sidebarCounts={sidebar?.sidebarCounts}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      {/* Mobile / tablet backdrop — closes either drawer on click. */}
-      {(mobileSidebarOpen || mobileTaskRailOpen) && (
+      {mobileNavOpen && (
         <div
           className="fixed inset-0 z-30 lg:hidden"
           style={{
-            background: "rgba(13,38,32,0.36)",
+            background: "rgba(13,38,32,0.4)",
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
-            animation: "ss-cmdk-fade 140ms ease-out",
           }}
-          onClick={() => {
-            setMobileSidebarOpen(false);
-            setMobileTaskRailOpen(false);
-          }}
+          onClick={() => setMobileNavOpen(false)}
           aria-hidden
         />
       )}
 
-      <main className="px-4 py-4 md:px-7 md:py-5 min-w-0">
-        <CommandTopBar
-          greetingName={greetingName}
-          openTasksCount={tasksData?.counts.open ?? 0}
-          onOpenSidebar={() => setMobileSidebarOpen(true)}
-          onOpenTaskRail={() => setMobileTaskRailOpen(true)}
+      <main className="px-5 py-6 md:px-10 md:py-9 min-w-0 space-y-10">
+        <CommandTopBar onOpenSidebar={() => setMobileNavOpen(true)} />
+
+        <Hero
+          activity={activity}
+          loadFailed={loadFailed}
+          scope={activityScope}
+          onScopeChange={setActivityScope}
         />
 
-        <CommandHero
-          summary={summary ?? null}
-          onViewHotDeals={() => setFilter("hot")}
-          onSendFollowups={() => setFilter("needs-followup")}
-        />
-
-        <section className="mt-6">
-          <div className="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
-            <div>
-              <h2
-                className="text-[22px] font-bold leading-tight"
-                style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
-              >
-                Who to follow up with — <em className="font-normal italic" style={{ color: PALETTE.muted }}>right now.</em>
-              </h2>
-            </div>
-            <FilterPills currentFilter={filter} onFilter={setFilter} summary={summary ?? null} priorities={data?.priorities ?? []} />
-          </div>
-
-          {data === null && !loadFailed ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <PriorityCardSkeleton key={i} />)}
-            </div>
-          ) : loadFailed ? (
-            <EmptyCard message="Couldn't load priorities. Refresh to try again." />
-          ) : visiblePriorities.length === 0 ? (
-            <EmptyCard
-              message={filter === "all"
-                ? "Nothing in the priority queue. Quiet day — or a clean inbox."
-                : "No deals match this filter."}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] gap-10">
+          <div className="min-w-0 space-y-10">
+            <HotDealsSection cards={activity?.hot ?? null} loadFailed={loadFailed} />
+            <NeedsFollowupSection
+              cards={activity?.needsFollowup ?? null}
+              loadFailed={loadFailed}
             />
-          ) : (
-            <ul className="space-y-3">
-              {visiblePriorities.map((p) => (
-                <PriorityCard
-                  key={p.requestId}
-                  priority={p}
-                  busy={busyByRequestId[p.requestId]}
-                  flash={flash?.requestId === p.requestId ? flash : null}
-                  onQuickReply={(b) => handleQuickReply(p, b)}
-                  onAddTask={() => handleAddTask(p)}
-                  onMarkDone={() => handleMarkDone(p)}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <NewReservationsSection
-          data={reservationsData}
-          scope={reservationsScope}
-          onScopeChange={setReservationsScope}
-        />
+            <BookingsSection
+              rows={activity?.reservations ?? null}
+              loadFailed={loadFailed}
+            />
+          </div>
+          <aside className="min-w-0 space-y-8">
+            <ActivityFeed events={activity?.recentActivity ?? null} />
+            <TasksCard tasks={tasksData?.tasks ?? null} counts={tasksData?.counts ?? null} />
+          </aside>
+        </div>
       </main>
-
-      <CommandTaskRail
-        tasksData={tasksData}
-        mobileOpen={mobileTaskRailOpen}
-        onMobileClose={() => setMobileTaskRailOpen(false)}
-      />
     </div>
   );
 }
 
-// ─── LEFT — Sidebar ──────────────────────────────────────────────────────
+// ─── LEFT — global navigation sidebar ──────────────────────────────────────
 
 function CommandSidebar({
-  currentFilter, onFilter, sidebarCounts, actionCenter, mobileOpen, onMobileClose,
+  sidebarCounts,
+  mobileOpen,
+  onMobileClose,
 }: {
-  currentFilter: FilterKey;
-  onFilter: (f: FilterKey) => void;
   sidebarCounts: SidebarCounts | undefined;
-  actionCenter: { hot: number; followups: number; unread: number; atRisk: number };
   mobileOpen: boolean;
   onMobileClose: () => void;
 }) {
-  // On lg+ the sidebar is `static` and lives in the grid's first
-  // column. Below lg it's a fixed drawer translated off-screen
-  // unless `mobileOpen` is true. `lg:translate-x-0` overrides the
-  // mobile transform at lg+ so resize never traps the drawer offscreen.
+  const { tokens } = useDashboardTheme();
   return (
     <aside
       className={`
-        z-40 w-[260px] border-r flex flex-col
+        z-40 w-[260px] flex flex-col
         fixed inset-y-0 left-0 transition-transform duration-200 ease-out
         lg:static lg:transition-none lg:translate-x-0
-        ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
+        ${mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"}
       `}
       style={{
-        background: PALETTE.cardBg,
-        borderColor: PALETTE.line,
+        background: tokens.tileBg,
+        borderRight: `1px solid ${tokens.ring}`,
       }}
     >
-      {/* Logo */}
-      <div className="px-5 py-5 border-b" style={{ borderColor: PALETTE.line }}>
+      <div className="px-5 py-5" style={{ borderBottom: `1px solid ${tokens.ring}` }}>
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-base"
-            style={{ background: "rgba(201,168,76,0.18)", color: PALETTE.gold }}
+            style={{ background: tokens.accentSoft, color: tokens.accent }}
           >
             S
           </div>
-          <span className="text-[15px] font-semibold tracking-tight" style={{ color: PALETTE.ink }}>
+          <span
+            className="text-[15px] font-semibold tracking-tight"
+            style={{ color: tokens.heading }}
+          >
             Safari Studio
           </span>
         </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4" onClick={onMobileClose}>
-        {/* WORK */}
         <SidebarGroup label="Work">
           <SidebarItem href="/dashboard" label="Overview" active />
           <SidebarItem href="/requests" label="Requests" badge={sidebarCounts?.requests} />
           <SidebarItem href="/proposals" label="Proposals" badge={sidebarCounts?.proposals} />
           <SidebarItem href="/properties" label="Property Library" />
-          <SidebarItem href="/settings/brand#visualStyle" label="Image Library" />
-          <SidebarItem href="/reservations" label="Reservations" badge={sidebarCounts?.reservations} />
+          <SidebarItem
+            href="/settings/brand#visualStyle"
+            label="Image Library"
+          />
+          <SidebarItem
+            href="/reservations"
+            label="Reservations"
+            badge={sidebarCounts?.reservations}
+          />
         </SidebarGroup>
 
-        {/* WORKSPACE — org-level config the operator manages occasionally
-            but needs visible from any page. Brand DNA + Team are the
-            two settings sections operators visit often enough to deserve
-            top-level entries (Brand DNA drives every AI draft + every
-            new proposal's defaults; Team is owner / admin work). */}
         <SidebarGroup label="Workspace">
           <SidebarItem href="/settings/brand" label="Brand DNA" />
           <SidebarItem href="/settings/team" label="Team" />
         </SidebarGroup>
 
-        {/* ACTION CENTER */}
-        <SidebarGroup label="Action Center">
-          <ActionCenterRow
-            icon="🔥"
-            label="Hot Deals"
-            count={actionCenter.hot}
-            tone="hot"
-            active={currentFilter === "hot"}
-            onClick={() => onFilter(currentFilter === "hot" ? "all" : "hot")}
-          />
-          <ActionCenterRow
-            icon="⏳"
-            label="Needs Follow-up"
-            count={actionCenter.followups}
-            tone="warm"
-            active={currentFilter === "needs-followup"}
-            onClick={() => onFilter(currentFilter === "needs-followup" ? "all" : "needs-followup")}
-          />
-          <ActionCenterRow
-            icon="💬"
-            label="Unread Messages"
-            count={actionCenter.unread}
-            tone="info"
-            active={currentFilter === "unread"}
-            onClick={() => onFilter(currentFilter === "unread" ? "all" : "unread")}
-          />
-          <ActionCenterRow
-            icon="⚠️"
-            label="At Risk"
-            count={actionCenter.atRisk}
-            tone="risk"
-            active={currentFilter === "at-risk"}
-            onClick={() => onFilter(currentFilter === "at-risk" ? "all" : "at-risk")}
-          />
-        </SidebarGroup>
-
-        {/* INSIGHTS */}
         <SidebarGroup label="Insights">
           <SidebarItem href="/analytics" label="Analytics" />
-          <SidebarItem href="/dashboard#performance" label="Performance" />
-          <SidebarItem href="/dashboard#performance" label="Conversion" />
         </SidebarGroup>
 
-        {/* SYSTEM */}
         <SidebarGroup label="System">
           <SidebarItem href="/requests" label="Inbox" badge={sidebarCounts?.inboxUnread} />
-          <SidebarItem href="/requests" label="Messages" />
           <SidebarItem href="/requests" label="Tasks" badge={sidebarCounts?.tasks} />
-          <SidebarItem href="/dashboard" label="Activity" />
           <SidebarItem href="/settings" label="Settings" />
         </SidebarGroup>
       </nav>
 
-      {/* User chip */}
       <div
-        className="border-t px-4 py-3 flex items-center gap-2.5"
-        style={{ borderColor: PALETTE.line }}
+        className="px-4 py-3 flex items-center gap-2.5"
+        style={{ borderTop: `1px solid ${tokens.ring}` }}
       >
-        <div className="shrink-0">
-          <UserButton />
-        </div>
+        <UserButton />
       </div>
     </aside>
   );
 }
 
-function SidebarGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function SidebarGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
   return (
     <div className="px-3 mt-2 mb-3">
       <div
         className="px-2 mb-1 text-[10px] uppercase tracking-[0.22em] font-semibold"
-        style={{ color: PALETTE.muted }}
+        style={{ color: tokens.muted }}
       >
         {label}
       </div>
@@ -610,27 +371,38 @@ function SidebarGroup({ label, children }: { label: string; children: React.Reac
 }
 
 function SidebarItem({
-  href, label, badge, active = false,
+  href,
+  label,
+  badge,
+  active = false,
 }: {
-  href: string; label: string; badge?: number; active?: boolean;
+  href: string;
+  label: string;
+  badge?: number;
+  active?: boolean;
 }) {
+  const { tokens } = useDashboardTheme();
   return (
     <Link
       href={href}
       className="flex items-center justify-between px-2 py-1.5 rounded-md text-[13px] transition"
       style={{
-        background: active ? "rgba(27,58,45,0.08)" : "transparent",
-        color: active ? PALETTE.forest : PALETTE.body,
+        background: active ? tokens.primarySoft : "transparent",
+        color: active ? tokens.primary : tokens.body,
         fontWeight: active ? 600 : 500,
       }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = PALETTE.lineSoft; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = tokens.ring;
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "transparent";
+      }}
     >
       <span className="truncate">{label}</span>
       {badge !== undefined && badge > 0 && (
         <span
           className="ml-2 text-[10.5px] tabular-nums px-1.5 py-0.5 rounded-full font-semibold"
-          style={{ background: "rgba(27,58,45,0.10)", color: PALETTE.forest }}
+          style={{ background: tokens.primarySoft, color: tokens.primary }}
         >
           {badge}
         </span>
@@ -639,65 +411,12 @@ function SidebarItem({
   );
 }
 
-function ActionCenterRow({
-  icon, label, count, tone, active, onClick,
-}: {
-  icon: string;
-  label: string;
-  count: number;
-  tone: "hot" | "warm" | "info" | "risk";
-  active: boolean;
-  onClick: () => void;
-}) {
-  const accent =
-    tone === "hot" ? PALETTE.hot :
-    tone === "warm" ? PALETTE.warm :
-    tone === "risk" ? PALETTE.warm :
-    PALETTE.forest;
-  const bgSoft =
-    tone === "hot" ? "rgba(220,38,38,0.08)" :
-    tone === "warm" ? "rgba(217,119,6,0.10)" :
-    tone === "risk" ? "rgba(217,119,6,0.10)" :
-    "rgba(27,58,45,0.08)";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-[13px] transition"
-      style={{
-        background: active ? bgSoft : "transparent",
-        color: active ? accent : PALETTE.body,
-        fontWeight: active ? 600 : 500,
-      }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = PALETTE.lineSoft; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
-    >
-      <span className="flex items-center gap-2 truncate">
-        <span className="text-[14px] leading-none" aria-hidden>{icon}</span>
-        <span className="truncate">{label}</span>
-      </span>
-      {count > 0 && (
-        <span
-          className="ml-2 text-[10.5px] tabular-nums px-1.5 py-0.5 rounded-full font-bold"
-          style={{ background: bgSoft, color: accent }}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
+// ─── TOP BAR — greeting + search + notifications + theme toggle ────────────
 
-// ─── TOP BAR ─────────────────────────────────────────────────────────────
-
-function CommandTopBar({
-  greetingName, openTasksCount, onOpenSidebar, onOpenTaskRail,
-}: {
-  greetingName: string;
-  openTasksCount: number;
-  onOpenSidebar: () => void;
-  onOpenTaskRail: () => void;
-}) {
+function CommandTopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
+  const { user } = useUser();
+  const { tokens } = useDashboardTheme();
+  const greetingName = (user?.firstName ?? user?.username ?? "").trim();
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 5) return "Working late";
@@ -705,31 +424,51 @@ function CommandTopBar({
     if (h < 18) return "Good afternoon";
     return "Good evening";
   }, []);
+
   return (
-    <div className="flex items-center justify-between gap-3 mb-4 md:mb-5">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-2.5 min-w-0">
-        {/* Hamburger — mobile / tablet only. */}
         <button
           type="button"
           onClick={onOpenSidebar}
           aria-label="Open menu"
           className="lg:hidden w-9 h-9 rounded-full flex items-center justify-center transition shrink-0"
-          style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
+          style={{
+            background: tokens.tileBg,
+            border: `1px solid ${tokens.ring}`,
+            color: tokens.body,
+          }}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          >
             <path d="M2.5 4 H13.5 M2.5 8 H13.5 M2.5 12 H13.5" />
           </svg>
         </button>
 
         <div className="min-w-0">
           <h1
-            className="text-[20px] md:text-[24px] font-bold leading-tight truncate"
-            style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
+            className="text-[22px] md:text-[26px] font-bold leading-tight truncate"
+            style={{
+              color: tokens.heading,
+              fontFamily: "'Playfair Display', Georgia, serif",
+              letterSpacing: "-0.01em",
+            }}
           >
-            {greeting}{greetingName ? `, ${greetingName}.` : "."}
+            {greeting}
+            {greetingName ? `, ${greetingName}` : ""}.
           </h1>
-          <div className="text-[12.5px] md:text-[13px] mt-0.5 truncate" style={{ color: PALETTE.muted }}>
-            Here&apos;s who needs your attention today.
+          <div
+            className="text-[13px] mt-0.5 truncate"
+            style={{ color: tokens.muted }}
+          >
+            Here&apos;s what&apos;s moving today.
           </div>
         </div>
       </div>
@@ -741,41 +480,22 @@ function CommandTopBar({
         <IconBtn label="Notifications">
           <BellIcon />
         </IconBtn>
-        {/* Tasks toggle — mobile / tablet only. Surface the open-count
-            so the operator knows the rail has something in it. */}
-        <button
-          type="button"
-          onClick={onOpenTaskRail}
-          aria-label={`Tasks (${openTasksCount} open)`}
-          title={`Tasks (${openTasksCount} open)`}
-          className="lg:hidden relative w-9 h-9 rounded-full flex items-center justify-center transition"
-          style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
-        >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2.5" y="3" width="10" height="9" rx="1.5" />
-            <path d="M5 6.5 L7 8.5 L10 5.5" />
-          </svg>
-          {openTasksCount > 0 && (
-            <span
-              className="absolute -top-1 -right-1 text-[9.5px] font-bold tabular-nums px-1.5 rounded-full leading-[1.4]"
-              style={{ background: PALETTE.forest, color: "white", minWidth: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
-            >
-              {openTasksCount > 9 ? "9+" : openTasksCount}
-            </span>
-          )}
-        </button>
+        <ThemeToggle />
       </div>
     </div>
   );
 }
 
 function IconBtn({
-  children, label, onClick,
+  children,
+  label,
+  onClick,
 }: {
   children: React.ReactNode;
   label: string;
   onClick?: () => void;
 }) {
+  const { tokens } = useDashboardTheme();
   return (
     <button
       type="button"
@@ -783,9 +503,17 @@ function IconBtn({
       title={label}
       onClick={onClick}
       className="w-9 h-9 rounded-full flex items-center justify-center transition"
-      style={{ background: PALETTE.cardBg, border: `1px solid ${PALETTE.line}`, color: PALETTE.body }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(13,38,32,0.18)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = PALETTE.line; }}
+      style={{
+        background: tokens.tileBg,
+        border: `1px solid ${tokens.ring}`,
+        color: tokens.body,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = tokens.ringHover;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = tokens.ring;
+      }}
     >
       {children}
     </button>
@@ -794,47 +522,73 @@ function IconBtn({
 
 function SearchIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    >
       <circle cx="7" cy="7" r="4.5" />
       <path d="M10.5 10.5 L13 13" />
     </svg>
   );
 }
+
 function BellIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3.5 11.5h9l-1.2-2v-3a3.3 3.3 0 0 0-6.6 0v3l-1.2 2Z" />
       <path d="M6.5 13.2a1.6 1.6 0 0 0 3 0" />
     </svg>
   );
 }
 
-// ─── HERO STRIP ──────────────────────────────────────────────────────────
+// ─── HERO ──────────────────────────────────────────────────────────────────
 
-function CommandHero({
-  summary, onViewHotDeals, onSendFollowups,
+function Hero({
+  activity,
+  loadFailed,
+  scope,
+  onScopeChange,
 }: {
-  summary: Summary | null;
-  onViewHotDeals: () => void;
-  onSendFollowups: () => void;
+  activity: ActivityResponse | null;
+  loadFailed: boolean;
+  scope: "mine" | "all";
+  onScopeChange: (s: "mine" | "all") => void;
 }) {
-  const hotCount = summary?.hotDealsCount ?? 0;
-  const valueCents = summary?.hotDealsValueCents ?? 0;
-  const currency = summary?.currency ?? "USD";
+  const { tokens } = useDashboardTheme();
+
+  const hotCount = activity?.hot.length ?? 0;
+  const followupCount = activity?.needsFollowup.length ?? 0;
+  const reservationsCount = activity?.reservations.length ?? 0;
+  const canViewAll = activity?.canViewAll ?? false;
+
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl px-7 py-6 md:px-9 md:py-7"
+    <section
+      className="relative overflow-hidden rounded-2xl px-7 py-7 md:px-10 md:py-9"
       style={{
-        background: `linear-gradient(135deg, ${PALETTE.forest} 0%, ${PALETTE.forestDeep} 100%)`,
-        boxShadow: "0 8px 24px -12px rgba(13,38,32,0.35)",
+        background: tokens.heroBg,
+        boxShadow: "0 12px 36px -16px rgba(13,38,32,0.45)",
       }}
     >
-      {/* Decorative texture — subtle dot grid + faded ridge silhouette */}
+      {/* Soft dot grid + corner glow for the alive feel. */}
       <div
         aria-hidden
         className="absolute inset-0 opacity-[0.06] pointer-events-none"
         style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, ${PALETTE.gold} 1px, transparent 0)`,
+          backgroundImage: `radial-gradient(circle at 1px 1px, ${tokens.accent} 1px, transparent 0)`,
           backgroundSize: "28px 28px",
         }}
       />
@@ -842,371 +596,295 @@ function CommandHero({
         aria-hidden
         className="absolute right-0 bottom-0 w-1/2 h-full pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at 100% 100%, rgba(201,168,76,0.18) 0%, transparent 60%)`,
+          background: `radial-gradient(ellipse at 100% 100%, rgba(212,183,101,0.22) 0%, transparent 60%)`,
         }}
       />
 
-      <div className="relative flex flex-wrap items-center justify-between gap-5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] font-semibold" style={{ color: PALETTE.gold }}>
-            <span>🔥</span> Today&apos;s focus
-          </div>
+      <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 flex-1">
           <div
-            className="mt-2 text-white text-[22px] md:text-[26px] font-bold leading-tight"
-            style={{ fontFamily: "'Playfair Display', serif" }}
+            className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] font-semibold"
+            style={{ color: tokens.accent }}
           >
-            {hotCount > 0
-              ? `You have ${hotCount} ${hotCount === 1 ? "deal" : "deals"} ready to close today.`
-              : "All caught up — no hot deals right now."}
+            <span aria-hidden>🔥</span> Today&apos;s focus
           </div>
-          {valueCents > 0 && (
-            <div className="mt-1 text-[13.5px] text-white/70">
-              Potential revenue:{" "}
-              <span className="font-semibold" style={{ color: PALETTE.gold }}>
-                {formatMoney(valueCents, currency)}
-              </span>
+
+          <div className="mt-5 grid grid-cols-3 gap-5 md:gap-9 max-w-2xl">
+            <Stat label="Hot deals" value={hotCount} loading={!activity && !loadFailed} />
+            <Stat
+              label="Needs follow-up"
+              value={followupCount}
+              loading={!activity && !loadFailed}
+            />
+            <Stat
+              label="Reservations"
+              value={reservationsCount}
+              loading={!activity && !loadFailed}
+            />
+          </div>
+
+          {canViewAll && (
+            <div className="mt-5 inline-flex items-center gap-1.5 rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <ScopePill active={scope === "mine"} onClick={() => onScopeChange("mine")} label="Mine" />
+              <ScopePill active={scope === "all"} onClick={() => onScopeChange("all")} label="Whole team" />
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             type="button"
-            onClick={onViewHotDeals}
+            onClick={() => scrollToId("dash-hot-deals")}
             disabled={hotCount === 0}
-            className="px-4 py-2 rounded-lg text-[13.5px] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.98]"
-            style={{ background: PALETTE.gold, color: PALETTE.forestDeep }}
+            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.98]"
+            style={{ background: tokens.accent, color: "#1a1a1a" }}
           >
             View hot deals →
           </button>
           <button
             type="button"
-            onClick={onSendFollowups}
-            className="px-4 py-2 rounded-lg text-[13.5px] font-semibold transition hover:brightness-110 active:scale-[0.98]"
-            style={{ background: "rgba(255,255,255,0.10)", color: "white", border: "1px solid rgba(255,255,255,0.22)" }}
+            onClick={() => scrollToId("dash-followup")}
+            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.22)",
+            }}
           >
             Send follow-ups
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-// ─── FILTER PILLS (top of priorities list) ───────────────────────────────
-
-function FilterPills({
-  currentFilter, onFilter, summary, priorities,
+function Stat({
+  label,
+  value,
+  loading,
 }: {
-  currentFilter: FilterKey;
-  onFilter: (f: FilterKey) => void;
-  summary: Summary | null;
-  priorities: Priority[];
+  label: string;
+  value: number;
+  loading: boolean;
 }) {
-  const counts = {
-    all: priorities.length,
-    hot: priorities.filter((p) => p.score.label === "hot").length,
-    "needs-followup": summary?.followupsDueCount ?? 0,
-    unread: priorities.filter((p) => p.unreadCount > 0).length,
-    "at-risk": priorities.filter((p) => p.atRisk).length,
-  };
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <Pill label="All" count={counts.all} active={currentFilter === "all"} onClick={() => onFilter("all")} />
-      <Pill label="Hot" count={counts.hot} active={currentFilter === "hot"} onClick={() => onFilter("hot")} accent={PALETTE.hot} />
-      <Pill label="Follow-up" count={counts["needs-followup"]} active={currentFilter === "needs-followup"} onClick={() => onFilter("needs-followup")} accent={PALETTE.warm} />
-      <Pill label="Unread" count={counts.unread} active={currentFilter === "unread"} onClick={() => onFilter("unread")} accent={PALETTE.forest} />
-      <Pill label="At risk" count={counts["at-risk"]} active={currentFilter === "at-risk"} onClick={() => onFilter("at-risk")} accent={PALETTE.warm} />
+    <div className="min-w-0">
+      <div
+        className="text-[10.5px] uppercase tracking-[0.24em] font-semibold text-white/60"
+      >
+        {label}
+      </div>
+      <div
+        className="mt-2.5 leading-[0.95] tabular-nums text-white"
+        style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: "clamp(44px, 6vw, 56px)",
+          fontWeight: 800,
+          letterSpacing: "-0.025em",
+        }}
+      >
+        {loading ? (
+          <span className="inline-block w-14 h-12 rounded animate-pulse bg-white/10" />
+        ) : (
+          value
+        )}
+      </div>
     </div>
   );
 }
 
-function Pill({
-  label, count, active, onClick, accent,
+function ScopePill({
+  active,
+  onClick,
+  label,
 }: {
-  label: string; count: number; active: boolean; onClick: () => void; accent?: string;
+  active: boolean;
+  onClick: () => void;
+  label: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="text-[12px] font-semibold px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+      className="px-3 py-1 rounded-full text-[11.5px] font-semibold transition"
       style={{
-        background: active ? PALETTE.forest : PALETTE.cardBg,
-        color: active ? "white" : PALETTE.body,
-        border: `1px solid ${active ? PALETTE.forest : PALETTE.line}`,
+        background: active ? "rgba(255,255,255,0.95)" : "transparent",
+        color: active ? "#1b3a2d" : "rgba(255,255,255,0.78)",
       }}
     >
       {label}
-      {count > 0 && (
-        <span
-          className="text-[10.5px] tabular-nums px-1.5 py-0.5 rounded-full font-bold"
-          style={{
-            background: active ? "rgba(255,255,255,0.16)" : (accent ? `${accent}1c` : "rgba(13,38,32,0.06)"),
-            color: active ? "white" : (accent ?? PALETTE.muted),
-          }}
-        >
-          {count}
-        </span>
-      )}
     </button>
   );
 }
 
-// ─── PRIORITY CARD ───────────────────────────────────────────────────────
+// ─── HOT DEALS — 2-card responsive grid ────────────────────────────────────
 
-const QUICK_REPLY_OPTIONS: Record<string, string[]> = {
-  reply: [
-    "Thanks for getting back — let me digest and reply with options shortly.",
-    "Got it. I'll come back with adjustments by end of day.",
-  ],
-  follow_up: [
-    "Just checking in — how's the proposal sitting with you?",
-    "Happy to adjust anything; let me know what's on your mind.",
-    "Want to jump on a quick call this week?",
-  ],
-  ask_for_booking: [
-    "Shall I go ahead and confirm this for you?",
-    "Ready to secure the camps before they release?",
-  ],
-  nudge: [
-    "Just checking if you saw the proposal — let me know your thoughts.",
-    "Anything I can clarify? Happy to walk you through it.",
-  ],
-  send_proposal: [
-    "Just shared your itinerary — would love your feedback.",
-  ],
-  confirm_reservation: [
-    "Reservations are in motion — I'll keep you posted.",
-  ],
-  stay_in_touch: [
-    "Just keeping in touch — anything I can help with?",
-  ],
-  draft_quote: [],
-  wait: [],
-};
-
-function PriorityCard({
-  priority, busy, flash, onQuickReply, onAddTask, onMarkDone,
+function HotDealsSection({
+  cards,
+  loadFailed,
 }: {
-  priority: Priority;
-  busy: "creating" | "completing" | "sending" | undefined;
-  flash: { message: string; tone: "success" | "info" } | null;
-  onQuickReply: (body: string) => void;
-  onAddTask: () => void;
-  onMarkDone: () => void;
+  cards: ActivityCard[] | null;
+  loadFailed: boolean;
 }) {
-  const isHot = priority.score.label === "hot";
-  const labelColor = priority.score.label === "hot" ? PALETTE.hot : priority.score.label === "warm" ? PALETTE.warm : PALETTE.cold;
-  const labelBg = priority.score.label === "hot" ? "#fee2e2" : priority.score.label === "warm" ? "#fef3c7" : "rgba(0,0,0,0.06)";
-  const intentColor =
-    priority.intentLabel === "high" ? PALETTE.green :
-    priority.intentLabel === "medium" ? PALETTE.warm :
-    PALETTE.muted;
-  const hasActiveCommitment = !!priority.activeTask?.matchesNextAction;
-  const isAutoTask = !!priority.activeTask?.auto;
-  const quickReplyOptions = QUICK_REPLY_OPTIONS[priority.score.nextAction.type] ?? [];
-  const showQuickReply = quickReplyOptions.length > 0 && !!priority.clientId;
-
   return (
-    <li
-      className={`relative rounded-2xl transition-all duration-200 ${isHot && !hasActiveCommitment ? "ss-hot-pulse" : ""}`}
-      style={{
-        background: PALETTE.cardBg,
-        boxShadow: isHot && !hasActiveCommitment
-          ? "0 4px 14px -4px rgba(220,38,38,0.18), 0 0 0 1px rgba(220,38,38,0.18)"
-          : `0 1px 0 ${PALETTE.line}, 0 4px 14px -8px rgba(13,38,32,0.10)`,
-        borderLeft: isHot && !hasActiveCommitment
-          ? `3px solid ${PALETTE.hot}`
-          : "3px solid transparent",
-      }}
-    >
-      {flash && (
-        <div
-          className="absolute top-3 right-3 z-10 text-[10.5px] font-semibold px-2 py-1 rounded-md shadow-sm"
-          style={{
-            background: flash.tone === "success" ? "#dcfce7" : "#e0f2fe",
-            color: flash.tone === "success" ? "#166534" : "#075985",
-            border: `1px solid ${flash.tone === "success" ? "#86efac" : "#7dd3fc"}`,
-            animation: "ss-flash-in 180ms ease-out",
-          }}
-        >
-          {flash.message}
-        </div>
+    <section id="dash-hot-deals">
+      <SectionHeader
+        title="Hot deals"
+        emoji="🔥"
+        subtitle="Highest-engagement proposals right now."
+        count={cards?.length}
+      />
+      {loadFailed ? (
+        <EmptyCard message="Couldn't load. Refresh to try again." />
+      ) : cards === null ? (
+        <CardGrid>
+          <DealCardSkeleton />
+          <DealCardSkeleton />
+        </CardGrid>
+      ) : cards.length === 0 ? (
+        <EmptyCard message="Quiet right now. New hot deals appear here as engagement builds." />
+      ) : (
+        <CardGrid>
+          {cards.map((c) => (
+            <DealCard key={c.proposalId} card={c} />
+          ))}
+        </CardGrid>
       )}
-
-      <div className="p-5 flex items-stretch gap-4">
-        {/* Thumbnail */}
-        <Thumbnail url={priority.thumbnailUrl} fallback={priority.clientName} />
-
-        {/* Main column */}
-        <div className="flex-1 min-w-0">
-          {/* Header row: HOT badge + name + (right) value/score/intent.
-              Stacks vertically below md so the value doesn't get
-              squished against the name on narrow viewports. */}
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between md:gap-3 gap-1.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className="text-[10px] uppercase tracking-[0.18em] font-bold px-2 py-0.5 rounded"
-                  style={{ background: labelBg, color: labelColor }}
-                >
-                  {priority.score.label}
-                </span>
-                <Link
-                  href={`/requests/${priority.requestId}`}
-                  className="text-[16px] font-bold truncate hover:underline"
-                  style={{ color: PALETTE.ink }}
-                  title={priority.clientName}
-                >
-                  {priority.clientName}
-                </Link>
-                {hasActiveCommitment && (
-                  <span
-                    className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
-                    style={{
-                      background: isAutoTask ? "#fef3c7" : "#dcfce7",
-                      color: isAutoTask ? "#92400e" : "#166534",
-                    }}
-                  >
-                    {isAutoTask ? "⚡ Auto task" : "✓ Task active"}
-                  </span>
-                )}
-              </div>
-              <div className="text-[12px] mt-0.5 truncate" style={{ color: PALETTE.muted }}>
-                <span className="tabular-nums">#{priority.referenceNumber}</span>
-                {priority.proposalTitle && <> · {priority.proposalTitle}</>}
-              </div>
-            </div>
-
-            <div className="md:text-right shrink-0 flex md:block items-center gap-3 md:gap-0">
-              {priority.valueCents > 0 ? (
-                <div
-                  className="text-[18px] md:text-[20px] font-bold tabular-nums leading-none"
-                  style={{ color: PALETTE.ink }}
-                >
-                  {formatMoney(priority.valueCents, priority.currency)}
-                </div>
-              ) : (
-                <div className="text-[12px]" style={{ color: PALETTE.muted }}>No quote yet</div>
-              )}
-              <div className="flex items-center md:justify-end gap-1.5 md:mt-1">
-                <span className="text-[15px] font-bold tabular-nums" style={{ color: intentColor }}>
-                  {priority.score.total}
-                </span>
-                <span className="text-[10.5px] uppercase tracking-[0.18em] font-semibold" style={{ color: intentColor }}>
-                  {priority.intentLabel} intent
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Signals row */}
-          <div className="flex items-center gap-1.5 flex-wrap mt-3">
-            <Signal icon="👀" label={`${priority.engagement.views} ${priority.engagement.views === 1 ? "view" : "views"}`} dim={priority.engagement.views === 0} />
-            {priority.engagement.totalSeconds >= 30 && (
-              <Signal icon="⏱️" label={formatDwell(priority.engagement.totalSeconds)} />
-            )}
-            {priority.engagement.pricingViewed && (
-              <Signal icon="💰" label="Pricing viewed" highlight />
-            )}
-            {priority.engagement.inboundMessages > 0 && (
-              <Signal icon="💬" label={`${priority.engagement.inboundMessages} ${priority.engagement.inboundMessages === 1 ? "reply" : "replies"}`} highlight />
-            )}
-            <Signal icon="🕒" label={formatRelative(priority.lastActivityIso)} dim />
-          </div>
-
-          {/* Insight box */}
-          {priority.insightText && (
-            <div
-              className="mt-3 px-3 py-2 rounded-lg text-[12.5px] leading-snug"
-              style={{
-                background: "rgba(27,58,45,0.06)",
-                color: PALETTE.ink,
-              }}
-            >
-              <span className="font-semibold" style={{ color: PALETTE.forest }}>Insight:</span>{" "}
-              {priority.insightText}
-            </div>
-          )}
-
-          {/* Best move */}
-          <div className="mt-3 text-[13px] leading-snug">
-            <span className="font-semibold" style={{ color: PALETTE.ink }}>Best move:</span>{" "}
-            <span style={{ color: PALETTE.body }}>{priority.score.nextAction.label}</span>
-          </div>
-
-          {/* Action bar */}
-          <div className="mt-3.5 flex items-center gap-2 flex-wrap justify-end">
-            {showQuickReply && (
-              <QuickReplyDropdown
-                options={quickReplyOptions}
-                onPick={onQuickReply}
-                busy={busy === "sending"}
-              />
-            )}
-            {hasActiveCommitment ? (
-              <button
-                type="button"
-                onClick={onMarkDone}
-                disabled={busy === "completing"}
-                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-                style={{ background: "#dcfce7", color: "#166534", border: "1px solid #86efac" }}
-              >
-                {busy === "completing" ? "…" : "✓ Mark done"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onAddTask}
-                disabled={busy === "creating"}
-                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-                style={{ background: PALETTE.cardBg, color: PALETTE.body, border: `1px solid ${PALETTE.line}` }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = PALETTE.cardBg; }}
-              >
-                {busy === "creating" ? "Adding…" : "+ Add task"}
-              </button>
-            )}
-            <Link
-              href={`/requests/${priority.requestId}`}
-              className="text-[12px] font-semibold px-4 py-1.5 rounded-lg transition text-white shadow-sm hover:brightness-110 active:scale-[0.98]"
-              style={{
-                background: priority.score.nextAction.urgent && !hasActiveCommitment
-                  ? `linear-gradient(180deg, ${PALETTE.hot}, #b91c1c)`
-                  : `linear-gradient(180deg, ${PALETTE.forest}, ${PALETTE.forestDeep})`,
-              }}
-            >
-              Message →
-            </Link>
-          </div>
-        </div>
-      </div>
-    </li>
+    </section>
   );
 }
 
-function Thumbnail({ url, fallback }: { url: string | null; fallback: string }) {
-  const initial = (fallback?.trim()?.charAt(0) ?? "·").toUpperCase();
-  if (url) {
-    return (
-      <div
-        className="shrink-0 overflow-hidden"
-        style={{ width: 64, height: 64, borderRadius: "50%", border: `1px solid ${PALETTE.line}` }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={fallback} className="w-full h-full object-cover" />
+function CardGrid({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>;
+}
+
+function DealCard({ card }: { card: ActivityCard }) {
+  const { tokens } = useDashboardTheme();
+  const initial = (card.client?.name ?? "·").trim().charAt(0).toUpperCase();
+  const tripSummary = card.title?.trim() || "Untitled proposal";
+  const reason = formatActivityReason(card.lastEventType, card.lastEventAt);
+  const isHot = card.status === "hot";
+  const isVeryHot = card.engagementScore >= 120;
+  const statusLabel = isVeryHot ? "VERY HOT" : isHot ? "HOT" : card.status.toUpperCase();
+
+  // Warm-tinted background for HOT / VERY HOT cards so they pop above
+  // the rest of the dashboard. VERY HOT gets a slightly heavier wash
+  // and an accent ring to read as a tier above HOT at a glance.
+  const baseBg = tokens.tileBg;
+  const warmTint = isVeryHot
+    ? `linear-gradient(135deg, rgba(220,38,38,0.07) 0%, rgba(255,255,255,0) 60%), ${baseBg}`
+    : isHot
+      ? `linear-gradient(135deg, rgba(220,38,38,0.04) 0%, rgba(255,255,255,0) 55%), ${baseBg}`
+      : baseBg;
+  const ring = isVeryHot
+    ? "rgba(220,38,38,0.32)"
+    : isHot
+      ? "rgba(220,38,38,0.18)"
+      : tokens.ring;
+  const ringHover = isHot || isVeryHot ? "rgba(220,38,38,0.45)" : tokens.ringHover;
+
+  return (
+    <article
+      className="rounded-2xl p-6 transition"
+      style={{
+        background: warmTint,
+        boxShadow: `inset 0 0 0 1px ${ring}, ${tokens.shadow}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = `inset 0 0 0 1px ${ringHover}, ${tokens.shadowHover}`;
+        e.currentTarget.style.transition = "transform 120ms ease, box-shadow 120ms ease";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = `inset 0 0 0 1px ${ring}, ${tokens.shadow}`;
+      }}
+    >
+      <div className="flex items-start gap-4">
+        <Avatar initial={initial} tokens={tokens} />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2.5 flex-wrap">
+            <h3
+              className="text-[17px] truncate"
+              style={{
+                color: tokens.heading,
+                fontWeight: 700,
+                letterSpacing: "-0.005em",
+              }}
+              title={card.client?.name ?? ""}
+            >
+              {card.client?.name ?? "Unknown client"}
+            </h3>
+            <StatusPill label={statusLabel} variant={isVeryHot ? "very-hot" : isHot ? "hot" : "neutral"} />
+          </div>
+          <div
+            className="text-[13px] truncate mt-1"
+            style={{ color: tokens.body }}
+            title={tripSummary}
+          >
+            {tripSummary}
+          </div>
+          <div
+            className="text-[12.5px] mt-2 flex items-center gap-1.5 flex-wrap"
+            style={{ color: tokens.body }}
+          >
+            <span style={{ color: tokens.heading, fontWeight: 600 }}>{reason.action}</span>
+            <span aria-hidden style={{ color: tokens.muted }}>•</span>
+            <span style={{ color: tokens.muted }}>{reason.when}</span>
+          </div>
+        </div>
+
+        <div className="text-right shrink-0">
+          <div
+            className="text-[34px] leading-none tabular-nums"
+            style={{
+              color: tokens.heading,
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontWeight: 800,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {card.engagementScore}
+          </div>
+          <div
+            className="text-[10px] uppercase tracking-[0.24em] font-semibold mt-1"
+            style={{ color: tokens.muted }}
+          >
+            score
+          </div>
+        </div>
       </div>
-    );
-  }
+
+      <div
+        className="mt-5 px-3.5 py-2.5 rounded-lg text-[12.5px]"
+        style={{ background: tokens.primarySoft, color: tokens.primary }}
+      >
+        <span style={{ fontWeight: 700 }}>Best move:</span> {card.nextAction}
+      </div>
+
+      <div className="mt-5 flex items-center gap-2.5">
+        <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
+          Open proposal
+        </PrimaryBtn>
+        <GhostBtn href={`/studio/${card.proposalId}`}>Follow up</GhostBtn>
+      </div>
+    </article>
+  );
+}
+
+function Avatar({ initial, tokens }: { initial: string; tokens: DashboardTokens }) {
   return (
     <div
       className="shrink-0 flex items-center justify-center font-bold"
       style={{
-        width: 64, height: 64, borderRadius: "50%",
-        background: `linear-gradient(135deg, ${PALETTE.forest}, ${PALETTE.forestDeep})`,
-        color: PALETTE.gold,
-        fontSize: 24,
-        letterSpacing: "0.05em",
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: tokens.primary,
+        color: "#fff",
+        fontSize: 18,
+        letterSpacing: "0.02em",
       }}
       aria-hidden
     >
@@ -1215,443 +893,667 @@ function Thumbnail({ url, fallback }: { url: string | null; fallback: string }) 
   );
 }
 
-function Signal({
-  icon, label, highlight = false, dim = false,
+function StatusPill({
+  label,
+  variant,
 }: {
-  icon: string; label: string; highlight?: boolean; dim?: boolean;
+  label: string;
+  variant: "very-hot" | "hot" | "neutral";
 }) {
-  let bg = "rgba(13,38,32,0.05)";
-  let color = PALETTE.body;
-  if (highlight) { bg = "rgba(27,58,45,0.10)"; color = PALETTE.forest; }
-  if (dim) { bg = "transparent"; color = PALETTE.muted; }
+  if (variant === "very-hot") {
+    return (
+      <span
+        className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0 inline-flex items-center gap-1"
+        style={{
+          background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
+          color: "#fff",
+          boxShadow: "0 4px 14px -4px rgba(220,38,38,0.45)",
+        }}
+      >
+        <span aria-hidden style={{ filter: "saturate(1.5)" }}>🔥</span>
+        {label}
+      </span>
+    );
+  }
+  if (variant === "hot") {
+    return (
+      <span
+        className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0"
+        style={{
+          background: "#fee2e2",
+          color: "#b91c1c",
+          boxShadow: "inset 0 0 0 1px rgba(220,38,38,0.18)",
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
   return (
     <span
-      className="text-[11px] font-medium px-2 py-0.5 rounded-md inline-flex items-center gap-1"
-      style={{ background: bg, color }}
+      className="text-[10px] uppercase tracking-[0.22em] font-bold px-2 py-1 rounded-md shrink-0"
+      style={{
+        background: "rgba(0,0,0,0.06)",
+        color: "rgba(0,0,0,0.6)",
+      }}
     >
-      <span aria-hidden style={{ opacity: 0.85 }}>{icon}</span>
       {label}
     </span>
   );
 }
 
-// ─── Quick reply dropdown ────────────────────────────────────────────────
-
-function QuickReplyDropdown({
-  options, onPick, busy,
-}: {
-  options: string[]; onPick: (body: string) => void; busy: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        disabled={busy}
-        className="text-[12px] font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-        style={{
-          background: "rgba(27,58,45,0.08)",
-          color: PALETTE.forest,
-          border: "1px solid rgba(27,58,45,0.10)",
-        }}
-      >
-        {busy ? "Sending…" : "Quick reply ▾"}
-      </button>
-      {open && !busy && (
-        <div
-          className="absolute z-30 right-0 mt-1.5 w-[300px] rounded-xl overflow-hidden"
-          style={{
-            background: "white",
-            border: `1px solid ${PALETTE.line}`,
-            boxShadow: "0 12px 28px -10px rgba(0,0,0,0.18)",
-            animation: "ss-flash-in 140ms ease-out",
-          }}
-        >
-          <div
-            className="px-3 py-2 text-[10px] uppercase tracking-[0.22em] font-semibold"
-            style={{ color: PALETTE.muted, borderBottom: `1px solid ${PALETTE.line}` }}
-          >
-            Quick reply
-          </div>
-          <ul>
-            {options.map((opt) => (
-              <li key={opt}>
-                <button
-                  type="button"
-                  onClick={() => { onPick(opt); setOpen(false); }}
-                  className="block w-full text-left text-[12.5px] px-3 py-2.5 transition"
-                  style={{ color: PALETTE.ink }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                >
-                  {opt}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Skeleton + empty ───────────────────────────────────────────────────
-
-function PriorityCardSkeleton() {
+function DealCardSkeleton() {
+  const { tokens } = useDashboardTheme();
   return (
     <div
-      className="rounded-2xl p-5 flex gap-4"
-      style={{ background: PALETTE.cardBg, boxShadow: `0 1px 0 ${PALETTE.line}` }}
+      className="rounded-2xl p-5"
+      style={{
+        background: tokens.tileBg,
+        boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+      }}
     >
-      <div className="w-16 h-16 rounded-full animate-pulse" style={{ background: PALETTE.lineSoft }} />
-      <div className="flex-1 space-y-2.5">
-        <div className="h-4 rounded animate-pulse w-1/3" style={{ background: PALETTE.lineSoft }} />
-        <div className="h-3 rounded animate-pulse w-2/3" style={{ background: PALETTE.lineSoft }} />
-        <div className="flex gap-1.5">
-          <div className="h-5 rounded animate-pulse w-16" style={{ background: PALETTE.lineSoft }} />
-          <div className="h-5 rounded animate-pulse w-20" style={{ background: PALETTE.lineSoft }} />
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-full animate-pulse" style={{ background: tokens.ring }} />
+        <div className="flex-1 space-y-2">
+          <div className="h-3.5 rounded w-1/2 animate-pulse" style={{ background: tokens.ring }} />
+          <div className="h-3 rounded w-3/4 animate-pulse" style={{ background: tokens.ring }} />
+          <div className="h-3 rounded w-1/3 animate-pulse" style={{ background: tokens.ring }} />
         </div>
       </div>
     </div>
   );
 }
 
+// ─── NEEDS FOLLOW-UP — list ────────────────────────────────────────────────
+
+function NeedsFollowupSection({
+  cards,
+  loadFailed,
+}: {
+  cards: ActivityCard[] | null;
+  loadFailed: boolean;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <section id="dash-followup">
+      <SectionHeader
+        title="Needs follow-up"
+        emoji="⚠️"
+        subtitle="Viewed but quiet for 48h+. A nudge is overdue."
+        count={cards?.length}
+      />
+      {loadFailed ? (
+        <EmptyCard message="Couldn't load. Refresh to try again." />
+      ) : cards === null ? (
+        <ListSkeleton rows={3} />
+      ) : cards.length === 0 ? (
+        <EmptyCard message="Nothing waiting on you. Every active deal has had recent attention." />
+      ) : (
+        <ul
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: tokens.tileBg,
+            boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+          }}
+        >
+          {cards.map((c, i) => (
+            <FollowupRow key={c.proposalId} card={c} divider={i > 0} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function FollowupRow({ card, divider }: { card: ActivityCard; divider: boolean }) {
+  const { tokens } = useDashboardTheme();
+  const tripSummary = card.title?.trim() || "Untitled proposal";
+  const sinceLabel = card.lastEventAt
+    ? `Viewed ${formatRelative(card.lastEventAt)}`
+    : "Viewed recently";
+  return (
+    <li
+      className="grid grid-cols-1 md:grid-cols-[1.4fr_1.6fr_1fr_auto] items-baseline gap-4 px-6 py-4 transition"
+      style={{ borderTop: divider ? `1px solid ${tokens.ring}` : "none" }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.primarySoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <div className="min-w-0">
+        <div
+          className="text-[14.5px] truncate"
+          style={{ color: tokens.heading, fontWeight: 700 }}
+        >
+          {card.client?.name ?? "Unknown client"}
+        </div>
+        <div
+          className="text-[11.5px] mt-0.5 truncate md:hidden"
+          style={{ color: tokens.muted }}
+        >
+          {tripSummary}
+        </div>
+      </div>
+      <div
+        className="text-[12.5px] truncate hidden md:block"
+        style={{ color: tokens.body }}
+      >
+        {tripSummary}
+      </div>
+      <div
+        className="text-[11.5px]"
+        style={{ color: tokens.muted }}
+      >
+        <div className="tabular-nums">{sinceLabel}</div>
+        <div className="opacity-75">No response yet</div>
+      </div>
+      <div className="shrink-0">
+        <PrimaryBtn href={`/studio/${card.proposalId}`}>Follow up</PrimaryBtn>
+      </div>
+    </li>
+  );
+}
+
+// ─── BOOKINGS — list ───────────────────────────────────────────────────────
+
+function BookingsSection({
+  rows,
+  loadFailed,
+}: {
+  rows: ReservationRow[] | null;
+  loadFailed: boolean;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <section id="dash-bookings">
+      <SectionHeader
+        title="New bookings"
+        emoji="💰"
+        subtitle="Reservations clients have submitted from their proposal."
+        count={rows?.length}
+      />
+      {loadFailed ? (
+        <EmptyCard message="Couldn't load. Refresh to try again." />
+      ) : rows === null ? (
+        <ListSkeleton rows={2} />
+      ) : rows.length === 0 ? (
+        <EmptyCard message="No bookings yet. New reservations land here the moment a client submits." />
+      ) : (
+        <ul
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: tokens.tileBg,
+            boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+          }}
+        >
+          {rows.map((r, i) => (
+            <BookingRow key={r.id} row={r} divider={i > 0} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean }) {
+  const { tokens } = useDashboardTheme();
+  const dates = `${formatShortDate(row.arrivalDate)} → ${formatShortDate(row.departureDate)}`;
+  const consultant =
+    row.assignedTo?.name?.trim() ||
+    row.assignedTo?.email?.split("@")[0] ||
+    "Unassigned";
+  const href = row.proposal ? `/studio/${row.proposal.id}` : "#";
+  return (
+    <li
+      className="grid grid-cols-1 md:grid-cols-[1.4fr_1.2fr_1fr_auto] items-baseline gap-4 px-6 py-4 transition"
+      style={{ borderTop: divider ? `1px solid ${tokens.ring}` : "none" }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.primarySoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <div className="min-w-0">
+        <div
+          className="text-[14.5px] truncate"
+          style={{ color: tokens.heading, fontWeight: 700 }}
+        >
+          {row.clientName}
+        </div>
+        <div
+          className="text-[11px] mt-0.5 truncate uppercase tracking-[0.06em]"
+          style={{ color: tokens.muted }}
+        >
+          {row.proposal?.trackingId ?? ""}
+        </div>
+      </div>
+      <div
+        className="text-[12.5px] tabular-nums whitespace-nowrap"
+        style={{ color: tokens.body }}
+      >
+        {dates}
+      </div>
+      <div
+        className="text-[12px] truncate"
+        style={{ color: tokens.muted }}
+      >
+        {consultant}
+      </div>
+      <div className="shrink-0">
+        <SecondaryBtn href={href}>View details</SecondaryBtn>
+      </div>
+    </li>
+  );
+}
+
+// ─── RIGHT — Activity feed ─────────────────────────────────────────────────
+
+function ActivityFeed({ events }: { events: RecentEvent[] | null }) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <section
+      className="rounded-2xl p-5"
+      style={{
+        background: tokens.tileBg,
+        boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <h3
+          className="text-[15px] font-semibold"
+          style={{
+            color: tokens.heading,
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
+        >
+          Client activity
+        </h3>
+      </div>
+
+      {events === null ? (
+        <ListSkeleton rows={4} compact />
+      ) : events.length === 0 ? (
+        <div className="py-6 text-[12.5px]" style={{ color: tokens.muted }}>
+          Quiet so far. Views, scrolls, and clicks land here as guests engage.
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {events.slice(0, 8).map((e) => (
+            <ActivityRow key={e.id} event={e} />
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4">
+        <Link
+          href="/analytics"
+          className="text-[12px] font-semibold inline-flex items-center gap-1"
+          style={{ color: tokens.primary }}
+        >
+          View all activity <span aria-hidden>→</span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function ActivityRow({ event }: { event: RecentEvent }) {
+  const { tokens } = useDashboardTheme();
+  const tone = activityTone(event.eventType);
+  const label = activityLabel(event);
+  return (
+    <li className="flex items-start gap-3">
+      <div
+        className="w-7 h-7 rounded-md flex items-center justify-center text-[12px] shrink-0 mt-0.5"
+        style={{ background: tone.bg, color: tone.fg }}
+        aria-hidden
+      >
+        {tone.glyph}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[12.5px] leading-snug truncate"
+          style={{ color: tokens.heading }}
+        >
+          {label}
+        </div>
+        {event.proposal && (
+          <div
+            className="text-[11px] truncate mt-0.5"
+            style={{ color: tokens.muted }}
+          >
+            {event.proposal.title || "Untitled proposal"} · {event.proposal.trackingId}
+          </div>
+        )}
+      </div>
+      <div
+        className="text-[10.5px] tabular-nums whitespace-nowrap shrink-0 mt-0.5"
+        style={{ color: tokens.muted }}
+      >
+        {formatRelative(event.at)}
+      </div>
+    </li>
+  );
+}
+
+// ─── RIGHT — Tasks card ────────────────────────────────────────────────────
+
+function TasksCard({
+  tasks,
+  counts,
+}: {
+  tasks: Task[] | null;
+  counts: { open: number; overdue: number } | null;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <section
+      className="rounded-2xl p-5"
+      style={{
+        background: tokens.tileBg,
+        boxShadow: `inset 0 0 0 1px ${tokens.ring}, ${tokens.shadow}`,
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <h3
+          className="text-[15px] font-semibold"
+          style={{
+            color: tokens.heading,
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
+        >
+          Today&apos;s tasks
+        </h3>
+        {counts && counts.overdue > 0 && (
+          <span
+            className="text-[10.5px] tabular-nums px-2 py-0.5 rounded-full font-semibold"
+            style={{ background: "#fee2e2", color: "#b91c1c" }}
+          >
+            {counts.overdue} overdue
+          </span>
+        )}
+      </div>
+
+      {tasks === null ? (
+        <ListSkeleton rows={3} compact />
+      ) : tasks.length === 0 ? (
+        <div
+          className="py-5 text-[12.5px] text-center"
+          style={{ color: tokens.muted }}
+        >
+          No open tasks. Add one from a deal.
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {tasks.slice(0, 6).map((t) => (
+            <TaskRow key={t.id} task={t} />
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4">
+        <PrimaryBtn href="/requests" full>
+          + Add task
+        </PrimaryBtn>
+      </div>
+    </section>
+  );
+}
+
+function TaskRow({ task }: { task: Task }) {
+  const { tokens } = useDashboardTheme();
+  const dueLabel = formatDueLabel(task.dueAt);
+  const tone = task.overdue ? "#b91c1c" : tokens.primary;
+  return (
+    <li>
+      <Link
+        href={task.request ? `/requests/${task.request.id}` : "#"}
+        className="block rounded-lg px-3 py-2 transition"
+        style={{ background: "transparent" }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = tokens.primarySoft;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <div className="flex items-start gap-2.5">
+          <div className="flex-1 min-w-0">
+            <div
+              className="text-[12.5px] font-medium truncate"
+              style={{ color: tokens.heading }}
+            >
+              {task.title}
+            </div>
+            <div
+              className="text-[10.5px] truncate mt-0.5"
+              style={{ color: tokens.muted }}
+            >
+              {task.request?.clientName ?? "—"}
+            </div>
+          </div>
+          <div
+            className="text-[10px] uppercase tracking-[0.18em] font-semibold shrink-0 mt-0.5"
+            style={{ color: tone }}
+          >
+            {task.overdue ? "Overdue" : dueLabel}
+          </div>
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+// ─── Reusable bits ─────────────────────────────────────────────────────────
+
+function SectionHeader({
+  title,
+  emoji,
+  subtitle,
+  count,
+}: {
+  title: string;
+  emoji: string;
+  subtitle: string;
+  count?: number;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <div className="flex items-baseline justify-between gap-3 mb-5">
+      <div className="min-w-0">
+        <h2
+          className="text-[22px] md:text-[26px] leading-[1.05]"
+          style={{
+            color: tokens.heading,
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontWeight: 700,
+            letterSpacing: "-0.018em",
+          }}
+        >
+          <span aria-hidden className="mr-2">
+            {emoji}
+          </span>
+          {title}
+          {typeof count === "number" && count > 0 && (
+            <span
+              className="ml-2.5 text-[12px] font-bold tabular-nums px-2.5 py-1 rounded-full align-middle"
+              style={{ background: tokens.primarySoft, color: tokens.primary }}
+            >
+              {count}
+            </span>
+          )}
+        </h2>
+        <div
+          className="text-[12.5px] mt-1.5"
+          style={{ color: tokens.muted }}
+        >
+          {subtitle}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrimaryBtn({
+  href,
+  children,
+  full = false,
+  emphasis = false,
+}: {
+  href: string;
+  children: React.ReactNode;
+  full?: boolean;
+  /** Boosts size, weight, and shadow so the button reads as the
+   *  dominant action on the card — used inside hot deal cards where
+   *  the primary CTA needs to feel decisive. */
+  emphasis?: boolean;
+}) {
+  const { tokens } = useDashboardTheme();
+  const sizeClass = emphasis
+    ? "px-5 h-11 rounded-xl text-[13.5px]"
+    : "px-3.5 h-9 rounded-lg text-[12.5px]";
+  const shadow = emphasis
+    ? `0 8px 22px -10px ${tokens.primary}, 0 2px 6px -2px rgba(13,38,32,0.18)`
+    : "none";
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center justify-center font-semibold transition active:scale-[0.97] ${sizeClass} ${
+        full ? "w-full" : ""
+      }`}
+      style={{
+        background: tokens.primary,
+        color: "#fff",
+        fontWeight: emphasis ? 700 : 600,
+        letterSpacing: emphasis ? "0.005em" : undefined,
+        boxShadow: shadow,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.filter = "brightness(1.08)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.filter = "none";
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function SecondaryBtn({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center justify-center px-3.5 h-9 rounded-lg text-[12.5px] font-semibold transition active:scale-[0.97]"
+      style={{
+        background: "transparent",
+        color: tokens.body,
+        border: `1px solid ${tokens.ring}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = tokens.ringHover;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = tokens.ring;
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+// Quieter than SecondaryBtn — text-only, no border. Used inside hot
+// deal cards so the eye lands first on the emphasised primary CTA;
+// "Follow up" is still discoverable but reads as a tertiary action.
+function GhostBtn({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center justify-center px-3 h-11 rounded-lg text-[12.5px] font-medium transition active:scale-[0.97]"
+      style={{ background: "transparent", color: tokens.muted }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.color = tokens.body;
+        e.currentTarget.style.background = tokens.primarySoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.color = tokens.muted;
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function EmptyCard({ message }: { message: string }) {
+  const { tokens } = useDashboardTheme();
   return (
     <div
-      className="rounded-2xl py-16 px-6 text-center text-[13px]"
-      style={{ background: PALETTE.cardBg, color: PALETTE.muted, boxShadow: `0 1px 0 ${PALETTE.line}` }}
+      className="rounded-2xl py-10 px-5 text-center text-[13px]"
+      style={{
+        background: tokens.tileBg,
+        color: tokens.muted,
+        boxShadow: `inset 0 0 0 1px ${tokens.ring}`,
+      }}
     >
       {message}
     </div>
   );
 }
 
-// ─── RIGHT — Task rail ──────────────────────────────────────────────────
-
-function CommandTaskRail({
-  tasksData, mobileOpen, onMobileClose,
-}: {
-  tasksData: TasksResponse | null;
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-}) {
-  const tasks = tasksData?.tasks ?? [];
+function ListSkeleton({ rows, compact = false }: { rows: number; compact?: boolean }) {
+  const { tokens } = useDashboardTheme();
   return (
-    <aside
-      className={`
-        z-40 w-[320px] border-l flex flex-col
-        fixed inset-y-0 right-0 transition-transform duration-200 ease-out
-        lg:static lg:transition-none lg:translate-x-0
-        ${mobileOpen ? "translate-x-0 shadow-2xl" : "translate-x-full"}
-      `}
-      style={{ background: PALETTE.cardBg, borderColor: PALETTE.line }}
+    <div
+      className={`rounded-2xl ${compact ? "p-0" : "p-5"} space-y-2.5`}
+      style={
+        compact
+          ? {}
+          : {
+              background: tokens.tileBg,
+              boxShadow: `inset 0 0 0 1px ${tokens.ring}`,
+            }
+      }
     >
-      <div className="px-5 py-5 border-b flex items-center justify-between gap-2" style={{ borderColor: PALETTE.line }}>
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] font-semibold" style={{ color: PALETTE.muted }}>
-            Today
-          </div>
-          <div className="text-[15px] font-semibold mt-0.5" style={{ color: PALETTE.ink }}>
-            {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {tasksData && tasksData.counts.overdue > 0 && (
-            <span
-              className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full tabular-nums"
-              style={{ background: "#fee2e2", color: PALETTE.hot }}
-            >
-              {tasksData.counts.overdue} overdue
-            </span>
-          )}
-          {/* Close button on mobile only — hidden on lg+ since the drawer is static there. */}
-          <button
-            type="button"
-            onClick={onMobileClose}
-            className="lg:hidden w-7 h-7 rounded-md flex items-center justify-center transition"
-            style={{ background: "transparent", color: PALETTE.muted }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            aria-label="Close tasks"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-              <path d="M3 3 L11 11 M11 3 L3 11" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {tasksData === null ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 rounded-lg animate-pulse" style={{ background: PALETTE.lineSoft }} />
-            ))}
-          </div>
-        ) : tasks.length === 0 ? (
-          <div className="py-12 text-center text-[12.5px]" style={{ color: PALETTE.muted }}>
-            No open tasks. Add one from a deal.
-          </div>
-        ) : (
-          <ul className="space-y-1.5">
-            {tasks.map((t) => <TaskRow key={t.id} task={t} />)}
-          </ul>
-        )}
-      </div>
-
-      <div className="border-t px-5 py-3" style={{ borderColor: PALETTE.line }}>
-        <Link
-          href="/requests"
-          className="text-[12.5px] font-semibold transition hover:underline"
-          style={{ color: PALETTE.forest }}
-        >
-          View all tasks →
-        </Link>
-      </div>
-    </aside>
-  );
-}
-
-function TaskRow({ task }: { task: Task }) {
-  const dueLabel = formatDueLabel(task.dueAt);
-  const priorityColor = task.overdue ? PALETTE.hot : PALETTE.forest;
-  return (
-    <li>
-      <Link
-        href={task.request ? `/requests/${task.request.id}` : "#"}
-        className="block group rounded-lg px-3 py-2.5 transition"
-        style={{ background: "transparent" }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-      >
-        <div className="flex items-start gap-3">
-          {/* Icon square */}
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="space-y-1.5">
           <div
-            className="shrink-0 mt-0.5 flex items-center justify-center"
-            style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: task.overdue ? "rgba(220,38,38,0.10)" : "rgba(27,58,45,0.08)",
-              color: priorityColor,
-            }}
-            aria-hidden
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="2.5" width="10" height="9" rx="1.5" />
-              <path d="M4.5 6.5 L6.5 8.5 L9.5 5" />
-            </svg>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-medium truncate" style={{ color: PALETTE.ink }}>
-              {task.title}
-            </div>
-            <div className="text-[11px] truncate mt-0.5" style={{ color: PALETTE.muted }}>
-              {task.request?.clientName ?? "—"}
-            </div>
-          </div>
-
-          <div className="shrink-0 text-right">
-            <div
-              className="text-[10px] font-semibold uppercase tracking-[0.16em] mb-0.5"
-              style={{ color: priorityColor }}
-            >
-              {task.overdue ? "Overdue" : (dueLabel === "Today" ? "Today" : dueLabel === "Tomorrow" ? "Tomorrow" : "Soon")}
-            </div>
-            <div className="text-[10px]" style={{ color: PALETTE.muted }}>
-              {dueLabel}
-            </div>
-          </div>
-        </div>
-      </Link>
-    </li>
-  );
-}
-
-// ─── New Reservations section ───────────────────────────────────────────
-//
-// Lightweight list of recent ProposalReservation rows. Default scope is
-// the calling consultant ("mine"); owners and admins get a Mine/All
-// toggle that flips the API filter. The point is visibility — a booking
-// landing in the DB has to be impossible to miss.
-
-function NewReservationsSection({
-  data,
-  scope,
-  onScopeChange,
-}: {
-  data: ReservationsResponse | null;
-  scope: "mine" | "all";
-  onScopeChange: (s: "mine" | "all") => void;
-}) {
-  const reservations = data?.reservations ?? [];
-  const canViewAll = data?.canViewAll ?? false;
-
-  return (
-    <section className="mt-8">
-      <div className="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
-        <div>
-          <h2
-            className="text-[18px] md:text-[20px] font-bold leading-tight"
-            style={{ color: PALETTE.ink, fontFamily: "'Playfair Display', serif" }}
-          >
-            New reservations
-            {data && reservations.length > 0 && (
-              <span
-                className="ml-2 text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full align-middle"
-                style={{ background: "rgba(27,58,45,0.10)", color: PALETTE.forest }}
-              >
-                {reservations.length}
-              </span>
-            )}
-          </h2>
-          <div className="text-[12px] mt-0.5" style={{ color: PALETTE.muted }}>
-            Bookings clients have submitted from their proposal.
-          </div>
-        </div>
-        {canViewAll && (
-          <div className="flex items-center gap-1.5">
-            <Pill
-              label="Mine"
-              count={0}
-              active={scope === "mine"}
-              onClick={() => onScopeChange("mine")}
-            />
-            <Pill
-              label="All"
-              count={0}
-              active={scope === "all"}
-              onClick={() => onScopeChange("all")}
-            />
-          </div>
-        )}
-      </div>
-
-      {data === null ? (
-        <div className="space-y-2">
-          {[1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-14 rounded-xl animate-pulse"
-              style={{ background: PALETTE.lineSoft }}
-            />
-          ))}
-        </div>
-      ) : reservations.length === 0 ? (
-        <EmptyCard
-          message={
-            scope === "mine"
-              ? "No reservations assigned to you yet. New bookings will land here the moment a client submits."
-              : "No reservations in this workspace yet."
-          }
-        />
-      ) : (
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{
-            background: PALETTE.cardBg,
-            boxShadow: `0 1px 0 ${PALETTE.line}, 0 4px 14px -8px rgba(13,38,32,0.10)`,
-          }}
-        >
-          <ul>
-            {reservations.map((r, i) => (
-              <ReservationRow key={r.id} row={r} divider={i > 0} />
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ReservationRow({ row, divider }: { row: ReservationRow; divider: boolean }) {
-  const dates = `${formatShortDate(row.arrivalDate)} → ${formatShortDate(row.departureDate)}`;
-  const assignee =
-    row.assignedTo?.name?.trim() ||
-    row.assignedTo?.email?.split("@")[0] ||
-    "Unassigned";
-  const tripTitle = row.proposal?.title?.trim() || "Untitled proposal";
-  const href = row.proposal ? `/studio/${row.proposal.id}` : "#";
-  return (
-    <li>
-      <Link
-        href={href}
-        className="grid grid-cols-1 md:grid-cols-[1.4fr_1.6fr_1.2fr_1fr_auto] gap-3 md:gap-4 items-baseline px-5 py-3.5 transition"
-        style={{
-          background: "transparent",
-          borderTop: divider ? `1px solid ${PALETTE.lineSoft}` : "none",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = PALETTE.lineSoft; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-      >
-        <div className="min-w-0">
+            className="h-3 rounded animate-pulse"
+            style={{ background: tokens.ring, width: `${50 + (i % 3) * 15}%` }}
+          />
           <div
-            className="text-[13.5px] font-semibold truncate"
-            style={{ color: PALETTE.ink }}
-          >
-            {row.clientName}
-          </div>
-          <div
-            className="text-[11px] mt-0.5 truncate md:hidden"
-            style={{ color: PALETTE.muted }}
-          >
-            {tripTitle}
-          </div>
+            className="h-2.5 rounded animate-pulse"
+            style={{ background: tokens.ring, width: `${30 + (i % 2) * 20}%` }}
+          />
         </div>
-        <div
-          className="text-[12.5px] truncate hidden md:block"
-          style={{ color: PALETTE.body }}
-          title={tripTitle}
-        >
-          {tripTitle}
-        </div>
-        <div
-          className="text-[12px] tabular-nums whitespace-nowrap"
-          style={{ color: PALETTE.body }}
-        >
-          {dates}
-        </div>
-        <div
-          className="text-[12px] truncate"
-          style={{ color: PALETTE.muted }}
-        >
-          {assignee}
-        </div>
-        <div
-          className="text-[11px] tabular-nums whitespace-nowrap text-right"
-          style={{ color: PALETTE.muted }}
-        >
-          {formatRelative(row.createdAt)}
-        </div>
-      </Link>
-    </li>
+      ))}
+    </div>
   );
 }
 
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
-// ─── Helpers ────────────────────────────────────────────────────────────
-
-function formatMoney(cents: number, currency: string): string {
-  if (!Number.isFinite(cents) || cents <= 0) return `${currency} 0`;
-  const dollars = cents / 100;
-  return `${currency} ${dollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+function scrollToId(id: string) {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function formatRelative(iso: string): string {
@@ -1664,6 +1566,12 @@ function formatRelative(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function formatDueLabel(iso: string | null): string {
   if (!iso) return "Anytime";
   const d = new Date(iso);
@@ -1671,16 +1579,75 @@ function formatDueLabel(iso: string | null): string {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfTomorrow = new Date(startOfToday);
   startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
-  const startOfDayAfter = new Date(startOfTomorrow);
-  startOfDayAfter.setDate(startOfDayAfter.getDate() + 1);
   if (d < startOfToday) return "Overdue";
   if (d < startOfTomorrow) return "Today";
+  const startOfDayAfter = new Date(startOfTomorrow);
+  startOfDayAfter.setDate(startOfDayAfter.getDate() + 1);
   if (d < startOfDayAfter) return "Tomorrow";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function formatDwell(seconds: number): string {
-  if (seconds < 60) return `${Math.floor(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
-  return `${(seconds / 3600).toFixed(1)}h`;
+// Splits the "why this is hot" line into two pieces so the action
+// can render bold and the timestamp can render light — gives a clear
+// "Started reservation • 30m ago" read instead of one undifferentiated
+// muted string.
+function formatActivityReason(
+  eventType: string | null,
+  lastEventAt: string | null,
+): { action: string; when: string } {
+  const when = lastEventAt ? formatRelative(lastEventAt) : "recently";
+  switch (eventType) {
+    case "price_viewed":
+      return { action: "Viewed pricing", when };
+    case "itinerary_clicked":
+      return { action: "Tapped itinerary", when };
+    case "proposal_scrolled":
+      return { action: "Read past 40%", when };
+    case "proposal_viewed":
+      return { action: "Opened proposal", when };
+    case "reservation_started":
+      return { action: "Started reservation", when };
+    case "reservation_completed":
+      return { action: "Confirmed booking", when };
+    default:
+      return { action: "Last touch", when };
+  }
+}
+
+function activityLabel(event: RecentEvent): string {
+  const who = event.client?.name?.split(" ")[0] ?? "A guest";
+  switch (event.eventType) {
+    case "proposal_viewed":
+      return `${who} opened the proposal`;
+    case "proposal_scrolled":
+      return `${who} read past the hero`;
+    case "itinerary_clicked":
+      return `${who} tapped an itinerary day`;
+    case "price_viewed":
+      return `${who} viewed pricing`;
+    case "reservation_started":
+      return `${who} started a booking`;
+    case "reservation_completed":
+      return `${who} confirmed a booking`;
+    default:
+      return `${who} engaged`;
+  }
+}
+
+function activityTone(eventType: string): { bg: string; fg: string; glyph: string } {
+  switch (eventType) {
+    case "price_viewed":
+      return { bg: "rgba(201,168,76,0.18)", fg: "#a1822f", glyph: "$" };
+    case "itinerary_clicked":
+      return { bg: "rgba(27,58,45,0.10)", fg: "#1b3a2d", glyph: "📍" };
+    case "reservation_started":
+      return { bg: "rgba(27,58,45,0.10)", fg: "#1b3a2d", glyph: "📅" };
+    case "reservation_completed":
+      return { bg: "#dcfce7", fg: "#166534", glyph: "✓" };
+    case "proposal_scrolled":
+      return { bg: "rgba(0,0,0,0.04)", fg: "rgba(0,0,0,0.6)", glyph: "↕" };
+    case "proposal_viewed":
+    default:
+      return { bg: "rgba(27,58,45,0.10)", fg: "#1b3a2d", glyph: "👁" };
+  }
 }
