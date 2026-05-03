@@ -10,6 +10,7 @@ import {
   useDashboardTheme,
   type DashboardTokens,
 } from "./DashboardTheme";
+import { PipelineStrip, type PipelineData } from "./PipelineStrip";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -63,6 +64,7 @@ type ActivityResponse = {
   needsFollowup: ActivityCard[];
   recentActivity: RecentEvent[];
   reservations: ReservationRow[];
+  pipeline: PipelineData | null;
   scope: "mine" | "all";
   canViewAll: boolean;
 };
@@ -233,13 +235,20 @@ function CommandCenterShell() {
       )}
 
       <main className="px-5 py-5 md:px-7 md:py-6 min-w-0 space-y-5">
-        <CommandTopBar onOpenSidebar={() => setMobileNavOpen(true)} />
-
-        <Hero
-          activity={activity}
-          loadFailed={loadFailed}
+        <CommandTopBar
+          onOpenSidebar={() => setMobileNavOpen(true)}
           scope={activityScope}
           onScopeChange={setActivityScope}
+          canViewAll={activity?.canViewAll ?? false}
+        />
+
+        {/* Live Pipeline Strip — replaces the old Hot/Follow-up/
+            Pipeline-$ stat tiles with a connected five-stage view of
+            the deal journey. Same dark gradient as the previous hero
+            so the page rhythm is unchanged. */}
+        <PipelineStrip
+          data={activity?.pipeline ?? null}
+          loading={!activity && !loadFailed}
         />
 
         {/* Dense 2-col content grid: left = hot + (followup | bookings),
@@ -419,7 +428,17 @@ function SidebarItem({
 
 // ─── TOP BAR — greeting + search + notifications + theme toggle ────────────
 
-function CommandTopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
+function CommandTopBar({
+  onOpenSidebar,
+  scope,
+  onScopeChange,
+  canViewAll,
+}: {
+  onOpenSidebar: () => void;
+  scope: "mine" | "all";
+  onScopeChange: (s: "mine" | "all") => void;
+  canViewAll: boolean;
+}) {
   const { user } = useUser();
   const { tokens } = useDashboardTheme();
   const greetingName = (user?.firstName ?? user?.username ?? "").trim();
@@ -480,6 +499,30 @@ function CommandTopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* Scope toggle — owner/admin only. Lives in the top bar
+            now that the Hero is gone (the PipelineStrip used to host
+            it via the old Hero component). Plain members never see
+            it; the API silently downgrades any "all" they pass. */}
+        {canViewAll && (
+          <div
+            className="inline-flex items-center gap-1 rounded-full p-0.5"
+            style={{
+              background: tokens.tileBg,
+              border: `1px solid ${tokens.ring}`,
+            }}
+          >
+            <ScopeToggleButton
+              active={scope === "mine"}
+              onClick={() => onScopeChange("mine")}
+              label="Mine"
+            />
+            <ScopeToggleButton
+              active={scope === "all"}
+              onClick={() => onScopeChange("all")}
+              label="Team"
+            />
+          </div>
+        )}
         <IconBtn label="Search (⌘K)" onClick={openCommandPalette}>
           <SearchIcon />
         </IconBtn>
@@ -489,6 +532,31 @@ function CommandTopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <ThemeToggle />
       </div>
     </div>
+  );
+}
+
+function ScopeToggleButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  const { tokens } = useDashboardTheme();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-2.5 h-7 rounded-full text-[11.5px] font-semibold transition-colors duration-150"
+      style={{
+        background: active ? tokens.primary : "transparent",
+        color: active ? "#fff" : tokens.muted,
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -558,172 +626,6 @@ function BellIcon() {
       <path d="M3.5 11.5h9l-1.2-2v-3a3.3 3.3 0 0 0-6.6 0v3l-1.2 2Z" />
       <path d="M6.5 13.2a1.6 1.6 0 0 0 3 0" />
     </svg>
-  );
-}
-
-// ─── HERO ──────────────────────────────────────────────────────────────────
-
-function Hero({
-  activity,
-  loadFailed,
-  scope,
-  onScopeChange,
-}: {
-  activity: ActivityResponse | null;
-  loadFailed: boolean;
-  scope: "mine" | "all";
-  onScopeChange: (s: "mine" | "all") => void;
-}) {
-  const { tokens } = useDashboardTheme();
-
-  const hotCount = activity?.hot.length ?? 0;
-  const followupCount = activity?.needsFollowup.length ?? 0;
-  const reservationsCount = activity?.reservations.length ?? 0;
-  const canViewAll = activity?.canViewAll ?? false;
-
-  return (
-    <section
-      className="relative overflow-hidden rounded-xl px-6 py-4 md:px-7 md:py-5"
-      style={{
-        background: tokens.heroBg,
-        boxShadow: "0 8px 24px -14px rgba(13,38,32,0.5)",
-      }}
-    >
-      {/* Subtle corner glow only — dot grid removed for crispness. */}
-      <div
-        aria-hidden
-        className="absolute right-0 bottom-0 w-1/2 h-full pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse at 100% 100%, rgba(212,183,101,0.18) 0%, transparent 55%)`,
-        }}
-      />
-
-      <div className="relative flex items-center gap-5 flex-wrap lg:flex-nowrap">
-        {/* Eyebrow + scope toggle — vertical stack on the left so the
-            stats own the centre of the hero. */}
-        <div className="shrink-0">
-          <div
-            className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.26em] font-semibold whitespace-nowrap"
-            style={{ color: tokens.accent }}
-          >
-            <span aria-hidden>🔥</span> Today&apos;s focus
-          </div>
-          {canViewAll && (
-            <div
-              className="mt-2 inline-flex items-center gap-1 rounded-full p-0.5"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-            >
-              <ScopePill active={scope === "mine"} onClick={() => onScopeChange("mine")} label="Mine" />
-              <ScopePill active={scope === "all"} onClick={() => onScopeChange("all")} label="Team" />
-            </div>
-          )}
-        </div>
-
-        {/* Stats — three numbers inline, the visual centre of the hero. */}
-        <div className="flex items-center gap-6 md:gap-9 flex-1 min-w-0">
-          <Stat label="Hot" value={hotCount} loading={!activity && !loadFailed} />
-          <Divider />
-          <Stat label="Follow-up" value={followupCount} loading={!activity && !loadFailed} />
-          <Divider />
-          <Stat label="Bookings" value={reservationsCount} loading={!activity && !loadFailed} />
-        </div>
-
-        {/* CTAs — pinned right, never wrap below stats on lg+. */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={() => scrollToId("dash-hot-deals")}
-            disabled={hotCount === 0}
-            className="px-3.5 h-9 rounded-md text-[12.5px] font-semibold transition-[filter,transform,background] duration-[120ms] ease-out disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
-            style={{ background: tokens.accent, color: "#1a1a1a" }}
-          >
-            View hot deals →
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("dash-followup")}
-            className="px-3.5 h-9 rounded-md text-[12.5px] font-semibold text-white transition-[filter,transform,background] duration-[120ms] ease-out hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
-            style={{
-              background: "rgba(255,255,255,0.1)",
-              border: "1px solid rgba(255,255,255,0.22)",
-            }}
-          >
-            Send follow-ups
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// Hairline between hero stats so the three numbers read as a row of
-// linked metrics rather than disconnected blocks.
-function Divider() {
-  return (
-    <div
-      aria-hidden
-      className="w-px h-9 shrink-0"
-      style={{ background: "rgba(255,255,255,0.12)" }}
-    />
-  );
-}
-
-function Stat({
-  label,
-  value,
-  loading,
-}: {
-  label: string;
-  value: number;
-  loading: boolean;
-}) {
-  return (
-    <div className="min-w-0">
-      <div
-        className="text-[9px] uppercase tracking-[0.20em] font-semibold text-white/45"
-      >
-        {label}
-      </div>
-      <div
-        className="mt-0.5 leading-[0.95] tabular-nums text-white"
-        style={{
-          fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: "clamp(34px, 4.4vw, 46px)",
-          fontWeight: 800,
-          letterSpacing: "-0.025em",
-        }}
-      >
-        {loading ? (
-          <span className="inline-block w-12 h-9 rounded animate-pulse bg-white/10" />
-        ) : (
-          value
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ScopePill({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-3 py-1 rounded-full text-[11.5px] font-semibold transition"
-      style={{
-        background: active ? "rgba(255,255,255,0.95)" : "transparent",
-        color: active ? "#1b3a2d" : "rgba(255,255,255,0.78)",
-      }}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -1649,12 +1551,6 @@ function ListSkeleton({ rows, compact = false }: { rows: number; compact?: boole
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-function scrollToId(id: string) {
-  if (typeof document === "undefined") return;
-  const el = document.getElementById(id);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
 function formatRelative(iso: string): string {
   const d = new Date(iso);

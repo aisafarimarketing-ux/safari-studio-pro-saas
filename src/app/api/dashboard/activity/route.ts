@@ -248,11 +248,78 @@ export async function GET(req: Request) {
       : null,
   }));
 
+  // ── Pipeline strip data ────────────────────────────────────────────────
+  // Five-stage live pipeline: Draft → Sent → Viewed → Booking requested
+  // → Confirmed. Counts the actual rows in each stage right now (not a
+  // window — the dashboard cares about current state, not historical
+  // funnel). Hot deals attached so the strip can flag them inline.
+  // Reservation totals (all + confirmed) are computed from a separate
+  // count query because the reservationsRaw above is capped at
+  // GROUP_LIMIT for the rendered list.
+  const [proposalCounts, totalReservationsRaw, confirmedReservationsRaw] = await Promise.all([
+    prisma.proposal.groupBy({
+      by: ["status"],
+      where: {
+        organizationId: orgId,
+        ...(scope === "mine" ? { userId: myUserId } : {}),
+      },
+      _count: { _all: true },
+    }),
+    prisma.proposalReservation.count({
+      where: {
+        organizationId: orgId,
+        ...(scope === "mine" ? { assignedUserId: myUserId } : {}),
+      },
+    }),
+    prisma.proposalReservation.count({
+      where: {
+        organizationId: orgId,
+        status: "confirmed",
+        ...(scope === "mine" ? { assignedUserId: myUserId } : {}),
+      },
+    }),
+  ]);
+
+  const proposalsByStatus = Object.fromEntries(
+    proposalCounts.map((p) => [p.status, p._count._all]),
+  );
+  const draftCount = proposalsByStatus.draft ?? 0;
+  // "Sent" includes accepted — once a proposal is sent it stays in
+  // that bucket until it accumulates a booking, regardless of whether
+  // the operator later flipped its status to "accepted".
+  const sentCount = (proposalsByStatus.sent ?? 0) + (proposalsByStatus.accepted ?? 0);
+  // "Viewed" reads from the full unfiltered summaries (already pulled
+  // above) — count rows with at least one view.
+  const viewedCount = summariesRaw.filter((s) => s.viewedCount > 0).length;
+  const hotDealsCount = hot.length;
+
+  // Conversion lines between adjacent stages. Floor at 0 so a 0/0
+  // edge case shows 0% rather than NaN. Each percentage is forward-
+  // looking: how much of the previous stage made it to the next.
+  const conv = (curr: number, prev: number): number =>
+    prev > 0 ? Math.min(1, curr / prev) : 0;
+
+  const pipeline = {
+    draft: draftCount,
+    sent: sentCount,
+    viewed: viewedCount,
+    bookingRequested: totalReservationsRaw,
+    confirmed: confirmedReservationsRaw,
+    hotDeals: hotDealsCount,
+    conversion: {
+      draftToSent: conv(sentCount, draftCount + sentCount),
+      sentToViewed: conv(viewedCount, sentCount),
+      viewedToBooking: conv(totalReservationsRaw, viewedCount),
+      bookingToConfirmed: conv(confirmedReservationsRaw, totalReservationsRaw),
+    },
+  };
+
   return NextResponse.json({
     hot,
     needsFollowup,
     recentActivity,
     reservations,
+    pipeline,
     scope,
     canViewAll,
   });
