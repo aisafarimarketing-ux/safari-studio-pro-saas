@@ -17,12 +17,23 @@ export function GreetingSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant;
   const body = section.content.body as string;
+  const tripStyleLabel = trip.tripStyle?.trim();
+  const availabilityNote =
+    (section.content.availabilityNote as string) ||
+    "Camps on this route fill quickly during peak dates — we're holding this plan based on current availability.";
+  const consultantCredit =
+    (section.content.consultantCredit as string) ||
+    `Designed by ${operator.consultantName || "your consultant"}${tripStyleLabel ? `, who plans ${tripStyleLabel.toLowerCase()} routes` : ""}, based on current camp availability and seasonal movement.`;
 
   // The greeting body now supports inline color + font-size (rich-text
   // toolbar). Save innerHTML, sanitised to the allow-list, so the
   // toolbar's spans round-trip through preview / share / PDF.
   const onBodyChange = (next: string) =>
     updateSectionContent(section.id, { body: next });
+  const onAvailabilityNoteChange = (next: string) =>
+    updateSectionContent(section.id, { availabilityNote: next });
+  const onConsultantCreditChange = (next: string) =>
+    updateSectionContent(section.id, { consultantCredit: next });
 
   const aiButton = isEditor ? (
     <div className="absolute top-14 right-4 z-[35]">
@@ -58,6 +69,12 @@ export function GreetingSection({ section }: { section: Section }) {
             <div className="text-small" style={{ color: tokens.mutedText }}>
               {operator.companyName}
             </div>
+            <ConsultantCredit
+              value={consultantCredit}
+              isEditor={isEditor}
+              tokens={tokens}
+              onChange={onConsultantCreditChange}
+            />
             <div className="mt-8 w-8" style={{ height: "2px", background: tokens.accent, opacity: 0.3 }} />
           </div>
 
@@ -69,6 +86,12 @@ export function GreetingSection({ section }: { section: Section }) {
             >
               A note from your consultant
             </div>
+            <AvailabilityNote
+              value={availabilityNote}
+              isEditor={isEditor}
+              tokens={tokens}
+              onChange={onAvailabilityNoteChange}
+            />
             <BigQuote theme={theme} tokens={tokens} />
             <RichEditable
               isEditor={isEditor}
@@ -97,6 +120,13 @@ export function GreetingSection({ section }: { section: Section }) {
           >
             Welcome
           </div>
+          <AvailabilityNote
+            value={availabilityNote}
+            isEditor={isEditor}
+            tokens={tokens}
+            onChange={onAvailabilityNoteChange}
+            align="center"
+          />
           <RichEditable
             isEditor={isEditor}
             as="div"
@@ -106,11 +136,20 @@ export function GreetingSection({ section }: { section: Section }) {
             style={{ color: tokens.headingText, fontFamily: `'${theme.displayFont}', serif` }}
             dataAttrs={{ "data-ai-editable": "greeting" }}
           />
-          <div className="mt-12 inline-flex items-center gap-3">
-            <ConsultantAvatar operator={operator} tokens={tokens} size={32} textSize="text-small" />
-            <span className="text-small font-medium" style={{ color: tokens.headingText }}>
-              {operator.consultantName}
-            </span>
+          <div className="mt-12 inline-flex flex-col items-center gap-2">
+            <div className="inline-flex items-center gap-3">
+              <ConsultantAvatar operator={operator} tokens={tokens} size={32} textSize="text-small" />
+              <span className="text-small font-medium" style={{ color: tokens.headingText }}>
+                {operator.consultantName}
+              </span>
+            </div>
+            <ConsultantCredit
+              value={consultantCredit}
+              isEditor={isEditor}
+              tokens={tokens}
+              onChange={onConsultantCreditChange}
+              align="center"
+            />
           </div>
         </div>
       </div>
@@ -131,6 +170,12 @@ export function GreetingSection({ section }: { section: Section }) {
             >
               A personal note
             </div>
+            <AvailabilityNote
+              value={availabilityNote}
+              isEditor={isEditor}
+              tokens={tokens}
+              onChange={onAvailabilityNoteChange}
+            />
             <RichEditable
               isEditor={isEditor}
               as="div"
@@ -149,6 +194,12 @@ export function GreetingSection({ section }: { section: Section }) {
                 <div className="text-label" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
                   {operator.companyName}
                 </div>
+                <ConsultantCredit
+                  value={consultantCredit}
+                  isEditor={isEditor}
+                  tokens={tokens}
+                  onChange={onConsultantCreditChange}
+                />
               </div>
             </div>
           </div>
@@ -168,6 +219,13 @@ export function GreetingSection({ section }: { section: Section }) {
         >
           A personal note
         </div>
+
+        <AvailabilityNote
+          value={availabilityNote}
+          isEditor={isEditor}
+          tokens={tokens}
+          onChange={onAvailabilityNoteChange}
+        />
 
         <BigQuote theme={theme} tokens={tokens} />
 
@@ -193,6 +251,12 @@ export function GreetingSection({ section }: { section: Section }) {
             <div className="text-label" style={{ color: tokens.mutedText, textTransform: "none", letterSpacing: "0", fontWeight: 400 }}>
               {operator.companyName}
             </div>
+            <ConsultantCredit
+              value={consultantCredit}
+              isEditor={isEditor}
+              tokens={tokens}
+              onChange={onConsultantCreditChange}
+            />
           </div>
         </div>
       </div>
@@ -201,6 +265,66 @@ export function GreetingSection({ section }: { section: Section }) {
 }
 
 // ─── Shared bits ────────────────────────────────────────────────────────────
+
+function AvailabilityNote({
+  value,
+  isEditor,
+  tokens,
+  onChange,
+  align = "left",
+}: {
+  value: string;
+  isEditor: boolean;
+  tokens: { mutedText: string };
+  onChange: (next: string) => void;
+  align?: "left" | "center";
+}) {
+  return (
+    <p
+      className="text-[12.5px] italic leading-relaxed -mt-8 mb-10 outline-none"
+      style={{
+        color: tokens.mutedText,
+        textAlign: align,
+        maxWidth: align === "center" ? undefined : "44ch",
+      }}
+      contentEditable={isEditor}
+      suppressContentEditableWarning
+      onBlur={(e) => onChange(e.currentTarget.textContent ?? "")}
+    >
+      {value}
+    </p>
+  );
+}
+
+function ConsultantCredit({
+  value,
+  isEditor,
+  tokens,
+  onChange,
+  align = "left",
+}: {
+  value: string;
+  isEditor: boolean;
+  tokens: { mutedText: string };
+  onChange: (next: string) => void;
+  align?: "left" | "center";
+}) {
+  return (
+    <p
+      className="text-[11.5px] leading-relaxed mt-2 outline-none"
+      style={{
+        color: tokens.mutedText,
+        textAlign: align,
+        maxWidth: align === "center" ? undefined : "48ch",
+      }}
+      contentEditable={isEditor}
+      suppressContentEditableWarning
+      onBlur={(e) => onChange(e.currentTarget.textContent ?? "")}
+    >
+      {value}
+    </p>
+  );
+}
 
 function ConsultantAvatar({
   operator,

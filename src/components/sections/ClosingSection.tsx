@@ -260,7 +260,13 @@ export function ClosingSection({ section }: { section: Section }) {
     "Now please review every section and let me know what needs adjusting — lodge choices, pace, optional activities, anything. I'll hold these camp dates while you confirm. Once you're ready, we'll move to booking and I'll send the detailed pre-trip briefing and packing list.";
   const availability =
     (section.content.availability as string) ||
-    "Availability at selected camps is limited and subject to confirmation.";
+    "Camps on this route fill quickly during peak dates — we're holding this plan based on current availability.";
+  const socialProof =
+    (section.content.socialProof as string) ||
+    "Often chosen for its balance of wildlife and pace.";
+  const nextSteps =
+    (section.content.nextSteps as string) ||
+    "Secure your safari → we confirm within hours → deposit secures your dates.";
   const ctaLabel =
     (section.content.ctaLabel as string) || PRIMARY_CTA_DEFAULT;
   const ctaBg = section.content.ctaBg as string | undefined;
@@ -375,6 +381,10 @@ export function ClosingSection({ section }: { section: Section }) {
     updateSectionContent(section.id, { letter: v });
   const onAvailabilityChange = (v: string) =>
     updateSectionContent(section.id, { availability: v });
+  const onSocialProofChange = (v: string) =>
+    updateSectionContent(section.id, { socialProof: v });
+  const onNextStepsChange = (v: string) =>
+    updateSectionContent(section.id, { nextSteps: v });
   const onCtaLabelChange = (v: string) =>
     updateSectionContent(section.id, { ctaLabel: v });
   const onCtaBgChange = (next: { bg: string; textColor: string }) =>
@@ -408,6 +418,8 @@ export function ClosingSection({ section }: { section: Section }) {
     headline,
     letter,
     availability,
+    socialProof,
+    nextSteps,
     ctaLabel,
     ctaBg,
     ctaTextColor,
@@ -430,6 +442,8 @@ export function ClosingSection({ section }: { section: Section }) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
     onCtaBgChange,
     onChangeCardImage,
@@ -490,6 +504,8 @@ interface VariantProps {
   headline: string;
   letter: string;
   availability: string;
+  socialProof: string;
+  nextSteps: string;
   ctaLabel: string;
   ctaBg?: string;
   ctaTextColor?: string;
@@ -514,6 +530,8 @@ interface VariantProps {
   onHeadlineChange: (v: string) => void;
   onLetterChange: (v: string) => void;
   onAvailabilityChange: (v: string) => void;
+  onSocialProofChange: (v: string) => void;
+  onNextStepsChange: (v: string) => void;
   onCtaLabelChange: (v: string) => void;
   onCtaBgChange: (next: { bg: string; textColor: string }) => void;
   onChangeCardImage: (id: string | number, file: File) => void;
@@ -560,7 +578,11 @@ function SafariReadyLayout(p: VariantProps) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
+    socialProof,
+    nextSteps,
     onCtaBgChange,
   } = p;
 
@@ -617,6 +639,17 @@ function SafariReadyLayout(p: VariantProps) {
         >
           {availability}
         </p>
+        {(socialProof || isEditor) && (
+          <p
+            className="mt-1.5 text-[12px] italic outline-none"
+            style={{ color: "#7a5d2e", opacity: 0.85 }}
+            contentEditable={isEditor}
+            suppressContentEditableWarning
+            onBlur={(e) => onSocialProofChange(e.currentTarget.textContent ?? "")}
+          >
+            {socialProof}
+          </p>
+        )}
       </div>
 
       {/* ── Folder card. Slight rotation so it reads as an object. ── */}
@@ -775,6 +808,8 @@ function SafariReadyLayout(p: VariantProps) {
               ctaBg={ctaBg ?? "#2a1d08"}
               ctaTextColor={ctaTextColor ?? "#f4ede0"}
               onCtaBgChange={onCtaBgChange}
+              subtext={nextSteps}
+              onSubtextChange={onNextStepsChange}
             />
           </div>
         </div>
@@ -879,7 +914,11 @@ function EditorialCloseLayout(p: VariantProps) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
+    socialProof,
+    nextSteps,
     onCtaBgChange,
     onChangeThemeImage,
     onResetThemeImage,
@@ -1005,6 +1044,12 @@ function EditorialCloseLayout(p: VariantProps) {
           >
             {availability}
           </p>
+          <SocialProofLine
+            value={socialProof}
+            isEditor={isEditor}
+            tokens={tokens}
+            onChange={onSocialProofChange}
+          />
 
           {/* Primary CTA + secondary actions */}
           <div className="mt-8 flex flex-col items-center">
@@ -1018,6 +1063,8 @@ function EditorialCloseLayout(p: VariantProps) {
                 ctaBg={ctaBg}
                 ctaTextColor={ctaTextColor}
                 onCtaBgChange={onCtaBgChange}
+                subtext={nextSteps}
+                onSubtextChange={onNextStepsChange}
               />
             </div>
             <div className="w-full max-w-2xl">
@@ -1066,7 +1113,11 @@ function SplitCardLayout(p: VariantProps) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
+    socialProof,
+    nextSteps,
     onCtaBgChange,
     onChangeCardImage,
     ctaBg,
@@ -1128,6 +1179,12 @@ function SplitCardLayout(p: VariantProps) {
           >
             {availability}
           </p>
+          <SocialProofLine
+            value={socialProof}
+            isEditor={isEditor}
+            tokens={tokens}
+            onChange={onSocialProofChange}
+          />
         </div>
 
         {/* Centered primary CTA + spread secondary actions */}
@@ -1142,6 +1199,8 @@ function SplitCardLayout(p: VariantProps) {
               ctaBg={ctaBg}
               ctaTextColor={ctaTextColor}
               onCtaBgChange={onCtaBgChange}
+              subtext={nextSteps}
+              onSubtextChange={onNextStepsChange}
             />
           </div>
           <SecondaryActions
@@ -1185,7 +1244,11 @@ function GalleryRowLayout(p: VariantProps) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
+    socialProof,
+    nextSteps,
     onCtaBgChange,
     onChangeCardImage,
     ctaBg,
@@ -1246,6 +1309,12 @@ function GalleryRowLayout(p: VariantProps) {
           >
             {availability}
           </p>
+          <SocialProofLine
+            value={socialProof}
+            isEditor={isEditor}
+            tokens={tokens}
+            onChange={onSocialProofChange}
+          />
         </div>
 
         <div className="w-full max-w-3xl mt-6 flex flex-col items-center">
@@ -1259,6 +1328,8 @@ function GalleryRowLayout(p: VariantProps) {
               ctaBg={ctaBg}
               ctaTextColor={ctaTextColor}
               onCtaBgChange={onCtaBgChange}
+              subtext={nextSteps}
+              onSubtextChange={onNextStepsChange}
             />
           </div>
           <SecondaryActions
@@ -1302,7 +1373,11 @@ function StackLayout(p: VariantProps) {
     onHeadlineChange,
     onLetterChange,
     onAvailabilityChange,
+    onSocialProofChange,
+    onNextStepsChange,
     onCtaLabelChange,
+    socialProof,
+    nextSteps,
     onCtaBgChange,
     onChangeCardImage,
     ctaBg,
@@ -1369,6 +1444,12 @@ function StackLayout(p: VariantProps) {
           >
             {availability}
           </p>
+          <SocialProofLine
+            value={socialProof}
+            isEditor={isEditor}
+            tokens={tokens}
+            onChange={onSocialProofChange}
+          />
 
           <div className="mt-8 flex flex-col items-center">
             <div className="w-full max-w-md">
@@ -1381,6 +1462,8 @@ function StackLayout(p: VariantProps) {
                 ctaBg={ctaBg}
                 ctaTextColor={ctaTextColor}
                 onCtaBgChange={onCtaBgChange}
+                subtext={nextSteps}
+                onSubtextChange={onNextStepsChange}
               />
             </div>
             <SecondaryActions
@@ -1413,6 +1496,8 @@ function PrimaryCta({
   ctaBg,
   ctaTextColor,
   onCtaBgChange,
+  subtext,
+  onSubtextChange,
 }: {
   label: string;
   isEditor: boolean;
@@ -1422,6 +1507,8 @@ function PrimaryCta({
   ctaBg?: string;
   ctaTextColor?: string;
   onCtaBgChange?: (next: { bg: string; textColor: string }) => void;
+  subtext?: string;
+  onSubtextChange?: (v: string) => void;
 }) {
   // Per-section overrides for the "Secure This Safari" button. Operators
   // asked for full control of this colour (it's the most clicked thing
@@ -1495,7 +1582,49 @@ function PrimaryCta({
           </div>
         </div>
       )}
+      {(subtext || isEditor) && (
+        <p
+          className="mt-2.5 text-[12px] leading-snug text-center outline-none"
+          style={{ color: tokens.mutedText }}
+          contentEditable={isEditor && !!onSubtextChange}
+          suppressContentEditableWarning
+          onBlur={
+            onSubtextChange
+              ? (e) => onSubtextChange(e.currentTarget.textContent ?? "")
+              : undefined
+          }
+        >
+          {subtext}
+        </p>
+      )}
     </div>
+  );
+}
+
+function SocialProofLine({
+  value,
+  isEditor,
+  tokens,
+  onChange,
+  align = "center",
+}: {
+  value: string;
+  isEditor: boolean;
+  tokens: ThemeTokens;
+  onChange: (v: string) => void;
+  align?: "left" | "center";
+}) {
+  if (!value && !isEditor) return null;
+  return (
+    <p
+      className="text-[12px] italic leading-relaxed mt-2 outline-none"
+      style={{ color: tokens.mutedText, textAlign: align }}
+      contentEditable={isEditor}
+      suppressContentEditableWarning
+      onBlur={(e) => onChange(e.currentTarget.textContent ?? "")}
+    >
+      {value}
+    </p>
   );
 }
 

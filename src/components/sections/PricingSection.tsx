@@ -92,6 +92,9 @@ export function PricingSection({ section }: { section: Section }) {
   const termsLabel =
     (section.content.termsLabel as string) || "Download full terms & conditions";
   const termsUrl = (section.content.termsUrl as string) || "";
+  const valueFraming =
+    (section.content.valueFraming as string) ||
+    "Includes private guiding, hand-picked lodges, and seamless internal transfers — arranged end-to-end.";
 
   return (
     <div
@@ -123,6 +126,21 @@ export function PricingSection({ section }: { section: Section }) {
             Breakdown of Costs
           </h2>
         </header>
+
+        {/* Value framing — sets context before the price lands. */}
+        <p
+          className="-mt-6 max-w-2xl text-[13.5px] italic leading-relaxed outline-none"
+          style={{ color: tokens.mutedText, fontFamily: `'${theme.bodyFont}', sans-serif` }}
+          contentEditable={isEditor}
+          suppressContentEditableWarning
+          onBlur={(e) =>
+            updateSectionContent(section.id, {
+              valueFraming: e.currentTarget.textContent ?? "",
+            })
+          }
+        >
+          {valueFraming}
+        </p>
 
         {/* ── 2 · Breakdown card ─────────────────────────────── */}
         <section>
