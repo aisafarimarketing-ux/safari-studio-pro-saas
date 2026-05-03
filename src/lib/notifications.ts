@@ -9,7 +9,32 @@ import { sendEmail, renderBrandedEmail } from "@/lib/mailer";
 // Non-blocking: every call is wrapped in try/catch so a mailer hiccup
 // never surfaces as a 500 on the action the user just took.
 
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+// Resolve the public origin used by every email link. NEXT_PUBLIC_APP_URL
+// is the canonical var; PUBLIC_BASE_URL is honoured as a fallback so a
+// half-configured Railway env doesn't ship broken-host links like
+// `http:///studio/<id>` (the bug that surfaced on 2026-05-03).
+const APP_URL = ((): string => {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.PUBLIC_BASE_URL,
+  ];
+  for (const raw of candidates) {
+    const v = (raw || "").trim().replace(/\/+$/, "");
+    if (!v) continue;
+    // Reject obviously malformed values — anything without a scheme
+    // would produce a relative href in the email client. Better to
+    // silently fall back to "no link" than to ship a broken button.
+    if (!/^https?:\/\//i.test(v)) {
+      console.warn(
+        "[notifications] App URL env var is set but missing http(s) scheme — ignoring:",
+        v,
+      );
+      continue;
+    }
+    return v;
+  }
+  return "";
+})();
 
 type PrefKey = "newRequest" | "requestAssigned";
 
@@ -35,8 +60,10 @@ async function recipientsForOrg(
     .map((m) => ({ email: m.user!.email as string, name: m.user!.name ?? null, userId: m.userId }));
 }
 
-function requestUrl(requestId: string): string {
-  if (!APP_URL) return `/requests/${requestId}`;
+// Returns null when APP_URL is unset, so callers know to suppress the
+// CTA button entirely rather than render a broken-host href.
+function requestUrl(requestId: string): string | null {
+  if (!APP_URL) return null;
   return `${APP_URL}/requests/${requestId}`;
 }
 
@@ -73,7 +100,7 @@ export async function notifyNewRequest(params: {
       preview: `New enquiry from ${params.clientName ?? params.clientEmail}`,
       body,
       ctaLabel: "Open the request",
-      ctaHref: requestUrl(params.requestId),
+      ctaHref: requestUrl(params.requestId) ?? undefined,
     });
 
     // Fan out as individual sends so delivery failures are isolated.
@@ -138,7 +165,7 @@ export async function notifyAssignment(params: {
       preview: `${assignerName} assigned ${params.clientName ?? params.clientEmail} to you`,
       body,
       ctaLabel: "Open the request",
-      ctaHref: requestUrl(params.requestId),
+      ctaHref: requestUrl(params.requestId) ?? undefined,
     });
 
     await sendEmail({
@@ -179,7 +206,7 @@ export async function notifyOverdue(params: {
       preview: `A request assigned to you has been quiet for ${params.hoursStale}h`,
       body,
       ctaLabel: "Open the request",
-      ctaHref: requestUrl(params.requestId),
+      ctaHref: requestUrl(params.requestId) ?? undefined,
     });
 
     await sendEmail({
@@ -368,10 +395,10 @@ export async function notifyReservationReceived(params: {
       ),
     );
 
-    const studioUrl = APP_URL
-      ? `${APP_URL}/studio/${params.proposalId}`
-      : `/studio/${params.proposalId}`;
-    const dashboardUrl = APP_URL ? `${APP_URL}/dashboard` : `/dashboard`;
+    // Null when no public origin is configured — the CTA block below
+    // suppresses the buttons rather than ship a broken-host href.
+    const studioUrl = APP_URL ? `${APP_URL}/studio/${params.proposalId}` : null;
+    const dashboardUrl = APP_URL ? `${APP_URL}/dashboard` : null;
 
     // Re-usable section header — small uppercase eyebrow above each
     // grouped block. Inline so every email client renders it.
@@ -449,7 +476,12 @@ export async function notifyReservationReceived(params: {
         </tr>
       </table>
 
-      <!-- CTAs -->
+      <!-- CTAs — rendered only when an absolute APP_URL is configured.
+           Without one, the buttons would carry a relative href that
+           email clients try to upgrade to "http:///studio/<id>" and
+           refuse to open. Operator instead reads the body and opens
+           Safari Studio manually. -->
+      ${studioUrl && dashboardUrl ? `
       <table cellpadding="0" cellspacing="0" role="presentation" style="margin:22px 0 0;">
         <tr>
           <td style="padding-right:6px;">
@@ -463,7 +495,10 @@ export async function notifyReservationReceived(params: {
             </a>
           </td>
         </tr>
-      </table>`;
+      </table>` : `
+      <p style="margin:22px 0 0;font-size:12.5px;color:rgba(0,0,0,0.55);">
+        Open Safari Studio to confirm this booking.
+      </p>`}`;
 
     const html = renderBrandedEmail({
       title: "🔥 New reservation request — ready to confirm",

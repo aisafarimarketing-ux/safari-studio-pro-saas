@@ -20,10 +20,32 @@ import { upsertContact, addContactTags, type GhlContactInput } from "./contacts"
 // errors land in console.warn + an IntegrationLog skip row when the
 // workflow id isn't mapped.
 
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+// Same fallback as src/lib/notifications.ts — prefer NEXT_PUBLIC_APP_URL,
+// fall back to PUBLIC_BASE_URL, and only accept absolute http(s) values.
+// Anything else returns "" so callers can suppress the URL rather than
+// ship a relative href into a third-party workflow.
+const APP_URL = ((): string => {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.PUBLIC_BASE_URL,
+  ];
+  for (const raw of candidates) {
+    const v = (raw || "").trim().replace(/\/+$/, "");
+    if (!v) continue;
+    if (!/^https?:\/\//i.test(v)) continue;
+    return v;
+  }
+  return "";
+})();
 
 function proposalShareUrl(proposalId: string): string {
   if (APP_URL) return `${APP_URL}/p/${proposalId}`;
+  // No public origin configured. Returning a relative path would put a
+  // broken link into the GHL workflow's customData; logging once per
+  // call surfaces the misconfig in Railway logs without throwing.
+  console.warn(
+    `[ghl/workflowEvents] APP_URL missing — proposalShareUrl(${proposalId}) fell back to relative path. Set NEXT_PUBLIC_APP_URL or PUBLIC_BASE_URL.`,
+  );
   return `/p/${proposalId}`;
 }
 
