@@ -208,10 +208,21 @@ function Hero() {
             </div>
 
             <div
-              className="mt-4 text-[12.5px]"
-              style={{ color: "rgba(255,255,255,0.45)" }}
+              className="mt-4 flex items-center gap-4 text-[12px] flex-wrap"
+              style={{ color: "rgba(255,255,255,0.5)" }}
             >
-              No credit card required · Live demo loads in 10 seconds
+              <span className="inline-flex items-center gap-1.5">
+                <Bullet />
+                No credit card
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Bullet />
+                Setup in 10 minutes
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Bullet />
+                Cancel anytime
+              </span>
             </div>
           </div>
 
@@ -223,11 +234,11 @@ function Hero() {
   );
 }
 
-// Stylised hero-side preview of the dashboard. Built from a stack of
-// distinct sub-cards (greeting + KPIs · hot deal · activity feed ·
-// bookings preview) inside a single dark container so it reads as a
-// real product surface — layered cards with their own borders and
-// shadows, not a flat panel.
+// Stylised hero-side preview of the dashboard. Mirrors the real
+// product layout: greeting strip → 3 separate KPI cards (counts +
+// pipeline value) → 2-col content (left: hot deals · followup ·
+// bookings; right: activity feed · tasks). Reads as a miniature
+// of the actual /dashboard rather than a single-column stack.
 function DashboardMockup() {
   const subBg = "rgba(255,255,255,0.03)";
   const subBorder = "rgba(255,255,255,0.09)";
@@ -247,7 +258,7 @@ function DashboardMockup() {
       />
 
       <div
-        className="relative rounded-2xl p-3.5"
+        className="relative rounded-2xl p-3"
         style={{
           background: "rgba(10,22,18,0.92)",
           border: `1px solid ${containerBorder}`,
@@ -255,255 +266,266 @@ function DashboardMockup() {
             "0 24px 48px -16px rgba(0,0,0,0.7), 0 8px 16px -8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
-        {/* ── Sub-card 1: greeting + KPI row ─────────────────────── */}
-        <div
-          className="rounded-xl p-3.5"
-          style={{ background: subBg, border: `1px solid ${subBorder}` }}
-        >
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div>
-              <div
-                className="text-[9.5px] uppercase tracking-[0.22em] font-semibold"
-                style={{ color: GOLD }}
-              >
-                Today
-              </div>
-              <div
-                className="mt-0.5 text-white text-[15.5px]"
-                style={{ fontFamily: SERIF, fontWeight: 600, letterSpacing: "-0.005em" }}
-              >
-                Good morning, Alex.
-              </div>
+        {/* ── Greeting strip ─────────────────────────────────────── */}
+        <div className="flex items-center justify-between gap-3 px-1 pt-1 pb-3">
+          <div>
+            <div
+              className="text-[9px] uppercase tracking-[0.22em] font-semibold"
+              style={{ color: GOLD }}
+            >
+              Today
             </div>
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold"
+              className="mt-0.5 text-white text-[14px]"
+              style={{ fontFamily: SERIF, fontWeight: 600, letterSpacing: "-0.005em" }}
+            >
+              Good morning, Alex.
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div
+              className="w-7 h-7 rounded-md flex items-center justify-center text-[12px]"
+              style={{
+                background: subBg,
+                border: `1px solid ${subBorder}`,
+                color: "rgba(255,255,255,0.55)",
+              }}
+              aria-hidden
+            >
+              ◔
+            </div>
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-[10.5px] font-bold"
               style={{ background: GREEN, color: "#fff" }}
               aria-hidden
             >
               AO
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-0">
-            <Kpi label="Hot" value="12" tone="hot" />
-            <Kpi label="Follow-up" value="3" tone="warn" divider />
-            <Kpi label="Bookings" value="8" tone="ok" divider />
-          </div>
         </div>
 
-        {/* ── Sub-card 2: active deal — DOMINANT card ───────────── */}
-        {/* Brighter surface, red glow halo, larger padding so the
-            VERY HOT deal owns the visual hierarchy of the mockup. */}
-        <div className="relative mt-3">
-          <div
-            aria-hidden
-            className="absolute -inset-1 rounded-xl pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(ellipse at 0% 50%, rgba(220,38,38,0.20) 0%, transparent 70%)",
-            }}
-          />
-          <div
-            className="relative rounded-xl overflow-hidden"
-            style={{
-              background: "rgba(255,255,255,0.06)",
-              border: `1px solid rgba(220,38,38,0.42)`,
-              boxShadow: "0 6px 16px -6px rgba(220,38,38,0.32)",
-            }}
-          >
-            <div
-              aria-hidden
-              className="absolute left-0 top-0 bottom-0 w-[4px]"
-              style={{ background: "#dc2626" }}
-            />
-            <div className="p-4 pl-5">
-              <div className="flex items-start gap-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px] shrink-0"
-                  style={{ background: GREEN, color: "#fff" }}
-                  aria-hidden
-                >
-                  L
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <div className="text-white text-[14px] font-semibold truncate">
-                      Lilian Nyongesa
-                    </div>
-                    <span
-                      className="text-[8.5px] uppercase tracking-[0.20em] font-bold px-1.5 py-0.5 rounded shrink-0"
-                      style={{
-                        background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
-                        color: "#fff",
-                        boxShadow: "0 2px 8px -2px rgba(220,38,38,0.45)",
-                      }}
-                    >
-                      Very hot
-                    </span>
-                  </div>
-                  <div
-                    className="text-[11.5px] truncate mt-1"
-                    style={{ color: "rgba(255,255,255,0.65)" }}
-                  >
-                    Migration Safari · Mara &amp; Serengeti · 9 days
-                  </div>
-                  <div
-                    className="text-[11.5px] mt-1.5 flex items-center gap-1.5"
-                  >
-                    <span
-                      className="inline-block w-1.5 h-1.5 rounded-full"
-                      style={{ background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.22)" }}
-                    />
-                    <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
-                    <span style={{ color: "rgba(255,255,255,0.42)" }}>· 32m ago</span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div
-                    className="text-[26px] leading-none tabular-nums text-white"
-                    style={{ fontFamily: SERIF, fontWeight: 800, letterSpacing: "-0.025em" }}
-                  >
-                    142
-                  </div>
-                  <div
-                    className="text-[8.5px] uppercase tracking-[0.20em] font-semibold mt-1"
-                    style={{ color: "rgba(255,255,255,0.5)" }}
-                  >
-                    score
-                  </div>
-                </div>
-              </div>
+        {/* ── KPI row — three separate cards ─────────────────────── */}
+        <div className="grid grid-cols-3 gap-2">
+          <KpiCard label="Hot deals" value="12" tone="hot" />
+          <KpiCard label="Follow-up" value="5" tone="warn" />
+          <KpiCard label="Pipeline" value="$124K" tone="ok" gold />
+        </div>
 
+        {/* ── 2-col content grid ─────────────────────────────────── */}
+        <div className="mt-2 grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2">
+          {/* LEFT — Hot deal · Followup · Bookings */}
+          <div className="min-w-0 space-y-2">
+            {/* Hot deal — DOMINANT */}
+            <div className="relative">
               <div
-                className="mt-3.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10.5px]"
+                aria-hidden
+                className="absolute -inset-1 rounded-xl pointer-events-none"
                 style={{
-                  background: "rgba(47,143,70,0.18)",
-                  color: "#9CD9A8",
-                  border: "1px solid rgba(47,143,70,0.36)",
+                  background:
+                    "radial-gradient(ellipse at 0% 50%, rgba(220,38,38,0.18) 0%, transparent 70%)",
+                }}
+              />
+              <div
+                className="relative rounded-xl overflow-hidden"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(220,38,38,0.40)",
+                  boxShadow: "0 6px 14px -6px rgba(220,38,38,0.30)",
                 }}
               >
-                <span
-                  className="text-[8px] uppercase tracking-[0.20em] font-bold"
-                  style={{ opacity: 0.75 }}
-                >
-                  Next
-                </span>
-                <span style={{ fontWeight: 600 }}>Answer pricing questions</span>
+                <div
+                  aria-hidden
+                  className="absolute left-0 top-0 bottom-0 w-[3px]"
+                  style={{ background: "#dc2626" }}
+                />
+                <div className="p-3 pl-3.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div
+                      className="text-[10px] font-semibold"
+                      style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}
+                    >
+                      🔥 Hot deals
+                    </div>
+                    <div className="text-[9.5px] font-semibold" style={{ color: GOLD, opacity: 0.85 }}>
+                      View all →
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[12px] shrink-0"
+                      style={{ background: GREEN, color: "#fff" }}
+                      aria-hidden
+                    >
+                      L
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="text-white text-[12px] font-semibold truncate">
+                          Lilian Nyongesa
+                        </div>
+                        <span
+                          className="text-[7.5px] uppercase tracking-[0.18em] font-bold px-1 py-0.5 rounded shrink-0"
+                          style={{
+                            background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
+                            color: "#fff",
+                          }}
+                        >
+                          Very hot
+                        </span>
+                      </div>
+                      <div
+                        className="text-[10px] flex items-center gap-1 mt-0.5"
+                      >
+                        <span
+                          className="inline-block w-1 h-1 rounded-full"
+                          style={{ background: "#16a34a", boxShadow: "0 0 0 2px rgba(22,163,74,0.22)" }}
+                        />
+                        <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
+                        <span style={{ color: "rgba(255,255,255,0.42)" }}>· 32m</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div
+                        className="text-[20px] leading-none tabular-nums text-white"
+                        style={{ fontFamily: SERIF, fontWeight: 800, letterSpacing: "-0.025em" }}
+                      >
+                        142
+                      </div>
+                      <div
+                        className="text-[7.5px] uppercase tracking-[0.20em] font-semibold mt-0.5"
+                        style={{ color: "rgba(255,255,255,0.5)" }}
+                      >
+                        score
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* ── Sub-card 3: activity feed (supporting tier) ───────── */}
-        {/* Lower-opacity surface + smaller text so the eye lands on
-            the dominant hot deal first; this is supporting context. */}
-        <div
-          className="mt-2.5 rounded-xl p-3"
-          style={{
-            background: "rgba(255,255,255,0.02)",
-            border: `1px solid rgba(255,255,255,0.06)`,
-            opacity: 0.92,
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
+            {/* Needs follow-up */}
             <div
-              className="text-[10.5px]"
+              className="rounded-xl p-2.5"
               style={{
-                fontFamily: SERIF,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.78)",
+                background: subBg,
+                border: "1px solid rgba(217,119,6,0.20)",
               }}
             >
-              Client activity
-            </div>
-            <div
-              className="text-[10px] font-semibold"
-              style={{ color: GOLD, opacity: 0.85 }}
-            >
-              View all →
-            </div>
-          </div>
-          {/* Slightly varied vertical gaps make the feed feel real
-              rather than mechanically gridded. */}
-          <div className="space-y-[7px]">
-            <ActivityLine
-              glyph="$"
-              tone="amber"
-              label="Marcus viewed pricing"
-              sub="The Anderson Family"
-              time="1h"
-              fresh
-            />
-            <ActivityLine
-              glyph="◉"
-              tone="green"
-              label="Priya tapped Day 4"
-              sub="Honeymoon Migration"
-              time="2h"
-            />
-            <ActivityLine
-              glyph="✓"
-              tone="success"
-              label="Booking confirmed"
-              sub="Devereux Family"
-              time="4h"
-            />
-            <ActivityLine
-              glyph="◇"
-              tone="green"
-              label="Sarah opened proposal"
-              sub="Beach &amp; Bush"
-              time="5h"
-            />
-          </div>
-        </div>
-
-        {/* ── Sub-card 4: bookings preview (supporting tier) ────── */}
-        <div
-          className="mt-2 rounded-xl p-3"
-          style={{
-            background: "rgba(255,255,255,0.02)",
-            border: `1px solid rgba(255,255,255,0.06)`,
-            opacity: 0.92,
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div
-                className="text-[10.5px]"
-                style={{
-                  fontFamily: SERIF,
-                  fontWeight: 600,
-                  color: "rgba(255,255,255,0.78)",
-                }}
-              >
-                New bookings
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}>
+                  ⚠️ Needs follow-up
+                </div>
+                <span
+                  className="text-[8.5px] tabular-nums font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(217,119,6,0.18)", color: "#fbbf24" }}
+                >
+                  5
+                </span>
               </div>
-              <span
-                className="text-[9px] tabular-nums font-bold px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(47,143,70,0.18)", color: "#9CD9A8" }}
-              >
-                3
-              </span>
+              <FollowupMini name="Joshua Chen" sub="Viewed 3d ago · no reply" />
+              <FollowupMini name="Marcus &amp; Tara Reid" sub="Viewed 2d ago · no reply" />
             </div>
+
+            {/* New bookings */}
             <div
-              className="text-[10px] font-semibold"
-              style={{ color: GOLD, opacity: 0.85 }}
+              className="rounded-xl p-2.5"
+              style={{ background: subBg, border: `1px solid ${subBorder}` }}
             >
-              View all →
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}>
+                  💰 New bookings
+                </div>
+                <span
+                  className="text-[8.5px] tabular-nums font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(47,143,70,0.18)", color: "#9CD9A8" }}
+                >
+                  3
+                </span>
+              </div>
+              <BookingPreview
+                isNew
+                client="Sam &amp; Lily Wong"
+                dates="2 Jul → 11 Jul"
+              />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <BookingPreview
-              isNew
-              client="The Devereux Family"
-              dates="14 Jun → 23 Jun"
-            />
-            <BookingPreview
-              client="Sam &amp; Lily Wong"
-              dates="2 Jul → 11 Jul"
-            />
+          {/* RIGHT — Activity feed · Tasks */}
+          <div className="min-w-0 space-y-2">
+            <div
+              className="rounded-xl p-2.5"
+              style={{
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}>
+                  Client activity
+                </div>
+                <div className="text-[9.5px] font-semibold" style={{ color: GOLD, opacity: 0.85 }}>
+                  View all →
+                </div>
+              </div>
+              {/* Slightly varied gaps so the feed feels live, not gridded. */}
+              <div className="space-y-[7px]">
+                <ActivityLine
+                  glyph="$"
+                  tone="amber"
+                  label="Marcus viewed pricing"
+                  sub="Anderson Family"
+                  time="1h"
+                  fresh
+                />
+                <ActivityLine
+                  glyph="◉"
+                  tone="green"
+                  label="Priya tapped Day 4"
+                  sub="Honeymoon"
+                  time="2h"
+                />
+                <ActivityLine
+                  glyph="✓"
+                  tone="success"
+                  label="Booking confirmed"
+                  sub="Devereux"
+                  time="4h"
+                />
+                <ActivityLine
+                  glyph="◇"
+                  tone="green"
+                  label="Sarah opened proposal"
+                  sub="Beach &amp; Bush"
+                  time="5h"
+                />
+              </div>
+            </div>
+
+            {/* Today's tasks */}
+            <div
+              className="rounded-xl p-2.5"
+              style={{
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}>
+                  Today&rsquo;s tasks
+                </div>
+                <span
+                  className="text-[8.5px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(220,38,38,0.18)", color: "#fca5a5" }}
+                >
+                  2 due
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <TaskMini label="Follow up with Lilian" due="Today" overdue />
+                <TaskMini label="Send revised quote" due="Today" />
+                <TaskMini label="Confirm Mara dates" due="Tomorrow" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -511,29 +533,47 @@ function DashboardMockup() {
   );
 }
 
-function Kpi({
+// Tiny green dot used as a microcopy bullet under the hero CTAs.
+function Bullet() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block w-1.5 h-1.5 rounded-full"
+      style={{ background: "#16a34a", boxShadow: "0 0 0 2px rgba(22,163,74,0.18)" }}
+    />
+  );
+}
+
+function KpiCard({
   label,
   value,
   tone,
-  divider = false,
+  gold = false,
 }: {
   label: string;
   value: string;
   tone: "hot" | "warn" | "ok";
-  divider?: boolean;
+  /** When true, the value renders gold and a faint gold wash behind
+   *  the card lifts it as the "money" KPI (e.g. pipeline value). */
+  gold?: boolean;
 }) {
   const accent =
     tone === "hot" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#22c55e";
   return (
     <div
-      className="px-3"
+      className="rounded-xl px-3 py-2.5 relative overflow-hidden"
       style={{
-        borderLeft: divider ? "1px solid rgba(255,255,255,0.08)" : "none",
+        background: gold
+          ? "linear-gradient(135deg, rgba(215,183,91,0.12) 0%, rgba(255,255,255,0.03) 100%)"
+          : "rgba(255,255,255,0.04)",
+        border: gold
+          ? "1px solid rgba(215,183,91,0.30)"
+          : "1px solid rgba(255,255,255,0.09)",
       }}
     >
       <div
-        className="text-[8.5px] uppercase tracking-[0.20em] font-semibold flex items-center gap-1.5"
-        style={{ color: "rgba(255,255,255,0.5)" }}
+        className="text-[8.5px] uppercase tracking-[0.22em] font-semibold flex items-center gap-1.5"
+        style={{ color: "rgba(255,255,255,0.55)" }}
       >
         <span
           aria-hidden
@@ -543,15 +583,79 @@ function Kpi({
         {label}
       </div>
       <div
-        className="mt-0.5 text-white tabular-nums leading-none"
+        className="mt-1 tabular-nums leading-none"
         style={{
           fontFamily: SERIF,
-          fontSize: 30,
+          fontSize: 26,
           fontWeight: 800,
           letterSpacing: "-0.025em",
+          color: gold ? GOLD : "#fff",
         }}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+// Compact follow-up row for the hero mockup. Two-line — name + meta.
+function FollowupMini({ name, sub }: { name: string; sub: string }) {
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <span
+        aria-hidden
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{ background: "#f59e0b" }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] truncate text-white" style={{ fontWeight: 600 }}>
+          {name.includes("&amp;") ? (
+            <span dangerouslySetInnerHTML={{ __html: name }} />
+          ) : (
+            name
+          )}
+        </div>
+        <div
+          className="text-[9.5px] truncate mt-0.5"
+          style={{ color: "rgba(255,255,255,0.5)" }}
+        >
+          {sub}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Compact task row for the hero mockup. Checkbox + label + due chip.
+function TaskMini({
+  label,
+  due,
+  overdue = false,
+}: {
+  label: string;
+  due: string;
+  overdue?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden
+        className="w-3.5 h-3.5 rounded-[3px] shrink-0"
+        style={{
+          border: "1px solid rgba(255,255,255,0.32)",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] truncate text-white" style={{ fontWeight: 500 }}>
+          {label}
+        </div>
+      </div>
+      <div
+        className="text-[9px] uppercase tracking-[0.16em] font-semibold shrink-0"
+        style={{ color: overdue ? "#fca5a5" : "rgba(255,255,255,0.5)" }}
+      >
+        {overdue ? "Overdue" : due}
       </div>
     </div>
   );
