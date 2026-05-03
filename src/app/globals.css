@@ -209,9 +209,9 @@
    pure white), brand accents lifted toward sage / dust-gold so they
    stay legible against the deep bg. */
 [data-dashboard-theme="dark"] {
-  --bg-primary:        #0d1612;
-  --bg-card:           #131c17;
-  --bg-card-hover:     rgba(212, 231, 218, 0.06);
+  --bg-primary:        #0a1411;
+  --bg-card:           #182722;
+  --bg-card-hover:     rgba(212, 231, 218, 0.08);
   --bg-hero:           linear-gradient(135deg, #1f4334 0%, #0d1612 100%);
 
   --text-primary:      rgba(232, 238, 233, 0.96);

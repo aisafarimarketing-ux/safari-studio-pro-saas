@@ -680,21 +680,21 @@ function Stat({
   return (
     <div className="min-w-0">
       <div
-        className="text-[9.5px] uppercase tracking-[0.22em] font-semibold text-white/55"
+        className="text-[9px] uppercase tracking-[0.20em] font-semibold text-white/45"
       >
         {label}
       </div>
       <div
-        className="mt-1 leading-[0.95] tabular-nums text-white"
+        className="mt-0.5 leading-[0.95] tabular-nums text-white"
         style={{
           fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: "clamp(28px, 3.6vw, 38px)",
+          fontSize: "clamp(34px, 4.4vw, 46px)",
           fontWeight: 800,
-          letterSpacing: "-0.022em",
+          letterSpacing: "-0.025em",
         }}
       >
         {loading ? (
-          <span className="inline-block w-10 h-8 rounded animate-pulse bg-white/10" />
+          <span className="inline-block w-12 h-9 rounded animate-pulse bg-white/10" />
         ) : (
           value
         )}
@@ -756,7 +756,10 @@ function HotDealsSection({
           <DealCardSkeleton />
         </CardGrid>
       ) : visible.length === 0 ? (
-        <EmptyCard message="Quiet right now. New hot deals appear here as engagement builds." />
+        <EmptyCard
+          message="Quiet right now. Send a proposal — hot deals show up here as guests engage."
+          cta={{ label: "Open proposals", href: "/proposals" }}
+        />
       ) : (
         <CardGrid>
           {visible.map((c) => (
@@ -782,16 +785,21 @@ function DealCard({ card }: { card: ActivityCard }) {
   const isFresh = isRecent(card.lastEventAt, 10 * 60_000);
   const statusLabel = isVeryHot ? "VERY HOT" : isHot ? "HOT" : card.status.toUpperCase();
 
-  // Crisp 1px outer border instead of the warm wash. Hot cards
-  // signal status via a 3px left accent strip + the StatusPill, not a
-  // background gradient — keeps every card's edge sharp and lets the
-  // grid read as a clean row of tiles.
+  // Hot cards signal status via a thick left accent strip + a
+  // tinted border + the StatusPill. Strip is 4px on hot (vs 0 on
+  // neutral) so the urgency reads at a glance even before the eye
+  // resolves the score.
   const accentStrip = isVeryHot
     ? "#dc2626"
     : isHot
-      ? "rgba(220,38,38,0.55)"
+      ? "rgba(220,38,38,0.65)"
       : "transparent";
-  const border = isHot || isVeryHot ? "rgba(220,38,38,0.22)" : tokens.ringHover;
+  const stripWidth = isHot || isVeryHot ? 4 : 0;
+  const border = isVeryHot
+    ? "rgba(220,38,38,0.35)"
+    : isHot
+      ? "rgba(220,38,38,0.22)"
+      : tokens.ringHover;
 
   // VERY HOT cards animate the ss-hot-pulse keyframe (existing).
   // "Just touched" deals (event in the last ~10min) get ss-fresh.
@@ -818,8 +826,8 @@ function DealCard({ card }: { card: ActivityCard }) {
           card body, so the surface stays calm and contrast stays high. */}
       <div
         aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-[3px]"
-        style={{ background: accentStrip }}
+        className="absolute left-0 top-0 bottom-0"
+        style={{ background: accentStrip, width: stripWidth }}
       />
 
       <div className="flex items-start gap-3">
@@ -880,18 +888,36 @@ function DealCard({ card }: { card: ActivityCard }) {
         </div>
       </div>
 
+      {/* Next action chip — explicitly labelled so the operator
+          always knows what to do next on this deal at a glance,
+          without having to read the activity line and guess. */}
+      <div
+        className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] max-w-full"
+        style={{
+          background: tokens.primarySoft,
+          color: tokens.primary,
+          border: `1px solid ${tokens.ring}`,
+        }}
+      >
+        <span
+          className="text-[9px] uppercase tracking-[0.18em] font-bold shrink-0"
+          style={{ opacity: 0.7 }}
+        >
+          Next
+        </span>
+        <span
+          className="font-semibold truncate"
+          title={card.nextAction}
+        >
+          {card.nextAction}
+        </span>
+      </div>
+
       <div className="mt-3 flex items-center gap-2">
         <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
           Open proposal
         </PrimaryBtn>
         <GhostBtn href={`/studio/${card.proposalId}`}>Follow up</GhostBtn>
-        <div
-          className="ml-auto text-[11px] truncate min-w-0"
-          style={{ color: tokens.muted }}
-          title={card.nextAction}
-        >
-          <span className="font-semibold">Next:</span> {card.nextAction}
-        </div>
       </div>
     </article>
   );
@@ -1022,7 +1048,10 @@ function NeedsFollowupSection({
           className="rounded-xl overflow-hidden"
           style={{
             background: tokens.tileBg,
-            border: `1px solid ${tokens.ring}`,
+            // Subtle amber-tinted border to read as a soft warning
+            // without screaming. Distinct from hot deals' red
+            // urgency and bookings' neutral surface.
+            border: `1px solid rgba(217,119,6,0.20)`,
             boxShadow: tokens.shadow,
           }}
         >
@@ -1099,7 +1128,10 @@ function BookingsSection({
       ) : visible === undefined ? (
         <ListSkeleton rows={2} />
       ) : visible.length === 0 ? (
-        <EmptyCard message="No bookings yet." />
+        <EmptyCard
+          message="No bookings yet. Share a proposal so a guest can request to book."
+          cta={{ label: "Open proposals", href: "/proposals" }}
+        />
       ) : (
         <ul
           className={`rounded-xl ${overflowsScroll ? "overflow-y-auto" : "overflow-hidden"}`}
@@ -1125,23 +1157,44 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
   const { tokens } = useDashboardTheme();
   const dates = `${formatShortDate(row.arrivalDate)} → ${formatShortDate(row.departureDate)}`;
   const href = row.proposal ? `/studio/${row.proposal.id}` : "#";
+  // Bookings created in the last 24h get a NEW chip + a slightly
+  // tinted background. The accent surfaces "newest first" without
+  // changing the list order or adding a separate section.
+  const isNew = isRecent(row.createdAt, 24 * 3_600_000);
   return (
     <li
       className="flex items-center gap-3 px-3.5 py-2.5 transition"
-      style={{ borderTop: divider ? `1px solid ${tokens.ring}` : "none" }}
+      style={{
+        borderTop: divider ? `1px solid ${tokens.ring}` : "none",
+        background: isNew ? "rgba(22,163,74,0.06)" : "transparent",
+      }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = tokens.primarySoft;
+        e.currentTarget.style.background = isNew
+          ? "rgba(22,163,74,0.10)"
+          : tokens.primarySoft;
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.background = isNew
+          ? "rgba(22,163,74,0.06)"
+          : "transparent";
       }}
     >
       <div className="flex-1 min-w-0">
-        <div
-          className="text-[13px] truncate"
-          style={{ color: tokens.heading, fontWeight: 600 }}
-        >
-          {row.clientName}
+        <div className="flex items-center gap-1.5">
+          {isNew && (
+            <span
+              className="text-[8.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
+              style={{ background: "#dcfce7", color: "#166534" }}
+            >
+              New
+            </span>
+          )}
+          <div
+            className="text-[13px] truncate"
+            style={{ color: tokens.heading, fontWeight: 600 }}
+          >
+            {row.clientName}
+          </div>
         </div>
         <div
           className="text-[11px] truncate mt-0.5 tabular-nums"
@@ -1151,7 +1204,7 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
         </div>
       </div>
       <div className="shrink-0">
-        <SecondaryBtn href={href}>View</SecondaryBtn>
+        <SecondaryBtn href={href}>Open booking</SecondaryBtn>
       </div>
     </li>
   );
@@ -1193,8 +1246,20 @@ function ActivityFeed({ events }: { events: RecentEvent[] | null }) {
       {events === null ? (
         <ListSkeleton rows={4} compact />
       ) : events.length === 0 ? (
-        <div className="py-4 text-[12px]" style={{ color: tokens.muted }}>
-          Quiet so far. Views and clicks land here as guests engage.
+        <div
+          className="py-3 text-[12px] leading-relaxed text-center"
+          style={{ color: tokens.body }}
+        >
+          Quiet so far.
+          <div className="mt-2">
+            <Link
+              href="/proposals"
+              className="text-[11.5px] font-semibold"
+              style={{ color: tokens.primary }}
+            >
+              Send a proposal →
+            </Link>
+          </div>
         </div>
       ) : (
         <ul className="space-y-2.5">
@@ -1222,24 +1287,31 @@ function ActivityRow({ event }: { event: RecentEvent }) {
         {tone.glyph}
       </div>
       <div className="flex-1 min-w-0">
+        {/* Three-tier hierarchy: event (heading weight) > client/
+            proposal context (body) > nothing else fights for
+            attention. */}
         <div
           className="text-[12.5px] leading-snug truncate"
-          style={{ color: tokens.heading }}
+          style={{ color: tokens.heading, fontWeight: 600 }}
         >
           {label}
         </div>
         {event.proposal && (
           <div
             className="text-[11px] truncate mt-0.5"
-            style={{ color: tokens.muted }}
+            style={{ color: tokens.body }}
           >
-            {event.proposal.title || "Untitled proposal"} · {event.proposal.trackingId}
+            {event.proposal.title || "Untitled proposal"}
+            <span className="opacity-60"> · {event.proposal.trackingId}</span>
           </div>
         )}
       </div>
       <div
-        className="text-[10.5px] tabular-nums whitespace-nowrap shrink-0 mt-0.5 inline-flex items-center gap-1.5"
-        style={{ color: tokens.muted }}
+        className="text-[11px] tabular-nums whitespace-nowrap shrink-0 mt-0.5 inline-flex items-center gap-1.5"
+        style={{
+          color: fresh ? tokens.heading : tokens.body,
+          fontWeight: fresh ? 600 : 500,
+        }}
       >
         {fresh && (
           <span className="ss-recency-dot" aria-label="Just happened" />
@@ -1515,18 +1587,33 @@ function GhostBtn({
   );
 }
 
-function EmptyCard({ message }: { message: string }) {
+function EmptyCard({
+  message,
+  cta,
+}: {
+  message: string;
+  cta?: { label: string; href: string };
+}) {
   const { tokens } = useDashboardTheme();
   return (
     <div
-      className="rounded-2xl py-10 px-5 text-center text-[13px]"
+      className="rounded-xl py-6 px-4 text-center"
       style={{
         background: tokens.tileBg,
-        color: tokens.muted,
-        boxShadow: `inset 0 0 0 1px ${tokens.ring}`,
+        border: `1px solid ${tokens.ring}`,
       }}
     >
-      {message}
+      <div
+        className="text-[12.5px] leading-relaxed"
+        style={{ color: tokens.body }}
+      >
+        {message}
+      </div>
+      {cta && (
+        <div className="mt-3">
+          <PrimaryBtn href={cta.href}>{cta.label}</PrimaryBtn>
+        </div>
+      )}
     </div>
   );
 }
