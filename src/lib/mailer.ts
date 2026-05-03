@@ -16,6 +16,10 @@ import "server-only";
 
 export type SendEmailInput = {
   to: string | string[];
+  /** Optional CC recipients. Resend forwards this verbatim — same
+   *  delivery semantics as the To field, just listed in the visible
+   *  Cc header so all recipients can see who else got the message. */
+  cc?: string | string[];
   subject: string;
   html: string;
   text?: string;
@@ -31,6 +35,7 @@ export async function sendEmail(input: SendEmailInput): Promise<{ ok: boolean; s
     // Intentional console so Railway logs show what would have been sent.
     console.log("[mailer] skipping — RESEND_API_KEY / MAIL_FROM not set. Would send:", {
       to: input.to,
+      cc: input.cc,
       subject: input.subject,
     });
     return { ok: true, skipped: true };
@@ -46,6 +51,9 @@ export async function sendEmail(input: SendEmailInput): Promise<{ ok: boolean; s
       body: JSON.stringify({
         from: process.env.MAIL_FROM!.trim(),
         to: Array.isArray(input.to) ? input.to : [input.to],
+        cc: input.cc
+          ? (Array.isArray(input.cc) ? input.cc : [input.cc])
+          : undefined,
         subject: input.subject,
         html: input.html,
         text: input.text,

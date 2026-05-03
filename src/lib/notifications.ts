@@ -192,6 +192,172 @@ export async function notifyOverdue(params: {
   }
 }
 
+// ─── Reservation received (client booking from /p/[id]) ──────────────────
+//
+// Fires when a ProposalReservation row is created via the public reserve
+// endpoint. Routes the notification to the consultant who owns the
+// proposal with a CC to the org owner so the booking is visible across
+// the team without surfacing it to the client.
+//
+// Failsafe rules:
+//   • consultant email present  → TO consultant, CC owner (when distinct)
+//   • consultant email missing  → TO owner only
+//   • owner email missing       → TO consultant only (no CC)
+//   • both missing              → log + no-op, never throw
+//
+// All errors are caught and logged. The reservation row is already
+// persisted by the time this runs — the response to the client never
+// depends on email delivery.
+
+export async function notifyReservationReceived(params: {
+  organizationId: string;
+  proposalId: string;
+  proposalTitle: string | null;
+  reservationId: string;
+  /** Email of the consultant who owns the proposal (proposal.user.email). */
+  consultantEmail: string | null;
+  consultantName: string | null;
+  // Reservation fields — passed in rather than re-queried so the caller
+  // can hand over what it already has from the create() response.
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  nationality: string | null;
+  arrivalDate: Date;
+  departureDate: Date;
+  travelers: string;
+  notes: string | null;
+}): Promise<void> {
+  const tag = `[notifications] reservationReceived(${params.reservationId})`;
+  try {
+    // Resolve the org owner via OrgMembership(role="owner"). There can
+    // be multiple owners; we take the first by createdAt for stability.
+    // Falls back to null when an org has no owner row (legacy / pre-
+    // membership data) so the failsafe rules below kick in.
+    const ownerMembership = await prisma.orgMembership.findFirst({
+      where: { organizationId: params.organizationId, role: "owner" },
+      orderBy: { createdAt: "asc" },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    const ownerEmail = ownerMembership?.user?.email?.trim() || null;
+
+    const consultantEmail = params.consultantEmail?.trim() || null;
+
+    // Apply the failsafe routing rules.
+    let to: string | null = null;
+    let cc: string | null = null;
+    if (consultantEmail) {
+      to = consultantEmail;
+      // CC owner only when distinct from the consultant — avoids
+      // duplicate delivery to the same inbox when the consultant IS
+      // the owner.
+      cc = ownerEmail && ownerEmail.toLowerCase() !== consultantEmail.toLowerCase()
+        ? ownerEmail
+        : null;
+    } else if (ownerEmail) {
+      to = ownerEmail;
+    }
+
+    console.log(`${tag} routing →`, {
+      to,
+      cc,
+      replyTo: consultantEmail,
+      proposalId: params.proposalId,
+    });
+
+    if (!to) {
+      console.warn(
+        `${tag} no consultant or owner email available — reservation persisted but no email sent.`,
+        { organizationId: params.organizationId, proposalId: params.proposalId },
+      );
+      return;
+    }
+
+    // Subject. Tracking id is the proposal's cuid; we expose the last
+    // 8 chars uppercased for human readability ("[Reservation #ABC12345]")
+    // while still being unique within the org. The consultant name lands
+    // in parentheses so a quick mail-rule sort-by-consultant works even
+    // when subjects render differently across clients.
+    const trackingId = params.proposalId.slice(-8).toUpperCase();
+    const tripTitle = params.proposalTitle?.trim() || "Untitled proposal";
+    const consultantLabel = params.consultantName?.trim() || "Unassigned";
+    const subject =
+      `[Reservation #${trackingId}] ${tripTitle} — ${params.clientName} ` +
+      `(Consultant: ${consultantLabel})`;
+
+    // Body — clean dl-style table inside the branded shell so every
+    // field is scannable at a glance. Dates render in the server's TZ
+    // as ISO date strings (YYYY-MM-DD) since the form captured them
+    // that way and we don't want timezone drift in an internal email.
+    const arrival = params.arrivalDate.toISOString().slice(0, 10);
+    const departure = params.departureDate.toISOString().slice(0, 10);
+    const rows: Array<[string, string]> = [
+      ["Tracking", `#${trackingId}`],
+      ["Reservation ID", params.reservationId],
+      ["Proposal", tripTitle],
+      ["Consultant", consultantLabel],
+      ["Client", params.clientName],
+      ["Phone", params.clientPhone],
+      ["Email", params.clientEmail],
+      ["Nationality", params.nationality || "—"],
+      ["Arrival", arrival],
+      ["Departure", departure],
+      ["Travelers", params.travelers || "—"],
+      ["Notes", params.notes || "—"],
+    ];
+    const body = `
+      <p>A client just submitted a reservation request from their proposal.</p>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin-top:14px;font-size:14px;color:rgba(0,0,0,0.78);">
+        ${rows
+          .map(
+            ([label, value]) => `
+        <tr>
+          <td style="padding:5px 14px 5px 0;color:rgba(0,0,0,0.5);vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+          <td style="padding:5px 0;font-weight:500;white-space:pre-wrap;">${escapeHtml(value)}</td>
+        </tr>`,
+          )
+          .join("")}
+      </table>
+      <p style="margin-top:18px;color:rgba(0,0,0,0.55);font-size:13px;">
+        Reach out within 24 hours to confirm availability — that&apos;s the promise the client saw on the
+        booking screen.
+      </p>`;
+
+    const ctaHref = APP_URL
+      ? `${APP_URL}/studio/${params.proposalId}`
+      : `/studio/${params.proposalId}`;
+    const html = renderBrandedEmail({
+      title: `Reservation · ${params.clientName}`,
+      preview: `New booking from ${params.clientName} for ${tripTitle}`,
+      body,
+      ctaLabel: "View in Safari Studio",
+      ctaHref,
+    });
+
+    const result = await sendEmail({
+      to,
+      cc: cc ?? undefined,
+      subject,
+      html,
+      // Reply-To threads any reply from the operator's inbox back
+      // to the consultant directly, even when the email came TO the
+      // owner. When the consultant has no email we drop Reply-To and
+      // let MAIL_REPLY_TO env handle the default.
+      replyTo: consultantEmail ?? undefined,
+    });
+
+    if (result.skipped) {
+      console.log(`${tag} mailer not configured — would have sent to`, { to, cc });
+    } else if (!result.ok) {
+      console.warn(`${tag} send failed:`, result.error, { to, cc });
+    } else {
+      console.log(`${tag} sent`, { to, cc });
+    }
+  } catch (err) {
+    console.warn(`${tag} unexpected error:`, err);
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

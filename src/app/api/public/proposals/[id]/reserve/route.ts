@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { notifyReservationReceived } from "@/lib/notifications";
 
 // POST /api/public/proposals/:id/reserve
 //
@@ -54,6 +55,9 @@ export async function POST(
 
   // Proposal must exist and be public-shareable. Anyone with the URL
   // can reserve — same auth posture as the rest of /api/public.
+  // We pull the consultant (proposal.user) and the proposal's
+  // request/client links so the post-create internal-message snapshot
+  // and email fan-out can run without a second round-trip.
   const proposal = await prisma.proposal.findUnique({
     where: { id },
     select: {
@@ -61,6 +65,9 @@ export async function POST(
       organizationId: true,
       userId: true,
       title: true,
+      requestId: true,
+      clientId: true,
+      user: { select: { email: true, name: true } },
     },
   });
   if (!proposal) {
@@ -129,7 +136,7 @@ export async function POST(
   }
 
   // Persist. Assign to the consultant who created the proposal so
-  // notification routing in v2 picks them up automatically.
+  // notification routing picks them up automatically.
   const reservation = await prisma.proposalReservation.create({
     data: {
       organizationId: proposal.organizationId,
@@ -146,6 +153,79 @@ export async function POST(
       assignedUserId: proposal.userId,
       sessionId: sessionId ?? null,
     },
+  });
+
+  const clientFullName = `${firstName} ${lastName}`.trim();
+  const trackingId = proposal.id.slice(-8).toUpperCase();
+  const tripTitle = proposal.title?.trim() || "Untitled proposal";
+
+  // ── Internal copy — Message row for inbox visibility ────────────────────
+  // Stores a snapshot of the booking as a system-channel inbound
+  // message so the future inbox UI can render it conversation-style
+  // without re-querying the ProposalReservation table. We attach
+  // requestId / clientId when the proposal carries those links so the
+  // existing per-request and per-client message threads pick the row
+  // up automatically. Best-effort — a failure here doesn't block the
+  // 200 response to the client.
+  try {
+    const messageBody = [
+      `Reservation #${trackingId} — ${clientFullName}`,
+      `Trip: ${tripTitle}`,
+      `Phone: ${phone}`,
+      `Email: ${email}`,
+      nationality ? `Nationality: ${nationality}` : null,
+      `Arrival: ${arrivalDate.toISOString().slice(0, 10)}`,
+      `Departure: ${departureDate.toISOString().slice(0, 10)}`,
+      travelers ? `Travelers: ${travelers}` : null,
+      notes ? `Notes: ${notes}` : null,
+      `Reservation ID: ${reservation.id}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await prisma.message.create({
+      data: {
+        organizationId: proposal.organizationId,
+        requestId: proposal.requestId ?? null,
+        clientId: proposal.clientId ?? null,
+        direction: "inbound",
+        channel: "system",
+        subject: `Reservation #${trackingId} — ${clientFullName}`,
+        body: messageBody,
+        status: "received",
+      },
+    });
+  } catch (err) {
+    // Reservation already persisted; the dashboard list reads from
+    // ProposalReservation directly so visibility is preserved even if
+    // this snapshot fails. Logged so a recurring failure surfaces.
+    console.warn(
+      "[reserve] internal Message snapshot failed:",
+      err,
+      { reservationId: reservation.id, proposalId: proposal.id },
+    );
+  }
+
+  // ── Email fan-out ──────────────────────────────────────────────────────
+  // Fire-and-forget so a slow Resend call never delays the client's
+  // success state. notifyReservationReceived is internally try/catch'd
+  // and logs every failure; the void here just keeps the route from
+  // awaiting it.
+  void notifyReservationReceived({
+    organizationId: proposal.organizationId,
+    proposalId: proposal.id,
+    proposalTitle: proposal.title,
+    reservationId: reservation.id,
+    consultantEmail: proposal.user?.email ?? null,
+    consultantName: proposal.user?.name ?? null,
+    clientName: clientFullName,
+    clientEmail: email,
+    clientPhone: phone,
+    nationality: nationality ?? null,
+    arrivalDate,
+    departureDate,
+    travelers,
+    notes: notes ?? null,
   });
 
   return NextResponse.json({ ok: true, reservationId: reservation.id });
