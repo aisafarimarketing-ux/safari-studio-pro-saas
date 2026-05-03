@@ -26,10 +26,11 @@ import Link from "next/link";
 //   secondary → /demo     (live demo proposal)
 
 const BG = "#F7F5F0";
-const HERO_TOP = "#061A14";
+const HERO_TOP = "#04130E";
 const HERO_BOTTOM = "#0E2A20";
 const GREEN = "#2F8F46";
-const GOLD = "#D7B75B";
+const GREEN_BRIGHT = "#34a04c";
+const GOLD = "#E0B85C";
 const INK = "#0a1411";
 const INK_2 = "rgba(10,20,17,0.72)";
 const CARD_BORDER = "rgba(0,0,0,0.08)";
@@ -162,20 +163,28 @@ function Hero() {
               style={{
                 fontFamily: SERIF,
                 fontSize: "clamp(48px, 5.4vw, 64px)",
-                lineHeight: 1.05,
-                letterSpacing: "-0.022em",
-                fontWeight: 600,
+                lineHeight: 1.04,
+                letterSpacing: "-0.025em",
+                fontWeight: 700,
               }}
             >
               Know when clients are ready to book.{" "}
-              <span style={{ color: GOLD }}>Close more safaris,</span> faster.
+              <span
+                style={{
+                  color: GOLD,
+                  textShadow: "0 1px 18px rgba(224,184,92,0.28)",
+                }}
+              >
+                Close more safaris,
+              </span>{" "}
+              faster.
             </h1>
 
             <p
               className="mt-5 text-[16px] max-w-[520px]"
               style={{
-                color: "rgba(255,255,255,0.72)",
-                lineHeight: 1.6,
+                color: "rgba(255,255,255,0.78)",
+                lineHeight: 1.55,
               }}
             >
               Safari Studio shows you who&rsquo;s most engaged with your proposal,
@@ -186,21 +195,22 @@ function Hero() {
             <div className="mt-7 flex items-center gap-3 flex-wrap">
               <a
                 href="/sign-up"
-                className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition active:scale-[0.97] hover:brightness-110"
+                className="inline-flex items-center justify-center px-5 h-12 rounded-lg text-[14.5px] font-bold transition active:scale-[0.97] hover:brightness-110"
                 style={{
-                  background: GREEN,
+                  background: `linear-gradient(180deg, ${GREEN_BRIGHT} 0%, ${GREEN} 100%)`,
                   color: "#fff",
-                  boxShadow: "0 6px 16px -6px rgba(47,143,70,0.55)",
+                  boxShadow:
+                    "0 10px 24px -8px rgba(47,143,70,0.55), inset 0 1px 0 rgba(255,255,255,0.18)",
                 }}
               >
                 Book a demo →
               </a>
               <Link
                 href="/demo"
-                className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
+                className="inline-flex items-center justify-center px-5 h-12 rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
                 style={{
-                  color: "#fff",
-                  border: "1px solid rgba(255,255,255,0.22)",
+                  color: "rgba(255,255,255,0.92)",
+                  border: "1px solid rgba(255,255,255,0.16)",
                 }}
               >
                 See how it works
@@ -315,85 +325,123 @@ function DashboardMockup() {
         <div className="mt-2 grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2">
           {/* LEFT — Hot deal · Followup · Bookings */}
           <div className="min-w-0 space-y-2">
-            {/* Hot deal — DOMINANT */}
+            {/* "Happening now" micro-label sits above the dominant
+                card so the eye lands here first. */}
+            <div className="flex items-center gap-1.5 px-1">
+              <span
+                aria-hidden
+                className="inline-block w-1.5 h-1.5 rounded-full"
+                style={{
+                  background: "#ef4444",
+                  boxShadow: "0 0 0 3px rgba(239,68,68,0.22)",
+                }}
+              />
+              <span
+                className="text-[9px] uppercase font-bold"
+                style={{
+                  color: "#fca5a5",
+                  letterSpacing: "0.24em",
+                }}
+              >
+                Happening now
+              </span>
+            </div>
+
+            {/* Hot deal — DOMINANT card. Brighter surface, layered red
+                glow halo, stronger border, scaled padding for presence. */}
             <div className="relative">
               <div
                 aria-hidden
-                className="absolute -inset-1 rounded-xl pointer-events-none"
+                className="absolute -inset-2 rounded-2xl pointer-events-none"
                 style={{
                   background:
-                    "radial-gradient(ellipse at 0% 50%, rgba(220,38,38,0.18) 0%, transparent 70%)",
+                    "radial-gradient(ellipse at 0% 50%, rgba(239,68,68,0.30) 0%, transparent 70%)",
                 }}
               />
               <div
                 className="relative rounded-xl overflow-hidden"
                 style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(220,38,38,0.40)",
-                  boxShadow: "0 6px 14px -6px rgba(220,38,38,0.30)",
+                  background: "rgba(255,255,255,0.085)",
+                  border: "1px solid rgba(239,68,68,0.55)",
+                  boxShadow:
+                    "0 12px 28px -8px rgba(220,38,38,0.40), inset 0 1px 0 rgba(255,255,255,0.08)",
                 }}
               >
                 <div
                   aria-hidden
-                  className="absolute left-0 top-0 bottom-0 w-[3px]"
-                  style={{ background: "#dc2626" }}
+                  className="absolute left-0 top-0 bottom-0 w-[4px]"
+                  style={{
+                    background: "linear-gradient(180deg,#ef4444 0%,#dc2626 100%)",
+                  }}
                 />
-                <div className="p-3 pl-3.5">
-                  <div className="flex items-center justify-between mb-1.5">
+                <div className="p-3.5 pl-4">
+                  <div className="flex items-center justify-between mb-2">
                     <div
-                      className="text-[10px] font-semibold"
-                      style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}
+                      className="text-[10.5px] font-bold"
+                      style={{ color: "#fff", fontFamily: SERIF }}
                     >
                       🔥 Hot deals
                     </div>
-                    <div className="text-[9.5px] font-semibold" style={{ color: GOLD, opacity: 0.85 }}>
+                    <div className="text-[9.5px] font-bold" style={{ color: GOLD }}>
                       View all →
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[12px] shrink-0"
-                      style={{ background: GREEN, color: "#fff" }}
+                      className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0"
+                      style={{
+                        background: GREEN,
+                        color: "#fff",
+                        boxShadow: "0 4px 10px -4px rgba(47,143,70,0.5)",
+                      }}
                       aria-hidden
                     >
                       L
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <div className="text-white text-[12px] font-semibold truncate">
+                        <div className="text-white text-[13px] font-bold truncate">
                           Lilian Nyongesa
                         </div>
                         <span
-                          className="text-[7.5px] uppercase tracking-[0.18em] font-bold px-1 py-0.5 rounded shrink-0"
+                          className="text-[8px] uppercase tracking-[0.18em] font-bold px-1.5 py-[3px] rounded-[3px] shrink-0"
                           style={{
-                            background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
+                            background: "linear-gradient(135deg,#ef4444 0%,#b91c1c 100%)",
                             color: "#fff",
+                            boxShadow:
+                              "0 2px 8px -2px rgba(239,68,68,0.55), inset 0 1px 0 rgba(255,255,255,0.18)",
                           }}
                         >
                           Very hot
                         </span>
                       </div>
-                      <div
-                        className="text-[10px] flex items-center gap-1 mt-0.5"
-                      >
+                      <div className="text-[10.5px] flex items-center gap-1 mt-1">
                         <span
                           className="inline-block w-1 h-1 rounded-full"
-                          style={{ background: "#16a34a", boxShadow: "0 0 0 2px rgba(22,163,74,0.22)" }}
+                          style={{
+                            background: "#22c55e",
+                            boxShadow: "0 0 0 2px rgba(34,197,94,0.28)",
+                          }}
                         />
                         <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
-                        <span style={{ color: "rgba(255,255,255,0.42)" }}>· 32m</span>
+                        <span style={{ color: "rgba(255,255,255,0.45)" }}>· 32m</span>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
                       <div
-                        className="text-[20px] leading-none tabular-nums text-white"
-                        style={{ fontFamily: SERIF, fontWeight: 800, letterSpacing: "-0.025em" }}
+                        className="text-[26px] leading-none tabular-nums text-white"
+                        style={{
+                          fontFamily: SERIF,
+                          fontWeight: 800,
+                          letterSpacing: "-0.03em",
+                          textShadow: "0 1px 12px rgba(239,68,68,0.32)",
+                        }}
                       >
                         142
                       </div>
                       <div
-                        className="text-[7.5px] uppercase tracking-[0.20em] font-semibold mt-0.5"
-                        style={{ color: "rgba(255,255,255,0.5)" }}
+                        className="text-[8px] uppercase tracking-[0.22em] font-bold mt-1"
+                        style={{ color: "rgba(255,255,255,0.55)" }}
                       >
                         score
                       </div>
@@ -403,12 +451,13 @@ function DashboardMockup() {
               </div>
             </div>
 
-            {/* Needs follow-up */}
+            {/* Needs follow-up — supporting tier (dimmed) */}
             <div
               className="rounded-xl p-2.5"
               style={{
-                background: subBg,
+                background: "rgba(255,255,255,0.025)",
                 border: "1px solid rgba(217,119,6,0.20)",
+                opacity: 0.82,
               }}
             >
               <div className="flex items-center justify-between mb-1.5">
@@ -426,10 +475,14 @@ function DashboardMockup() {
               <FollowupMini name="Marcus &amp; Tara Reid" sub="Viewed 2d ago · no reply" />
             </div>
 
-            {/* New bookings */}
+            {/* New bookings — supporting tier (dimmed) */}
             <div
               className="rounded-xl p-2.5"
-              style={{ background: subBg, border: `1px solid ${subBorder}` }}
+              style={{
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                opacity: 0.82,
+              }}
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.78)", fontFamily: SERIF }}>
@@ -450,8 +503,8 @@ function DashboardMockup() {
             </div>
           </div>
 
-          {/* RIGHT — Activity feed · Tasks */}
-          <div className="min-w-0 space-y-2">
+          {/* RIGHT — Activity feed · Tasks (supporting tier, dimmed) */}
+          <div className="min-w-0 space-y-2" style={{ opacity: 0.82 }}>
             <div
               className="rounded-xl p-2.5"
               style={{
@@ -796,36 +849,45 @@ function BuiltForStrip() {
   ];
   return (
     <section
-      className="py-12 md:py-14"
-      style={{ borderBottom: `1px solid ${CARD_BORDER}` }}
+      className="py-16 md:py-20"
+      style={{ borderBottom: `1px solid rgba(0,0,0,0.10)` }}
     >
       <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
         <div
-          className="text-[11.5px] font-bold uppercase"
+          className="text-[12px] font-bold uppercase"
           style={{
-            color: INK_2,
-            letterSpacing: "0.36em",
+            color: INK,
+            opacity: 0.86,
+            letterSpacing: "0.40em",
           }}
         >
           Built for leading safari teams
         </div>
         <p
-          className="mt-3 text-[14.5px]"
+          className="mt-3 text-[15px]"
           style={{ color: INK_2 }}
         >
           Inspired by how high-performing safari operators sell, plan, follow up, and close trips.
         </p>
 
-        <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-12 gap-y-5 items-center">
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-10 gap-y-6 items-center">
           {categories.map((label) => (
             <div
               key={label}
-              className="text-[12.5px] font-bold text-center whitespace-nowrap"
+              className="text-[12.5px] font-bold text-center whitespace-nowrap transition-colors duration-150"
               style={{
                 color: INK,
                 fontFamily: SANS,
-                letterSpacing: "0.32em",
-                opacity: 0.72,
+                letterSpacing: "0.34em",
+                opacity: 0.82,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = GREEN;
+                e.currentTarget.style.opacity = "1";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = INK;
+                e.currentTarget.style.opacity = "0.82";
               }}
             >
               {label}
@@ -886,38 +948,41 @@ function WhyOperators() {
         </div>
 
         <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Pains card — slightly darker / muted to read as the
-              "before" state. Pain bullets in heavier ink for clarity. */}
+          {/* Pains card — darker beige/gray, more "before-state" feel.
+              Subtle X marks (single stroke, no playful badge). */}
           <div
             className="rounded-2xl p-6"
             style={{
-              background: "#EDEAE0",
-              border: `1px solid rgba(0,0,0,0.10)`,
-              boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+              background: "#E5E1D6",
+              border: `1px solid rgba(0,0,0,0.12)`,
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)",
             }}
           >
             <div
-              className="text-[10.5px] uppercase tracking-[0.24em] font-bold mb-4"
-              style={{ color: "rgba(10,20,17,0.55)" }}
+              className="text-[10.5px] uppercase tracking-[0.26em] font-bold mb-5"
+              style={{ color: "rgba(10,20,17,0.50)" }}
             >
               Without Safari Studio
             </div>
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {pains.map((p) => (
                 <li key={p} className="flex items-start gap-3">
-                  <span
+                  <svg
                     aria-hidden
-                    className="mt-0.5 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                    style={{
-                      background: "rgba(220,38,38,0.14)",
-                      color: "#b91c1c",
-                    }}
+                    className="mt-1 shrink-0"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="rgba(10,20,17,0.45)"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
                   >
-                    ×
-                  </span>
+                    <path d="M3.5 3.5 L10.5 10.5 M10.5 3.5 L3.5 10.5" />
+                  </svg>
                   <span
                     className="text-[14.5px] leading-[1.5]"
-                    style={{ color: "rgba(10,20,17,0.82)" }}
+                    style={{ color: "rgba(10,20,17,0.72)" }}
                   >
                     {p}
                   </span>
@@ -927,45 +992,50 @@ function WhyOperators() {
           </div>
 
           {/* Gains card — green */}
-          {/* Solution card — more vibrant green, brighter highlight,
-              gold tick bullets to lift the "after" state. */}
+          {/* Solution card — more vibrant green, layered glow, gold
+              checks. Visibly outranks the "before" card so the "after"
+              reads as the obvious winner. */}
           <div
             className="rounded-2xl p-6 relative overflow-hidden"
             style={{
-              background: `linear-gradient(135deg, #1f6d36 0%, #2F8F46 55%, #38a751 100%)`,
+              background: `linear-gradient(135deg, #1d6a35 0%, #34a04c 60%, #3eb957 100%)`,
               boxShadow:
-                "0 1px 2px rgba(0,0,0,0.10), 0 8px 20px -8px rgba(34,106,51,0.55)",
+                "0 1px 2px rgba(0,0,0,0.10), 0 14px 32px -10px rgba(47,143,70,0.70), inset 0 1px 0 rgba(255,255,255,0.18)",
               color: "#fff",
             }}
           >
             <div
               aria-hidden
-              className="absolute right-0 bottom-0 w-1/2 h-1/2 pointer-events-none"
+              className="absolute -right-10 -top-10 w-[60%] h-[80%] pointer-events-none"
               style={{
                 background:
-                  "radial-gradient(ellipse at 100% 100%, rgba(215,183,91,0.24) 0%, transparent 60%)",
+                  "radial-gradient(ellipse at 50% 50%, rgba(224,184,92,0.26) 0%, transparent 65%)",
               }}
             />
             <div
-              className="text-[10.5px] uppercase tracking-[0.24em] font-bold mb-4 relative"
-              style={{ color: GOLD }}
+              className="text-[10.5px] uppercase tracking-[0.26em] font-bold mb-5 relative"
+              style={{ color: GOLD, textShadow: "0 1px 8px rgba(224,184,92,0.32)" }}
             >
               With Safari Studio
             </div>
-            <ul className="space-y-2.5 relative">
+            <ul className="space-y-3 relative">
               {gains.map((g) => (
                 <li key={g} className="flex items-start gap-3">
                   <span
                     aria-hidden
-                    className="mt-0.5 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                    className="mt-0.5 w-[20px] h-[20px] rounded-full flex items-center justify-center shrink-0"
                     style={{
-                      background: GOLD,
-                      color: "#1a1a1a",
+                      background: `linear-gradient(135deg, #f3cf75 0%, ${GOLD} 100%)`,
+                      color: "#0a1411",
+                      boxShadow:
+                        "0 2px 6px -2px rgba(224,184,92,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
                     }}
                   >
-                    ✓
+                    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 5.5 L4.5 8 L9 3" />
+                    </svg>
                   </span>
-                  <span className="text-[14.5px] leading-[1.5]" style={{ color: "rgba(255,255,255,0.96)" }}>
+                  <span className="text-[14.5px] leading-[1.5]" style={{ color: "rgba(255,255,255,0.98)" }}>
                     {g}
                   </span>
                 </li>
@@ -1044,42 +1114,58 @@ function WhatOperatorsWant() {
           </p>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {items.map((it) => (
-            <article
-              key={it.title}
-              className="rounded-2xl p-5 transition-all duration-150 ease-out hover:-translate-y-0.5"
-              style={{
-                background: BG,
-                border: `1px solid rgba(0,0,0,0.10)`,
-                boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 10px -4px rgba(0,0,0,0.06)",
-              }}
-            >
-              <div
-                className="text-[10px] uppercase tracking-[0.24em] font-bold"
-                style={{ color: GREEN }}
-              >
-                {it.eyebrow}
-              </div>
-              <h3
-                className="mt-3 text-[20px] leading-[1.2]"
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+          {items.map((it, i) => {
+            // Break uniformity: first card highlighted with a green
+            // ring + inset, third card pushed down by 12px so the row
+            // reads as curated, not perfectly gridded.
+            const isLead = i === 0;
+            const offset = i === 2 ? "lg:translate-y-3" : "";
+            return (
+              <article
+                key={it.title}
+                className={`rounded-2xl p-5 transition-all duration-150 ease-out hover:-translate-y-0.5 ${offset}`}
                 style={{
-                  fontFamily: SERIF,
-                  color: INK,
-                  fontWeight: 700,
-                  letterSpacing: "-0.012em",
+                  background: isLead
+                    ? `linear-gradient(180deg, #ffffff 0%, ${BG} 100%)`
+                    : `linear-gradient(180deg, ${BG} 0%, #f0ece1 100%)`,
+                  border: isLead
+                    ? `1px solid rgba(47,143,70,0.32)`
+                    : `1px solid rgba(0,0,0,0.10)`,
+                  boxShadow: isLead
+                    ? "0 1px 2px rgba(0,0,0,0.04), 0 12px 24px -10px rgba(47,143,70,0.20), inset 0 0 0 1px rgba(47,143,70,0.10)"
+                    : "0 1px 2px rgba(0,0,0,0.04), 0 6px 14px -6px rgba(0,0,0,0.08)",
                 }}
               >
-                {it.title}
-              </h3>
-              <p
-                className="mt-2 text-[13.5px] leading-[1.55]"
-                style={{ color: "rgba(10,20,17,0.65)" }}
-              >
-                {it.body}
-              </p>
-            </article>
-          ))}
+                <div
+                  className="text-[9.5px] uppercase font-bold"
+                  style={{
+                    color: GREEN,
+                    letterSpacing: "0.28em",
+                  }}
+                >
+                  {it.eyebrow}
+                </div>
+                <h3
+                  className="mt-3 text-[20px] leading-[1.18]"
+                  style={{
+                    fontFamily: SERIF,
+                    color: INK,
+                    fontWeight: 700,
+                    letterSpacing: "-0.014em",
+                  }}
+                >
+                  {it.title}
+                </h3>
+                <p
+                  className="mt-2 text-[13.5px] leading-[1.55]"
+                  style={{ color: "rgba(10,20,17,0.62)" }}
+                >
+                  {it.body}
+                </p>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -1113,23 +1199,30 @@ function Pricing() {
             style={{
               fontFamily: SERIF,
               fontSize: "clamp(28px, 3.6vw, 36px)",
-              lineHeight: 1.1,
-              letterSpacing: "-0.015em",
-              fontWeight: 600,
+              lineHeight: 1.08,
+              letterSpacing: "-0.022em",
+              fontWeight: 700,
             }}
           >
-            Simple pricing.{" "}
-            <span style={{ color: GOLD }}>Powerful results.</span>
+            <span style={{ color: "rgba(255,255,255,0.78)" }}>Simple pricing.</span>{" "}
+            <span
+              style={{
+                color: GOLD,
+                textShadow: "0 1px 14px rgba(224,184,92,0.32)",
+              }}
+            >
+              Powerful results.
+            </span>
           </h2>
           <p
-            className="mt-3 text-[16px] leading-[1.6]"
+            className="mt-3 text-[16px] leading-[1.55]"
             style={{ color: "rgba(255,255,255,0.7)" }}
           >
             Close one safari and Safari Studio pays for itself for the year.
           </p>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
           <PriceCard
             name="Starter"
             price="$59"
@@ -1212,30 +1305,37 @@ function PriceCard({
 }) {
   return (
     <div
-      className="rounded-2xl p-6 relative"
+      className={`rounded-2xl relative transition-transform duration-200 ${
+        featured ? "p-7 md:scale-[1.04] md:z-[1]" : "p-6"
+      }`}
       style={{
         background: featured
-          ? "linear-gradient(180deg, rgba(215,183,91,0.12) 0%, rgba(255,255,255,0.02) 100%)"
+          ? "linear-gradient(180deg, rgba(224,184,92,0.18) 0%, rgba(255,255,255,0.04) 100%)"
           : "rgba(255,255,255,0.03)",
         border: featured
-          ? `1px solid rgba(215,183,91,0.55)`
+          ? `1px solid rgba(224,184,92,0.65)`
           : `1px solid rgba(255,255,255,0.12)`,
         boxShadow: featured
-          ? "0 12px 28px -12px rgba(215,183,91,0.40)"
+          ? "0 1px 2px rgba(0,0,0,0.10), 0 18px 40px -12px rgba(224,184,92,0.45), inset 0 1px 0 rgba(255,255,255,0.10)"
           : "none",
       }}
     >
       {featured && (
         <div
-          className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.24em] font-bold px-3 py-1 rounded-full"
-          style={{ background: GOLD, color: HERO_TOP, boxShadow: "0 4px 10px -4px rgba(215,183,91,0.45)" }}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.26em] font-bold px-3 py-1 rounded-full"
+          style={{
+            background: `linear-gradient(180deg, #f0cb74 0%, ${GOLD} 100%)`,
+            color: HERO_TOP,
+            boxShadow:
+              "0 6px 14px -4px rgba(224,184,92,0.55), inset 0 1px 0 rgba(255,255,255,0.45)",
+          }}
         >
           Most popular
         </div>
       )}
 
       <div
-        className="text-[11.5px] uppercase tracking-[0.24em] font-bold"
+        className="text-[11.5px] uppercase tracking-[0.26em] font-bold"
         style={{ color: featured ? GOLD : "rgba(255,255,255,0.55)" }}
       >
         {name}
@@ -1245,9 +1345,9 @@ function PriceCard({
           className="text-white"
           style={{
             fontFamily: SERIF,
-            fontSize: 42,
+            fontSize: featured ? 48 : 42,
             fontWeight: 700,
-            letterSpacing: "-0.025em",
+            letterSpacing: "-0.028em",
             lineHeight: 1,
           }}
         >
@@ -1264,42 +1364,63 @@ function PriceCard({
       </div>
       <p
         className="mt-2 text-[13px] leading-[1.5]"
-        style={{ color: "rgba(255,255,255,0.65)" }}
+        style={{ color: "rgba(255,255,255,0.68)" }}
       >
         {tagline}
       </p>
 
       <a
         href={ctaHref}
-        className="mt-5 inline-flex w-full items-center justify-center px-4 h-12 rounded-lg text-[14px] font-bold transition active:scale-[0.97] hover:brightness-110"
+        className="mt-6 inline-flex w-full items-center justify-center px-4 rounded-lg text-[14.5px] font-bold transition-all duration-150 active:scale-[0.97] hover:brightness-110 hover:scale-[1.02]"
         style={
           featured
             ? {
-                background: GOLD,
+                background: `linear-gradient(180deg, #f0cb74 0%, ${GOLD} 100%)`,
                 color: HERO_TOP,
-                boxShadow: "0 6px 16px -6px rgba(215,183,91,0.55)",
+                height: 52,
+                boxShadow:
+                  "0 10px 22px -6px rgba(224,184,92,0.65), inset 0 1px 0 rgba(255,255,255,0.45)",
               }
             : {
-                background: GREEN,
+                background: `linear-gradient(180deg, ${GREEN_BRIGHT} 0%, ${GREEN} 100%)`,
                 color: "#fff",
-                boxShadow: "0 6px 16px -6px rgba(47,143,70,0.55)",
+                height: 48,
+                boxShadow:
+                  "0 8px 18px -6px rgba(47,143,70,0.55), inset 0 1px 0 rgba(255,255,255,0.16)",
               }
         }
       >
         {ctaLabel}
       </a>
 
-      <ul className="mt-5 space-y-2">
+      <ul className="mt-6 space-y-3">
         {features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-[13px]">
+          <li key={f} className="flex items-start gap-3 text-[13.5px]">
             <span
               aria-hidden
-              className="mt-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px] font-bold shrink-0"
-              style={{ background: GREEN, color: "#fff" }}
+              className="mt-0.5 w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0"
+              style={{
+                background: featured ? GOLD : GREEN,
+                color: featured ? HERO_TOP : "#fff",
+                boxShadow: featured
+                  ? "0 2px 6px -2px rgba(224,184,92,0.5)"
+                  : "0 2px 6px -2px rgba(47,143,70,0.4)",
+              }}
             >
-              ✓
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 11 11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2 5.5 L4.5 8 L9 3" />
+              </svg>
             </span>
-            <span style={{ color: "rgba(255,255,255,0.86)" }}>{f}</span>
+            <span style={{ color: "rgba(255,255,255,0.88)" }}>{f}</span>
           </li>
         ))}
       </ul>
@@ -1312,60 +1433,77 @@ function PriceCard({
 function FinalCTA() {
   return (
     <section
-      className="py-16 md:py-20"
+      className="py-20 md:py-28"
       style={{ background: HERO_TOP, color: "#fff" }}
     >
-      <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center relative">
+        {/* Subtle green halo behind the primary button */}
+        <div
+          aria-hidden
+          className="absolute left-1/2 -translate-x-1/2 pointer-events-none"
+          style={{
+            bottom: 32,
+            width: 320,
+            height: 80,
+            background:
+              "radial-gradient(ellipse at 50% 50%, rgba(47,143,70,0.32) 0%, transparent 70%)",
+            filter: "blur(8px)",
+          }}
+        />
         <h2
+          className="relative"
           style={{
             fontFamily: SERIF,
-            fontSize: "clamp(34px, 4.4vw, 44px)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.022em",
+            fontSize: "clamp(38px, 4.8vw, 52px)",
+            lineHeight: 1.04,
+            letterSpacing: "-0.025em",
             fontWeight: 700,
           }}
         >
           Ready to close more safaris?
         </h2>
         <p
-          className="mt-3 text-[16px] leading-[1.5] max-w-[440px] mx-auto"
+          className="mt-4 text-[16px] leading-[1.5] max-w-[440px] mx-auto relative"
           style={{ color: "rgba(255,255,255,0.72)" }}
         >
           Bring your brand, send your first proposal, see who&rsquo;s ready to book.
         </p>
-        <div className="mt-9 flex items-center gap-3 justify-center flex-wrap">
+        <div className="mt-10 flex items-center gap-3 justify-center flex-wrap relative">
           <a
             href="/sign-up"
-            className="inline-flex items-center justify-center px-6 h-12 rounded-lg text-[15px] font-bold transition active:scale-[0.97] hover:brightness-110"
+            className="inline-flex items-center justify-center px-7 h-[52px] rounded-lg text-[15px] font-bold transition active:scale-[0.97] hover:brightness-110 hover:scale-[1.02]"
             style={{
-              background: GREEN,
+              background: `linear-gradient(180deg, ${GREEN_BRIGHT} 0%, ${GREEN} 100%)`,
               color: "#fff",
-              boxShadow: "0 8px 22px -8px rgba(47,143,70,0.65)",
+              boxShadow:
+                "0 14px 32px -10px rgba(47,143,70,0.75), inset 0 1px 0 rgba(255,255,255,0.18)",
             }}
           >
             Book a demo →
           </a>
           <Link
             href="/demo"
-            className="inline-flex items-center justify-center px-5 h-12 rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
+            className="inline-flex items-center justify-center px-5 h-[52px] rounded-lg text-[14px] font-semibold transition hover:bg-white/5"
             style={{
-              color: "#fff",
-              border: "1px solid rgba(255,255,255,0.24)",
+              color: "rgba(255,255,255,0.85)",
+              border: "1px solid rgba(255,255,255,0.16)",
             }}
           >
             See how it works
           </Link>
         </div>
         <div
-          className="mt-5 inline-flex items-center gap-2 text-[12px]"
-          style={{ color: "rgba(255,255,255,0.55)" }}
+          className="mt-6 inline-flex items-center gap-2 text-[12.5px] relative"
+          style={{ color: "rgba(255,255,255,0.78)" }}
         >
           <span
             aria-hidden
             className="inline-block w-1.5 h-1.5 rounded-full"
-            style={{ background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.22)" }}
+            style={{ background: "#22c55e", boxShadow: "0 0 0 3px rgba(34,197,94,0.32)" }}
           />
-          Start in 60 seconds · No setup required
+          <span style={{ fontWeight: 600 }}>Start in 60 seconds</span>
+          <span style={{ color: "rgba(255,255,255,0.4)" }}>·</span>
+          <span>No setup required</span>
         </div>
       </div>
     </section>
