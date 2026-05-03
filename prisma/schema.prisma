@@ -636,6 +636,17 @@ model ProposalReservation {
 
   status    String   @default("new") // "new" | "contacted" | "confirmed" | "lost"
 
+  // Outbound notification result captured at row creation. Mirrors the
+  // ReservationDeliveryResult union from src/lib/notifications.ts:
+  //   "sent"          → Resend accepted the message
+  //   "skipped"       → mailer not configured (RESEND_API_KEY missing)
+  //   "no-recipient"  → no operator email on file
+  //   "failed"        → Resend returned a non-2xx response
+  //   "timeout"       → 5s deadline elapsed before send completed
+  // Surfaced as a small chip in the dashboard so the operator knows
+  // whether to follow up by another channel.
+  emailStatus String?
+
   // Anonymous client session that produced the reservation (matches
   // the sessionId used by the engagement tracker on /p/[id]). Lets us
   // tie a reservation back to the view session that produced it.

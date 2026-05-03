@@ -477,15 +477,9 @@ function parseEmailDelivery(raw: unknown): EmailDelivery | null {
 //   3. Confidence line that personalises the moment with the
 //      consultant / company name (senderLabel) so the guest feels
 //      they've been handed to a human, not a queue
-// Delivery status is intentionally NOT surfaced in this copy — we
-// stopped promising "sent" because the route may have skipped the
-// email when mailer config was incomplete. The dashboard shows the
-// operator the row regardless; this screen just confirms receipt.
 function renderSuccessMessage(
   firstName: string,
   senderLabel: string,
-  // Kept in the signature so callers don't have to be updated, and
-  // future copy passes can re-introduce delivery-specific lines.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _delivery: EmailDelivery | null,
 ): React.ReactNode {
@@ -496,24 +490,18 @@ function renderSuccessMessage(
         style={{ color: SAFE_INK_2 }}
       >
         Thanks, <strong style={{ color: SAFE_INK }}>{firstName}</strong>.
-        Your request has been received and is already being reviewed.
+        We&rsquo;ve received your request. We&rsquo;ll confirm availability
+        shortly.
       </p>
       <p
-        className="text-[15px] leading-[1.65] mt-3"
-        style={{ color: SAFE_INK_2 }}
-      >
-        We&rsquo;ll confirm availability and next steps within 24 hours —
-        often much sooner.
-      </p>
-      <p
-        className="text-[13px] leading-[1.6] mt-5"
+        className="text-[13.5px] leading-[1.6] mt-4"
         style={{ color: SAFE_INK_3 }}
       >
-        If your trip is time-sensitive, we recommend checking your email or
-        WhatsApp for a faster response.
+        You&rsquo;ll receive a confirmation email shortly. It may take a few
+        minutes — check spam if you don&rsquo;t see it.
       </p>
       <p
-        className="text-[13px] leading-[1.6] mt-2.5"
+        className="text-[13px] leading-[1.6] mt-4"
         style={{ color: SAFE_INK_2 }}
       >
         You&rsquo;re now in touch with{" "}

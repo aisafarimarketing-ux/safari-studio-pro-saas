@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       arrivalDate: true,
       departureDate: true,
       status: true,
+      emailStatus: true,
       createdAt: true,
       proposal: { select: { id: true, title: true } },
       assignedUser: { select: { id: true, name: true, email: true } },
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
       arrivalDate: r.arrivalDate.toISOString(),
       departureDate: r.departureDate.toISOString(),
       status: r.status,
+      emailStatus: r.emailStatus,
       createdAt: r.createdAt.toISOString(),
       proposal: r.proposal ? { id: r.proposal.id, title: r.proposal.title ?? null } : null,
       assignedTo: r.assignedUser

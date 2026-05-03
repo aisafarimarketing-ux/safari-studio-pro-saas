@@ -15,10 +15,9 @@ import { getAuthContext } from "@/lib/currentUser";
 // Why not "copy invite link"?
 //   Clerk's API doesn't expose the acceptance URL — it's generated when
 //   the invitation email is sent and includes a signed token only
-//   present in the email body. To support copy-link we'd have to rebuild
-//   the entire invite flow with our own ticketing. The Custom SMTP fix
-//   (Clerk → Resend) makes the email actually arrive, which is the
-//   underlying problem.
+//   present in the email body. Recipients who don't see the email
+//   should check spam, or the operator can re-invite from a different
+//   address.
 
 export async function GET() {
   const ctx = await getAuthContext();
@@ -65,9 +64,7 @@ export async function GET() {
 //
 // "Resend" via revoke + create with the same email + role. Same
 // effect as clicking Resend in Clerk's hosted UI. The new invitation
-// fires a fresh email through whatever email path Clerk is configured
-// for (their default sender, or your Resend SMTP if you've set up
-// Custom SMTP).
+// fires a fresh email through Clerk's default sender.
 export async function POST(req: Request) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

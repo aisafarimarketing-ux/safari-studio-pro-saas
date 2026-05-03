@@ -54,6 +54,7 @@ type ReservationRow = {
   arrivalDate: string;
   departureDate: string;
   status: string;
+  emailStatus: string | null;
   createdAt: string;
   proposal: { id: string; title: string | null; trackingId: string } | null;
   assignedTo: { id: string; name: string | null; email: string | null } | null;
@@ -1099,10 +1100,11 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
           </div>
         </div>
         <div
-          className="text-[11px] truncate mt-0.5 tabular-nums"
+          className="flex items-center gap-2 mt-0.5"
           style={{ color: tokens.muted }}
         >
-          {dates}
+          <span className="text-[11px] truncate tabular-nums">{dates}</span>
+          <EmailStatusChip status={row.emailStatus} />
         </div>
       </div>
       <div className="shrink-0">
@@ -1110,6 +1112,71 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
       </div>
     </li>
   );
+}
+
+// Small chip that shows the operator the outbound notification state
+// captured at reservation creation. Mirrors the ReservationDeliveryResult
+// union from src/lib/notifications.ts plus "delayed" (race timed out)
+// and a fallback for legacy rows with no recorded status.
+function EmailStatusChip({ status }: { status: string | null }) {
+  const config = emailStatusConfig(status);
+  if (!config) return null;
+  return (
+    <span
+      className="text-[9.5px] uppercase tracking-[0.16em] font-semibold px-1.5 py-0.5 rounded shrink-0"
+      style={{ background: config.bg, color: config.fg }}
+      title={config.title}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+function emailStatusConfig(status: string | null): {
+  label: string;
+  bg: string;
+  fg: string;
+  title: string;
+} | null {
+  switch (status) {
+    case "sent":
+      return {
+        label: "Email sent",
+        bg: "rgba(22,163,74,0.10)",
+        fg: "#15803d",
+        title: "Notification email delivered to the operator inbox.",
+      };
+    case "delayed":
+      return {
+        label: "Email pending",
+        bg: "rgba(202,138,4,0.10)",
+        fg: "#a16207",
+        title: "Email send took longer than 5s — still completing in background.",
+      };
+    case "skipped":
+      return {
+        label: "Email off",
+        bg: "rgba(0,0,0,0.06)",
+        fg: "rgba(0,0,0,0.55)",
+        title: "Mailer not configured — booking captured but no email sent.",
+      };
+    case "no-recipient":
+      return {
+        label: "No recipient",
+        bg: "rgba(202,138,4,0.10)",
+        fg: "#a16207",
+        title: "No operator email on file to notify.",
+      };
+    case "failed":
+      return {
+        label: "Email failed",
+        bg: "rgba(179,67,52,0.10)",
+        fg: "#b34334",
+        title: "Resend rejected the message — check the activity log.",
+      };
+    default:
+      return null;
+  }
 }
 
 // ─── RIGHT — Activity feed ─────────────────────────────────────────────────

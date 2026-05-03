@@ -302,8 +302,40 @@ export async function POST(
     );
     // Don't await — the promise keeps the connection-less work alive
     // until Resend responds; we just stop blocking the HTTP response.
-    notifyPromise.catch((err) => {
-      console.warn("[reserve] background email finally failed:", err);
+    // When it eventually settles, persist the real status so the
+    // dashboard chip flips from "delayed" to the final state.
+    notifyPromise
+      .then((finalDelivery) => {
+        return prisma.proposalReservation
+          .update({
+            where: { id: reservation.id },
+            data: { emailStatus: finalDelivery.status },
+          })
+          .catch((err) => {
+            console.warn(
+              "[reserve] background emailStatus update failed:",
+              err,
+              { reservationId: reservation.id },
+            );
+          });
+      })
+      .catch((err) => {
+        console.warn("[reserve] background email finally failed:", err);
+      });
+  }
+
+  // Persist whatever we know now — "sent" / "skipped" / "no-recipient"
+  // / "failed" / "delayed". A later background settle (above) may
+  // overwrite this with the final status if the race timed out.
+  try {
+    await prisma.proposalReservation.update({
+      where: { id: reservation.id },
+      data: { emailStatus: delivery.status },
+    });
+  } catch (err) {
+    console.warn("[reserve] emailStatus persist failed:", err, {
+      reservationId: reservation.id,
+      status: delivery.status,
     });
   }
 

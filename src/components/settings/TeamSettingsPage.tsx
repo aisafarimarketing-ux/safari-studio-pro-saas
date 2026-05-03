@@ -31,6 +31,9 @@ export function TeamSettingsPage() {
   const [invites, setInvites] = useState<Invitation[] | null>(null);
   const [invitesError, setInvitesError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Email of the most recently resent invite, plus a timestamp so the
+  // confirmation banner can fade out after a few seconds.
+  const [lastResent, setLastResent] = useState<{ email: string; at: number } | null>(null);
 
   const loadInvites = useCallback(async () => {
     try {
@@ -55,6 +58,7 @@ export function TeamSettingsPage() {
 
   const handleResend = async (invitationId: string) => {
     if (busyId) return;
+    const inviteRecord = invites?.find((inv) => inv.id === invitationId);
     setBusyId(invitationId);
     try {
       const res = await fetch("/api/team/invitations", {
@@ -65,6 +69,15 @@ export function TeamSettingsPage() {
       if (!res.ok) {
         const detail = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(detail.error ?? `HTTP ${res.status}`);
+      }
+      if (inviteRecord) {
+        const stamp = Date.now();
+        setLastResent({ email: inviteRecord.emailAddress, at: stamp });
+        // Auto-fade after a minute so the banner doesn't outstay its
+        // welcome. Parent state, so unmount tears it down too.
+        setTimeout(() => {
+          setLastResent((curr) => (curr && curr.at === stamp ? null : curr));
+        }, 60_000);
       }
       await loadInvites();
     } catch (err) {
@@ -136,6 +149,7 @@ export function TeamSettingsPage() {
               invites={invites}
               error={invitesError}
               busyId={busyId}
+              lastResent={lastResent}
               onResend={handleResend}
               onRevoke={handleRevoke}
             />
@@ -166,15 +180,22 @@ function PendingInvitations({
   invites,
   error,
   busyId,
+  lastResent,
   onResend,
   onRevoke,
 }: {
   invites: Invitation[] | null;
   error: string | null;
   busyId: string | null;
+  lastResent: { email: string; at: number } | null;
   onResend: (id: string) => void;
   onRevoke: (id: string) => void;
 }) {
+  // Banner shows whenever a resend has happened in this session;
+  // re-clicking Resend simply replaces it with the latest. Auto-clear
+  // is handled by the parent (timeout fired in handleResend).
+  const recentResend = lastResent;
+
   return (
     <section
       className="rounded-2xl bg-white p-6"
@@ -192,11 +213,26 @@ function PendingInvitations({
             Pending invitations
           </h2>
           <p className="text-[13px] text-black/55 mt-1 max-w-xl">
-            Invite emails sometimes get caught by Yahoo / Outlook spam filters.
-            Resend, revoke, or re-invite from a different address here.
+            Invite sent. It can take a few minutes to arrive — check spam if
+            needed. Didn&rsquo;t receive it? Resend below or re-invite from a
+            different email.
           </p>
         </div>
       </div>
+
+      {recentResend && (
+        <div
+          className="mb-4 rounded-lg p-3 text-[13px]"
+          style={{
+            background: "rgba(27,58,45,0.06)",
+            color: "#1b3a2d",
+            border: "1px solid rgba(27,58,45,0.18)",
+          }}
+        >
+          Invite resent to <strong>{recentResend.email}</strong>. It can take a
+          few minutes to arrive — check spam if needed.
+        </div>
+      )}
 
       {error && (
         <div
