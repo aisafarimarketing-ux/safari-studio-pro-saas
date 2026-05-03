@@ -11,6 +11,8 @@ import {
   type DashboardTokens,
 } from "./DashboardTheme";
 import { PipelineStrip, type PipelineData } from "./PipelineStrip";
+import { FollowUpDialog } from "./FollowUpDialog";
+import { ReservationSummaryDialog } from "./ReservationSummaryDialog";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -36,7 +38,12 @@ type ActivityCard = {
   nextAction: string;
   lastEventAt: string | null;
   lastEventType: string | null;
-  client: { id: string; name: string | null } | null;
+  client: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   consultant: { id: string; name: string | null; email: string | null } | null;
 };
 
@@ -123,6 +130,29 @@ function CommandCenterShell() {
   const [sidebar, setSidebar] = useState<PrioritiesSummary | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  // AI dialog state — managed at this level so deep leaves (DealCard,
+  // BookingRow) can request the dialog via window CustomEvent rather
+  // than threading callbacks through every section component.
+  const [followUpTarget, setFollowUpTarget] = useState<FollowUpTarget | null>(null);
+  const [reservationSummaryTarget, setReservationSummaryTarget] =
+    useState<ReservationSummaryTarget | null>(null);
+
+  useEffect(() => {
+    const onFollowUp = (e: Event) => {
+      const detail = (e as CustomEvent<FollowUpTarget>).detail;
+      if (detail?.proposalId) setFollowUpTarget(detail);
+    };
+    const onSummary = (e: Event) => {
+      const detail = (e as CustomEvent<ReservationSummaryTarget>).detail;
+      if (detail?.reservationId) setReservationSummaryTarget(detail);
+    };
+    window.addEventListener("ss:openFollowUp", onFollowUp);
+    window.addEventListener("ss:openReservationSummary", onSummary);
+    return () => {
+      window.removeEventListener("ss:openFollowUp", onFollowUp);
+      window.removeEventListener("ss:openReservationSummary", onSummary);
+    };
+  }, []);
 
   // Body scroll-lock while the mobile drawer is open.
   useEffect(() => {
@@ -276,9 +306,38 @@ function CommandCenterShell() {
           </aside>
         </div>
       </main>
+
+      {followUpTarget && (
+        <FollowUpDialog
+          proposalId={followUpTarget.proposalId}
+          clientName={followUpTarget.clientName}
+          clientPhone={followUpTarget.clientPhone}
+          clientEmail={followUpTarget.clientEmail}
+          onClose={() => setFollowUpTarget(null)}
+        />
+      )}
+      {reservationSummaryTarget && (
+        <ReservationSummaryDialog
+          reservationId={reservationSummaryTarget.reservationId}
+          clientName={reservationSummaryTarget.clientName}
+          onClose={() => setReservationSummaryTarget(null)}
+        />
+      )}
     </div>
   );
 }
+
+type FollowUpTarget = {
+  proposalId: string;
+  clientName: string | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
+};
+
+type ReservationSummaryTarget = {
+  reservationId: string;
+  clientName: string | null;
+};
 
 // ─── LEFT — global navigation sidebar ──────────────────────────────────────
 
@@ -816,11 +875,35 @@ function DealCard({ card }: { card: ActivityCard }) {
         </span>
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
         <PrimaryBtn href={`/studio/${card.proposalId}`} emphasis>
           Open proposal
         </PrimaryBtn>
-        <GhostBtn href={`/studio/${card.proposalId}`}>Follow up</GhostBtn>
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent<FollowUpTarget>("ss:openFollowUp", {
+                detail: {
+                  proposalId: card.proposalId,
+                  clientName: card.client?.name ?? null,
+                  clientPhone: card.client?.phone ?? null,
+                  clientEmail: card.client?.email ?? null,
+                },
+              }),
+            )
+          }
+          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-[12px] font-semibold transition active:scale-[0.97]"
+          style={{
+            background: tokens.primarySoft,
+            color: tokens.primary,
+            border: `1px solid ${tokens.ring}`,
+          }}
+          title="Draft a follow-up message with Safari Studio AI"
+        >
+          <span aria-hidden style={{ opacity: 0.85 }}>✦</span>
+          Draft follow-up
+        </button>
       </div>
     </article>
   );
@@ -1135,7 +1218,30 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
           </div>
         )}
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent<ReservationSummaryTarget>("ss:openReservationSummary", {
+                detail: {
+                  reservationId: row.id,
+                  clientName: row.clientName,
+                },
+              }),
+            )
+          }
+          className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md text-[11.5px] font-semibold transition active:scale-[0.97]"
+          style={{
+            background: "transparent",
+            color: tokens.muted,
+            border: `1px solid ${tokens.ring}`,
+          }}
+          title="Summarise this reservation with Safari Studio AI"
+        >
+          <span aria-hidden style={{ opacity: 0.85 }}>✦</span>
+          Summarise
+        </button>
         <SecondaryBtn href={href}>Open booking</SecondaryBtn>
       </div>
     </li>
@@ -1557,33 +1663,6 @@ function SecondaryBtn({
 // Quieter than SecondaryBtn — text-only, no border. Used inside hot
 // deal cards so the eye lands first on the emphasised primary CTA;
 // "Follow up" is still discoverable but reads as a tertiary action.
-function GhostBtn({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  const { tokens } = useDashboardTheme();
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center justify-center px-3 h-11 rounded-lg text-[12.5px] font-medium transition-[color,background,transform] duration-[120ms] ease-out active:scale-[0.96] active:duration-[60ms]"
-      style={{ background: "transparent", color: tokens.muted }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.color = tokens.body;
-        e.currentTarget.style.background = tokens.primarySoft;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.color = tokens.muted;
-        e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
 function EmptyCard({
   message,
   cta,

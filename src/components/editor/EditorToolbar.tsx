@@ -308,7 +308,7 @@ export function EditorToolbar({
             type="button"
             onClick={() => setAIMenuOpen((v) => !v)}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm rounded-lg transition active:scale-95 font-medium border border-black/12 text-black/75 hover:bg-black/[0.03]"
-            title="AI Tools"
+            title="Safari Studio AI"
           >
             <span aria-hidden style={{ color: "#c9a84c", fontSize: 14 }}>
               ✦

@@ -36,6 +36,7 @@ model User {
   createdReservations Reservation[]
   assignedProposalReservations ProposalReservation[]
   proposalEvents      ProposalEvent[]
+  aiSuggestions       AISuggestion[]
 
   @@index([clerkUserId])
 }
@@ -170,6 +171,7 @@ model Organization {
   proposalEvents       ProposalEvent[]
   proposalActivitySummaries ProposalActivitySummary[]
   proposalCounters     ProposalCounter[]
+  aiSuggestions        AISuggestion[]
 
   @@index([clerkOrgId])
 }
@@ -1276,4 +1278,48 @@ model IntegrationLog {
   @@index([organizationId, status])
   @@index([entityType, entityId])
   @@index([provider, status, nextRetryAt])
+}
+
+// ─── AISuggestion — log of operator-facing AI drafts ───────────────────────
+//
+// Every "draft for me" surface (follow-up generator, reservation summary,
+// future hot-deal next-action LLM, etc.) writes one row here when the
+// model returns. The operator's workflow is always draft → review →
+// manual send, so this table tracks what was suggested and what they
+// actually did with it (applied / dismissed / superseded).
+//
+// `kind`        — namespaced action key, e.g. "follow-up" / "reservation-summary".
+// `targetType`  — the entity the suggestion is *about* ("proposal" / "reservation"
+//                 / "request").
+// `targetId`    — id of that entity. Not a foreign key on purpose — entities
+//                 may be deleted while suggestion history is kept for review.
+// `input`       — JSON payload the model saw (sliced context, signals).
+// `output`      — generated text the operator sees.
+// `status`      — "pending" (default), "applied", "dismissed".
+// Cost / token usage stays in API logs — this row is for the operator
+// audit trail, not Anthropic billing.
+
+model AISuggestion {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  kind       String
+  targetType String
+  targetId   String
+
+  input  Json?
+  output String
+
+  status    String    @default("pending") // "pending" | "applied" | "dismissed"
+  appliedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, kind])
+  @@index([targetType, targetId])
 }

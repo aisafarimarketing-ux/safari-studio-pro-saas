@@ -367,7 +367,7 @@ export function AISmartPropertyDialog({
                 className="text-[12.5px] mb-4"
                 style={{ color: "#1b3a2d" }}
               >
-                <span className="font-semibold">AI summary:</span>{" "}
+                <span className="font-semibold">Safari Studio AI:</span>{" "}
                 {state.kind === "ready" ? state.response.summary : ""}
               </div>
               {state.kind === "ready" && state.response.picks.length === 0 && (

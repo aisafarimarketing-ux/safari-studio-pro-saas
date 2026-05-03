@@ -336,7 +336,7 @@ function WorkingBody({ progress, stage }: { progress: number; stage: string }) {
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between text-[12.5px]">
-          <div className="text-black/55">AI rebuild</div>
+          <div className="text-black/55">Safari Studio AI</div>
           <div className="tabular-nums font-semibold" style={{ color: FOREST }}>{pct}%</div>
         </div>
         <div className="mt-2 text-center text-[11.5px] text-black/40">Usually 15 – 25 seconds</div>

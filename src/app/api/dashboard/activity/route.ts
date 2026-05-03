@@ -39,7 +39,12 @@ type Card = {
   nextAction: string;
   lastEventAt: string | null;
   lastEventType: string | null;
-  client: { id: string; name: string | null } | null;
+  client: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   consultant: { id: string; name: string | null; email: string | null } | null;
 };
 
@@ -89,7 +94,7 @@ export async function GET(req: Request) {
       engagementScore: true,
       status: true,
       nextAction: true,
-      client: { select: { id: true, firstName: true, lastName: true, email: true } },
+      client: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
       proposal: {
         select: {
           id: true,
@@ -135,6 +140,8 @@ export async function GET(req: Request) {
               [row.client.firstName, row.client.lastName].filter(Boolean).join(" ") ||
               row.client.email ||
               null,
+            email: row.client.email ?? null,
+            phone: row.client.phone ?? null,
           }
         : null,
       consultant: row.proposal.user

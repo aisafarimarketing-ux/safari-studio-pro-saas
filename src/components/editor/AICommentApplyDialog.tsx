@@ -306,7 +306,7 @@ export function AICommentApplyDialog({
           {(state.kind === "ready" || state.kind === "applying") && (
             <>
               <div className="text-[12.5px] mb-4" style={{ color: "#1b3a2d" }}>
-                <span className="font-semibold">AI summary:</span> {state.kind === "ready" ? state.patch.summary : ""}
+                <span className="font-semibold">Safari Studio AI:</span> {state.kind === "ready" ? state.patch.summary : ""}
               </div>
               {state.kind === "ready" && state.patch.edits.length === 0 && (
                 <div className="text-[13px] text-black/55 italic py-4">
