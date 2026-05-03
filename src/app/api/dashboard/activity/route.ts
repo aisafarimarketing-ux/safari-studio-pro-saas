@@ -75,6 +75,12 @@ type Card = {
    *  "Schedule auto-send" button is disabled with the reason as a
    *  tooltip — same logic the /schedule route enforces server-side. */
   autoSendEligibility: { ok: true } | { ok: false; reason: string };
+  /** Channel the dashboard should default to for this card. Mirrors
+   *  the spec's priority order: WhatsApp when client.phone exists,
+   *  Email otherwise. Null when neither contact method is available
+   *  — the inline contact-capture UI uses this signal to prompt for
+   *  the missing field. */
+  preferredChannel: "whatsapp" | "email" | null;
   client: {
     id: string;
     name: string | null;
@@ -251,6 +257,11 @@ export async function GET(req: Request) {
       suggestedAction: momentum.suggestedAction,
       draft,
       autoSendEligibility,
+      preferredChannel: row.client?.phone
+        ? "whatsapp"
+        : row.client?.email
+          ? "email"
+          : null,
       client: row.client
         ? {
             id: row.client.id,

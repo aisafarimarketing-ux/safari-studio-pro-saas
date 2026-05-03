@@ -9,6 +9,11 @@ import {
   type DealMomentum,
   type SuggestedAction,
 } from "@/lib/dealMomentum";
+import {
+  EmailIcon,
+  WhatsAppIcon,
+  WHATSAPP_GREEN,
+} from "@/lib/channelIcons";
 import { fireToast } from "./Toast";
 
 // FollowUpPanel — Deal Momentum's edit surface. Slide-out from the
@@ -285,12 +290,14 @@ export function FollowUpPanel({
             style={{ background: "rgba(0,0,0,0.05)" }}
           >
             <ChannelTab
+              channel="whatsapp"
               active={channel === "whatsapp"}
               disabled={busy}
               onClick={() => switchChannel("whatsapp")}
               label="WhatsApp"
             />
             <ChannelTab
+              channel="email"
               active={channel === "email"}
               disabled={busy}
               onClick={() => switchChannel("email")}
@@ -394,49 +401,62 @@ export function FollowUpPanel({
                 type="button"
                 onClick={handleCopyAll}
                 disabled={!draft || busy}
-                className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
                 style={{
                   background: "transparent",
                   color: "#0a1411",
                   border: "1px solid rgba(0,0,0,0.16)",
                 }}
               >
-                Copy WhatsApp
+                <WhatsAppIcon size={13} />
+                Copy
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleCopyEmailParts}
                 disabled={!draft || busy}
-                className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
                 style={{
                   background: "transparent",
                   color: "#0a1411",
                   border: "1px solid rgba(0,0,0,0.16)",
                 }}
               >
-                Copy Email
+                <EmailIcon size={13} />
+                Copy
               </button>
             )}
           </div>
           {channel === "whatsapp" ? (
+            // WhatsApp = PRIMARY: filled brand green so the operator
+            // sees instantly which channel they're about to dispatch.
             <button
               type="button"
               onClick={handleSendWhatsApp}
               disabled={!clientPhone || !draft || busy}
-              className="px-4 h-9 rounded-md text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97]"
-              style={{ background: "#1b3a2d", color: "#ffffff" }}
+              className="inline-flex items-center gap-2 px-4 h-9 rounded-md text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97]"
+              style={{ background: WHATSAPP_GREEN, color: "#ffffff" }}
             >
+              <WhatsAppIcon size={14} mono />
               Send via WhatsApp →
             </button>
           ) : (
+            // Email = SECONDARY: outline so it visually defers to the
+            // green WhatsApp button when both are present in the wider
+            // dashboard surface.
             <button
               type="button"
               onClick={handleSendEmail}
               disabled={!clientEmail || !draft || busy}
-              className="px-4 h-9 rounded-md text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97]"
-              style={{ background: "#1b3a2d", color: "#ffffff" }}
+              className="inline-flex items-center gap-2 px-4 h-9 rounded-md text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97]"
+              style={{
+                background: "transparent",
+                color: "#1b3a2d",
+                border: "1px solid #1b3a2d",
+              }}
             >
+              <EmailIcon size={14} />
               Send via Email →
             </button>
           )}
@@ -589,27 +609,38 @@ function AutoSendStrip({
 
 function ChannelTab({
   label,
+  channel,
   active,
   disabled,
   onClick,
 }: {
   label: string;
+  channel: "whatsapp" | "email";
   active: boolean;
   disabled: boolean;
   onClick: () => void;
 }) {
+  // Active WhatsApp tab adopts brand green so the hierarchy ("WhatsApp
+  // is primary") reads visually, not just by position.
+  const activeBg = channel === "whatsapp" ? WHATSAPP_GREEN : "#ffffff";
+  const activeFg = channel === "whatsapp" ? "#ffffff" : "#0a1411";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="px-3 h-7 rounded text-[12px] font-semibold transition disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 px-3 h-7 rounded text-[12px] font-semibold transition disabled:opacity-50"
       style={{
-        background: active ? "#ffffff" : "transparent",
-        color: active ? "#0a1411" : "rgba(10,20,17,0.55)",
+        background: active ? activeBg : "transparent",
+        color: active ? activeFg : "rgba(10,20,17,0.55)",
         boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
       }}
     >
+      {channel === "whatsapp" ? (
+        <WhatsAppIcon size={12} mono={active} />
+      ) : (
+        <EmailIcon size={12} />
+      )}
       {label}
     </button>
   );

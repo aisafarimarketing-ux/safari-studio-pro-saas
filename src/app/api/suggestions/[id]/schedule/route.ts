@@ -91,7 +91,7 @@ export async function POST(
     select: {
       id: true,
       organizationId: true,
-      client: { select: { email: true } },
+      client: { select: { email: true, phone: true } },
       activitySummary: {
         select: {
           lastEventAt: true,
@@ -147,8 +147,17 @@ export async function POST(
     return NextResponse.json({ error: decision.reason }, { status: 422 });
   }
 
-  // Email-only in v1 — refuse if the client has no email on file.
-  if (!proposal.client?.email) {
+  // Channel-specific contact check — WhatsApp needs a phone, Email
+  // needs an email. The decision above already rejects an empty
+  // channel; here we enforce the contact method actually exists.
+  const channel = row.channel === "whatsapp" ? "whatsapp" : row.channel === "email" ? "email" : null;
+  if (channel === "whatsapp" && !proposal.client?.phone?.trim()) {
+    return NextResponse.json(
+      { error: "Client has no WhatsApp number — add one to enable auto-send." },
+      { status: 422 },
+    );
+  }
+  if (channel === "email" && !proposal.client?.email?.trim()) {
     return NextResponse.json(
       { error: "Client has no email on file — cannot auto-send." },
       { status: 422 },

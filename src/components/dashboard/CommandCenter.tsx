@@ -22,6 +22,12 @@ import {
   type DealMomentum,
   type SuggestedAction,
 } from "@/lib/dealMomentum";
+import {
+  ChannelSentLabel,
+  EmailIcon,
+  WhatsAppIcon,
+  WHATSAPP_GREEN,
+} from "@/lib/channelIcons";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -60,6 +66,7 @@ type ActivityCard = {
     autoSent: boolean;
   } | null;
   autoSendEligibility: { ok: true } | { ok: false; reason: string };
+  preferredChannel: "whatsapp" | "email" | null;
   client: {
     id: string;
     name: string | null;
@@ -791,6 +798,13 @@ function DealCard({ card }: { card: ActivityCard }) {
   const action = card.suggestedAction;
   const autoScheduledIso = card.draft?.autoSendScheduledFor ?? null;
   const autoSent = card.draft?.autoSent ?? false;
+  // Channel hierarchy: WhatsApp primary when client.phone exists,
+  // Email fallback when client.email exists. The Send-now button
+  // adopts WhatsApp brand green when WhatsApp is the target so the
+  // operator sees where the message is going without reading.
+  const preferredChannel: "whatsapp" | "email" | null =
+    card.draft?.channel
+      ?? (card.client?.phone ? "whatsapp" : card.client?.email ? "email" : null);
 
   const openPanel = () => {
     window.dispatchEvent(
@@ -892,18 +906,43 @@ function DealCard({ card }: { card: ActivityCard }) {
           message just went out. Countdown updates client-side every
           second; cancel button DELETEs the schedule and refreshes the
           dashboard. */}
+      {/* Inline contact capture — shown only on VERY_HOT cards that
+          have a linked Client but no WhatsApp number on file. Adding
+          one here flips the card's preferred channel and makes
+          auto-send instantly viable, without round-tripping through
+          a separate client-edit page. */}
+      {isVeryHot &&
+        !card.client?.phone &&
+        card.client?.id &&
+        !autoSent &&
+        !autoScheduledIso && (
+          <InlinePhoneCapture
+            clientId={card.client.id}
+            clientName={card.client.name ?? null}
+            hasEmail={Boolean(card.client.email)}
+          />
+        )}
+
       {autoSent ? (
         <div
-          className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
+          className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-md max-w-full"
           style={{
-            background: "rgba(22,163,74,0.10)",
-            color: "#15803d",
-            border: "1px solid rgba(22,163,74,0.30)",
+            background: card.draft?.channel === "whatsapp"
+              ? "rgba(37,211,102,0.10)"
+              : "rgba(22,163,74,0.10)",
+            border: `1px solid ${
+              card.draft?.channel === "whatsapp"
+                ? "rgba(37,211,102,0.30)"
+                : "rgba(22,163,74,0.30)"
+            }`,
           }}
           title="Auto-follow-up dispatched."
         >
           <span aria-hidden>✓</span>
-          <span className="font-semibold">Auto-follow-up sent</span>
+          <ChannelSentLabel
+            channel={card.draft?.channel === "whatsapp" ? "whatsapp" : "email"}
+            size={12}
+          />
         </div>
       ) : autoScheduledIso ? (
         <AutoSendCountdown
@@ -968,10 +1007,24 @@ function DealCard({ card }: { card: ActivityCard }) {
               type="button"
               onClick={sendNow}
               className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-md text-[12.5px] font-semibold transition active:scale-[0.97] shadow-sm"
-              style={{ background: colors.accent, color: "#ffffff" }}
-              title="Open the draft and send"
+              style={{
+                background:
+                  preferredChannel === "whatsapp" ? WHATSAPP_GREEN : colors.accent,
+                color: "#ffffff",
+              }}
+              title={
+                preferredChannel === "whatsapp"
+                  ? "Open the draft and send via WhatsApp"
+                  : "Open the draft and send via email"
+              }
             >
-              <span aria-hidden style={{ opacity: 0.95 }}>✦</span>
+              {preferredChannel === "whatsapp" ? (
+                <WhatsAppIcon size={14} mono />
+              ) : preferredChannel === "email" ? (
+                <EmailIcon size={14} />
+              ) : (
+                <span aria-hidden style={{ opacity: 0.95 }}>✦</span>
+              )}
               Send now
             </button>
             <button
@@ -1059,9 +1112,37 @@ function AutoSendCountdown({
               : "Auto-send failed.",
             hint: typeof data?.error === "string" ? data.error : undefined,
           });
+        } else if (data?.channel === "whatsapp" && typeof data.waUrl === "string") {
+          // WhatsApp Mode A — try to open the deep-link in a new tab.
+          // If the popup blocker stops us (e.g. the dashboard tab
+          // wasn't focused at fire time), the toast becomes the
+          // gateway: tapping it opens wa.me on the user gesture and
+          // bypasses the blocker.
+          const win =
+            typeof window !== "undefined" ? window.open(data.waUrl, "_blank") : null;
+          if (win) {
+            fireToast({
+              message: "⚡ Auto-follow-up opened in WhatsApp.",
+              hint: "Confirm the send there.",
+              onUndo: () => {
+                void fetch(`/api/suggestions/${suggestionId}/sent`, {
+                  method: "DELETE",
+                }).then(onFireDone);
+              },
+            });
+          } else {
+            fireToast({
+              message: "Auto-follow-up ready — tap to open WhatsApp.",
+              hint: "Popup blocked. Click here.",
+              durationMs: 12_000,
+              onUndo: () => {
+                window.open(data.waUrl, "_blank");
+              },
+            });
+          }
         } else {
           fireToast({
-            message: "Auto-follow-up sent.",
+            message: "⚡ Auto-follow-up sent (Email).",
             hint: "Likely response window: 1–3h.",
             onUndo: () => {
               void fetch(`/api/suggestions/${suggestionId}/sent`, {
@@ -1121,6 +1202,132 @@ function AutoSendCountdown({
         >
           Cancel
         </button>
+      )}
+    </div>
+  );
+}
+
+function InlinePhoneCapture({
+  clientId,
+  clientName,
+  hasEmail,
+}: {
+  clientId: string;
+  clientName: string | null;
+  hasEmail: boolean;
+}) {
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const submit = async () => {
+    const trimmed = phone.trim();
+    if (!trimmed) return;
+    // Bare client-side guard — the server's PATCH handler stores
+    // arbitrary strings, but a phone with no digits is almost
+    // certainly a typo so reject it before round-tripping.
+    if (!/\d/.test(trimmed)) {
+      setError("Add at least one digit.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: trimmed }),
+      });
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(detail.error ?? `HTTP ${res.status}`);
+      }
+      fireToast({
+        message: `WhatsApp number saved${clientName ? ` for ${clientName}` : ""}.`,
+        hint: "Auto-follow-up unlocked.",
+      });
+      window.dispatchEvent(new CustomEvent("ss:refreshActivity"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the number.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="mt-3 rounded-md p-2.5"
+      style={{
+        background: "rgba(202,138,4,0.08)",
+        border: "1px solid rgba(202,138,4,0.25)",
+      }}
+    >
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1.5 text-[12px] font-semibold"
+          style={{ color: "#a16207" }}
+          title="Adds the number to the client profile."
+        >
+          <span aria-hidden>📱</span>
+          {hasEmail
+            ? "Add WhatsApp number to follow up faster"
+            : "Add a contact method to enable follow-ups"}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px]" style={{ color: "rgba(10,20,17,0.65)" }}>
+            +
+          </span>
+          <input
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="255 712 345 678"
+            autoFocus
+            className="flex-1 min-w-[140px] h-8 rounded text-[13px] px-2 outline-none"
+            style={{
+              background: "#ffffff",
+              border: "1px solid rgba(0,0,0,0.16)",
+              color: "#0a1411",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void submit();
+              if (e.key === "Escape") setOpen(false);
+            }}
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy || !phone.trim()}
+            className="inline-flex items-center gap-1 h-8 px-3 rounded text-[12px] font-semibold disabled:opacity-50 active:scale-[0.97]"
+            style={{ background: WHATSAPP_GREEN, color: "#ffffff" }}
+          >
+            <WhatsAppIcon size={12} mono />
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setPhone("");
+              setError(null);
+            }}
+            disabled={busy}
+            className="text-[11px] font-semibold"
+            style={{ color: "rgba(10,20,17,0.55)" }}
+          >
+            Cancel
+          </button>
+          {error && (
+            <span className="w-full text-[11px]" style={{ color: "#b34334" }}>
+              {error}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

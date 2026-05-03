@@ -250,14 +250,13 @@ export function canAutoSend(input: AutoSendInput): AutoSendDecision {
     return { ok: false, reason: "Deal is not VERY_HOT." };
   }
 
-  if (input.channel === "whatsapp") {
-    // WhatsApp programmatic send needs WhatsApp Business API. Until
-    // that lands, only email auto-send is supported.
-    return { ok: false, reason: "Auto-send is email-only in v1." };
-  }
   if (!input.channel) {
     return { ok: false, reason: "No draft channel selected yet." };
   }
+  // WhatsApp + Email both supported. WhatsApp uses the wa.me deep-link
+  // at fire time (Mode A — operator confirms the send in WhatsApp);
+  // Mode B with the WhatsApp Business API can drop in without changing
+  // this guard. Email goes via Resend.
 
   // Buying-signal gate: the deal is VERY_HOT *because of* a fresh
   // pricing or reservation interaction. Anything older than 60 min

@@ -8,16 +8,24 @@ import { canAutoSend, classifyMomentum } from "@/lib/dealMomentum";
 //
 // Fires the auto-follow-up. Called by the dashboard's countdown when
 // it hits zero — re-validates every spec condition server-side, then
-// dispatches the message via Resend (email channel only in v1).
+// either dispatches the message (email via Resend) OR returns the
+// wa.me URL the dashboard should open (WhatsApp).
+//
+// Channel handling:
+//   - Email     — programmatic dispatch via Resend; returns ok=true.
+//   - WhatsApp  — Mode A (no API yet): we don't dispatch, we mark the
+//                 suggestion as "fired" and return a `waUrl` the
+//                 dashboard window.opens. The operator confirms the
+//                 send in WhatsApp itself. Mode B (Business API) can
+//                 drop in later without changing the response shape;
+//                 callers either consume waUrl OR ignore it if a
+//                 dispatched=true flag arrives in the future.
 //
 // On success, the row picks up:
 //   autoSent: true, sentAt = now, status = "applied", outcome = "sent"
 //
 // On a failed condition, returns 422 with the reason. On a mailer
 // failure, returns 500 with the error from the Resend HTTP API.
-//
-// The dashboard re-fetches /api/dashboard/activity after this returns
-// so the card flips to "Auto-follow-up sent" without a manual reload.
 
 export async function POST(
   _req: Request,
@@ -31,16 +39,6 @@ export async function POST(
 
   const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Suggestion id required" }, { status: 400 });
-
-  if (!isMailerConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "Mailer not configured — set RESEND_API_KEY and MAIL_FROM in Railway environment.",
-      },
-      { status: 500 },
-    );
-  }
 
   const row = await prisma.aISuggestion.findUnique({
     where: { id },
@@ -97,7 +95,7 @@ export async function POST(
       organizationId: true,
       title: true,
       client: {
-        select: { firstName: true, lastName: true, email: true },
+        select: { firstName: true, lastName: true, email: true, phone: true },
       },
       activitySummary: {
         select: {
@@ -114,8 +112,41 @@ export async function POST(
     return NextResponse.json({ error: "Linked proposal not found" }, { status: 404 });
   }
   const summary = proposal.activitySummary;
-  const clientEmail = proposal.client?.email?.trim();
-  if (!clientEmail) {
+  const clientEmail = proposal.client?.email?.trim() || null;
+  const clientPhone = proposal.client?.phone?.trim() || null;
+  // The wa.me URL needs a digits-only phone (no +/spaces). Built once
+  // here and used by the WhatsApp branch below.
+  const phoneDigits = clientPhone
+    ? clientPhone.replace(/[^\d+]/g, "").replace(/^\+/, "")
+    : null;
+
+  // Channel selection mirrors src/lib/dealMomentum.ts canAutoSend's
+  // expectations. The schedule route already validated the channel
+  // exists; this is the last-chance check that the contact method
+  // hasn't been removed in the intervening minutes.
+  const channel: "whatsapp" | "email" | null =
+    row.channel === "whatsapp" ? "whatsapp" : row.channel === "email" ? "email" : null;
+  if (!channel) {
+    await prisma.aISuggestion.update({
+      where: { id: row.id },
+      data: { autoSendScheduledFor: null },
+    });
+    return NextResponse.json(
+      { error: "No channel set on this suggestion — auto-send cancelled." },
+      { status: 422 },
+    );
+  }
+  if (channel === "whatsapp" && !phoneDigits) {
+    await prisma.aISuggestion.update({
+      where: { id: row.id },
+      data: { autoSendScheduledFor: null },
+    });
+    return NextResponse.json(
+      { error: "Client has no phone on file — auto-send cancelled." },
+      { status: 422 },
+    );
+  }
+  if (channel === "email" && !clientEmail) {
     await prisma.aISuggestion.update({
       where: { id: row.id },
       data: { autoSendScheduledFor: null },
@@ -123,6 +154,17 @@ export async function POST(
     return NextResponse.json(
       { error: "Client has no email on file — auto-send cancelled." },
       { status: 422 },
+    );
+  }
+  // Email channel needs a configured mailer; WhatsApp doesn't (Mode A
+  // dispatches via wa.me, not SMTP).
+  if (channel === "email" && !isMailerConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Mailer not configured — set RESEND_API_KEY and MAIL_FROM in Railway environment.",
+      },
+      { status: 500 },
     );
   }
 
@@ -156,7 +198,7 @@ export async function POST(
     reservationCompleted: summary?.reservationCompleted ?? false,
     lastOperatorMessageAt: lastSent?.sentAt ?? null,
     lastClientReplyAt: null,
-    channel: row.channel === "email" ? "email" : row.channel === "whatsapp" ? "whatsapp" : null,
+    channel,
   });
   if (!decision.ok) {
     // Conditions changed — abort cleanly. Drop the schedule so the
@@ -168,9 +210,42 @@ export async function POST(
     return NextResponse.json({ error: decision.reason, aborted: true }, { status: 422 });
   }
 
-  // Build the email. The model's draft uses the "Subject: ...\n\nbody"
-  // shape when channel === "email"; parse it back so the Resend
-  // request can carry a real subject line.
+  // ── WhatsApp branch (Mode A — wa.me deep-link) ──────────────────────────
+  // We don't programmatically dispatch (no Business API yet). The
+  // operator confirms the send in WhatsApp itself. Marking the row as
+  // sent here is correct: the system fired at the right moment, the
+  // operator doesn't have to think about it again.
+  if (channel === "whatsapp") {
+    const waUrl = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+      stripSubjectLine(row.output),
+    )}`;
+    const updated = await prisma.aISuggestion.update({
+      where: { id: row.id },
+      data: {
+        autoSent: true,
+        sentAt: new Date(),
+        autoSendScheduledFor: null,
+        channel: "whatsapp",
+        status: "applied",
+        appliedAt: new Date(),
+        outcome: "sent",
+      },
+      select: { id: true, autoSent: true, sentAt: true, channel: true, output: true },
+    });
+    console.log(
+      `[autoSend] WhatsApp wa.me ready for suggestion ${row.id} → ${phoneDigits} (proposal ${proposal.id})`,
+    );
+    return NextResponse.json({
+      ok: true,
+      suggestion: updated,
+      channel: "whatsapp",
+      waUrl,
+    });
+  }
+
+  // ── Email branch ────────────────────────────────────────────────────────
+  // The model's draft uses the "Subject: ...\n\nbody" shape — parse it
+  // back so the Resend request can carry a real subject line.
   const parsed = parseEmailDraft(row.output);
   const fullName = [
     proposal.client?.firstName,
@@ -182,7 +257,7 @@ export async function POST(
   const replyTo = await resolveOperatorEmail(auth.organization.id, row.userId);
 
   const result = await sendEmail({
-    to: clientEmail,
+    to: clientEmail!,
     subject: parsed.subject,
     text: parsed.body,
     html: bodyToHtml(parsed.body),
@@ -222,7 +297,17 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     suggestion: updated,
+    channel: "email",
   });
+}
+
+// WhatsApp drafts that came through the email-template path can carry
+// a "Subject: …\n\n" prefix the model used for the email variant.
+// Strip it before pushing into wa.me so the operator sees the body
+// only.
+function stripSubjectLine(s: string): string {
+  const m = /^subject:[^\n]*\n\n([\s\S]+)$/i.exec(s);
+  return (m?.[1] ?? s).trim();
 }
 
 function parseEmailDraft(draft: string): { subject: string; body: string } {
