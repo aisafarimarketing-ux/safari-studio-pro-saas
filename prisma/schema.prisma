@@ -110,6 +110,18 @@ model Organization {
   // tracks free-access state (trial / pilot / paid).
   plan String @default("none") // "none" | "consultant" | "explorer" | "operator"
 
+  // ── Follow-up automation level ─────────────────────────────────────
+  // Operator-selected "power level" for AI follow-ups. Drives the
+  // dashboard's UI per deal:
+  //   "assisted"      — drafts only, manual send (default)
+  //   "smart_assist"  — recommendations + one-click send
+  //   "auto"          — auto-send timer with safety guards
+  // isPremium is plumbed for future gating; today canUseMode() in
+  // src/lib/followUpMode.ts always returns true regardless. When we
+  // wire payment, flipping the gate is one line.
+  followUpMode String  @default("assisted") // "assisted" | "smart_assist" | "auto"
+  isPremium    Boolean @default(false)
+
   // ── Payment processor linkage ──────────────────────────────────────
   // paymentProcessor identifies which rail the subscription runs on.
   // Paystack is the EA primary (card + M-Pesa for Kenya). Stripe

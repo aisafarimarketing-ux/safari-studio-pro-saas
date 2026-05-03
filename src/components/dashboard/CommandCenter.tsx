@@ -28,6 +28,15 @@ import {
   WhatsAppIcon,
   WHATSAPP_GREEN,
 } from "@/lib/channelIcons";
+import {
+  FOLLOW_UP_MODES,
+  FOLLOW_UP_MODE_BLURB,
+  FOLLOW_UP_MODE_DEFAULT,
+  FOLLOW_UP_MODE_LABEL,
+  modeCapabilities,
+  normaliseFollowUpMode,
+  type FollowUpMode,
+} from "@/lib/followUpMode";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -105,6 +114,8 @@ type ActivityResponse = {
   pipeline: PipelineData | null;
   scope: "mine" | "all";
   canViewAll: boolean;
+  followUpMode: FollowUpMode;
+  isPremium: boolean;
 };
 
 type Task = {
@@ -312,6 +323,13 @@ function CommandCenterShell() {
           canViewAll={activity?.canViewAll ?? false}
         />
 
+        {/* Follow-up Mode selector — operator's "power level" for AI
+            follow-ups. Drives DealCard / FollowUpPanel adaptation;
+            persisted on the org so it survives sessions. */}
+        <FollowUpModeSelector
+          mode={activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
+        />
+
         {/* Hot Deals Bar — Deal Momentum's "what needs you NOW" surface.
             Sits above the pipeline strip so it's the first thing the
             operator sees on load. Click any client to scroll to their
@@ -333,7 +351,11 @@ function CommandCenterShell() {
             one viewport on a 1080p+ screen without scrolling. */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] gap-5">
           <div className="min-w-0 space-y-5">
-            <HotDealsSection cards={activity?.hot ?? null} loadFailed={loadFailed} />
+            <HotDealsSection
+              cards={activity?.hot ?? null}
+              loadFailed={loadFailed}
+              mode={activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
+            />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <NeedsFollowupSection
                 cards={activity?.needsFollowup ?? null}
@@ -358,6 +380,9 @@ function CommandCenterShell() {
           clientName={followUpTarget.clientName}
           clientPhone={followUpTarget.clientPhone}
           clientEmail={followUpTarget.clientEmail}
+          autoSendEligibility={followUpTarget.autoSendEligibility}
+          autoSendScheduledFor={followUpTarget.autoSendScheduledFor ?? null}
+          mode={followUpTarget.mode ?? activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
           onClose={() => setFollowUpTarget(null)}
         />
       )}
@@ -380,6 +405,9 @@ type FollowUpTarget = {
   clientEmail: string | null;
   autoSendEligibility?: { ok: true } | { ok: false; reason: string };
   autoSendScheduledFor?: string | null;
+  /** Operator's selected follow-up mode. Drives whether the panel
+   *  exposes the Schedule auto-send strip. */
+  mode?: FollowUpMode;
 };
 
 type ReservationSummaryTarget = {
@@ -742,9 +770,11 @@ function BellIcon() {
 function HotDealsSection({
   cards,
   loadFailed,
+  mode,
 }: {
   cards: ActivityCard[] | null;
   loadFailed: boolean;
+  mode: FollowUpMode;
 }) {
   // Cap visible cards at 4 (a 2x2 grid) so the section stays inside
   // one viewport. Anything beyond bubbles up via the count chip on
@@ -773,7 +803,7 @@ function HotDealsSection({
       ) : (
         <CardGrid>
           {visible.map((c) => (
-            <DealCard key={c.proposalId} card={c} />
+            <DealCard key={c.proposalId} card={c} mode={mode} />
           ))}
         </CardGrid>
       )}
@@ -785,8 +815,9 @@ function CardGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>;
 }
 
-function DealCard({ card }: { card: ActivityCard }) {
+function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
   const { tokens } = useDashboardTheme();
+  const caps = modeCapabilities(mode);
   const initial = (card.client?.name ?? "·").trim().charAt(0).toUpperCase();
   const tripSummary = card.title?.trim() || "Untitled proposal";
   const colors = MOMENTUM_COLORS[card.momentum];
@@ -796,8 +827,13 @@ function DealCard({ card }: { card: ActivityCard }) {
   const animClass = isVeryHot ? "ss-hot-pulse" : "";
   const hasDraft = Boolean(card.draft);
   const action = card.suggestedAction;
-  const autoScheduledIso = card.draft?.autoSendScheduledFor ?? null;
-  const autoSent = card.draft?.autoSent ?? false;
+  // Auto-send chip / countdown only render in Auto mode. Smart Assist
+  // and Assisted hide them so the card stays focused on the operator's
+  // own send action.
+  const autoScheduledIso = caps.allowAutoSend
+    ? card.draft?.autoSendScheduledFor ?? null
+    : null;
+  const autoSent = caps.allowAutoSend ? card.draft?.autoSent ?? false : false;
   // Channel hierarchy: WhatsApp primary when client.phone exists,
   // Email fallback when client.email exists. The Send-now button
   // adopts WhatsApp brand green when WhatsApp is the target so the
@@ -816,6 +852,7 @@ function DealCard({ card }: { card: ActivityCard }) {
           clientEmail: card.client?.email ?? null,
           autoSendEligibility: card.autoSendEligibility,
           autoSendScheduledFor: autoScheduledIso,
+          mode,
         },
       }),
     );
@@ -955,10 +992,11 @@ function DealCard({ card }: { card: ActivityCard }) {
         />
       ) : null}
 
-      {/* Suggested action — operator-readable line that mirrors the
-          deal momentum classifier's call. Hidden once an auto-send is
-          live so the card carries one urgent CTA, not two. */}
-      {!autoScheduledIso && !autoSent && (
+      {/* Suggested action — visible in Smart Assist + Auto. Hidden in
+          Assisted mode (the operator drives the send themselves) and
+          while an auto-send countdown is live (one urgent CTA per
+          card, not two). */}
+      {caps.showSuggestedAction && !autoScheduledIso && !autoSent && (
         <div
           className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
           style={{
@@ -980,6 +1018,21 @@ function DealCard({ card }: { card: ActivityCard }) {
           )}
         </div>
       )}
+
+      {/* "Recommended — client is active" hint for Smart Assist + Auto
+          on VERY_HOT deals. Distinct from the suggested-action chip:
+          the chip says what to do, this says why. */}
+      {caps.showRecommendedHint &&
+        isVeryHot &&
+        !autoScheduledIso &&
+        !autoSent && (
+          <div
+            className="mt-2 text-[11.5px]"
+            style={{ color: colors.fg, fontWeight: 600 }}
+          >
+            Recommended — client is active
+          </div>
+        )}
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {action === "WAIT" ? (
@@ -1039,21 +1092,23 @@ function DealCard({ card }: { card: ActivityCard }) {
             >
               Edit
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                /* Wait is a no-op for v1 — operator skips the suggestion.
-                   Future: persist a "snooze until" so the card de-prioritises. */
-              }}
-              className="inline-flex items-center gap-1 px-3 h-9 rounded-md text-[12px] font-medium transition"
-              style={{
-                background: "transparent",
-                color: tokens.muted,
-              }}
-              title="Skip this suggestion for now"
-            >
-              Wait
-            </button>
+            {caps.showWaitButton && (
+              <button
+                type="button"
+                onClick={() => {
+                  /* Wait is a no-op for v1 — operator skips the suggestion.
+                     Future: persist a "snooze until" so the card de-prioritises. */
+                }}
+                className="inline-flex items-center gap-1 px-3 h-9 rounded-md text-[12px] font-medium transition"
+                style={{
+                  background: "transparent",
+                  color: tokens.muted,
+                }}
+                title="Skip this suggestion for now"
+              >
+                Wait
+              </button>
+            )}
           </>
         )}
       </div>
@@ -1343,6 +1398,93 @@ function MomentumBadge({ momentum }: { momentum: DealMomentum }) {
       <span aria-hidden>{MOMENTUM_ICON[momentum]}</span>
       {MOMENTUM_LABEL[momentum]}
     </span>
+  );
+}
+
+function FollowUpModeSelector({ mode }: { mode: FollowUpMode }) {
+  const { tokens } = useDashboardTheme();
+  // Optimistic local state so the segmented control flips instantly
+  // even while the PATCH is in flight. ss:refreshActivity at the end
+  // pulls the canonical mode back from the server.
+  const [pending, setPending] = useState<FollowUpMode | null>(null);
+  const current = pending ?? normaliseFollowUpMode(mode);
+
+  const setMode = async (next: FollowUpMode) => {
+    if (next === current) return;
+    setPending(next);
+    try {
+      const res = await fetch("/api/org/follow-up-mode", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      if (!res.ok) {
+        const detail = (await res.json().catch(() => ({}))) as { error?: string };
+        fireToast({
+          message: "Couldn't change Follow-up Mode.",
+          hint: detail.error,
+        });
+        setPending(null);
+        return;
+      }
+      fireToast({
+        message: `Follow-up Mode: ${FOLLOW_UP_MODE_LABEL[next]}.`,
+        hint: FOLLOW_UP_MODE_BLURB[next],
+      });
+      window.dispatchEvent(new CustomEvent("ss:refreshActivity"));
+    } catch (err) {
+      fireToast({
+        message: "Couldn't change Follow-up Mode.",
+        hint: err instanceof Error ? err.message : undefined,
+      });
+      setPending(null);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl px-4 py-3 flex items-center justify-between gap-4 flex-wrap"
+      style={{
+        background: tokens.tileBg,
+        border: `1px solid ${tokens.ring}`,
+      }}
+    >
+      <div className="min-w-0">
+        <div
+          className="text-[10.5px] uppercase tracking-[0.22em] font-bold"
+          style={{ color: tokens.muted }}
+        >
+          Follow-up Mode
+        </div>
+        <div
+          className="text-[12.5px] mt-0.5"
+          style={{ color: tokens.body }}
+        >
+          {FOLLOW_UP_MODE_BLURB[current]}
+        </div>
+      </div>
+      <div
+        className="inline-flex items-center gap-1 p-1 rounded-md"
+        style={{ background: "rgba(0,0,0,0.05)" }}
+      >
+        {FOLLOW_UP_MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => void setMode(m)}
+            disabled={pending !== null && pending !== m}
+            className="px-3 h-7 rounded text-[12px] font-semibold transition disabled:opacity-50"
+            style={{
+              background: m === current ? tokens.primary : "transparent",
+              color: m === current ? "#ffffff" : tokens.heading,
+              boxShadow: m === current ? "0 1px 3px rgba(0,0,0,0.10)" : "none",
+            }}
+          >
+            {FOLLOW_UP_MODE_LABEL[m]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

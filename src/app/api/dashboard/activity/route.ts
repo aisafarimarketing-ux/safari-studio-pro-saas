@@ -9,6 +9,7 @@ import {
   type DealMomentum,
   type SuggestedAction,
 } from "@/lib/dealMomentum";
+import { normaliseFollowUpMode } from "@/lib/followUpMode";
 
 // GET /api/dashboard/activity
 //
@@ -106,6 +107,16 @@ export async function GET(req: Request) {
   const orgId = ctx.organization.id;
   const myUserId = ctx.user.id;
   const now = new Date();
+
+  // Pull the org's follow-up mode + premium flag so the dashboard can
+  // adapt without a second round-trip. Both default to safe values
+  // when the row is older than the migration that added the columns.
+  const orgRow = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { followUpMode: true, isPremium: true },
+  });
+  const followUpMode = normaliseFollowUpMode(orgRow?.followUpMode);
+  const isPremium = orgRow?.isPremium ?? false;
 
   // Base where for proposal-summary reads. Scope = "mine" filters by
   // proposal.userId (the consultant who owns the proposal). Scope =
@@ -470,5 +481,7 @@ export async function GET(req: Request) {
     pipeline,
     scope,
     canViewAll,
+    followUpMode,
+    isPremium,
   });
 }

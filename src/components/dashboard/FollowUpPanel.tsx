@@ -14,6 +14,10 @@ import {
   WhatsAppIcon,
   WHATSAPP_GREEN,
 } from "@/lib/channelIcons";
+import {
+  modeCapabilities,
+  type FollowUpMode,
+} from "@/lib/followUpMode";
 import { fireToast } from "./Toast";
 
 // FollowUpPanel — Deal Momentum's edit surface. Slide-out from the
@@ -39,6 +43,9 @@ type Props = {
    *  When set, the panel hides the "Schedule" button and shows a
    *  "Cancel auto-send" button instead. */
   autoSendScheduledFor?: string | null;
+  /** Operator's selected follow-up mode. The Schedule auto-send strip
+   *  only renders in Auto mode; Assisted + Smart Assist hide it. */
+  mode?: FollowUpMode;
   onClose: () => void;
 };
 
@@ -49,8 +56,10 @@ export function FollowUpPanel({
   clientEmail,
   autoSendEligibility,
   autoSendScheduledFor,
+  mode = "assisted",
   onClose,
 }: Props) {
+  const caps = modeCapabilities(mode);
   const [channel, setChannel] = useState<Channel>(
     clientPhone ? "whatsapp" : "email",
   );
@@ -345,9 +354,12 @@ export function FollowUpPanel({
           </p>
         </div>
 
-        {/* Auto-send strip — only renders for email-channel drafts on
-            VERY_HOT deals. Schedules a 12-minute timer; the dashboard
-            countdown UI (DealCard) takes over from there. */}
+        {/* Auto-send strip — only renders in Auto follow-up mode. The
+            schedule button is also gated server-side via
+            canAutoSend(); this is the UX layer that hides it in
+            Assisted / Smart Assist mode so it doesn't read as a
+            broken / disabled affordance. */}
+        {caps.allowAutoSend && (
         <AutoSendStrip
           suggestionId={null /* fetched lazily; we don't need it to render */}
           channel={channel}
@@ -376,6 +388,7 @@ export function FollowUpPanel({
             return typeof data.suggestionId === "string" ? data.suggestionId : null;
           }}
         />
+        )}
 
         {/* Footer — Send / Copy / Regenerate */}
         <div
