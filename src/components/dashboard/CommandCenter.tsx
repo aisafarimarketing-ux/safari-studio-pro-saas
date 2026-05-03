@@ -502,7 +502,7 @@ function IconBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="w-9 h-9 rounded-full flex items-center justify-center transition"
+      className="w-9 h-9 rounded-full flex items-center justify-center transition-[border-color,transform,background] duration-[120ms] ease-out active:scale-[0.94] active:duration-[60ms]"
       style={{
         background: tokens.tileBg,
         border: `1px solid ${tokens.ring}`,
@@ -636,7 +636,7 @@ function Hero({
             type="button"
             onClick={() => scrollToId("dash-hot-deals")}
             disabled={hotCount === 0}
-            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.98]"
+            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold transition-[filter,transform,background] duration-[120ms] ease-out disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
             style={{ background: tokens.accent, color: "#1a1a1a" }}
           >
             View hot deals →
@@ -644,7 +644,7 @@ function Hero({
           <button
             type="button"
             onClick={() => scrollToId("dash-followup")}
-            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+            className="px-4 h-10 rounded-lg text-[13.5px] font-semibold text-white transition-[filter,transform,background] duration-[120ms] ease-out hover:brightness-110 active:scale-[0.96] active:duration-[60ms]"
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "1px solid rgba(255,255,255,0.22)",
@@ -765,6 +765,7 @@ function DealCard({ card }: { card: ActivityCard }) {
   const reason = formatActivityReason(card.lastEventType, card.lastEventAt);
   const isHot = card.status === "hot";
   const isVeryHot = card.engagementScore >= 120;
+  const isFresh = isRecent(card.lastEventAt, 10 * 60_000);
   const statusLabel = isVeryHot ? "VERY HOT" : isHot ? "HOT" : card.status.toUpperCase();
 
   // Warm-tinted background for HOT / VERY HOT cards so they pop above
@@ -783,9 +784,19 @@ function DealCard({ card }: { card: ActivityCard }) {
       : tokens.ring;
   const ringHover = isHot || isVeryHot ? "rgba(220,38,38,0.45)" : tokens.ringHover;
 
+  // VERY HOT cards animate the existing ss-hot-pulse keyframe so the
+  // most-active deals visibly throb on the page. "Just touched" deals
+  // (event in the last ~10min) layer the ss-fresh ring on top so an
+  // operator's eye catches the freshest movement first.
+  const animClass = isVeryHot
+    ? "ss-hot-pulse"
+    : isFresh
+      ? "ss-fresh"
+      : "";
+
   return (
     <article
-      className="rounded-2xl p-6 transition"
+      className={`rounded-2xl p-6 transition-all duration-150 ease-out ${animClass}`}
       style={{
         background: warmTint,
         boxShadow: `inset 0 0 0 1px ${ring}, ${tokens.shadow}`,
@@ -793,7 +804,6 @@ function DealCard({ card }: { card: ActivityCard }) {
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-2px)";
         e.currentTarget.style.boxShadow = `inset 0 0 0 1px ${ringHover}, ${tokens.shadowHover}`;
-        e.currentTarget.style.transition = "transform 120ms ease, box-shadow 120ms ease";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
@@ -829,6 +839,9 @@ function DealCard({ card }: { card: ActivityCard }) {
             className="text-[12.5px] mt-2 flex items-center gap-1.5 flex-wrap"
             style={{ color: tokens.body }}
           >
+            {isRecent(card.lastEventAt, 5 * 60_000) && (
+              <span className="ss-recency-dot" aria-label="Activity in the last 5 minutes" />
+            )}
             <span style={{ color: tokens.heading, fontWeight: 600 }}>{reason.action}</span>
             <span aria-hidden style={{ color: tokens.muted }}>•</span>
             <span style={{ color: tokens.muted }}>{reason.when}</span>
@@ -1204,6 +1217,7 @@ function ActivityRow({ event }: { event: RecentEvent }) {
   const { tokens } = useDashboardTheme();
   const tone = activityTone(event.eventType);
   const label = activityLabel(event);
+  const fresh = isRecent(event.at, 5 * 60_000);
   return (
     <li className="flex items-start gap-3">
       <div
@@ -1230,10 +1244,13 @@ function ActivityRow({ event }: { event: RecentEvent }) {
         )}
       </div>
       <div
-        className="text-[10.5px] tabular-nums whitespace-nowrap shrink-0 mt-0.5"
+        className="text-[10.5px] tabular-nums whitespace-nowrap shrink-0 mt-0.5 inline-flex items-center gap-1.5"
         style={{ color: tokens.muted }}
       >
-        {formatRelative(event.at)}
+        {fresh && (
+          <span className="ss-recency-dot" aria-label="Just happened" />
+        )}
+        <span>{formatRelative(event.at)}</span>
       </div>
     </li>
   );
@@ -1421,7 +1438,7 @@ function PrimaryBtn({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center justify-center font-semibold transition active:scale-[0.97] ${sizeClass} ${
+      className={`inline-flex items-center justify-center font-semibold transition-[filter,transform,box-shadow] duration-[120ms] ease-out active:scale-[0.96] active:duration-[60ms] ${sizeClass} ${
         full ? "w-full" : ""
       }`}
       style={{
@@ -1454,7 +1471,7 @@ function SecondaryBtn({
   return (
     <Link
       href={href}
-      className="inline-flex items-center justify-center px-3.5 h-9 rounded-lg text-[12.5px] font-semibold transition active:scale-[0.97]"
+      className="inline-flex items-center justify-center px-3.5 h-9 rounded-lg text-[12.5px] font-semibold transition-[border-color,transform,background] duration-[120ms] ease-out active:scale-[0.96] active:duration-[60ms]"
       style={{
         background: "transparent",
         color: tokens.body,
@@ -1486,7 +1503,7 @@ function GhostBtn({
   return (
     <Link
       href={href}
-      className="inline-flex items-center justify-center px-3 h-11 rounded-lg text-[12.5px] font-medium transition active:scale-[0.97]"
+      className="inline-flex items-center justify-center px-3 h-11 rounded-lg text-[12.5px] font-medium transition-[color,background,transform] duration-[120ms] ease-out active:scale-[0.96] active:duration-[60ms]"
       style={{ background: "transparent", color: tokens.muted }}
       onMouseEnter={(e) => {
         e.currentTarget.style.color = tokens.body;
@@ -1564,6 +1581,17 @@ function formatRelative(iso: string): string {
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// True when the timestamp is within `windowMs` of now. Used to gate
+// the live-pulse decorations: recency dot (5min) on activity rows
+// and "just touched" ring (10min) on deal cards. Returns false on
+// missing / invalid timestamps so the caller never has to null-check.
+function isRecent(iso: string | null | undefined, windowMs: number): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t <= windowMs;
 }
 
 function formatShortDate(iso: string): string {
