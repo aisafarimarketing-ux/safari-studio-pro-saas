@@ -143,8 +143,8 @@ function Hero() {
         }}
       />
 
-      <div className="max-w-[1200px] mx-auto px-6 md:px-8 pt-16 md:pt-20 pb-24 md:pb-32">
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] gap-12 lg:gap-16 items-center">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 pt-14 md:pt-16 pb-20 md:pb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-10 lg:gap-12 items-center">
           {/* Left — copy */}
           <div className="min-w-0">
             <div
@@ -160,12 +160,12 @@ function Hero() {
             </div>
 
             <h1
-              className="mt-6 text-white"
+              className="mt-5 text-white"
               style={{
                 fontFamily: SERIF,
-                fontSize: "clamp(40px, 5.6vw, 64px)",
+                fontSize: "clamp(48px, 5.4vw, 64px)",
                 lineHeight: 1.05,
-                letterSpacing: "-0.02em",
+                letterSpacing: "-0.022em",
                 fontWeight: 600,
               }}
             >
@@ -174,19 +174,26 @@ function Hero() {
             </h1>
 
             <p
-              className="mt-6 text-[16px] md:text-[17px] leading-[1.6] max-w-[560px]"
-              style={{ color: "rgba(255,255,255,0.72)" }}
+              className="mt-5 text-[16px] max-w-[520px]"
+              style={{
+                color: "rgba(255,255,255,0.72)",
+                lineHeight: 1.6,
+              }}
             >
               Safari Studio shows you who&rsquo;s most engaged with your proposal,
               what they care about, and what to do next, so you can close more
               safaris, faster.
             </p>
 
-            <div className="mt-8 flex items-center gap-3 flex-wrap">
+            <div className="mt-7 flex items-center gap-3 flex-wrap">
               <a
                 href="/sign-up"
                 className="inline-flex items-center justify-center px-5 h-11 rounded-lg text-[14px] font-semibold transition active:scale-[0.97] hover:brightness-110"
-                style={{ background: GREEN, color: "#fff" }}
+                style={{
+                  background: GREEN,
+                  color: "#fff",
+                  boxShadow: "0 6px 16px -6px rgba(47,143,70,0.55)",
+                }}
               >
                 Book a demo →
               </a>
@@ -203,7 +210,7 @@ function Hero() {
             </div>
 
             <div
-              className="mt-5 text-[12.5px]"
+              className="mt-4 text-[12.5px]"
               style={{ color: "rgba(255,255,255,0.45)" }}
             >
               No credit card required · Live demo loads in 10 seconds
@@ -218,181 +225,253 @@ function Hero() {
   );
 }
 
-// Stylised hero-side preview of the dashboard. Composed entirely from
-// divs + inline svg so it renders crisp at any density and survives
-// without any /public asset.
+// Stylised hero-side preview of the dashboard. Built from a stack of
+// distinct sub-cards (greeting + KPIs · hot deal · activity feed ·
+// bookings preview) inside a single dark container so it reads as a
+// real product surface — layered cards with their own borders and
+// shadows, not a flat panel.
 function DashboardMockup() {
-  const cardBg = "rgba(255,255,255,0.04)";
-  const cardBorder = "rgba(255,255,255,0.08)";
-  const cardBorderStrong = "rgba(255,255,255,0.14)";
+  const subBg = "rgba(255,255,255,0.03)";
+  const subBorder = "rgba(255,255,255,0.09)";
+  const containerBorder = "rgba(255,255,255,0.14)";
 
   return (
     <div className="relative">
-      {/* outer shadow halo */}
+      {/* Soft warm halo behind the card so the dark surface lifts off
+          the dark hero gradient with a faint amber glow. */}
       <div
         aria-hidden
-        className="absolute -inset-6 rounded-3xl opacity-60 pointer-events-none"
+        className="absolute -inset-5 rounded-[28px] opacity-70 pointer-events-none"
         style={{
           background:
-            "radial-gradient(ellipse at 50% 50%, rgba(215,183,91,0.18) 0%, transparent 70%)",
+            "radial-gradient(ellipse at 50% 35%, rgba(215,183,91,0.18) 0%, transparent 65%)",
         }}
       />
 
       <div
-        className="relative rounded-2xl p-5 backdrop-blur-sm"
+        className="relative rounded-2xl p-3.5"
         style={{
-          background: "rgba(13,28,22,0.88)",
-          border: `1px solid ${cardBorderStrong}`,
+          background: "rgba(10,22,18,0.92)",
+          border: `1px solid ${containerBorder}`,
           boxShadow:
-            "0 30px 80px -20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)",
+            "0 24px 48px -16px rgba(0,0,0,0.7), 0 8px 16px -8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
-        {/* greeting strip */}
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div>
-            <div
-              className="text-[10px] uppercase tracking-[0.18em] font-semibold"
-              style={{ color: GOLD }}
-            >
-              Today
-            </div>
-            <div
-              className="mt-0.5 text-white text-[16px]"
-              style={{ fontFamily: SERIF, fontWeight: 600 }}
-            >
-              Good morning, Alex.
-            </div>
-          </div>
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold"
-            style={{ background: GREEN, color: "#fff" }}
-          >
-            AO
-          </div>
-        </div>
-
-        {/* KPI row */}
+        {/* ── Sub-card 1: greeting + KPI row ─────────────────────── */}
         <div
-          className="grid grid-cols-3 gap-2 rounded-xl p-3"
-          style={{ background: cardBg, border: `1px solid ${cardBorder}` }}
+          className="rounded-xl p-3.5"
+          style={{ background: subBg, border: `1px solid ${subBorder}` }}
         >
-          <Kpi label="Hot" value="12" tone="hot" />
-          <Kpi label="Follow-up" value="3" tone="warn" />
-          <Kpi label="Bookings" value="8" tone="ok" />
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <div
+                className="text-[9.5px] uppercase tracking-[0.22em] font-semibold"
+                style={{ color: GOLD }}
+              >
+                Today
+              </div>
+              <div
+                className="mt-0.5 text-white text-[15.5px]"
+                style={{ fontFamily: SERIF, fontWeight: 600, letterSpacing: "-0.005em" }}
+              >
+                Good morning, Alex.
+              </div>
+            </div>
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold"
+              style={{ background: GREEN, color: "#fff" }}
+              aria-hidden
+            >
+              AO
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-0">
+            <Kpi label="Hot" value="12" tone="hot" />
+            <Kpi label="Follow-up" value="3" tone="warn" divider />
+            <Kpi label="Bookings" value="8" tone="ok" divider />
+          </div>
         </div>
 
-        {/* hot-deal card */}
+        {/* ── Sub-card 2: active deal with VERY HOT badge ────────── */}
         <div
-          className="mt-3 rounded-xl p-3.5"
+          className="mt-2.5 rounded-xl relative overflow-hidden"
           style={{
-            background: cardBg,
-            border: `1px solid rgba(220,38,38,0.22)`,
-            position: "relative",
-            overflow: "hidden",
+            background: subBg,
+            border: `1px solid rgba(220,38,38,0.30)`,
           }}
         >
           <div
             aria-hidden
-            className="absolute left-0 top-0 bottom-0 w-[3px]"
-            style={{ background: "rgba(220,38,38,0.65)" }}
+            className="absolute left-0 top-0 bottom-0 w-[4px]"
+            style={{ background: "#dc2626" }}
           />
-          <div className="flex items-start gap-3">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0"
-              style={{ background: GREEN, color: "#fff" }}
-            >
-              L
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <div className="text-white text-[13px] font-semibold truncate">
-                  Lilian Nyongesa
+          <div className="p-3.5 pl-4">
+            <div className="flex items-start gap-3">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0"
+                style={{ background: GREEN, color: "#fff" }}
+                aria-hidden
+              >
+                L
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="text-white text-[13px] font-semibold truncate">
+                    Lilian Nyongesa
+                  </div>
+                  <span
+                    className="text-[8.5px] uppercase tracking-[0.20em] font-bold px-1.5 py-0.5 rounded shrink-0"
+                    style={{
+                      background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
+                      color: "#fff",
+                    }}
+                  >
+                    Very hot
+                  </span>
                 </div>
-                <span
-                  className="text-[9px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
-                  style={{
-                    background: "linear-gradient(135deg,#dc2626 0%,#991b1b 100%)",
-                    color: "#fff",
-                  }}
+                <div
+                  className="text-[11px] truncate mt-0.5"
+                  style={{ color: "rgba(255,255,255,0.6)" }}
                 >
-                  Very hot
-                </span>
+                  Migration Safari · Mara &amp; Serengeti · 9 days
+                </div>
+                <div
+                  className="text-[11px] mt-1 flex items-center gap-1.5"
+                >
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full"
+                    style={{ background: "#16a34a", boxShadow: "0 0 0 3px rgba(22,163,74,0.18)" }}
+                  />
+                  <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
+                  <span style={{ color: "rgba(255,255,255,0.4)" }}>· 32m</span>
+                </div>
               </div>
-              <div
-                className="text-[11.5px] truncate mt-0.5"
-                style={{ color: "rgba(255,255,255,0.6)" }}
-              >
-                Mara · Serengeti · 9 days
-              </div>
-              <div
-                className="text-[11px] mt-1 flex items-center gap-1.5"
-                style={{ color: "rgba(255,255,255,0.7)" }}
-              >
-                <span
-                  className="inline-block w-1.5 h-1.5 rounded-full"
-                  style={{ background: "#16a34a" }}
-                />
-                <span style={{ color: "#fff", fontWeight: 600 }}>Viewed pricing</span>
-                <span style={{ color: "rgba(255,255,255,0.4)" }}>· 32m ago</span>
+              <div className="text-right shrink-0">
+                <div
+                  className="text-[22px] leading-none tabular-nums text-white"
+                  style={{ fontFamily: SERIF, fontWeight: 800, letterSpacing: "-0.02em" }}
+                >
+                  142
+                </div>
+                <div
+                  className="text-[8.5px] uppercase tracking-[0.20em] font-semibold mt-0.5"
+                  style={{ color: "rgba(255,255,255,0.5)" }}
+                >
+                  score
+                </div>
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <div
-                className="text-[20px] leading-none tabular-nums text-white"
-                style={{ fontFamily: SERIF, fontWeight: 800 }}
+
+            <div
+              className="mt-3 inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px]"
+              style={{
+                background: "rgba(47,143,70,0.16)",
+                color: "#9CD9A8",
+                border: "1px solid rgba(47,143,70,0.32)",
+              }}
+            >
+              <span
+                className="text-[8px] uppercase tracking-[0.18em] font-bold"
+                style={{ opacity: 0.75 }}
               >
-                142
-              </div>
-              <div
-                className="text-[8.5px] uppercase tracking-[0.18em] font-semibold mt-0.5"
-                style={{ color: "rgba(255,255,255,0.5)" }}
-              >
-                score
-              </div>
+                Next
+              </span>
+              <span style={{ fontWeight: 600 }}>Answer pricing questions</span>
             </div>
           </div>
         </div>
 
-        {/* activity rows */}
-        <div className="mt-3 space-y-2">
-          <ActivityLine
-            glyph="$"
-            tone="amber"
-            label="Marcus viewed pricing"
-            sub="The Anderson Family"
-            time="1h"
-          />
-          <ActivityLine
-            glyph="📍"
-            tone="green"
-            label="Priya tapped Day 4"
-            sub="Honeymoon Migration"
-            time="2h"
-          />
-          <ActivityLine
-            glyph="✓"
-            tone="success"
-            label="Booking confirmed"
-            sub="Devereux Family"
-            time="4h"
-          />
-        </div>
-
+        {/* ── Sub-card 3: activity feed ──────────────────────────── */}
         <div
-          className="mt-4 pt-3 flex items-center justify-between"
-          style={{ borderTop: `1px solid ${cardBorder}` }}
+          className="mt-2.5 rounded-xl p-3.5"
+          style={{ background: subBg, border: `1px solid ${subBorder}` }}
         >
-          <div
-            className="text-[11px]"
-            style={{ color: "rgba(255,255,255,0.5)" }}
-          >
-            $42K in pipeline
+          <div className="flex items-center justify-between mb-2.5">
+            <div
+              className="text-[11.5px] text-white"
+              style={{ fontFamily: SERIF, fontWeight: 600 }}
+            >
+              Client activity
+            </div>
+            <div
+              className="text-[10px] font-semibold"
+              style={{ color: GOLD }}
+            >
+              View all →
+            </div>
           </div>
-          <div
-            className="text-[11px] font-semibold"
-            style={{ color: GOLD }}
-          >
-            View activity →
+          <div className="space-y-2">
+            <ActivityLine
+              glyph="$"
+              tone="amber"
+              label="Marcus viewed pricing"
+              sub="The Anderson Family"
+              time="1h"
+              fresh
+            />
+            <ActivityLine
+              glyph="📍"
+              tone="green"
+              label="Priya tapped Day 4"
+              sub="Honeymoon Migration"
+              time="2h"
+            />
+            <ActivityLine
+              glyph="✓"
+              tone="success"
+              label="Booking confirmed"
+              sub="Devereux Family"
+              time="4h"
+            />
+            <ActivityLine
+              glyph="👁"
+              tone="green"
+              label="Sarah opened proposal"
+              sub="Beach &amp; Bush"
+              time="5h"
+            />
+          </div>
+        </div>
+
+        {/* ── Sub-card 4: bookings preview ───────────────────────── */}
+        <div
+          className="mt-2.5 rounded-xl p-3.5"
+          style={{ background: subBg, border: `1px solid ${subBorder}` }}
+        >
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <div
+                className="text-[11.5px] text-white"
+                style={{ fontFamily: SERIF, fontWeight: 600 }}
+              >
+                New bookings
+              </div>
+              <span
+                className="text-[9px] tabular-nums font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: "rgba(47,143,70,0.18)", color: "#9CD9A8" }}
+              >
+                3
+              </span>
+            </div>
+            <div
+              className="text-[10px] font-semibold"
+              style={{ color: GOLD }}
+            >
+              View all →
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <BookingPreview
+              isNew
+              client="The Devereux Family"
+              dates="14 Jun → 23 Jun"
+            />
+            <BookingPreview
+              client="Sam &amp; Lily Wong"
+              dates="2 Jul → 11 Jul"
+            />
           </div>
         </div>
       </div>
@@ -404,15 +483,22 @@ function Kpi({
   label,
   value,
   tone,
+  divider = false,
 }: {
   label: string;
   value: string;
   tone: "hot" | "warn" | "ok";
+  divider?: boolean;
 }) {
   const accent =
     tone === "hot" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#22c55e";
   return (
-    <div className="px-2 py-1.5">
+    <div
+      className="px-3"
+      style={{
+        borderLeft: divider ? "1px solid rgba(255,255,255,0.08)" : "none",
+      }}
+    >
       <div
         className="text-[8.5px] uppercase tracking-[0.20em] font-semibold flex items-center gap-1.5"
         style={{ color: "rgba(255,255,255,0.5)" }}
@@ -426,7 +512,12 @@ function Kpi({
       </div>
       <div
         className="mt-0.5 text-white tabular-nums leading-none"
-        style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}
+        style={{
+          fontFamily: SERIF,
+          fontSize: 30,
+          fontWeight: 800,
+          letterSpacing: "-0.025em",
+        }}
       >
         {value}
       </div>
@@ -440,12 +531,14 @@ function ActivityLine({
   label,
   sub,
   time,
+  fresh = false,
 }: {
   glyph: string;
   tone: "amber" | "green" | "success";
   label: string;
   sub: string;
   time: string;
+  fresh?: boolean;
 }) {
   const swatch =
     tone === "amber"
@@ -456,7 +549,7 @@ function ActivityLine({
   return (
     <div className="flex items-start gap-2.5">
       <div
-        className="w-7 h-7 rounded-md flex items-center justify-center text-[12px] shrink-0"
+        className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] shrink-0 mt-0.5"
         style={{ background: swatch.bg, color: swatch.fg }}
         aria-hidden
       >
@@ -464,24 +557,87 @@ function ActivityLine({
       </div>
       <div className="flex-1 min-w-0">
         <div
-          className="text-[12px] truncate text-white"
+          className="text-[11.5px] truncate text-white"
           style={{ fontWeight: 600 }}
         >
           {label}
         </div>
         <div
-          className="text-[10.5px] truncate"
-          style={{ color: "rgba(255,255,255,0.55)" }}
+          className="text-[10px] truncate"
+          style={{ color: "rgba(255,255,255,0.5)" }}
         >
           {sub}
         </div>
       </div>
       <div
-        className="text-[10.5px] tabular-nums shrink-0 mt-0.5"
-        style={{ color: "rgba(255,255,255,0.45)" }}
+        className="text-[10px] tabular-nums shrink-0 mt-1 inline-flex items-center gap-1"
+        style={{
+          color: fresh ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.45)",
+          fontWeight: fresh ? 600 : 400,
+        }}
       >
+        {fresh && (
+          <span
+            aria-hidden
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{
+              background: "#16a34a",
+              boxShadow: "0 0 0 3px rgba(22,163,74,0.25)",
+            }}
+          />
+        )}
         {time}
       </div>
+    </div>
+  );
+}
+
+function BookingPreview({
+  isNew = false,
+  client,
+  dates,
+}: {
+  isNew?: boolean;
+  client: string;
+  dates: string;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2.5 px-2 py-1.5 rounded-md"
+      style={{
+        background: isNew ? "rgba(22,163,74,0.08)" : "transparent",
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {isNew && (
+            <span
+              className="text-[7.5px] uppercase tracking-[0.20em] font-bold px-1 py-0.5 rounded shrink-0"
+              style={{ background: "#dcfce7", color: "#166534" }}
+            >
+              New
+            </span>
+          )}
+          <div
+            className="text-[11.5px] truncate text-white"
+            style={{ fontWeight: 600 }}
+          >
+            {client}
+          </div>
+        </div>
+        <div
+          className="text-[10px] tabular-nums truncate mt-0.5"
+          style={{ color: "rgba(255,255,255,0.5)" }}
+        >
+          {dates}
+        </div>
+      </div>
+      <span
+        className="text-[10px] font-semibold px-2 py-1 rounded shrink-0"
+        style={{ color: GOLD, border: "1px solid rgba(215,183,91,0.32)" }}
+      >
+        Open
+      </span>
     </div>
   );
 }
@@ -504,33 +660,33 @@ function BuiltForStrip() {
   ];
   return (
     <section
-      className="py-16 md:py-20"
+      className="py-14 md:py-16"
       style={{ borderBottom: `1px solid ${CARD_BORDER}` }}
     >
       <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
         <div
-          className="text-[11.5px] font-semibold uppercase tracking-[0.28em]"
+          className="text-[11px] font-semibold uppercase tracking-[0.32em]"
           style={{ color: INK_3 }}
         >
           Built for leading safari teams
         </div>
         <p
-          className="mt-3 text-[15px] max-w-[640px] mx-auto"
+          className="mt-2.5 text-[14.5px]"
           style={{ color: INK_2 }}
         >
-          Inspired by how high-performing safari operators sell, plan, follow
-          up, and close trips.
+          Inspired by how high-performing safari operators sell, plan, follow up, and close trips.
         </p>
 
-        <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-8 gap-y-6 items-center">
+        <div className="mt-9 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-8 gap-y-5 items-center">
           {categories.map((label) => (
             <div
               key={label}
-              className="text-[12px] font-semibold tracking-[0.22em] text-center"
+              className="text-[11.5px] font-semibold text-center whitespace-nowrap"
               style={{
                 color: INK_3,
                 fontFamily: SANS,
-                opacity: 0.7,
+                letterSpacing: "0.28em",
+                opacity: 0.55,
               }}
             >
               {label}
@@ -563,7 +719,7 @@ function WhyOperators() {
   return (
     <section
       id="why"
-      className="py-20 md:py-24"
+      className="py-16 md:py-20"
       style={{ background: BG }}
     >
       <div className="max-w-[1200px] mx-auto px-6 md:px-8">
@@ -573,7 +729,7 @@ function WhyOperators() {
               fontFamily: SERIF,
               fontSize: "clamp(28px, 3.6vw, 36px)",
               lineHeight: 1.1,
-              letterSpacing: "-0.015em",
+              letterSpacing: "-0.018em",
               fontWeight: 600,
               color: INK,
             }}
@@ -590,14 +746,14 @@ function WhyOperators() {
           </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Pains card */}
           <div
-            className="rounded-2xl p-7"
+            className="rounded-2xl p-6"
             style={{
               background: "#fff",
               border: `1px solid ${CARD_BORDER}`,
-              boxShadow: "0 1px 2px rgba(13,38,32,0.04), 0 8px 24px -10px rgba(13,38,32,0.06)",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px -4px rgba(0,0,0,0.06)",
             }}
           >
             <div
@@ -632,11 +788,11 @@ function WhyOperators() {
 
           {/* Gains card — green */}
           <div
-            className="rounded-2xl p-7 relative overflow-hidden"
+            className="rounded-2xl p-6 relative overflow-hidden"
             style={{
               background: `linear-gradient(135deg, ${GREEN_DEEP} 0%, ${GREEN} 100%)`,
               boxShadow:
-                "0 1px 2px rgba(13,38,32,0.04), 0 8px 28px -10px rgba(34,106,51,0.4)",
+                "0 1px 2px rgba(0,0,0,0.06), 0 6px 16px -6px rgba(34,106,51,0.45)",
               color: "#fff",
             }}
           >
@@ -715,7 +871,7 @@ function WhatOperatorsWant() {
   ];
 
   return (
-    <section id="product" className="py-20 md:py-24" style={{ background: "#fff", borderTop: `1px solid ${CARD_BORDER}`, borderBottom: `1px solid ${CARD_BORDER}` }}>
+    <section id="product" className="py-16 md:py-20" style={{ background: "#fff", borderTop: `1px solid ${CARD_BORDER}`, borderBottom: `1px solid ${CARD_BORDER}` }}>
       <div className="max-w-[1200px] mx-auto px-6 md:px-8">
         <div className="text-center max-w-[680px] mx-auto">
           <div
@@ -730,7 +886,7 @@ function WhatOperatorsWant() {
               fontFamily: SERIF,
               fontSize: "clamp(28px, 3.6vw, 36px)",
               lineHeight: 1.1,
-              letterSpacing: "-0.015em",
+              letterSpacing: "-0.018em",
               fontWeight: 600,
               color: INK,
             }}
@@ -746,14 +902,15 @@ function WhatOperatorsWant() {
           </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {items.map((it) => (
             <article
               key={it.title}
-              className="rounded-2xl p-6"
+              className="rounded-2xl p-5"
               style={{
                 background: BG,
                 border: `1px solid ${CARD_BORDER}`,
+                boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
               }}
             >
               <div
@@ -793,7 +950,7 @@ function Pricing() {
   return (
     <section
       id="pricing"
-      className="py-20 md:py-24 relative overflow-hidden"
+      className="py-16 md:py-20 relative overflow-hidden"
       style={{
         background: `linear-gradient(180deg, ${HERO_BOTTOM} 0%, ${HERO_TOP} 100%)`,
         color: "#fff",
@@ -830,7 +987,7 @@ function Pricing() {
           </p>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-5">
           <PriceCard
             name="Starter"
             price="$59"
@@ -1005,7 +1162,7 @@ function PriceCard({
 function FinalCTA() {
   return (
     <section
-      className="py-16 md:py-20"
+      className="py-14 md:py-16"
       style={{ background: HERO_TOP, color: "#fff" }}
     >
       <div className="max-w-[1200px] mx-auto px-6 md:px-8 text-center">
