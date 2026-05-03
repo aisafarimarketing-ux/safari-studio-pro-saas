@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notifyReservationReceived } from "@/lib/notifications";
+import { recordProposalEvent } from "@/lib/proposalActivity";
+import { displayTrackingId } from "@/lib/proposalTracking";
 
 // POST /api/public/proposals/:id/reserve
 //
@@ -65,6 +67,7 @@ export async function POST(
       organizationId: true,
       userId: true,
       title: true,
+      trackingId: true,
       requestId: true,
       clientId: true,
       user: { select: { email: true, name: true } },
@@ -156,8 +159,32 @@ export async function POST(
   });
 
   const clientFullName = `${firstName} ${lastName}`.trim();
-  const trackingId = proposal.id.slice(-8).toUpperCase();
+  const trackingId = displayTrackingId(proposal);
   const tripTitle = proposal.title?.trim() || "Untitled proposal";
+
+  // ── Org-level activity event ────────────────────────────────────────────
+  // Authoritative reservation_completed write — the dialog's
+  // client-side track() call also fires this kind, but the track route
+  // intentionally drops it on the floor so the score doesn't double-
+  // count. This server-side path is the single source of truth.
+  try {
+    await recordProposalEvent({
+      organizationId: proposal.organizationId,
+      proposalId: proposal.id,
+      clientId: proposal.clientId ?? null,
+      eventType: "reservation_completed",
+      metadata: {
+        reservationId: reservation.id,
+        sessionId: sessionId ?? null,
+      },
+    });
+  } catch (err) {
+    // Reservation row is already persisted; activity log is the
+    // soft path. Logged so a recurring failure surfaces.
+    console.warn("[reserve] recordProposalEvent failed:", err, {
+      reservationId: reservation.id,
+    });
+  }
 
   // ── Internal copy — Message row for inbox visibility ────────────────────
   // Stores a snapshot of the booking as a system-channel inbound
@@ -214,6 +241,7 @@ export async function POST(
   void notifyReservationReceived({
     organizationId: proposal.organizationId,
     proposalId: proposal.id,
+    trackingId,
     proposalTitle: proposal.title,
     reservationId: reservation.id,
     consultantEmail: proposal.user?.email ?? null,

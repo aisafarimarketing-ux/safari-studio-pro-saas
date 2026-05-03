@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBlankProposal } from "@/lib/defaults";
 import { recordActivity } from "@/lib/activity";
+import { nextProposalTrackingId } from "@/lib/proposalTracking";
 
 // POST /api/requests/[id]/quote
 //
@@ -98,6 +99,15 @@ export async function POST(
   if (brandDNA?.brandName) proposal.operator.companyName = brandDNA.brandName;
   if (brandDNA?.logoUrl) proposal.operator.logoUrl = brandDNA.logoUrl;
 
+  // Allocate a tracking id ("PRO-2026-0042") for the new proposal.
+  // Best-effort — null trackingId still saves and reads fall back.
+  let trackingId: string | undefined;
+  try {
+    trackingId = await nextProposalTrackingId(ctx.organization.id);
+  } catch (err) {
+    console.warn("[requests/quote] trackingId allocation failed:", err);
+  }
+
   // Persist. Both requestId + clientId are set so the proposal ties back
   // to the CRM pipeline. status stays "draft".
   const saved = await prisma.proposal.create({
@@ -110,8 +120,9 @@ export async function POST(
       contentJson: proposal as unknown as Prisma.InputJsonValue,
       requestId: request.id,
       clientId: request.client?.id ?? null,
+      ...(trackingId ? { trackingId } : {}),
     },
-    select: { id: true, title: true, createdAt: true },
+    select: { id: true, title: true, trackingId: true, createdAt: true },
   });
 
   // System note on the request feed + activity event.

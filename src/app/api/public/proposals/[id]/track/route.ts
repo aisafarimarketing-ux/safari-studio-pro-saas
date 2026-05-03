@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { triggerProposalViewed } from "@/lib/ghl/workflowEvents";
+import {
+  recordProposalEvent,
+  type ProposalEventType,
+} from "@/lib/proposalActivity";
 
 // POST /api/public/proposals/:id/track
 //   Body: { sessionId, kind: "open" | "section" | "close",
@@ -18,9 +22,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
 
   // Proposal must exist (avoid enumeration via this endpoint).
+  // Pull the org + client links so the activity layer can attribute
+  // the event to the right tenant + contact without a second query.
   const proposal = await prisma.proposal.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, organizationId: true, clientId: true },
   });
   if (!proposal) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -33,14 +39,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
   }
-  // open / section / close drive engagement metrics.
-  // reservation_started / reservation_completed bookend the booking
-  // popup flow — used by funnel analytics + future GHL workflow
-  // triggers ("client opened booking but didn't submit" → nudge).
+  // Two parallel taxonomies share this endpoint:
+  //   • Session-scoped engagement: open / section / close — used by
+  //     ProposalView (one row per anonymous viewer session).
+  //   • Org-level activity: proposal_viewed / proposal_scrolled /
+  //     itinerary_clicked / price_viewed / reservation_started /
+  //     reservation_completed — used by ProposalEvent +
+  //     ProposalActivitySummary (org-level "what's hot today").
+  // "open" is the legacy spelling for the first session view; we
+  // accept both names and normalise "open" → "proposal_viewed" when
+  // writing to the org-level log so older /p/[id] clients keep
+  // working without a frontend release.
   const ALLOWED_KINDS = [
     "open",
     "section",
     "close",
+    "proposal_viewed",
+    "proposal_scrolled",
+    "itinerary_clicked",
+    "price_viewed",
     "reservation_started",
     "reservation_completed",
   ] as const;
@@ -66,43 +83,89 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     ?? req.headers.get("x-vercel-ip-country")
     ?? null;
 
-  // Upsert the view row. sessionStorage-issued sessionIds mean reload = same
-  // session, new tab = possibly new session (we accept that inflation).
+  // Session-scoped kinds drive the legacy ProposalView accumulator. Org-
+  // level event kinds (proposal_viewed, proposal_scrolled, etc.) feed
+  // the new ProposalEvent log instead.
+  const SESSION_KINDS = new Set(["open", "section", "close"]);
+  const isSessionKind = SESSION_KINDS.has(kind);
+
   const now = new Date();
-  const view = await prisma.proposalView.upsert({
-    where: { proposalId_sessionId: { proposalId: id, sessionId } },
-    create: {
-      proposalId: id,
-      sessionId,
-      userAgent,
-      referrer,
-      country,
-    },
-    update: {
-      lastViewedAt: now,
-      // Bump viewCount only on "open" kinds (tab reload / new session start).
-      ...(kind === "open" ? { viewCount: { increment: 1 } } : {}),
-      // Accumulate dwell on section / close events.
-      ...(dwellSeconds && (kind === "section" || kind === "close")
-        ? { totalSeconds: { increment: dwellSeconds } }
-        : {}),
-    },
-  });
+  if (isSessionKind) {
+    // Upsert the view row. sessionStorage-issued sessionIds mean reload =
+    // same session, new tab = possibly new session (we accept that
+    // inflation).
+    const view = await prisma.proposalView.upsert({
+      where: { proposalId_sessionId: { proposalId: id, sessionId } },
+      create: {
+        proposalId: id,
+        sessionId,
+        userAgent,
+        referrer,
+        country,
+      },
+      update: {
+        lastViewedAt: now,
+        // Bump viewCount only on "open" kinds (tab reload / new session start).
+        ...(kind === "open" ? { viewCount: { increment: 1 } } : {}),
+        // Accumulate dwell on section / close events.
+        ...(dwellSeconds && (kind === "section" || kind === "close")
+          ? { totalSeconds: { increment: dwellSeconds } }
+          : {}),
+      },
+    });
 
-  await prisma.proposalViewEvent.create({
-    data: {
-      viewId: view.id,
-      kind,
-      sectionId,
-      dwellSeconds,
-    },
-  });
+    await prisma.proposalViewEvent.create({
+      data: {
+        viewId: view.id,
+        kind,
+        sectionId,
+        dwellSeconds,
+      },
+    });
+  }
 
-  // GHL-side fan-out for the booking funnel — fire-and-forget so a
-  // slow webhook never blocks the client. v1 just records the event;
-  // workflow triggers can be added alongside triggerProposalViewed
-  // when GHL is wired.
-  void kind;
+  // ── Org-level activity log ──────────────────────────────────────────────
+  // Map the wire kind to a ProposalEventType; "open" carries forward as
+  // proposal_viewed so older clients populate the new tables too.
+  // Section / close are session-only — they never become org-level
+  // activity events.
+  const activityType: ProposalEventType | null = (() => {
+    switch (kind) {
+      case "open": return "proposal_viewed";
+      case "proposal_viewed": return "proposal_viewed";
+      case "proposal_scrolled": return "proposal_scrolled";
+      case "itinerary_clicked": return "itinerary_clicked";
+      case "price_viewed": return "price_viewed";
+      case "reservation_started": return "reservation_started";
+      // reservation_completed is written authoritatively by the reserve
+      // route; we ignore it here so the dashboard score doesn't double-
+      // count when the dialog also fires it via track.
+      case "reservation_completed": return null;
+      default: return null;
+    }
+  })();
+
+  if (activityType && proposal.organizationId) {
+    try {
+      await recordProposalEvent({
+        organizationId: proposal.organizationId,
+        proposalId: id,
+        clientId: proposal.clientId ?? null,
+        eventType: activityType,
+        metadata: {
+          sessionId,
+          ...(sectionId ? { sectionId } : {}),
+          ...(dwellSeconds ? { dwellSeconds } : {}),
+        },
+      });
+    } catch (err) {
+      // Activity is best-effort: a failure here mustn't 500 the
+      // tracker. The session-scoped ProposalView log is already
+      // persisted, so engagement metrics survive even when the
+      // activity layer is broken.
+      console.warn("[track] recordProposalEvent failed:", err, { proposalId: id, kind });
+    }
+  }
 
   // First-view detection — only on "open" kinds. We count ProposalView
   // rows for this proposal AFTER the upsert; if exactly one exists, the

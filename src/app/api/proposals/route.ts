@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { planProposalLimit, planLabel, type PlanKey } from "@/lib/billing/plans";
+import { nextProposalTrackingId } from "@/lib/proposalTracking";
 
 // Enforce the monthly proposal limit tied to the org's paid plan. Returns
 // a 402 response when the limit is hit; otherwise null. Trial / pilot
@@ -158,6 +159,20 @@ export async function POST(req: Request) {
     if (limitError) return limitError;
   }
 
+  // Allocate a human-readable trackingId on first create only — saves
+  // (subsequent upserts) preserve the existing id. Best-effort: if the
+  // counter increment fails, the proposal still saves with a null
+  // trackingId and the displayTrackingId() helper falls back to the
+  // legacy id.slice(-8) format wherever the id is rendered.
+  let trackingId: string | undefined;
+  if (!existing) {
+    try {
+      trackingId = await nextProposalTrackingId(ctx.organization.id);
+    } catch (err) {
+      console.warn("[proposals] trackingId allocation failed:", err);
+    }
+  }
+
   const saved = await prisma.proposal.upsert({
     where: { id: proposal.id },
     create: {
@@ -167,6 +182,7 @@ export async function POST(req: Request) {
       title,
       status,
       contentJson: proposal as object,
+      ...(trackingId ? { trackingId } : {}),
     },
     update: {
       title,
@@ -174,7 +190,7 @@ export async function POST(req: Request) {
       organizationId: ctx.organization.id,
       contentJson: proposal as object,
     },
-    select: { id: true, title: true, updatedAt: true },
+    select: { id: true, title: true, trackingId: true, updatedAt: true },
   });
   return NextResponse.json({ proposal: saved });
 }

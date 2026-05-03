@@ -212,6 +212,12 @@ export async function notifyOverdue(params: {
 export async function notifyReservationReceived(params: {
   organizationId: string;
   proposalId: string;
+  /** Display tracking id — either the persisted Proposal.trackingId
+   *  ("PRO-2026-0042") or the legacy id.slice(-8) fallback for
+   *  proposals created before that column landed. The caller should
+   *  resolve this via displayTrackingId(proposal) so legacy and new
+   *  proposals look identical in the email subject. */
+  trackingId: string;
   proposalTitle: string | null;
   reservationId: string;
   /** Email of the consultant who owns the proposal (proposal.user.email). */
@@ -273,12 +279,12 @@ export async function notifyReservationReceived(params: {
       return;
     }
 
-    // Subject. Tracking id is the proposal's cuid; we expose the last
-    // 8 chars uppercased for human readability ("[Reservation #ABC12345]")
-    // while still being unique within the org. The consultant name lands
-    // in parentheses so a quick mail-rule sort-by-consultant works even
-    // when subjects render differently across clients.
-    const trackingId = params.proposalId.slice(-8).toUpperCase();
+    // Subject uses the caller-supplied tracking id ("PRO-2026-0042"
+    // for proposals created after the trackingId column landed; the
+    // legacy id.slice(-8) format for older rows). The consultant name
+    // lands in parentheses so a mail-rule sort-by-consultant works
+    // even when subjects render differently across clients.
+    const trackingId = params.trackingId;
     const tripTitle = params.proposalTitle?.trim() || "Untitled proposal";
     const consultantLabel = params.consultantName?.trim() || "Unassigned";
     const subject =

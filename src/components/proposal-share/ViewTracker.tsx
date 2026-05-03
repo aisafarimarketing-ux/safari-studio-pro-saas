@@ -46,6 +46,29 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
     const elements = document.querySelectorAll<HTMLElement>('[id^="section-"], [id^="day-"]');
     elements.forEach((el) => observer.observe(el));
 
+    // ── proposal_scrolled — fire once per session per proposal when
+    //    the viewer crosses 25% of the document height. Cheap pass-
+    //    through to /track; sessionStorage marker dedupes so a long
+    //    scroll session doesn't spam the activity log. Distinct from
+    //    section-dwell events which already exist; this is the org-
+    //    level "they engaged past the hero" signal.
+    let scrollFired = readScrollFired(proposalId, sessionId);
+    const onScroll = () => {
+      if (scrollFired) return;
+      const scrolled = window.scrollY || document.documentElement.scrollTop;
+      const total = Math.max(
+        document.documentElement.scrollHeight - window.innerHeight,
+        1,
+      );
+      if (scrolled / total >= 0.25) {
+        scrollFired = true;
+        markScrollFired(proposalId, sessionId);
+        post(proposalId, { sessionId, kind: "proposal_scrolled" });
+        window.removeEventListener("scroll", onScroll);
+      }
+    };
+    if (!scrollFired) window.addEventListener("scroll", onScroll, { passive: true });
+
     function flushCurrent() {
       if (currentSectionId && sectionEnteredAt != null) {
         const dwellSeconds = Math.max(1, Math.round((Date.now() - sectionEnteredAt) / 1000));
@@ -85,10 +108,34 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
       observer.disconnect();
       window.removeEventListener("pagehide", onUnload);
       window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [proposalId]);
 
   return null;
+}
+
+// Tracks whether proposal_scrolled has fired for this (proposal,
+// session) pair so a re-mount of ViewTracker (route change, theme
+// flip) doesn't re-fire the event.
+function readScrollFired(proposalId: string, sessionId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(scrollKey(proposalId, sessionId)) === "1";
+  } catch {
+    return false;
+  }
+}
+function markScrollFired(proposalId: string, sessionId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(scrollKey(proposalId, sessionId), "1");
+  } catch {
+    /* sessionStorage unavailable — overcounting is acceptable */
+  }
+}
+function scrollKey(proposalId: string, sessionId: string): string {
+  return `ss-proposal-scrolled-${proposalId}-${sessionId}`;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

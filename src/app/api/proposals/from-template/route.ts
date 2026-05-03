@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
 import { applyIdentityToOperator } from "@/lib/consultantIdentity";
+import { nextProposalTrackingId } from "@/lib/proposalTracking";
 import {
   applyBrandDefaultsToTheme,
   applyBrandDefaultsToSections,
@@ -125,6 +126,17 @@ export async function POST(req: Request) {
     }
   }
 
+  // Allocate a tracking id ("PRO-2026-0042") so template-derived
+  // proposals participate in the per-org sequence from day one.
+  // Best-effort — if it fails the proposal still saves and reads fall
+  // back to the legacy slice format.
+  let trackingId: string | undefined;
+  try {
+    trackingId = await nextProposalTrackingId(ctx.organization.id);
+  } catch (err) {
+    console.warn("[proposals/from-template] trackingId allocation failed:", err);
+  }
+
   // Persist via Prisma directly (same shape the existing /api/proposals
   // POST uses internally). Keeping this endpoint self-contained so the
   // template clone never partially duplicates via a second HTTP hop.
@@ -136,8 +148,9 @@ export async function POST(req: Request) {
       title: proposal.metadata.title,
       status: proposal.metadata.status ?? "draft",
       contentJson: proposal as unknown as object,
+      ...(trackingId ? { trackingId } : {}),
     },
-    select: { id: true, title: true, status: true, updatedAt: true, createdAt: true },
+    select: { id: true, title: true, status: true, trackingId: true, updatedAt: true, createdAt: true },
   });
 
   return NextResponse.json({ proposal: saved });

@@ -35,6 +35,7 @@ model User {
   activityEvents      ActivityEvent[]
   createdReservations Reservation[]
   assignedProposalReservations ProposalReservation[]
+  proposalEvents      ProposalEvent[]
 
   @@index([clerkUserId])
 }
@@ -166,6 +167,9 @@ model Organization {
   proposalReservations ProposalReservation[]
   messages             Message[]
   integrationLogs      IntegrationLog[]
+  proposalEvents       ProposalEvent[]
+  proposalActivitySummaries ProposalActivitySummary[]
+  proposalCounters     ProposalCounter[]
 
   @@index([clerkOrgId])
 }
@@ -335,11 +339,19 @@ model Proposal {
   isPublic  Boolean @default(false)
   shareSlug String? @unique
 
+  // Human-readable tracking id, "PRO-{YYYY}-{NNNN}". Allocated on
+  // create per-org per-year via ProposalCounter. Nullable so legacy
+  // proposals stay valid; readers fall back to id.slice(-8) when this
+  // is unset.
+  trackingId String?
+
   contentJson Json // Full Proposal object — see src/lib/types.ts
 
   deposits             ProposalDeposit[]
   reservations         Reservation[]
   proposalReservations ProposalReservation[]
+  events               ProposalEvent[]
+  activitySummary      ProposalActivitySummary?
 
   // Optional link to the inbound Request this proposal was drafted for.
   // Nullable because legacy proposals + "blank canvas" drafts have no
@@ -359,6 +371,7 @@ model Proposal {
   comments ProposalComment[]
   views    ProposalView[]
 
+  @@unique([organizationId, trackingId])
   @@index([userId])
   @@index([organizationId])
   @@index([shareSlug])
@@ -412,6 +425,108 @@ model ProposalViewEvent {
   createdAt DateTime @default(now())
 
   @@index([viewId, createdAt])
+}
+
+// ─── Proposal activity (org-level event log + precomputed summary) ────────
+//
+// ProposalView / ProposalViewEvent above are session-scoped (one row
+// per anonymous viewer "session", events keyed to that view).
+// ProposalEvent is a parallel, org-level append-only log keyed to the
+// proposal directly so the dashboard's "what's hot today" answer can
+// be computed without joining through the view sessions. Both tables
+// coexist: ProposalView still drives the engagement KPIs in the
+// dashboard summary, ProposalEvent + ProposalActivitySummary drive
+// the new dealflow / activity surfaces.
+//
+// Event types written here: proposal_viewed, proposal_scrolled,
+// itinerary_clicked, price_viewed, reservation_started,
+// reservation_completed.
+
+model ProposalEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // The Client (CRM "contact") attached to the proposal. Null when the
+  // proposal has no client link (blank-canvas drafts, demo content).
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  // The user attributed to this event when authenticated. Almost
+  // always null because /p/[id] is anonymous; reserved for future
+  // operator-side actions (e.g. "consultant marked viewed").
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  eventType String // see comment block above
+  metadata  Json?  // free-form per-event payload (sectionId, sessionId, dwellSeconds, reservationId)
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([proposalId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([organizationId, eventType, createdAt])
+}
+
+// One row per proposal — precomputed counters + derived score / status
+// / next-action so the dashboard endpoint can read fast without
+// scanning the event log. Updated inside the same transaction that
+// writes a ProposalEvent.
+
+model ProposalActivitySummary {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  proposalId String   @unique
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  lastEventType String?
+  lastEventAt   DateTime?
+
+  // Counters / flags. Counters bump on every matching event;
+  // boolean flags flip true the first time and stay true.
+  viewedCount          Int     @default(0)
+  scrolledCount        Int     @default(0)
+  itineraryClicked     Boolean @default(false)
+  priceViewed          Boolean @default(false)
+  clickedReservation   Boolean @default(false) // mirrors reservation_started
+  reservationCompleted Boolean @default(false)
+
+  // Derived columns. status drives the dashboard groupings; readers
+  // also re-derive "needs_followup" at read time using lastEventAt vs
+  // now (so the column doesn't go stale waiting on a cron).
+  engagementScore Int    @default(0)
+  nextAction      String @default("Keep watching")
+  status          String @default("watching") // watching | warm | hot | needs_followup | booked
+
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status, engagementScore])
+  @@index([organizationId, lastEventAt])
+}
+
+// Per-org per-year counter for trackingId generation, mirroring the
+// RequestCounter pattern. Format: "PRO-{year}-{value:04d}".
+
+model ProposalCounter {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  year  Int
+  value Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, year])
 }
 
 // ─── Client interaction (lightweight) ───────────────────────────────────────
@@ -807,6 +922,8 @@ model Client {
   requests  Request[]
   proposals Proposal[]
   messages  Message[]
+  proposalEvents          ProposalEvent[]
+  proposalActivitySummaries ProposalActivitySummary[]
 
   @@unique([organizationId, email])
   @@index([organizationId, lastName])
