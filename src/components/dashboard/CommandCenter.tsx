@@ -109,6 +109,8 @@ type ActivityResponse = {
   hot: ActivityCard[];
   needsFollowup: ActivityCard[];
   needsAttention: ActivityCard[];
+  opportunities: ActivityCard[];
+  opportunitiesTotal: number;
   recentActivity: RecentEvent[];
   reservations: ReservationRow[];
   pipeline: PipelineData | null;
@@ -330,11 +332,17 @@ function CommandCenterShell() {
           mode={activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
         />
 
-        {/* Hot Deals Bar — Deal Momentum's "what needs you NOW" surface.
-            Sits above the pipeline strip so it's the first thing the
-            operator sees on load. Click any client to scroll to their
-            card in the Hot Deals section below. */}
-        <HotDealsBar deals={activity?.needsAttention ?? null} />
+        {/* Today's Opportunities — the daily closing feed. Replaces
+            the previous HotDealsBar chip strip with a richer feed
+            that answers "who needs you, why now, what do you send?"
+            in a single glance. Pulls from
+            /api/dashboard/activity#opportunities — pre-sorted server-
+            side. */}
+        <TodaysOpportunities
+          opportunities={activity?.opportunities ?? null}
+          total={activity?.opportunitiesTotal ?? 0}
+          mode={activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
+        />
 
         {/* Live Pipeline Strip — replaces the old Hot/Follow-up/
             Pipeline-$ stat tiles with a connected five-stage view of
@@ -1488,77 +1496,258 @@ function FollowUpModeSelector({ mode }: { mode: FollowUpMode }) {
   );
 }
 
-function HotDealsBar({ deals }: { deals: ActivityCard[] | null }) {
+// ─── Today's Opportunities — daily closing feed ─────────────────────────
+//
+// The dashboard's main daily workflow. Pre-sorted server-side via
+// /api/dashboard/activity#opportunities so the client just renders.
+// Each row reuses the same ss:openFollowUp event the rest of the
+// dashboard fires — no parallel state, no duplicated send logic.
+
+function TodaysOpportunities({
+  opportunities,
+  total,
+  mode,
+}: {
+  opportunities: ActivityCard[] | null;
+  total: number;
+  mode: FollowUpMode;
+}) {
   const { tokens } = useDashboardTheme();
-  if (!deals) return null;
-  if (deals.length === 0) {
+  if (!opportunities) {
     return (
       <div
-        className="rounded-xl px-4 py-3 flex items-center gap-3"
+        className="rounded-xl p-4"
+        style={{
+          background: tokens.tileBg,
+          border: `1px solid ${tokens.ring}`,
+        }}
+      >
+        <div className="h-3 w-32 rounded animate-pulse" style={{ background: "rgba(0,0,0,0.08)" }} />
+        <div className="mt-3 space-y-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="h-10 rounded animate-pulse" style={{ background: "rgba(0,0,0,0.05)" }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (opportunities.length === 0) {
+    return (
+      <div
+        className="rounded-xl px-4 py-4 flex items-center gap-3"
         style={{
           background: tokens.tileBg,
           border: `1px solid ${tokens.ring}`,
           color: tokens.muted,
         }}
       >
-        <span aria-hidden style={{ fontSize: 16 }}>✓</span>
-        <span className="text-[13px]">No deals need your attention right now.</span>
+        <span aria-hidden style={{ fontSize: 18 }}>✓</span>
+        <div>
+          <div className="text-[13px] font-semibold" style={{ color: tokens.heading }}>
+            All caught up
+          </div>
+          <div className="text-[11.5px]">No urgent opportunities right now.</div>
+        </div>
       </div>
     );
   }
   return (
-    <div
-      className="rounded-xl px-4 py-3"
+    <section
+      className="rounded-xl"
       style={{
-        background: "linear-gradient(135deg, rgba(220,38,38,0.10) 0%, rgba(202,138,4,0.06) 100%)",
-        border: "1px solid rgba(220,38,38,0.22)",
+        background: tokens.tileBg,
+        border: `1px solid ${tokens.ring}`,
       }}
     >
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div
-          className="text-[13.5px] font-bold"
-          style={{ color: "#b91c1c", fontFamily: "'Playfair Display', Georgia, serif" }}
-        >
-          🔥 {deals.length} {deals.length === 1 ? "deal needs" : "deals need"} attention now
+      <div className="flex items-baseline justify-between gap-3 flex-wrap px-4 pt-4 pb-2">
+        <div>
+          <h2
+            className="text-[14px] font-bold"
+            style={{
+              color: tokens.heading,
+              fontFamily: "'Playfair Display', Georgia, serif",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            Today&rsquo;s Opportunities
+          </h2>
+          <p className="text-[11.5px] mt-0.5" style={{ color: tokens.muted }}>
+            Who needs you, why now, what to send.
+          </p>
         </div>
-        <div className="text-[11px]" style={{ color: tokens.muted }}>
-          Click a name to jump to the card.
-        </div>
+        {total > opportunities.length && (
+          <Link
+            href="/proposals"
+            className="text-[11.5px] font-semibold transition"
+            style={{ color: tokens.primary }}
+          >
+            View all opportunities ({total}) →
+          </Link>
+        )}
       </div>
-      <ul className="mt-2 flex items-center gap-1.5 flex-wrap">
-        {deals.map((d) => (
-          <li key={d.proposalId}>
-            <button
-              type="button"
-              onClick={() => {
-                const target = document.getElementById(`deal-${d.proposalId}`);
-                if (target) {
-                  target.scrollIntoView({ behavior: "smooth", block: "center" });
-                  target.style.outline = `2px solid ${MOMENTUM_COLORS[d.momentum].accent}`;
-                  setTimeout(() => {
-                    target.style.outline = "";
-                  }, 1400);
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[12px] font-semibold transition hover:opacity-90 active:scale-[0.97]"
-              style={{
-                background: "rgba(255,255,255,0.6)",
-                color: "#0a1411",
-                border: `1px solid ${MOMENTUM_COLORS[d.momentum].accent}40`,
-              }}
-              title={d.momentumReason}
-            >
-              <span aria-hidden>{MOMENTUM_ICON[d.momentum]}</span>
-              <span className="truncate max-w-[160px]">
-                {d.client?.name ?? "Unknown"}
-              </span>
-              <span aria-hidden style={{ opacity: 0.5 }}>·</span>
-              <span style={{ opacity: 0.7 }}>{d.momentumReason.split(" • ").pop()}</span>
-            </button>
-          </li>
+      <ul>
+        {opportunities.map((card, i) => (
+          <OpportunityRow
+            key={card.proposalId}
+            card={card}
+            divider={i > 0}
+            mode={mode}
+          />
         ))}
       </ul>
-    </div>
+    </section>
+  );
+}
+
+function OpportunityRow({
+  card,
+  divider,
+  mode,
+}: {
+  card: ActivityCard;
+  divider: boolean;
+  mode: FollowUpMode;
+}) {
+  const { tokens } = useDashboardTheme();
+  const colors = MOMENTUM_COLORS[card.momentum];
+  const tripTitle = card.title?.trim() || "Untitled proposal";
+  const preferredChannel: "whatsapp" | "email" | null =
+    card.draft?.channel
+      ?? (card.client?.phone
+        ? "whatsapp"
+        : card.client?.email
+          ? "email"
+          : null);
+  const hasContact = preferredChannel !== null;
+
+  const openPanel = () => {
+    window.dispatchEvent(
+      new CustomEvent<FollowUpTarget>("ss:openFollowUp", {
+        detail: {
+          proposalId: card.proposalId,
+          clientName: card.client?.name ?? null,
+          clientPhone: card.client?.phone ?? null,
+          clientEmail: card.client?.email ?? null,
+          autoSendEligibility: card.autoSendEligibility,
+          autoSendScheduledFor: card.draft?.autoSendScheduledFor ?? null,
+          mode,
+        },
+      }),
+    );
+  };
+
+  const ctaLabel =
+    preferredChannel === "whatsapp"
+      ? "Send WhatsApp"
+      : preferredChannel === "email"
+        ? "Send Email"
+        : "Add contact";
+  const ctaBg =
+    preferredChannel === "whatsapp"
+      ? WHATSAPP_GREEN
+      : preferredChannel === "email"
+        ? "#1b3a2d"
+        : "rgba(0,0,0,0.10)";
+  const ctaColor =
+    preferredChannel ? "#ffffff" : "rgba(10,20,17,0.55)";
+  const suggestedActionLabel =
+    preferredChannel === "whatsapp"
+      ? "Send WhatsApp now"
+      : preferredChannel === "email"
+        ? "Send email now"
+        : "Add a contact method to follow up";
+
+  return (
+    <li
+      className="px-4 py-3 transition"
+      style={{
+        borderTop: divider ? `1px solid ${tokens.ring}` : "none",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.primarySoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <div className="flex items-center gap-3 flex-wrap">
+        <MomentumBadge momentum={card.momentum} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className="text-[13.5px] truncate"
+              style={{ color: tokens.heading, fontWeight: 700 }}
+              title={card.client?.name ?? ""}
+            >
+              {card.client?.name ?? "Unknown client"}
+            </span>
+            <span aria-hidden style={{ color: tokens.muted, opacity: 0.5 }}>·</span>
+            <span
+              className="text-[12px] truncate"
+              style={{ color: tokens.body }}
+              title={tripTitle}
+            >
+              {tripTitle}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+            <span className="text-[11.5px]" style={{ color: tokens.muted }}>
+              {card.momentumReason}
+            </span>
+            <span aria-hidden style={{ color: tokens.muted, opacity: 0.5 }}>·</span>
+            <span
+              className="text-[11.5px] font-semibold"
+              style={{ color: colors.fg }}
+            >
+              👉 {suggestedActionLabel}
+            </span>
+          </div>
+        </div>
+        {hasContact ? (
+          <button
+            type="button"
+            onClick={openPanel}
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-[12.5px] font-semibold transition active:scale-[0.97] shadow-sm shrink-0"
+            style={{ background: ctaBg, color: ctaColor }}
+            title={
+              preferredChannel === "whatsapp"
+                ? "Open the WhatsApp draft"
+                : "Open the email draft"
+            }
+          >
+            {preferredChannel === "whatsapp" ? (
+              <WhatsAppIcon size={13} mono />
+            ) : (
+              <EmailIcon size={13} />
+            )}
+            {ctaLabel}
+          </button>
+        ) : card.client?.id ? (
+          <button
+            type="button"
+            onClick={openPanel}
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-[12px] font-semibold transition active:scale-[0.97] shrink-0"
+            style={{
+              background: "transparent",
+              color: tokens.heading,
+              border: `1px solid ${tokens.ring}`,
+            }}
+          >
+            <span aria-hidden>📱</span>
+            Add contact
+          </button>
+        ) : null}
+      </div>
+      {!hasContact && card.client?.id && (
+        <div className="mt-2">
+          <InlinePhoneCapture
+            clientId={card.client.id}
+            clientName={card.client.name ?? null}
+            hasEmail={Boolean(card.client.email)}
+          />
+        </div>
+      )}
+    </li>
   );
 }
 

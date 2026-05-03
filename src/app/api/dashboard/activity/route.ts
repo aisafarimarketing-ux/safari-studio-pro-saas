@@ -309,6 +309,40 @@ export async function GET(req: Request) {
     )
     .slice(0, GROUP_LIMIT);
 
+  // Today's Opportunities — daily closing feed. The dashboard's main
+  // workflow surface: 5-second answer to "who needs me, why now,
+  // what do I send?". Includes:
+  //   - VERY_HOT (priority 0) — fresh activity, strike now
+  //   - COOLING (priority 1) — went quiet, gentle nudge
+  //   - WARM with a non-WAIT action (priority 2) — momentum still
+  //     moving but the operator hasn't pinged in
+  // Excludes:
+  //   - COLD (not actionable enough to be an "opportunity")
+  //   - WARM with WAIT (booked deals + recently-touched, no urgent
+  //     action needed)
+  // Within the same momentum bucket, sort by engagementScore desc so
+  // the highest-intent deal lands at the top.
+  const opportunityFiltered = summaries.filter((s) => {
+    if (s.momentum === "VERY_HOT") return true;
+    if (s.momentum === "COOLING") return true;
+    if (s.momentum === "WARM" && s.suggestedAction !== "WAIT") return true;
+    return false;
+  });
+  const momentumPriority: Record<string, number> = {
+    VERY_HOT: 0,
+    COOLING: 1,
+    WARM: 2,
+    COLD: 3,
+  };
+  const opportunitiesSorted = [...opportunityFiltered].sort((a, b) => {
+    const pa = momentumPriority[a.momentum] ?? 4;
+    const pb = momentumPriority[b.momentum] ?? 4;
+    if (pa !== pb) return pa - pb;
+    return b.engagementScore - a.engagementScore;
+  });
+  const opportunitiesTotal = opportunitiesSorted.length;
+  const opportunities = opportunitiesSorted.slice(0, 5);
+
   // ── Recent activity — append-only ProposalEvent log, freshest first.
   const recentEventsRaw = await prisma.proposalEvent.findMany({
     where: {
@@ -476,6 +510,8 @@ export async function GET(req: Request) {
     hot,
     needsFollowup,
     needsAttention,
+    opportunities,
+    opportunitiesTotal,
     recentActivity,
     reservations,
     pipeline,
