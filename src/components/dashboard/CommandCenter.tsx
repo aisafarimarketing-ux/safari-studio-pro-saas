@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { openCommandPalette } from "@/components/CommandPalette";
@@ -13,7 +13,7 @@ import {
 import { PipelineStrip, type PipelineData } from "./PipelineStrip";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ReservationSummaryDialog } from "./ReservationSummaryDialog";
-import { ToastHost } from "./Toast";
+import { ToastHost, fireToast } from "./Toast";
 import {
   ACTION_LABEL,
   MOMENTUM_COLORS,
@@ -56,7 +56,10 @@ type ActivityCard = {
     text: string;
     createdAt: string;
     sentAt: string | null;
+    autoSendScheduledFor: string | null;
+    autoSent: boolean;
   } | null;
+  autoSendEligibility: { ok: true } | { ok: false; reason: string };
   client: {
     id: string;
     name: string | null;
@@ -157,6 +160,12 @@ function CommandCenterShell() {
   const [reservationSummaryTarget, setReservationSummaryTarget] =
     useState<ReservationSummaryTarget | null>(null);
 
+  // Bumping this re-runs the activity-fetch effect below. Auto-send
+  // fires + scheduling actions dispatch "ss:refreshActivity" so the
+  // dashboard repaints with the updated draft state without waiting
+  // for the next 30s poll.
+  const [refreshTick, setRefreshTick] = useState(0);
+
   useEffect(() => {
     const onFollowUp = (e: Event) => {
       const detail = (e as CustomEvent<FollowUpTarget>).detail;
@@ -166,11 +175,14 @@ function CommandCenterShell() {
       const detail = (e as CustomEvent<ReservationSummaryTarget>).detail;
       if (detail?.reservationId) setReservationSummaryTarget(detail);
     };
+    const onRefresh = () => setRefreshTick((n) => n + 1);
     window.addEventListener("ss:openFollowUp", onFollowUp);
     window.addEventListener("ss:openReservationSummary", onSummary);
+    window.addEventListener("ss:refreshActivity", onRefresh);
     return () => {
       window.removeEventListener("ss:openFollowUp", onFollowUp);
       window.removeEventListener("ss:openReservationSummary", onSummary);
+      window.removeEventListener("ss:refreshActivity", onRefresh);
     };
   }, []);
 
@@ -213,7 +225,7 @@ function CommandCenterShell() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activityScope]);
+  }, [activityScope, refreshTick]);
 
   // Tasks — right-rail card.
   useEffect(() => {
@@ -359,6 +371,8 @@ type FollowUpTarget = {
   clientName: string | null;
   clientPhone: string | null;
   clientEmail: string | null;
+  autoSendEligibility?: { ok: true } | { ok: false; reason: string };
+  autoSendScheduledFor?: string | null;
 };
 
 type ReservationSummaryTarget = {
@@ -775,6 +789,8 @@ function DealCard({ card }: { card: ActivityCard }) {
   const animClass = isVeryHot ? "ss-hot-pulse" : "";
   const hasDraft = Boolean(card.draft);
   const action = card.suggestedAction;
+  const autoScheduledIso = card.draft?.autoSendScheduledFor ?? null;
+  const autoSent = card.draft?.autoSent ?? false;
 
   const openPanel = () => {
     window.dispatchEvent(
@@ -784,6 +800,8 @@ function DealCard({ card }: { card: ActivityCard }) {
           clientName: card.client?.name ?? null,
           clientPhone: card.client?.phone ?? null,
           clientEmail: card.client?.email ?? null,
+          autoSendEligibility: card.autoSendEligibility,
+          autoSendScheduledFor: autoScheduledIso,
         },
       }),
     );
@@ -870,28 +888,59 @@ function DealCard({ card }: { card: ActivityCard }) {
         </div>
       </div>
 
+      {/* Auto-send strip — only renders while a schedule is live or the
+          message just went out. Countdown updates client-side every
+          second; cancel button DELETEs the schedule and refreshes the
+          dashboard. */}
+      {autoSent ? (
+        <div
+          className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
+          style={{
+            background: "rgba(22,163,74,0.10)",
+            color: "#15803d",
+            border: "1px solid rgba(22,163,74,0.30)",
+          }}
+          title="Auto-follow-up dispatched."
+        >
+          <span aria-hidden>✓</span>
+          <span className="font-semibold">Auto-follow-up sent</span>
+        </div>
+      ) : autoScheduledIso ? (
+        <AutoSendCountdown
+          scheduledIso={autoScheduledIso}
+          suggestionId={card.draft!.id}
+          accent={colors.accent}
+          onFireDone={() => {
+            window.dispatchEvent(new CustomEvent("ss:refreshActivity"));
+          }}
+        />
+      ) : null}
+
       {/* Suggested action — operator-readable line that mirrors the
-          deal momentum classifier's call. */}
-      <div
-        className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
-        style={{
-          background: colors.bg,
-          color: colors.fg,
-          border: `1px solid ${colors.accent}33`,
-        }}
-      >
-        <span aria-hidden>👉</span>
-        <span className="font-semibold truncate">{ACTION_LABEL[action]}</span>
-        {hasDraft && action !== "WAIT" && (
-          <span
-            className="text-[9.5px] uppercase tracking-[0.18em] font-bold ml-1.5 px-1.5 py-0.5 rounded"
-            style={{ background: "rgba(255,255,255,0.55)", color: colors.fg }}
-            title="A Safari Studio AI draft is ready to send."
-          >
-            Draft ready
-          </span>
-        )}
-      </div>
+          deal momentum classifier's call. Hidden once an auto-send is
+          live so the card carries one urgent CTA, not two. */}
+      {!autoScheduledIso && !autoSent && (
+        <div
+          className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
+          style={{
+            background: colors.bg,
+            color: colors.fg,
+            border: `1px solid ${colors.accent}33`,
+          }}
+        >
+          <span aria-hidden>👉</span>
+          <span className="font-semibold truncate">{ACTION_LABEL[action]}</span>
+          {hasDraft && action !== "WAIT" && (
+            <span
+              className="text-[9.5px] uppercase tracking-[0.18em] font-bold ml-1.5 px-1.5 py-0.5 rounded"
+              style={{ background: "rgba(255,255,255,0.55)", color: colors.fg }}
+              title="A Safari Studio AI draft is ready to send."
+            >
+              Draft ready
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {action === "WAIT" ? (
@@ -956,6 +1005,124 @@ function DealCard({ card }: { card: ActivityCard }) {
         )}
       </div>
     </article>
+  );
+}
+
+function AutoSendCountdown({
+  scheduledIso,
+  suggestionId,
+  accent,
+  onFireDone,
+}: {
+  scheduledIso: string;
+  suggestionId: string;
+  accent: string;
+  onFireDone: () => void;
+}) {
+  const fireAtMs = new Date(scheduledIso).getTime();
+  const [tick, setTick] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const fired = useRef(false);
+
+  useEffect(() => {
+    const handle = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(handle);
+  }, []);
+
+  const remainingMs = fireAtMs - Date.now();
+  const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const mm = Math.floor(remainingSec / 60);
+  const ss = remainingSec % 60;
+  const label = remainingSec > 0
+    ? `Auto-follow-up in ${mm}:${ss.toString().padStart(2, "0")}`
+    : "Sending auto-follow-up…";
+
+  // Fire the auto-send when the timer hits zero. Single-shot per
+  // mount; if the dashboard refreshes mid-send the new card carries
+  // the autoSent flag from the server and skips this branch.
+  useEffect(() => {
+    if (fired.current) return;
+    if (remainingMs > 0) return;
+    if (busy) return;
+    fired.current = true;
+    setBusy(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/suggestions/${suggestionId}/auto-send`, {
+          method: "POST",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          fireToast({
+            message: data?.aborted
+              ? "Auto-follow-up cancelled."
+              : "Auto-send failed.",
+            hint: typeof data?.error === "string" ? data.error : undefined,
+          });
+        } else {
+          fireToast({
+            message: "Auto-follow-up sent.",
+            hint: "Likely response window: 1–3h.",
+            onUndo: () => {
+              void fetch(`/api/suggestions/${suggestionId}/sent`, {
+                method: "DELETE",
+              }).then(onFireDone);
+            },
+          });
+        }
+      } catch (err) {
+        fireToast({
+          message: "Auto-send failed.",
+          hint: err instanceof Error ? err.message : undefined,
+        });
+      } finally {
+        setBusy(false);
+        onFireDone();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingMs <= 0, busy]);
+
+  void tick;
+
+  const handleCancel = async () => {
+    setBusy(true);
+    try {
+      await fetch(`/api/suggestions/${suggestionId}/schedule`, {
+        method: "DELETE",
+      });
+      fireToast({ message: "Auto-follow-up cancelled." });
+    } catch {
+      /* ignore — best-effort */
+    } finally {
+      setBusy(false);
+      onFireDone();
+    }
+  };
+
+  return (
+    <div
+      className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-[11.5px] max-w-full"
+      style={{
+        background: `${accent}15`,
+        color: accent,
+        border: `1px solid ${accent}55`,
+      }}
+    >
+      <span aria-hidden style={{ filter: "saturate(1.2)" }}>⚡</span>
+      <span className="font-semibold tabular-nums">{label}</span>
+      {remainingSec > 0 && (
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={busy}
+          className="text-[10.5px] font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+          style={{ color: accent, opacity: 0.85 }}
+        >
+          Cancel
+        </button>
+      )}
+    </div>
   );
 }
 

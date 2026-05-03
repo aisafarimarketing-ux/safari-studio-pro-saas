@@ -199,3 +199,118 @@ export const ACTION_LABEL: Record<SuggestedAction, string> = {
   ASK_QUESTION: "Ask a question",
   WAIT: "Wait for reply",
 };
+
+// ─── Safe Auto-Send guard ───────────────────────────────────────────────
+//
+// Pure validator. Used by:
+//   - the dashboard UI ("Schedule auto-send" button is disabled with a
+//     reason when this returns false)
+//   - the /schedule API route (last-chance server-side gate before
+//     persisting autoSendScheduledFor)
+//   - the /auto-send API route (re-validated at fire time so a deal
+//     that cooled in the last 10 minutes doesn't get pinged anyway)
+//
+// Conditions are AND-ed; the function returns the first failing reason
+// so the UI can surface "why not".
+
+export type AutoSendInput = {
+  momentum: DealMomentum;
+  /** Most recent client-side event timestamp. */
+  lastEventAt: Date | null;
+  /** Did that event hit the pricing section? Pulled from
+   *  ProposalActivitySummary.priceViewed AND lastEventType="price_viewed". */
+  lastEventType: string | null;
+  priceViewed: boolean;
+  /** Has the client started or completed a reservation? */
+  clickedReservation: boolean;
+  reservationCompleted: boolean;
+  /** Most recent dispatch from this operator on this deal. */
+  lastOperatorMessageAt: Date | null;
+  /** Most recent inbound message from the client (client_replied or
+   *  message.direction="inbound"). Null when no reply tracking exists yet. */
+  lastClientReplyAt: Date | null;
+  /** Channel of the latest draft. Auto-send is email-only in v1 — see
+   *  notes in the route handler. */
+  channel: "whatsapp" | "email" | null;
+  /** Caller-supplied "now" for testability. Defaults to current time. */
+  now?: Date;
+};
+
+export type AutoSendDecision =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+const AUTO_SEND_VERY_HOT_REQUIRED_MIN = 60; // viewed pricing within last 60min
+const AUTO_SEND_OP_QUIET_HOURS = 2;          // no operator msg in last 2h
+
+export function canAutoSend(input: AutoSendInput): AutoSendDecision {
+  const now = input.now ?? new Date();
+
+  if (input.momentum !== "VERY_HOT") {
+    return { ok: false, reason: "Deal is not VERY_HOT." };
+  }
+
+  if (input.channel === "whatsapp") {
+    // WhatsApp programmatic send needs WhatsApp Business API. Until
+    // that lands, only email auto-send is supported.
+    return { ok: false, reason: "Auto-send is email-only in v1." };
+  }
+  if (!input.channel) {
+    return { ok: false, reason: "No draft channel selected yet." };
+  }
+
+  // Buying-signal gate: the deal is VERY_HOT *because of* a fresh
+  // pricing or reservation interaction. Anything older than 60 min
+  // doesn't qualify, even if VERY_HOT was triggered by a different
+  // event type.
+  const buyingSignal =
+    input.priceViewed || input.clickedReservation;
+  if (!buyingSignal) {
+    return { ok: false, reason: "No pricing or reservation engagement yet." };
+  }
+  if (!input.lastEventAt) {
+    return { ok: false, reason: "No engagement data on this deal." };
+  }
+  const eventAgeMin = (now.getTime() - input.lastEventAt.getTime()) / 60_000;
+  if (eventAgeMin > AUTO_SEND_VERY_HOT_REQUIRED_MIN) {
+    return { ok: false, reason: "Buying-signal moment has passed." };
+  }
+
+  // Reservation in progress = client is already moving forward; an
+  // auto-follow-up here would feel pushy and might cross-fire with
+  // their own checkout.
+  if (input.clickedReservation || input.reservationCompleted) {
+    return { ok: false, reason: "Client is already in the reservation flow." };
+  }
+
+  // Operator quiet window — don't double-tap if the consultant just
+  // reached out manually.
+  if (
+    input.lastOperatorMessageAt &&
+    now.getTime() - input.lastOperatorMessageAt.getTime() <
+      AUTO_SEND_OP_QUIET_HOURS * 3_600_000
+  ) {
+    return { ok: false, reason: "Operator messaged recently." };
+  }
+
+  // Client reply pending — give the conversation room to breathe. Only
+  // applied when reply tracking is actually available; until that
+  // pipeline ships, lastClientReplyAt is always null and this gate is
+  // a no-op.
+  if (
+    input.lastClientReplyAt &&
+    input.lastOperatorMessageAt &&
+    input.lastClientReplyAt > input.lastOperatorMessageAt
+  ) {
+    return { ok: false, reason: "Client just replied — wait for the operator." };
+  }
+
+  return { ok: true };
+}
+
+// Default scheduling window when the operator clicks "Schedule auto-send".
+// 12 minutes lands inside the spec's 10–15 range and sits at a "still
+// in-context" delay — long enough for the operator to cancel if they
+// change their mind, short enough that the buying-signal hasn't gone
+// stale by the time the message lands.
+export const AUTO_SEND_DEFAULT_DELAY_MS = 12 * 60 * 1000;

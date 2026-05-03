@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { refreshStatusForRead, type ProposalStatus } from "@/lib/proposalActivity";
 import { displayTrackingId } from "@/lib/proposalTracking";
 import {
+  canAutoSend,
   classifyMomentum,
   type DealMomentum,
   type SuggestedAction,
@@ -60,8 +61,20 @@ type Card = {
         text: string;
         createdAt: string;
         sentAt: string | null;
+        /** ISO timestamp when the auto-send timer fires. Null when no
+         *  schedule is set. The dashboard renders a countdown when this
+         *  is in the future and clears it when conditions change. */
+        autoSendScheduledFor: string | null;
+        /** True after the auto-send route has actually dispatched. Used
+         *  by the card to flip from "Auto-follow-up in X:XX" to
+         *  "Auto-follow-up sent" without a manual reload. */
+        autoSent: boolean;
       }
     | null;
+  /** Pre-validated guard for the dashboard. When false, the
+   *  "Schedule auto-send" button is disabled with the reason as a
+   *  tooltip — same logic the /schedule route enforces server-side. */
+  autoSendEligibility: { ok: true } | { ok: false; reason: string };
   client: {
     id: string;
     name: string | null;
@@ -153,6 +166,8 @@ export async function GET(req: Request) {
           channel: true,
           sentAt: true,
           createdAt: true,
+          autoSendScheduledFor: true,
+          autoSent: true,
         },
       })
     : [];
@@ -199,8 +214,26 @@ export async function GET(req: Request) {
           text: latestDraft.output,
           createdAt: latestDraft.createdAt.toISOString(),
           sentAt: latestDraft.sentAt?.toISOString() ?? null,
+          autoSendScheduledFor: latestDraft.autoSendScheduledFor?.toISOString() ?? null,
+          autoSent: latestDraft.autoSent,
         }
       : null;
+    const autoSendEligibility = canAutoSend({
+      momentum: momentum.momentum,
+      lastEventAt: row.lastEventAt,
+      lastEventType: row.lastEventType,
+      priceViewed: row.priceViewed,
+      clickedReservation: row.clickedReservation,
+      reservationCompleted: row.reservationCompleted,
+      lastOperatorMessageAt: lastSentByProposal.get(row.proposalId) ?? null,
+      lastClientReplyAt: null,
+      channel: latestDraft?.channel === "email"
+        ? "email"
+        : latestDraft?.channel === "whatsapp"
+          ? "whatsapp"
+          : null,
+      now,
+    });
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({
@@ -217,6 +250,7 @@ export async function GET(req: Request) {
       momentumReason: momentum.reason,
       suggestedAction: momentum.suggestedAction,
       draft,
+      autoSendEligibility,
       client: row.client
         ? {
             id: row.client.id,

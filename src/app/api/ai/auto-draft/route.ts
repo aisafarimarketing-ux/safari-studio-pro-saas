@@ -45,7 +45,13 @@ type Body = {
   instructions?: string;
   /** Force a fresh generation even if a cached draft is still valid. */
   force?: boolean;
+  /** Auto-send tone — softer than the manual draft. Used by the
+   *  safe auto-send pipeline so the message that goes out without an
+   *  operator review reads as a gentle nudge, not a sales push. */
+  autoSoft?: boolean;
 };
+
+const SOFT_TONE_RULES = `\n\nThis draft will be auto-sent to the client without an operator review. Soften the tone accordingly:\n- Open with a single low-pressure observation (e.g. "I saw you took another look at the costs"). Never accuse or imply tracking; phrase it as if the operator just happens to remember.\n- One offer of help, not a sales push. No "ready to book?" / "secure your dates" / "this is the time" language.\n- Close with an open invitation, not a deadline. "Happy to answer anything" lands better than "let me know by Friday".\n- Keep it 3 to 4 lines. Auto-sent messages should feel rare and considered, not engineered.`;
 
 export async function POST(req: Request) {
   const ctx = await getAuthContext();
@@ -73,6 +79,7 @@ export async function POST(req: Request) {
   }
   const channel: Channel = body.channel === "email" ? "email" : "whatsapp";
   const force = Boolean(body.force);
+  const autoSoft = Boolean(body.autoSoft);
   const instructions = body.instructions?.trim().slice(0, 800) || "";
 
   const proposal = await prisma.proposal.findUnique({
@@ -139,7 +146,10 @@ export async function POST(req: Request) {
 
   // Cache check — return the latest unsent draft for this {proposal,
   // channel} when it's still fresh and the caller didn't force.
-  if (!force && !instructions) {
+  // autoSoft variants always regenerate so the cached "regular" draft
+  // can't accidentally be used for an auto-send (it would read too
+  // assertive for an unreviewed message).
+  if (!force && !instructions && !autoSoft) {
     const cached = await prisma.aISuggestion.findFirst({
       where: {
         organizationId: ctx.organization.id,
@@ -214,7 +224,10 @@ export async function POST(req: Request) {
       system: [
         {
           type: "text",
-          text: SYSTEM_RULES + brandDNASection,
+          text:
+            SYSTEM_RULES +
+            (autoSoft ? SOFT_TONE_RULES : "") +
+            brandDNASection,
           cache_control: { type: "ephemeral" },
         },
       ],

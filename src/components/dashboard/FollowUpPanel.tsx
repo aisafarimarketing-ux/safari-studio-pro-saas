@@ -27,6 +27,13 @@ type Props = {
   clientName: string | null;
   clientPhone: string | null;
   clientEmail: string | null;
+  /** Pre-validated guard from /api/dashboard/activity. Disables the
+   *  Schedule auto-send button + surfaces the reason as a tooltip. */
+  autoSendEligibility?: { ok: true } | { ok: false; reason: string };
+  /** ISO timestamp if an auto-send is already scheduled for this deal.
+   *  When set, the panel hides the "Schedule" button and shows a
+   *  "Cancel auto-send" button instead. */
+  autoSendScheduledFor?: string | null;
   onClose: () => void;
 };
 
@@ -35,6 +42,8 @@ export function FollowUpPanel({
   clientName,
   clientPhone,
   clientEmail,
+  autoSendEligibility,
+  autoSendScheduledFor,
   onClose,
 }: Props) {
   const [channel, setChannel] = useState<Channel>(
@@ -329,6 +338,38 @@ export function FollowUpPanel({
           </p>
         </div>
 
+        {/* Auto-send strip — only renders for email-channel drafts on
+            VERY_HOT deals. Schedules a 12-minute timer; the dashboard
+            countdown UI (DealCard) takes over from there. */}
+        <AutoSendStrip
+          suggestionId={null /* fetched lazily; we don't need it to render */}
+          channel={channel}
+          eligibility={autoSendEligibility}
+          alreadyScheduled={Boolean(autoSendScheduledFor)}
+          onScheduled={() => {
+            window.dispatchEvent(new CustomEvent("ss:refreshActivity"));
+            onClose();
+          }}
+          onCancelled={() => {
+            window.dispatchEvent(new CustomEvent("ss:refreshActivity"));
+            onClose();
+          }}
+          getSuggestionId={async () => {
+            // The schedule API needs the suggestion id. The auto-draft
+            // route both creates one (when no fresh cached draft
+            // exists) and returns the id of the cached row, so calling
+            // it here is the cheapest way to get the id without
+            // duplicating logic.
+            const res = await fetch("/api/ai/auto-draft", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proposalId, channel }),
+            });
+            const data = await res.json().catch(() => ({}));
+            return typeof data.suggestionId === "string" ? data.suggestionId : null;
+          }}
+        />
+
         {/* Footer — Send / Copy / Regenerate */}
         <div
           className="px-5 py-3 flex items-center justify-between gap-2 flex-wrap"
@@ -401,6 +442,147 @@ export function FollowUpPanel({
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+function AutoSendStrip({
+  channel,
+  eligibility,
+  alreadyScheduled,
+  onScheduled,
+  onCancelled,
+  getSuggestionId,
+}: {
+  suggestionId: string | null;
+  channel: "whatsapp" | "email";
+  eligibility?: { ok: true } | { ok: false; reason: string };
+  alreadyScheduled: boolean;
+  onScheduled: () => void;
+  onCancelled: () => void;
+  getSuggestionId: () => Promise<string | null>;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  // Email-only in v1 — show a quiet hint on WhatsApp drafts so the
+  // operator understands why the schedule button is missing without
+  // it being a UX dead-end.
+  if (channel === "whatsapp") {
+    return (
+      <div
+        className="px-5 py-2.5 text-[11.5px]"
+        style={{
+          background: "rgba(0,0,0,0.04)",
+          color: "rgba(10,20,17,0.55)",
+          borderTop: "1px solid rgba(0,0,0,0.06)",
+        }}
+      >
+        Auto-send is email-only in v1. Switch to Email to schedule one.
+      </div>
+    );
+  }
+
+  const eligible = eligibility?.ok ?? false;
+  const blockedReason = eligibility && !eligibility.ok ? eligibility.reason : null;
+
+  const handleSchedule = async () => {
+    setBusy(true);
+    try {
+      const id = await getSuggestionId();
+      if (!id) {
+        fireToast({
+          message: "Couldn't schedule auto-send.",
+          hint: "No draft found for this deal yet.",
+        });
+        return;
+      }
+      const res = await fetch(`/api/suggestions/${id}/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        fireToast({
+          message: "Couldn't schedule auto-send.",
+          hint: typeof data.error === "string" ? data.error : `HTTP ${res.status}`,
+        });
+        return;
+      }
+      fireToast({
+        message: "Auto-follow-up scheduled.",
+        hint: "Watch the countdown on the deal card.",
+      });
+      onScheduled();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setBusy(true);
+    try {
+      const id = await getSuggestionId();
+      if (!id) return;
+      await fetch(`/api/suggestions/${id}/schedule`, { method: "DELETE" });
+      fireToast({ message: "Auto-follow-up cancelled." });
+      onCancelled();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
+      style={{
+        borderTop: "1px solid rgba(0,0,0,0.06)",
+        background: alreadyScheduled
+          ? "rgba(220,38,38,0.06)"
+          : "rgba(202,138,4,0.06)",
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-semibold" style={{ color: "#0a1411" }}>
+          ⚡ Safe auto-send
+        </div>
+        <div className="text-[11.5px]" style={{ color: "rgba(10,20,17,0.65)" }}>
+          {alreadyScheduled
+            ? "Auto-follow-up is queued for this deal. Cancel here or on the dashboard card."
+            : eligible
+              ? "Schedule a 12-minute auto-follow-up. We'll cancel if conditions change."
+              : blockedReason || "Auto-send is unavailable right now."}
+        </div>
+      </div>
+      {alreadyScheduled ? (
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={busy}
+          className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
+          style={{
+            background: "transparent",
+            color: "#b91c1c",
+            border: "1px solid rgba(220,38,38,0.35)",
+          }}
+        >
+          {busy ? "…" : "Cancel auto-send"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSchedule}
+          disabled={!eligible || busy}
+          title={!eligible ? blockedReason ?? "" : "Schedule a 12-minute auto-follow-up."}
+          className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50 active:scale-[0.97]"
+          style={{
+            background: eligible ? "#ca8a04" : "rgba(0,0,0,0.10)",
+            color: eligible ? "#ffffff" : "rgba(10,20,17,0.45)",
+          }}
+        >
+          {busy ? "…" : "Schedule auto-send"}
+        </button>
+      )}
     </div>
   );
 }

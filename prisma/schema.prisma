@@ -1331,6 +1331,16 @@ model AISuggestion {
   bookedAt   DateTime?
   outcome    String?  // "sent" | "replied" | "booked" | "no-response"
 
+  // Safe Auto-Send. autoSendScheduledFor is set when the operator
+  // schedules an auto-send from a VERY_HOT deal card; the dashboard's
+  // countdown reads from this column. autoSent flips to true once the
+  // /auto-send route completes a real dispatch (Resend HTTP API). The
+  // schedule cancels automatically when conditions change (operator
+  // sends manually, status drops, client replies) — see
+  // src/lib/dealMomentum.ts canAutoSend().
+  autoSendScheduledFor DateTime?
+  autoSent             Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
