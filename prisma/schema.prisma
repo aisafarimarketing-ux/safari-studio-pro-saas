@@ -34,6 +34,7 @@ model User {
   presence            Presence?
   activityEvents      ActivityEvent[]
   createdReservations Reservation[]
+  assignedProposalReservations ProposalReservation[]
 
   @@index([clerkUserId])
 }
@@ -161,9 +162,10 @@ model Organization {
   requestCounters RequestCounter[]
   presences       Presence[]
   activityEvents  ActivityEvent[]
-  reservations    Reservation[]
-  messages        Message[]
-  integrationLogs IntegrationLog[]
+  reservations         Reservation[]
+  proposalReservations ProposalReservation[]
+  messages             Message[]
+  integrationLogs      IntegrationLog[]
 
   @@index([clerkOrgId])
 }
@@ -335,8 +337,9 @@ model Proposal {
 
   contentJson Json // Full Proposal object — see src/lib/types.ts
 
-  deposits     ProposalDeposit[]
-  reservations Reservation[]
+  deposits             ProposalDeposit[]
+  reservations         Reservation[]
+  proposalReservations ProposalReservation[]
 
   // Optional link to the inbound Request this proposal was drafted for.
   // Nullable because legacy proposals + "blank canvas" drafts have no
@@ -472,6 +475,64 @@ model Reservation {
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
   @@index([proposalId])
+}
+
+// ─── Proposal client reservations ──────────────────────────────────────────
+//
+// Distinct from the supplier-side Reservation model above. This row is
+// created when a client submits the "Make a Reservation" popup from
+// inside a proposal share view (/p/[id]). It captures the contact
+// details + arrival/departure window the client has confirmed at
+// booking time (which may differ from the proposal's draft dates) and
+// becomes the lead the consultant follows up to take payment.
+//
+// Routing:
+//   - assignedUserId defaults to the consultant who created the
+//     proposal (proposal.userId), so notification emails land with
+//     the right person on the team. Owner / admins can re-assign.
+//
+// No payment fields here — those live on ProposalDeposit. We keep the
+// reservation lightweight so it can be created without any external
+// integration.
+
+model ProposalReservation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // Client-supplied form fields
+  firstName     String
+  lastName      String
+  email         String
+  phone         String
+  nationality   String?
+  arrivalDate   DateTime
+  departureDate DateTime
+  travelers     String   @default("") // free text — "2 adults, 1 child age 7"
+  notes         String?
+
+  // Routing — defaults to the proposal's creator. Reassignable by the
+  // owner / admin via the inbox UI.
+  assignedUserId String?
+  assignedUser   User?   @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  status    String   @default("new") // "new" | "contacted" | "confirmed" | "lost"
+
+  // Anonymous client session that produced the reservation (matches
+  // the sessionId used by the engagement tracker on /p/[id]). Lets us
+  // tie a reservation back to the view session that produced it.
+  sessionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@index([proposalId])
+  @@index([assignedUserId])
 }
 
 // ─── Proposal deposits ──────────────────────────────────────────────────────

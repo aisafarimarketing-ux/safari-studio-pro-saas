@@ -8,6 +8,8 @@ import { uploadImage } from "@/lib/uploadImage";
 import { ExpandingCards, type CardItem } from "@/components/ui/ExpandingCards";
 import { getGlyphForDestination } from "@/lib/wildlifeGlyphs";
 import { IntelligentColorPicker } from "@/components/ui/IntelligentColorPicker";
+import { ReservationDialog } from "@/components/proposal-share/ReservationDialog";
+import { ensureSessionId } from "@/components/proposal-share/ViewTracker";
 import type {
   Section,
   Day,
@@ -350,21 +352,21 @@ export function ClosingSection({ section }: { section: Section }) {
   // a plain <img> with object-cover, so per-tile reposition isn't
   // surfaced here — operators tweak via the day card if needed.)
 
-  // Action wiring bound with the proposal's operator/client/trip
+  // Reservation dialog state. The Secure CTA opens an in-app booking
+  // popup so the client never leaves the proposal — pre-fills name +
+  // dates + travelers from the proposal, asks for the four missing
+  // pieces (phone, email, nationality, notes) and persists a
+  // ProposalReservation row. Operator brief: "have our app carry the
+  // forms and open a popup."
+  const [reservationOpen, setReservationOpen] = useState(false);
   const onSecure = () => {
-    const wa = buildWhatsAppLink(operator, client, trip);
-    const fallback = buildFallbackBookLink(operator);
-    const target = wa || fallback;
-    if (!target) {
-      if (isEditor) {
-        alert(
-          "No WhatsApp / booking URL configured. Set operator.whatsapp on the operator profile so the Secure-This-Safari button can fire a booking message.",
-        );
-      }
-      return;
-    }
-    if (typeof window !== "undefined") window.open(target, "_blank");
+    setReservationOpen(true);
   };
+  // Touch the WhatsApp / fallback helpers so the imports don't go
+  // unused — they're still available for future operator-configurable
+  // CTA modes (e.g. "open WhatsApp instead of the popup" toggle).
+  void buildWhatsAppLink;
+  void buildFallbackBookLink;
 
   // Editable callbacks for inline content
   const onHeadlineChange = (v: string) =>
@@ -436,14 +438,36 @@ export function ClosingSection({ section }: { section: Section }) {
     onThemeLabelChange,
   };
 
-  if (variant === "gallery-row") return <GalleryRowLayout {...sharedProps} />;
-  if (variant === "stack") return <StackLayout {...sharedProps} />;
-  if (variant === "split-card") return <SplitCardLayout {...sharedProps} />;
-  if (variant === "safari-ready") return <SafariReadyLayout {...sharedProps} />;
-  // Default + new-name → editorial-close. Legacy proposals saved with
-  // unrecognised variant strings (decision-card, conversion-card, etc.)
-  // also land here, gaining the calmer one-photo close.
-  return <EditorialCloseLayout {...sharedProps} />;
+  // Pick the variant body, then wrap with the in-app booking dialog
+  // so every variant's Secure CTA opens the same popup.
+  const body = (() => {
+    if (variant === "gallery-row") return <GalleryRowLayout {...sharedProps} />;
+    if (variant === "stack") return <StackLayout {...sharedProps} />;
+    if (variant === "split-card") return <SplitCardLayout {...sharedProps} />;
+    if (variant === "safari-ready") return <SafariReadyLayout {...sharedProps} />;
+    // Default + new-name → editorial-close. Legacy proposals saved
+    // with unrecognised variant strings (decision-card,
+    // conversion-card, etc.) also land here, gaining the calmer
+    // one-photo close.
+    return <EditorialCloseLayout {...sharedProps} />;
+  })();
+
+  return (
+    <>
+      {body}
+      {!isEditor && (
+        <ReservationDialog
+          open={reservationOpen}
+          proposalId={proposal.id}
+          proposal={proposal}
+          tokens={tokens}
+          theme={theme}
+          sessionId={typeof window !== "undefined" ? ensureSessionId() : undefined}
+          onClose={() => setReservationOpen(false)}
+        />
+      )}
+    </>
+  );
 }
 
 // ─── Cover-hero lookup ───────────────────────────────────────────────────

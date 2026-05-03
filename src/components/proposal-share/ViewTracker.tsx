@@ -93,7 +93,10 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function ensureSessionId(): string {
+// Exported so other client-facing flows (ReservationDialog, etc.) can
+// resolve the same session id and tie their events back to the same
+// engagement-tracker session.
+export function ensureSessionId(): string {
   try {
     let id = sessionStorage.getItem(SESSION_KEY);
     if (!id) {

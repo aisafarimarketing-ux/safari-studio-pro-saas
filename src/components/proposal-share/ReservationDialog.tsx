@@ -1,0 +1,518 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { Proposal, ThemeTokens, ProposalTheme } from "@/lib/types";
+
+// ─── ReservationDialog — client booking popup ───────────────────────────
+//
+// Opens from the Closing section's "Secure This Safari" CTA. Captures
+// the four pieces of info the proposal doesn't already know — phone,
+// email, nationality, additional notes — alongside editable arrival /
+// departure dates and a travelers field that pre-fill from the
+// proposal but stay editable so the booking window's reality (visa
+// shifted, flights changed) can override the draft.
+//
+// Anonymous — fires against /api/public/proposals/:id/reserve. Also
+// pings the existing engagement tracker with reservation_started on
+// open and reservation_completed on success so funnel analytics +
+// future GHL triggers ("opened booking, didn't submit") have signals
+// to work with.
+
+type ReservationDialogProps = {
+  open: boolean;
+  proposalId: string;
+  proposal: Proposal;
+  tokens: ThemeTokens;
+  theme: ProposalTheme;
+  /** Anonymous viewer session — same id used by the engagement
+   *  tracker so the reservation row can be tied back to the view
+   *  session that produced it. */
+  sessionId?: string;
+  onClose: () => void;
+};
+
+type FormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  nationality: string;
+  arrivalDate: string;   // YYYY-MM-DD (HTML date input format)
+  departureDate: string; // YYYY-MM-DD
+  travelers: string;
+  notes: string;
+};
+
+export function ReservationDialog({
+  open,
+  proposalId,
+  proposal,
+  tokens,
+  theme,
+  sessionId,
+  onClose,
+}: ReservationDialogProps) {
+  const initial = useMemo(() => buildInitialForm(proposal), [proposal]);
+  const [form, setForm] = useState<FormState>(initial);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  // Reset whenever the dialog re-opens for a fresh attempt.
+  useEffect(() => {
+    if (open) {
+      setForm(initial);
+      setSubmitting(false);
+      setError(null);
+      setDone(false);
+      // Fire-and-forget tracker event so the operator's funnel
+      // shows "started" vs "completed" reservations.
+      track(proposalId, sessionId, "reservation_started");
+    }
+  }, [open, initial, proposalId, sessionId]);
+
+  // ESC closes; outside-click on the backdrop closes too.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setError(null);
+
+    // Client-side validation mirrors the server's. Catches obvious
+    // mistakes without a round-trip.
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      setError("Please enter your first and last name.");
+      return;
+    }
+    if (!form.email.includes("@")) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!form.phone.trim()) {
+      setError("Please enter a phone or WhatsApp number.");
+      return;
+    }
+    if (!form.arrivalDate || !form.departureDate) {
+      setError("Please pick both an arrival and a departure date.");
+      return;
+    }
+    if (form.departureDate < form.arrivalDate) {
+      setError("Departure date must be on or after arrival.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/public/proposals/${proposalId}/reserve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          sessionId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Couldn't submit — try again.");
+        setSubmitting(false);
+        return;
+      }
+      track(proposalId, sessionId, "reservation_completed");
+      setDone(true);
+      setSubmitting(false);
+    } catch {
+      setError("Network error — please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center p-0 md:p-6"
+      style={{ background: "rgba(20,20,20,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full md:max-w-[640px] max-h-[92vh] overflow-y-auto rounded-t-2xl md:rounded-2xl shadow-2xl"
+        style={{
+          background: tokens.pageBg,
+          fontFamily: `'${theme.bodyFont}', sans-serif`,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div
+          className="flex items-baseline justify-between gap-3 px-5 md:px-7 pt-5 pb-3"
+          style={{ borderBottom: `1px solid ${tokens.border}` }}
+        >
+          <div>
+            <div
+              className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
+              style={{ color: tokens.mutedText }}
+            >
+              Make a reservation
+            </div>
+            <h2
+              className="font-bold leading-[1.1] mt-0.5"
+              style={{
+                color: tokens.headingText,
+                fontFamily: `'${theme.displayFont}', serif`,
+                fontSize: "clamp(1.2rem, 2.4vw, 1.6rem)",
+                letterSpacing: "-0.005em",
+              }}
+            >
+              {done ? "We're on it" : proposal.trip.title || "Your safari"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-2xl leading-none transition hover:opacity-75"
+            style={{ color: tokens.mutedText }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {done ? (
+          <div className="px-5 md:px-7 py-8">
+            <p
+              className="text-[15px] leading-[1.7]"
+              style={{ color: tokens.bodyText }}
+            >
+              Thank you, {form.firstName}. Your reservation request has been
+              sent to{" "}
+              <strong style={{ color: tokens.headingText }}>
+                {proposal.operator.consultantName || proposal.operator.companyName || "the team"}
+              </strong>
+              . You&rsquo;ll hear from us within 24 hours to confirm
+              availability and walk you through the next step.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-6 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
+              style={{
+                background: tokens.accent,
+                color: "white",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="px-5 md:px-7 py-5 space-y-4">
+            <Row>
+              <Field label="First name" required>
+                <Input
+                  value={form.firstName}
+                  onChange={(v) => update({ firstName: v })}
+                  autoFocus
+                  tokens={tokens}
+                />
+              </Field>
+              <Field label="Last name" required>
+                <Input
+                  value={form.lastName}
+                  onChange={(v) => update({ lastName: v })}
+                  tokens={tokens}
+                />
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Phone (mobile / WhatsApp)" required>
+                <Input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(v) => update({ phone: v })}
+                  placeholder="+255 712 345 678"
+                  tokens={tokens}
+                />
+              </Field>
+              <Field label="Email" required>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(v) => update({ email: v })}
+                  placeholder="you@example.com"
+                  tokens={tokens}
+                />
+              </Field>
+            </Row>
+            <Field label="Nationality">
+              <Input
+                value={form.nationality}
+                onChange={(v) => update({ nationality: v })}
+                placeholder="e.g. United Kingdom"
+                tokens={tokens}
+              />
+            </Field>
+            <Row>
+              <Field label="Arrival date" required>
+                <Input
+                  type="date"
+                  value={form.arrivalDate}
+                  onChange={(v) => update({ arrivalDate: v })}
+                  tokens={tokens}
+                />
+              </Field>
+              <Field label="Departure date" required>
+                <Input
+                  type="date"
+                  value={form.departureDate}
+                  onChange={(v) => update({ departureDate: v })}
+                  min={form.arrivalDate || undefined}
+                  tokens={tokens}
+                />
+              </Field>
+            </Row>
+            <Field
+              label="Travelers"
+              hint="Total count + ages of any children"
+            >
+              <Input
+                value={form.travelers}
+                onChange={(v) => update({ travelers: v })}
+                placeholder="2 adults, 1 child age 7"
+                tokens={tokens}
+              />
+            </Field>
+            <Field label="Anything else we should know?">
+              <Textarea
+                value={form.notes}
+                onChange={(v) => update({ notes: v })}
+                placeholder="Dietary needs, mobility considerations, special celebrations…"
+                tokens={tokens}
+                rows={3}
+              />
+            </Field>
+
+            {error && (
+              <div
+                className="text-[13px] px-3 py-2 rounded-md"
+                style={{
+                  background: "rgba(179, 67, 52, 0.08)",
+                  color: "#b34334",
+                  border: "1px solid rgba(179, 67, 52, 0.2)",
+                }}
+                role="alert"
+              >
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
+              <p
+                className="text-[11.5px] flex-1 min-w-[180px]"
+                style={{ color: tokens.mutedText }}
+              >
+                Submitting sends your details directly to{" "}
+                {proposal.operator.consultantName ||
+                  proposal.operator.companyName ||
+                  "the team"}
+                . No payment is taken at this step.
+              </p>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2.5 rounded-lg text-[14px] font-semibold transition shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-wait"
+                style={{
+                  background: tokens.accent,
+                  color: "white",
+                }}
+              >
+                {submitting ? "Sending…" : "Send reservation"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+
+function track(proposalId: string, sessionId: string | undefined, kind: string) {
+  if (!sessionId) return;
+  // Best-effort, never blocks the UI.
+  try {
+    void fetch(`/api/public/proposals/${proposalId}/track`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, kind }),
+      keepalive: true,
+    });
+  } catch {
+    /* swallow — tracking is best-effort */
+  }
+}
+
+function buildInitialForm(proposal: Proposal): FormState {
+  // Split guestNames "Sam Kombe & Lily Wong" / "Sam Kombe" into a
+  // first guest's first + last name. Editable by the client.
+  const fullName = proposal.client.guestNames?.trim() ?? "";
+  const firstGuest = fullName.split(/[,&]|\sand\s/i)[0]?.trim() ?? "";
+  const parts = firstGuest.split(/\s+/);
+  const firstName = parts[0] ?? "";
+  const lastName = parts.slice(1).join(" ");
+
+  // Travelers: prefer adults+children when set, else the operator's
+  // free-form pax string ("2 adults"), else blank for the client to
+  // fill in.
+  const adults = proposal.client.adults;
+  const children = proposal.client.children;
+  let travelers = "";
+  if (typeof adults === "number" && adults > 0) {
+    travelers = `${adults} ${adults === 1 ? "adult" : "adults"}`;
+    if (typeof children === "number" && children > 0) {
+      travelers += `, ${children} ${children === 1 ? "child" : "children"}`;
+    }
+  } else if (proposal.client.pax) {
+    travelers = proposal.client.pax;
+  }
+
+  return {
+    firstName,
+    lastName,
+    email: "",
+    phone: "",
+    nationality: "",
+    arrivalDate: parseArrivalDate(proposal.trip.arrivalDate),
+    departureDate: parseDepartureDate(proposal.trip.arrivalDate, proposal.trip.nights),
+    travelers,
+    notes: "",
+  };
+}
+
+function parseArrivalDate(arrivalISO: string | undefined): string {
+  if (!arrivalISO) return "";
+  // arrivalDate is stored as "YYYY-MM-DD" — perfect for <input type="date">.
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(arrivalISO);
+  return m ? m[1] : "";
+}
+
+function parseDepartureDate(
+  arrivalISO: string | undefined,
+  nights: number | undefined,
+): string {
+  if (!arrivalISO || !nights) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(arrivalISO);
+  if (!m) return "";
+  const start = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  start.setUTCDate(start.getUTCDate() + Math.max(0, nights));
+  const y = start.getUTCFullYear();
+  const mo = String(start.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(start.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${d}`;
+}
+
+// ─── Form primitives ────────────────────────────────────────────────────
+
+function Row({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-[11.5px] uppercase tracking-[0.18em] font-semibold text-black/60">
+          {label}
+          {required && <span className="text-[#b34334] ml-1">*</span>}
+        </span>
+        {hint && <span className="text-[11px] text-black/40">{hint}</span>}
+      </div>
+      {children}
+    </label>
+  );
+}
+
+function Input({
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  autoFocus,
+  min,
+  tokens,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  type?: "text" | "email" | "tel" | "date";
+  placeholder?: string;
+  autoFocus?: boolean;
+  min?: string;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      min={min}
+      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition"
+      style={{
+        background: "white",
+        border: `1px solid ${tokens.border}`,
+        color: tokens.headingText,
+      }}
+    />
+  );
+}
+
+function Textarea({
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+  tokens,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full px-3 py-2.5 rounded-lg text-[14px] outline-none transition resize-y"
+      style={{
+        background: "white",
+        border: `1px solid ${tokens.border}`,
+        color: tokens.headingText,
+      }}
+    />
+  );
+}

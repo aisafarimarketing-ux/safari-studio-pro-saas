@@ -33,10 +33,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId required" }, { status: 400 });
   }
-  const kind =
-    body.kind === "open" || body.kind === "section" || body.kind === "close"
-      ? body.kind
-      : null;
+  // open / section / close drive engagement metrics.
+  // reservation_started / reservation_completed bookend the booking
+  // popup flow — used by funnel analytics + future GHL workflow
+  // triggers ("client opened booking but didn't submit" → nudge).
+  const ALLOWED_KINDS = [
+    "open",
+    "section",
+    "close",
+    "reservation_started",
+    "reservation_completed",
+  ] as const;
+  type Kind = (typeof ALLOWED_KINDS)[number];
+  const kind: Kind | null = (ALLOWED_KINDS as readonly string[]).includes(
+    body.kind as string,
+  )
+    ? (body.kind as Kind)
+    : null;
   if (!kind) return NextResponse.json({ error: "invalid kind" }, { status: 400 });
 
   const sectionId = typeof body.sectionId === "string" ? body.sectionId.slice(0, 64) : null;
@@ -84,6 +97,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       dwellSeconds,
     },
   });
+
+  // GHL-side fan-out for the booking funnel — fire-and-forget so a
+  // slow webhook never blocks the client. v1 just records the event;
+  // workflow triggers can be added alongside triggerProposalViewed
+  // when GHL is wired.
+  void kind;
 
   // First-view detection — only on "open" kinds. We count ProposalView
   // rows for this proposal AFTER the upsert; if exactly one exists, the
