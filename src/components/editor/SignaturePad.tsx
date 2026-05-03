@@ -29,7 +29,11 @@ export function SignaturePad({
   const [lastRemembered, setLastRemembered] = useState<string | null>(null);
 
   // Resize + prime the canvas once mounted. DPR-aware so the stroke stays
-  // crisp on retina screens.
+  // crisp on retina screens. Canvas stays *transparent* — the previous
+  // white fillRect baked a white background into every exported PNG,
+  // which then surfaced on dark headers / tinted footers as an
+  // out-of-place rectangle. Going transparent + auto-cropping on save
+  // is the fix.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -47,9 +51,6 @@ export function SignaturePad({
     ctx.lineJoin = "round";
     ctx.lineWidth = 2.2;
     ctx.strokeStyle = "#1b2125";
-    // Clear/whitewash so the exported PNG has a white background.
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, cssW, cssH);
 
     // If we have an initial signature, paint it in.
     if (initial) {
@@ -64,6 +65,7 @@ export function SignaturePad({
     // Load the last-remembered signature for the "Use previous" affordance.
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored) setLastRemembered(stored);
     } catch {
       // localStorage may be disabled (private mode, SSR guard) — silent fallback.
@@ -117,8 +119,10 @@ export function SignaturePad({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const { width, height } = canvas.getBoundingClientRect();
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
+    // Transparent clear — clearRect zeroes the alpha channel so the
+    // canvas reads as the underlying CSS background, not an opaque
+    // white rectangle.
+    ctx.clearRect(0, 0, width, height);
     setIsEmpty(true);
   };
 
@@ -131,8 +135,7 @@ export function SignaturePad({
     const img = new Image();
     img.onload = () => {
       const { width, height } = canvas.getBoundingClientRect();
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
       setIsEmpty(false);
     };
@@ -142,7 +145,13 @@ export function SignaturePad({
   const save = () => {
     const canvas = canvasRef.current;
     if (!canvas || isEmpty) return;
-    const dataUrl = canvas.toDataURL("image/png");
+    // Auto-crop to the bounding box of the drawn ink, with a small
+    // padding margin. Saves a tight transparent PNG — the previous
+    // 380×140 frame ballooned the visible signature on every render
+    // surface (footer, share view, PDF). Falls back to the full
+    // canvas when crop detection finds nothing (degenerate case).
+    const cropped = exportCroppedSignature(canvas);
+    const dataUrl = cropped ?? canvas.toDataURL("image/png");
     try {
       window.localStorage.setItem(STORAGE_KEY, dataUrl);
     } catch {
@@ -256,4 +265,69 @@ export function SignaturePad({
       </div>
     </div>
   );
+}
+
+// Find the bounding box of opaque pixels and export only that region
+// as a PNG with a small padding margin. Returns null when the canvas
+// is empty (no opaque pixels) so the caller falls back to the raw
+// canvas — that path is dead in practice (we already gate on isEmpty)
+// but it keeps the helper safe to call.
+function exportCroppedSignature(canvas: HTMLCanvasElement): string | null {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  // canvas.width / .height are the DPR-scaled backing-store dimensions.
+  // Scan the alpha channel to find the ink box, then export at 1:1
+  // backing-store resolution so the ink stays crisp at large sizes.
+  const w = canvas.width;
+  const h = canvas.height;
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  let imageData: ImageData;
+  try {
+    imageData = ctx.getImageData(0, 0, w, h);
+  } catch {
+    // Cross-origin tainted canvas would throw; not possible here, but
+    // returning null is the safe fallback either way.
+    return null;
+  }
+  const data = imageData.data;
+  // 4 bytes per pixel (RGBA). We only care whether alpha is non-zero —
+  // opacity threshold of 8 ignores anti-aliasing fringes that visually
+  // read as empty.
+  const ALPHA_THRESHOLD = 8;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const alpha = data[(y * w + x) * 4 + 3];
+      if (alpha > ALPHA_THRESHOLD) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0 || maxY < 0) return null;
+
+  // Padding scales with DPR so the visual margin stays consistent
+  // across screens.
+  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const pad = Math.round(8 * dpr);
+  const cropX = Math.max(0, minX - pad);
+  const cropY = Math.max(0, minY - pad);
+  const cropW = Math.min(w - cropX, maxX - minX + 1 + pad * 2);
+  const cropH = Math.min(h - cropY, maxY - minY + 1 + pad * 2);
+
+  const out = document.createElement("canvas");
+  out.width = cropW;
+  out.height = cropH;
+  const outCtx = out.getContext("2d");
+  if (!outCtx) return null;
+  outCtx.putImageData(
+    ctx.getImageData(cropX, cropY, cropW, cropH),
+    0,
+    0,
+  );
+  return out.toDataURL("image/png");
 }

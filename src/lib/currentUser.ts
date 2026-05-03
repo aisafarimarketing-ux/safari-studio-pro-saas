@@ -35,13 +35,24 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
   const cu = await currentUser();
   const email = cu?.emailAddresses?.[0]?.emailAddress ?? null;
-  const name =
-    [cu?.firstName, cu?.lastName].filter(Boolean).join(" ") || email || null;
+  // Real name from Clerk only — never fall back to email here. The
+  // previous fallback (`|| email`) leaked the operator's email into
+  // every place that displayed `user.name`, including the consultant
+  // signature block on every proposal. Downstream readers
+  // (friendlyConsultantName in lib/consultantIdentity.ts) handle
+  // missing names with a polished fallback that derives a first-name
+  // from the local-part of the email — but consultantName is no
+  // longer literally an email address.
+  const name = [cu?.firstName, cu?.lastName].filter(Boolean).join(" ") || null;
 
   const user = await prisma.user.upsert({
     where: { clerkUserId: userId },
+    // Don't overwrite a previously-set name with null on every call —
+    // an old User row that captured the email-as-name pre-fix would
+    // get blanked otherwise. Only set name during create OR when the
+    // Clerk profile carries a real one (i.e. name is non-null).
     create: { clerkUserId: userId, email, name },
-    update: { email, name },
+    update: { email, ...(name ? { name } : {}) },
   });
 
   if (!orgId) return { user, organization: null, membership: null, role: "member", orgActive: false };

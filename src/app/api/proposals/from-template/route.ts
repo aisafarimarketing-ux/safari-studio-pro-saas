@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { getTemplateBySlug, buildProposalFromTemplate } from "@/lib/templates";
-import { applyIdentityToOperator } from "@/lib/consultantIdentity";
+import { applyIdentityToOperator, friendlyConsultantName } from "@/lib/consultantIdentity";
 import { nextProposalTrackingId } from "@/lib/proposalTracking";
 import { ensureRequestForProposal } from "@/lib/requestForProposal";
 import {
@@ -52,17 +52,24 @@ export async function POST(req: Request) {
   // caller. The cloned operator block starts with org/email basics; we
   // then layer the user's full consultant identity (photo, signature,
   // role title) on top so the proposal carries the drafter's brand.
+  // Polished display name — guards legacy User.name === email rows
+  // and produces "Collins" from "collins@example.com" when Clerk has
+  // no first/last on file.
+  const polishedName = friendlyConsultantName({
+    name: ctx.user.name,
+    email: ctx.user.email,
+  });
   const proposal = buildProposalFromTemplate(tpl, {
     mode: "clone",
     operator: {
       companyName: ctx.organization.name ?? "",
-      consultantName: ctx.user.name ?? "",
+      consultantName: polishedName,
       email: ctx.user.email ?? "",
     },
   });
 
   proposal.operator = applyIdentityToOperator(proposal.operator, {
-    name: ctx.user.name ?? "",
+    name: polishedName,
     email: ctx.user.email ?? null,
     roleTitle: ctx.membership?.roleTitle ?? null,
     photoUrl: ctx.membership?.profilePhotoUrl ?? null,

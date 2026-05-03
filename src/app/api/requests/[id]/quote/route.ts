@@ -6,6 +6,10 @@ import { buildBlankProposal } from "@/lib/defaults";
 import { recordActivity } from "@/lib/activity";
 import { nextProposalTrackingId } from "@/lib/proposalTracking";
 import { inferTripDuration, seedBlankDays } from "@/lib/tripDefaults";
+import {
+  applyIdentityToOperator,
+  friendlyConsultantName,
+} from "@/lib/consultantIdentity";
 
 // POST /api/requests/[id]/quote
 //
@@ -38,11 +42,25 @@ export async function POST(
   });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Pull brandDNA once so the operator block has real branding on the
-  // first draft instead of the blank placeholders.
+  // Pull brandDNA + the consultant's per-org membership so the
+  // operator block opens fully branded — company name + logo from
+  // the org's Brand DNA, plus the drafter's photo / role / signature
+  // / WhatsApp from their OrgMembership profile. This is the
+  // "premium feel" fix: every new quote ships with the operator's
+  // actual identity rather than placeholder text the operator has
+  // to fill in by hand.
   const brandDNA = await prisma.brandDNAProfile.findUnique({
     where: { organizationId: ctx.organization.id },
     select: { brandName: true, logoUrl: true },
+  });
+  const membership = await prisma.orgMembership.findFirst({
+    where: { organizationId: ctx.organization.id, userId: ctx.user.id },
+    select: {
+      roleTitle: true,
+      profilePhotoUrl: true,
+      signatureUrl: true,
+      whatsapp: true,
+    },
   });
 
   // Compose the blank proposal skeleton and overlay request data.
@@ -112,9 +130,19 @@ export async function POST(
   else if (style.includes("classic") || style.includes("value")) proposal.activeTier = "classic";
   else proposal.activeTier = "premier";
 
-  // Operator — seed from the user + brand DNA so the first paint isn't empty.
-  if (ctx.user.name) proposal.operator.consultantName = ctx.user.name;
-  if (ctx.user.email) proposal.operator.email = ctx.user.email;
+  // Operator — full identity overlay. friendlyConsultantName guards
+  // against the legacy User.name === email rows by picking up the
+  // email's local-part as a polished fallback. Brand DNA fills the
+  // company name + logo on top so the proposal never opens with the
+  // generic blank operator card.
+  proposal.operator = applyIdentityToOperator(proposal.operator, {
+    name: friendlyConsultantName({ name: ctx.user.name, email: ctx.user.email }),
+    email: ctx.user.email ?? null,
+    roleTitle: membership?.roleTitle?.trim() || null,
+    photoUrl: membership?.profilePhotoUrl?.trim() || null,
+    signatureUrl: membership?.signatureUrl?.trim() || null,
+    whatsapp: membership?.whatsapp?.trim() || null,
+  });
   if (brandDNA?.brandName) proposal.operator.companyName = brandDNA.brandName;
   if (brandDNA?.logoUrl) proposal.operator.logoUrl = brandDNA.logoUrl;
 
