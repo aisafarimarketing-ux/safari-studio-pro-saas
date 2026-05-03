@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { extractProposalValueCents } from "@/lib/proposalValue";
 
 // GET /api/analytics — the admin dashboard rollup.
 //
@@ -38,7 +39,7 @@ export async function GET() {
   //   Proposal              → drafts / sent / accepted activity
   //   ProposalReservation   → bookings funnel + by-status counts
   // Most operators ship 100s of rows per quarter — these are cheap.
-  const [requests, proposals, reservations, memberships] = await Promise.all([
+  const [requests, proposals, reservations, memberships, viewedSummaries] = await Promise.all([
     prisma.request.findMany({
       where: { organizationId: orgId, receivedAt: { gte: since } },
       select: {
@@ -56,9 +57,15 @@ export async function GET() {
         id: true,
         status: true,
         createdAt: true,
-        // Whether this proposal has at least one client booking — drives
-        // proposal→booking conversion without a second join.
-        proposalReservations: { select: { id: true }, take: 1 },
+        // contentJson — used by extractProposalValueCents to roll up
+        // pipeline $ across the org. Pulled per-proposal once; cheap
+        // for the typical 100-300 proposals/quarter range.
+        contentJson: true,
+        // Pulls every reservation's status so we can split "booking
+        // requested" from "confirmed" in the unified funnel.
+        proposalReservations: {
+          select: { id: true, status: true },
+        },
       },
     }),
     prisma.proposalReservation.findMany({
@@ -72,6 +79,18 @@ export async function GET() {
     prisma.orgMembership.findMany({
       where: { organizationId: orgId },
       include: { user: { select: { id: true, name: true, email: true } } },
+    }),
+    // ProposalActivitySummary — drives the "Viewed" stage of the
+    // unified funnel. We only care about whether the proposal has
+    // been opened at all (viewedCount > 0); status is used for
+    // proposals that may have been viewed but never moved further.
+    prisma.proposalActivitySummary.findMany({
+      where: {
+        organizationId: orgId,
+        viewedCount: { gt: 0 },
+        proposal: { createdAt: { gte: since } },
+      },
+      select: { proposalId: true, viewedCount: true },
     }),
   ]);
 
@@ -192,12 +211,65 @@ export async function GET() {
   for (const p of proposals) {
     if (p.status in proposalsByStatus) proposalsByStatus[p.status] += 1;
   }
-  // A proposal "with reservation" means at least one client booking
-  // came back via the share view. proposalReservations is preloaded
-  // (take:1) so this is a no-op walk.
+  // Proposals that received at least one client booking via the
+  // share view, and the subset that have a confirmed reservation.
   const proposalsWithReservation = proposals.filter(
     (p) => p.proposalReservations.length > 0,
   ).length;
+  const proposalsWithConfirmed = proposals.filter((p) =>
+    p.proposalReservations.some((r) => r.status === "confirmed"),
+  ).length;
+
+  // Pipeline $ — sum of value across active proposals (draft + sent).
+  // Currency is last-wins across the rollup; mixed-currency orgs land
+  // on whichever currency the most-recent active proposal uses, which
+  // is "wrong but not misleading" for the headline. A per-currency
+  // breakdown is a follow-up if it ever matters.
+  let pipelineValueCents = 0;
+  let pipelineCurrency = "USD";
+  for (const p of proposals) {
+    if (p.status === "draft" || p.status === "sent") {
+      const v = extractProposalValueCents(p.contentJson);
+      if (v.cents > 0) {
+        pipelineValueCents += v.cents;
+        pipelineCurrency = v.currency;
+      }
+    }
+  }
+
+  // Unified five-stage funnel that traces a deal across the linked
+  // tables. Each stage counts proposals (the unit of journey)
+  // currently sitting in that stage:
+  //   Draft             — proposal created, never sent
+  //   Sent              — operator hit Send (or the proposal reached
+  //                       "accepted")
+  //   Viewed            — guest opened /p/[id] (ProposalActivitySummary
+  //                       with viewedCount > 0)
+  //   Booking requested — guest submitted the reservation form
+  //                       (proposal has >= 1 ProposalReservation)
+  //   Confirmed         — operator marked the booking confirmed
+  //                       (reservation status = "confirmed")
+  const viewedProposalIds = new Set(viewedSummaries.map((s) => s.proposalId));
+  const unifiedFunnel = {
+    draft: proposals.filter((p) => p.status === "draft").length,
+    sent: proposals.filter(
+      (p) => p.status === "sent" || p.status === "accepted",
+    ).length,
+    viewed: proposals.filter((p) => viewedProposalIds.has(p.id)).length,
+    bookingRequested: proposalsWithReservation,
+    confirmed: proposalsWithConfirmed,
+  };
+
+  // Journey conversion headline — "X proposals → Y bookings (Z%)".
+  // Y = proposals that received any booking (not raw reservation count
+  // — same proposal twice would double-count). Floor at 0 so a 0/0
+  // edge case shows 0% rather than NaN.
+  const journeyConversion = {
+    proposals: proposalsTotal,
+    bookings: proposalsWithReservation,
+    rate:
+      proposalsTotal > 0 ? proposalsWithReservation / proposalsTotal : 0,
+  };
 
   // ── Reservation rollups (the real "bookings" pipeline) ─────────────────
   const reservationsTotal = reservations.length;
@@ -234,12 +306,20 @@ export async function GET() {
       total: proposalsTotal,
       byStatus: proposalsByStatus,
       withReservation: proposalsWithReservation,
+      withConfirmed: proposalsWithConfirmed,
       conversion: proposalConversion,
+      pipelineValueCents,
+      pipelineCurrency,
     },
     reservations: {
       total: reservationsTotal,
       byStatus: reservationsByStatus,
     },
+    // Unified-journey rollups — Draft → Sent → Viewed → Booking
+    // requested → Confirmed, plus the headline conversion ("X
+    // proposals → Y bookings (Z%)") that operators read first.
+    unifiedFunnel,
+    journeyConversion,
   });
 }
 

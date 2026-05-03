@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { extractProposalValueCents } from "@/lib/proposalValue";
 
 // GET /api/team — live performance command center for the operator
 // roster. Returns per-member metrics, derived action score, badges,
@@ -34,7 +35,7 @@ export async function GET() {
     stageCounts,
     firstReplyStats,
     bookedThisMonth,
-    proposalCounts,
+    allProposals,
     summaries,
     reservations,
     activities,
@@ -79,14 +80,19 @@ export async function GET() {
       },
       _count: { _all: true },
     }),
-    // Active proposals per member (draft + sent).
-    prisma.proposal.groupBy({
-      by: ["userId", "status"],
-      where: {
-        organizationId: orgId,
-        status: { in: ACTIVE_PROPOSAL_STATUSES },
+    // All proposals per member — pulled with status + contentJson so
+    // we can compute (a) active count for the player card, (b)
+    // pipeline $ via extractProposalValueCents, (c) all-time
+    // proposal count for the conversion-rate denominator. groupBy
+    // would be cheaper but can't return contentJson, and a typical
+    // org has 100s of proposals which the JSON parse handles fine.
+    prisma.proposal.findMany({
+      where: { organizationId: orgId },
+      select: {
+        userId: true,
+        status: true,
+        contentJson: true,
       },
-      _count: { _all: true },
     }),
     // Activity summaries with their proposal owner so we can group by
     // userId. Filter to only the statuses we render so the row count
@@ -153,13 +159,33 @@ export async function GET() {
       .map((b) => [b.assignedToUserId as string, b._count._all]),
   );
 
-  // Proposals — count active per user (draft + sent combined).
+  // Proposals — walk once and accumulate three rollups per user:
+  //   • active count (draft + sent) for the player-card metric
+  //   • total count (any status) for the conversion-rate denominator
+  //   • pipeline value (cents) summed across active proposals
   const proposalsActiveByUser = new Map<string, number>();
-  for (const p of proposalCounts) {
-    proposalsActiveByUser.set(
+  const proposalsTotalByUser = new Map<string, number>();
+  const pipelineCentsByUser = new Map<string, number>();
+  const pipelineCurrencyByUser = new Map<string, string>();
+  for (const p of allProposals) {
+    proposalsTotalByUser.set(
       p.userId,
-      (proposalsActiveByUser.get(p.userId) ?? 0) + p._count._all,
+      (proposalsTotalByUser.get(p.userId) ?? 0) + 1,
     );
+    if (ACTIVE_PROPOSAL_STATUSES.includes(p.status)) {
+      proposalsActiveByUser.set(
+        p.userId,
+        (proposalsActiveByUser.get(p.userId) ?? 0) + 1,
+      );
+      const v = extractProposalValueCents(p.contentJson);
+      if (v.cents > 0) {
+        pipelineCentsByUser.set(
+          p.userId,
+          (pipelineCentsByUser.get(p.userId) ?? 0) + v.cents,
+        );
+        pipelineCurrencyByUser.set(p.userId, v.currency);
+      }
+    }
   }
 
   // Activity-summary buckets per user.
@@ -221,6 +247,7 @@ export async function GET() {
           : "offline";
 
     const proposalsActive = proposalsActiveByUser.get(m.userId) ?? 0;
+    const proposalsTotal = proposalsTotalByUser.get(m.userId) ?? 0;
     const hotDeals = hotByUser.get(m.userId) ?? 0;
     const needsFollowup = followupByUser.get(m.userId) ?? 0;
     const atRisk = atRiskByUser.get(m.userId) ?? 0;
@@ -229,6 +256,14 @@ export async function GET() {
       + (requestBookedByUser.get(m.userId) ?? 0);
     const bookingsAllTime = reservationsAllTimeByUser.get(m.userId) ?? 0;
     const medianResponseMinutes = medianByUser.get(m.userId) ?? null;
+    const pipelineValueCents = pipelineCentsByUser.get(m.userId) ?? 0;
+    const pipelineCurrency = pipelineCurrencyByUser.get(m.userId) ?? "USD";
+    // Conversion = bookings / proposals shipped. Uses all-time
+    // counters so a member with one win this week and 30 historical
+    // proposals doesn't read as 100%. Denominator floors to avoid
+    // divide-by-zero NaN.
+    const conversionRate =
+      proposalsTotal > 0 ? bookingsAllTime / proposalsTotal : 0;
 
     const lastEvent = lastActivityByUser.get(m.userId);
 
@@ -251,12 +286,16 @@ export async function GET() {
       bookedThisMonth: requestBookedByUser.get(m.userId) ?? 0, // legacy field — kept for back-compat
       metrics: {
         proposalsActive,
+        proposalsTotal,
         hotDeals,
         needsFollowup,
         atRisk,
         bookingsThisMonth,
         bookingsAllTime,
         medianResponseMinutes,
+        pipelineValueCents,
+        pipelineCurrency,
+        conversionRate,
         actionScore: computeActionScore({
           bookingsThisMonth,
           hotDeals,

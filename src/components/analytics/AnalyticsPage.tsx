@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/properties/AppHeader";
+import { formatMoneyCompact } from "@/lib/proposalValue";
 
 // Admin-only analytics rollup. Four blocks:
 //   1. Summary KPIs (received, booked, conversion, median response)
@@ -36,11 +37,26 @@ type Analytics = {
     total: number;
     byStatus: Record<string, number>;
     withReservation: number;
+    withConfirmed: number;
     conversion: number;
+    pipelineValueCents: number;
+    pipelineCurrency: string;
   };
   reservations: {
     total: number;
     byStatus: Record<string, number>;
+  };
+  unifiedFunnel: {
+    draft: number;
+    sent: number;
+    viewed: number;
+    bookingRequested: number;
+    confirmed: number;
+  };
+  journeyConversion: {
+    proposals: number;
+    bookings: number;
+    rate: number;
   };
 };
 
@@ -64,6 +80,17 @@ const RESERVATION_STAGES: { key: string; label: string }[] = [
   { key: "contacted", label: "Contacted" },
   { key: "confirmed", label: "Confirmed" },
   { key: "lost",      label: "Lost" },
+];
+
+// The five stages of the unified deal journey, used by the new top-of-
+// page funnel. Order matters — left-to-right tells the story
+// "Draft -> Confirmed".
+const UNIFIED_STAGES: { key: keyof Analytics["unifiedFunnel"]; label: string }[] = [
+  { key: "draft",            label: "Draft" },
+  { key: "sent",             label: "Sent" },
+  { key: "viewed",           label: "Viewed" },
+  { key: "bookingRequested", label: "Booking requested" },
+  { key: "confirmed",        label: "Confirmed" },
 ];
 
 export function AnalyticsPage() {
@@ -134,6 +161,23 @@ export function AnalyticsPage() {
 
         {data && (
           <>
+            {/* Journey conversion headline — the load-bearing metric:
+                "X proposals → Y bookings (Z%)". Reads first so the
+                operator knows where they stand before scanning the
+                breakdown. */}
+            <JourneyHeadline
+              proposals={data.journeyConversion.proposals}
+              bookings={data.journeyConversion.bookings}
+              rate={data.journeyConversion.rate}
+              pipelineValueCents={data.proposals.pipelineValueCents}
+              pipelineCurrency={data.proposals.pipelineCurrency}
+            />
+
+            {/* Unified five-stage funnel — Draft → Sent → Viewed →
+                Booking requested → Confirmed. Shows where deals stack
+                up across the linked tables in one row. */}
+            <UnifiedFunnel funnel={data.unifiedFunnel} />
+
             {/* KPIs — now keyed off the actual product activity, not
                 just inbound CRM requests. Operators who skip the
                 request inbox and create proposals directly were
@@ -301,6 +345,194 @@ function KPI({
 // page (Proposals / Bookings / Inbound requests) so each flow shares
 // the same shape: small label on the left, stage tiles spread across
 // the right.
+// ─── Journey conversion headline ────────────────────────────────────────
+//
+// The single line every operator wants: how many proposals went out,
+// how many turned into bookings, and the conversion percentage. Plus
+// pipeline value to anchor the money side.
+
+function JourneyHeadline({
+  proposals,
+  bookings,
+  rate,
+  pipelineValueCents,
+  pipelineCurrency,
+}: {
+  proposals: number;
+  bookings: number;
+  rate: number;
+  pipelineValueCents: number;
+  pipelineCurrency: string;
+}) {
+  const ratePct = Math.round(rate * 100);
+  const pipelineLabel = formatMoneyCompact(pipelineValueCents, pipelineCurrency);
+  return (
+    <section
+      className="rounded-2xl bg-white p-6 mb-6 relative overflow-hidden"
+      style={{
+        border: "1px solid rgba(27,58,45,0.20)",
+        boxShadow:
+          "0 1px 2px rgba(27,58,45,0.04), 0 8px 24px -10px rgba(27,58,45,0.10)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={{ background: "#1b3a2d" }}
+      />
+      <div className="flex items-end justify-between gap-6 flex-wrap">
+        <div className="min-w-0">
+          <div
+            className="text-[10.5px] uppercase font-bold mb-2"
+            style={{ color: "rgba(0,0,0,0.55)", letterSpacing: "0.24em" }}
+          >
+            Journey conversion
+          </div>
+          <div
+            className="flex items-baseline gap-3 flex-wrap"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            <span
+              className="text-[32px] md:text-[40px] tabular-nums"
+              style={{ color: "rgba(0,0,0,0.88)", fontWeight: 700, letterSpacing: "-0.022em" }}
+            >
+              {proposals}
+            </span>
+            <span className="text-[15px] text-black/55">proposals →</span>
+            <span
+              className="text-[32px] md:text-[40px] tabular-nums"
+              style={{ color: "#1b3a2d", fontWeight: 700, letterSpacing: "-0.022em" }}
+            >
+              {bookings}
+            </span>
+            <span className="text-[15px] text-black/55">bookings</span>
+            <span
+              className="text-[20px] md:text-[24px] tabular-nums px-2.5 py-0.5 rounded-md ml-1"
+              style={{
+                background: ratePct >= 20 ? "rgba(47,143,70,0.12)" : "rgba(0,0,0,0.05)",
+                color: ratePct >= 20 ? "#1b3a2d" : "rgba(0,0,0,0.55)",
+                fontWeight: 700,
+              }}
+            >
+              {ratePct}%
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] text-black/55">
+            {bookings === 0
+              ? "No bookings closed in the last 90 days yet."
+              : `In the last 90 days, ${ratePct}% of proposals converted to a booking request.`}
+          </p>
+        </div>
+
+        {pipelineValueCents > 0 && (
+          <div className="text-right shrink-0">
+            <div
+              className="text-[10.5px] uppercase font-bold"
+              style={{ color: "rgba(0,0,0,0.55)", letterSpacing: "0.24em" }}
+            >
+              Pipeline value
+            </div>
+            <div
+              className="mt-1 tabular-nums"
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: 32,
+                fontWeight: 700,
+                color: "#c9a84c",
+                letterSpacing: "-0.025em",
+              }}
+            >
+              {pipelineLabel}
+            </div>
+            <div className="text-[11.5px] text-black/45 mt-0.5">
+              draft + sent
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─── Unified five-stage funnel ──────────────────────────────────────────
+
+function UnifiedFunnel({ funnel }: { funnel: Analytics["unifiedFunnel"] }) {
+  // Compute the visual width per stage as a proportion of the largest
+  // stage. Floors at 8% so a single-deal stage is still visible.
+  const max = Math.max(1, ...UNIFIED_STAGES.map((s) => funnel[s.key]));
+  return (
+    <section
+      className="rounded-2xl bg-white p-5 md:p-6 mb-6"
+      style={{
+        border: "1px solid rgba(0,0,0,0.08)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      }}
+    >
+      <div className="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
+        <div>
+          <div
+            className="text-[10.5px] uppercase font-bold"
+            style={{ color: "rgba(0,0,0,0.55)", letterSpacing: "0.24em" }}
+          >
+            Deal journey · Last 90 days
+          </div>
+          <h3
+            className="mt-1 text-[18px] font-bold text-black/85"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
+            Where deals are stacking up
+          </h3>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {UNIFIED_STAGES.map((stage, i) => {
+          const count = funnel[stage.key];
+          const width = Math.max(8, Math.round((count / max) * 100));
+          const isTerminal = stage.key === "confirmed";
+          const accent = isTerminal ? "#1b3a2d" : i >= 3 ? "#2d5a40" : "#c9a84c";
+          return (
+            <div key={stage.key} className="flex items-center gap-3">
+              <div
+                className="w-[140px] text-[11.5px] font-semibold shrink-0"
+                style={{ color: "rgba(0,0,0,0.62)" }}
+              >
+                {stage.label}
+              </div>
+              <div className="flex-1 h-7 rounded-md" style={{ background: "rgba(0,0,0,0.05)" }}>
+                <div
+                  className="h-full rounded-md flex items-center justify-end pr-2.5"
+                  style={{
+                    width: `${width}%`,
+                    background: accent,
+                    transition: "width 200ms ease-out",
+                    boxShadow: isTerminal ? "0 4px 10px -4px rgba(27,58,45,0.35)" : undefined,
+                  }}
+                >
+                  {count > 0 && (
+                    <span
+                      className="text-[11.5px] tabular-nums font-bold"
+                      style={{ color: "#fff" }}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div
+                className="w-[44px] text-right tabular-nums text-[13px] font-bold shrink-0"
+                style={{ color: count > 0 ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.40)" }}
+              >
+                {count}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function PipelineRow({
   label,
   stages,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/properties/AppHeader";
+import { formatMoneyCompact } from "@/lib/proposalValue";
 
 // ─── Live team performance command center ─────────────────────────────────
 //
@@ -43,12 +44,16 @@ type TeamMember = {
   bookedThisMonth: number;
   metrics: {
     proposalsActive: number;
+    proposalsTotal: number;
     hotDeals: number;
     needsFollowup: number;
     atRisk: number;
     bookingsThisMonth: number;
     bookingsAllTime: number;
     medianResponseMinutes: number | null;
+    pipelineValueCents: number;
+    pipelineCurrency: string;
+    conversionRate: number;
     actionScore: number;
   };
   badges: string[];
@@ -432,20 +437,40 @@ function PlayerCard({ member }: { member: TeamMember }) {
         </div>
       )}
 
-      {/* ── 2x2 metric grid ────────────────────────────────────── */}
-      <div
-        className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3"
-      >
-        <Metric label="Proposals" value={m.metrics.proposalsActive} />
-        <Metric label="Bookings · MTD" value={m.metrics.bookingsThisMonth} />
-        <Metric label="Hot deals" value={m.metrics.hotDeals} accent={m.metrics.hotDeals > 0 ? HOT : undefined} />
+      {/* ── 3x2 metric grid — six journey metrics ─────────────── */}
+      {/* Top row reads as the headline: Pipeline $ · Conversion %
+          · Bookings. Bottom row shows the supporting counts:
+          Proposals · Hot deals · Follow-up. */}
+      <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3">
         <Metric
-          label="Median reply"
+          label="Pipeline"
           stringValue={
-            m.metrics.medianResponseMinutes != null
-              ? formatMinutes(m.metrics.medianResponseMinutes)
+            m.metrics.pipelineValueCents > 0
+              ? formatMoneyCompact(m.metrics.pipelineValueCents, m.metrics.pipelineCurrency)
               : "—"
           }
+          accent={m.metrics.pipelineValueCents > 0 ? GOLD : undefined}
+        />
+        <Metric
+          label="Conversion"
+          stringValue={
+            m.metrics.proposalsTotal > 0
+              ? `${Math.round(m.metrics.conversionRate * 100)}%`
+              : "—"
+          }
+          accent={m.metrics.conversionRate >= 0.2 ? FOREST : undefined}
+        />
+        <Metric label="Bookings" value={m.metrics.bookingsAllTime} />
+        <Metric label="Proposals" value={m.metrics.proposalsActive} />
+        <Metric
+          label="Hot deals"
+          value={m.metrics.hotDeals}
+          accent={m.metrics.hotDeals > 0 ? HOT : undefined}
+        />
+        <Metric
+          label="Follow-up"
+          value={m.metrics.needsFollowup}
+          accent={m.metrics.needsFollowup > 0 ? WARN : undefined}
         />
       </div>
 
