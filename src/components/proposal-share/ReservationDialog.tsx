@@ -245,26 +245,30 @@ export function ReservationDialog({
 
         {done ? (
           <div className="px-5 md:px-7 py-8">
-            <p
-              className="text-[15px] leading-[1.7]"
-              style={{ color: tokens.bodyText }}
-            >
-              {renderSuccessMessage(form.firstName, senderLabel, emailDelivery, tokens)}
-            </p>
+            {renderSuccessMessage(form.firstName, senderLabel, emailDelivery, tokens)}
             <button
               type="button"
               onClick={onClose}
-              className="mt-6 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
+              className="mt-7 w-full md:w-auto inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-[14px] font-semibold transition"
               style={{
                 background: tokens.accent,
                 color: "white",
               }}
             >
-              Close
+              Done
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="px-5 md:px-7 py-5 space-y-4">
+            {/* Reassuring intro — sets expectation before the form */}
+            <p
+              className="text-[13.5px] leading-[1.55] -mt-1"
+              style={{ color: tokens.bodyText }}
+            >
+              Tell us about your trip — we&rsquo;ll confirm availability and next
+              steps shortly.
+            </p>
+
             <Row>
               <Field label="First name" required>
                 <Input
@@ -283,7 +287,11 @@ export function ReservationDialog({
               </Field>
             </Row>
             <Row>
-              <Field label="Phone (mobile / WhatsApp)" required>
+              <Field
+                label="Phone (mobile / WhatsApp)"
+                hint="Used for quick confirmation (WhatsApp preferred)"
+                required
+              >
                 <Input
                   type="tel"
                   value={form.phone}
@@ -329,14 +337,11 @@ export function ReservationDialog({
                 />
               </Field>
             </Row>
-            <Field
-              label="Travelers"
-              hint="Total count + ages of any children"
-            >
+            <Field label="Travelers">
               <Input
                 value={form.travelers}
                 onChange={(v) => update({ travelers: v })}
-                placeholder="2 adults, 1 child age 7"
+                placeholder="2 adults, 0 children"
                 tokens={tokens}
               />
             </Field>
@@ -344,7 +349,7 @@ export function ReservationDialog({
               <Textarea
                 value={form.notes}
                 onChange={(v) => update({ notes: v })}
-                placeholder="Dietary needs, mobility considerations, special celebrations…"
+                placeholder="Anything important? Dietary needs, special occasions, preferences…"
                 tokens={tokens}
                 rows={3}
               />
@@ -366,11 +371,11 @@ export function ReservationDialog({
 
             <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
               <p
-                className="text-[11.5px] flex-1 min-w-[180px]"
+                className="text-[11.5px] flex-1 min-w-[180px] leading-[1.55]"
                 style={{ color: tokens.mutedText }}
               >
-                Submitting sends your details directly to {senderLabel}.
-                No payment is taken at this step.
+                No payment required now. We&rsquo;ll confirm availability and
+                guide you through the next step.
               </p>
               <button
                 type="submit"
@@ -381,7 +386,7 @@ export function ReservationDialog({
                   color: "white",
                 }}
               >
-                {submitting ? "Sending…" : "Send reservation"}
+                {submitting ? "Sending…" : "Request reservation →"}
               </button>
             </div>
           </form>
@@ -434,39 +439,56 @@ function parseEmailDelivery(raw: unknown): EmailDelivery | null {
   return null;
 }
 
-// Render the success-screen copy. ONLY the "sent" status claims the
-// email actually went — every other status (skipped because mailer
-// isn't configured, failed, delayed past 5s, no recipient) falls
-// back to a neutral "received, the team will reach out" line so we
-// never lie about delivery.
+// Render the success-screen copy. Three calm paragraphs:
+//   1. Confirmation + 24h promise — the load-bearing line
+//   2. Time-sensitive reassurance — keeps the guest's eye on their
+//      inbox / WhatsApp without manufacturing urgency
+//   3. Confidence line that personalises the moment with the
+//      consultant / company name (senderLabel) so the guest feels
+//      they've been handed to a human, not a queue
+// Delivery status is intentionally NOT surfaced in this copy — we
+// stopped promising "sent" because the route may have skipped the
+// email when mailer config was incomplete. The dashboard shows the
+// operator the row regardless; this screen just confirms receipt.
 function renderSuccessMessage(
   firstName: string,
   senderLabel: string,
-  delivery: EmailDelivery | null,
+  // Kept in the signature so callers don't have to be updated, and
+  // future copy passes can re-introduce delivery-specific lines.
+  _delivery: EmailDelivery | null,
   tokens: ThemeTokens,
 ): React.ReactNode {
-  const senderTag = (
-    <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>
-  );
-
-  if (delivery?.status === "sent") {
-    return (
-      <>
-        Thank you, {firstName}. Your reservation request has been sent to{" "}
-        {senderTag}. You&rsquo;ll hear from us within 24 hours to confirm
-        availability and walk you through the next step.
-      </>
-    );
-  }
-
-  // Every other status (skipped / failed / delayed / no-recipient /
-  // unknown): the row is persisted, the operator can see it in the
-  // dashboard, but we don't claim an email went out.
   return (
     <>
-      Thank you, {firstName}. Your reservation request has been received and is
-      with {senderTag}. They&rsquo;ll be in touch within 24 hours to confirm
-      availability and walk you through the next step.
+      <p
+        className="text-[15px] leading-[1.65]"
+        style={{ color: tokens.bodyText }}
+      >
+        Thanks, <strong style={{ color: tokens.headingText }}>{firstName}</strong>.
+        Your request has been received and is already being reviewed.
+      </p>
+      <p
+        className="text-[15px] leading-[1.65] mt-3"
+        style={{ color: tokens.bodyText }}
+      >
+        We&rsquo;ll confirm availability and next steps within 24 hours —
+        often much sooner.
+      </p>
+      <p
+        className="text-[13px] leading-[1.6] mt-5"
+        style={{ color: tokens.mutedText }}
+      >
+        If your trip is time-sensitive, we recommend checking your email or
+        WhatsApp for a faster response.
+      </p>
+      <p
+        className="text-[13px] leading-[1.6] mt-2.5"
+        style={{ color: tokens.bodyText }}
+      >
+        You&rsquo;re now in touch with{" "}
+        <strong style={{ color: tokens.headingText }}>{senderLabel}</strong>,
+        who will guide you through the booking.
+      </p>
     </>
   );
 }
