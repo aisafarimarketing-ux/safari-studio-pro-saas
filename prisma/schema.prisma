@@ -179,6 +179,7 @@ model Organization {
   reservations         Reservation[]
   proposalReservations ProposalReservation[]
   bookingCheckRequests BookingCheckRequest[]
+  brandChangeRequests  BrandChangeRequest[]
   messages             Message[]
   integrationLogs      IntegrationLog[]
   proposalEvents       ProposalEvent[]
@@ -809,6 +810,70 @@ model BookingCheckRequest {
   @@index([organizationId, status])
   @@index([reservationId])
   @@index([proposalId, createdAt])
+}
+
+// ─── Brand change requests ─────────────────────────────────────────────────
+//
+// Members can edit trip / itinerary / pricing content but not brand-
+// sensitive fields (colors, fonts, layouts, master template, greeting
+// formats, signatures). When a member needs an exception — a one-off
+// branded variant for a specific client, or a long-term update they
+// think the org should adopt — they file a BrandChangeRequest from
+// the editor's locked control. An admin reviews + decides.
+//
+// Status workflow:
+//   "pending"          — submitted, awaiting admin decision
+//   "approved_once"    — admin approved for the named proposal only;
+//                        org default unchanged. The proposal itself
+//                        carries the override per-section as usual.
+//   "approved_default" — admin approved AND wants this to become the
+//                        new org-wide default; admin still applies
+//                        via the existing /api/brand-dna PUT path.
+//                        This state records intent; application is a
+//                        separate operator action so a glitchy click
+//                        never silently rewrites the company brand.
+//   "rejected"         — admin declined; reason in decidedNote.
+//
+// fieldName is a free-text key (e.g. "headingFont", "brandColors",
+// "greetingFormat") so the request can describe whichever field the
+// editor's locked control surfaced. currentValue / requestedValue
+// are JSON for flexibility — strings, color arrays, layout objects
+// all serialise cleanly.
+
+model BrandChangeRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Who asked. requesterId is a soft pointer (no FK) so deleting the
+  // user account doesn't cascade away the audit trail; the admin
+  // queue still shows "(former member)" when the user is gone.
+  requesterId String
+
+  // Optional proposal context — the request was raised while editing
+  // this proposal. Null when the member raised it from a global
+  // surface (settings page) without a specific proposal in mind.
+  // Soft pointer for the same audit-survives-delete reason as above.
+  proposalId String?
+
+  // What the member wants to change.
+  fieldName       String
+  currentValue    Json?
+  requestedValue  Json
+  reason          String?
+
+  // Decision state.
+  status      String    @default("pending")
+  decidedBy   String?
+  decidedAt   DateTime?
+  decidedNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([requesterId, createdAt])
+  @@index([proposalId])
 }
 
 // ─── Proposal deposits ──────────────────────────────────────────────────────
