@@ -11,8 +11,9 @@ import {
 } from "@/lib/dealMomentum";
 import { normaliseFollowUpMode } from "@/lib/followUpMode";
 import {
+  aggregateBookedStats,
   extractDaysFromInput,
-  suggestNextStep,
+  suggestNextStepWithStats,
   type InspectorSuggestion,
 } from "@/lib/inspectorAI";
 
@@ -210,6 +211,31 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Booked-suggestion history — feeds Inspector AI v2 stats ─────
+  // Org-wide aggregation over every AISuggestion that was sent and
+  // ultimately booked. Bounded by the org's booking volume (small
+  // for early-stage operators; the index on outcome+org keeps it
+  // fast). Aggregation runs in JS — see lib/inspectorAI.ts. The
+  // resulting BookedStats is shared across every card in this
+  // request, so the cost is one query per dashboard load, not per
+  // card.
+  const bookedHistoryRaw = await prisma.aISuggestion.findMany({
+    where: {
+      organizationId: orgId,
+      outcome: "booked",
+      sentAt: { not: null },
+      bookedAt: { not: null },
+    },
+    select: {
+      channel: true,
+      sentAt: true,
+      bookedAt: true,
+      input: true,
+    },
+    take: 500, // hard cap defends against runaway old data
+  });
+  const bookedStats = aggregateBookedStats(bookedHistoryRaw);
+
   // ── Execution AI history — feeds Inspector AI's "next day" rule ──
   // Pull every sent execution snippet for the visible proposals so we
   // know which day numbers the operator has already covered. Mostly
@@ -303,22 +329,28 @@ export async function GET(req: Request) {
           : null,
       now,
     });
-    // Inspector AI — read-only "what to do next" suggester. Returns
-    // null on cold deals, recently-touched deals, and booked deals;
-    // dashboard renders nothing for those. The actionCommand string
-    // is what we drop into the ⌘K bar when the operator clicks the
-    // suggestion's button.
-    const nextSuggestion = suggestNextStep({
-      momentum: momentum.momentum,
-      lastEventType: row.lastEventType,
-      priceViewed: row.priceViewed,
-      clickedReservation: row.clickedReservation,
-      reservationCompleted: row.reservationCompleted,
-      lastSentAt: lastSentByProposal.get(row.proposalId) ?? null,
-      priorDaysSent: priorDaysByProposal.get(row.proposalId) ?? [],
-      clientFirstName: row.client?.firstName ?? null,
-      now,
-    });
+    // Inspector AI — read-only "what to do next" suggester. v2 is
+    // outcome-aware: when the heuristic suggests an actionable day
+    // AND the org has at least 3 booked AISuggestions for that day,
+    // the message is upgraded from rule-based ("Day 3 often works
+    // next") to data-grounded ("3 similar bookings closed within
+    // 25 min after sending Day 3 via WhatsApp"). Below the sample
+    // threshold the suggester falls back to the v1 heuristic copy
+    // — never invents a stat off thin data.
+    const nextSuggestion = suggestNextStepWithStats(
+      {
+        momentum: momentum.momentum,
+        lastEventType: row.lastEventType,
+        priceViewed: row.priceViewed,
+        clickedReservation: row.clickedReservation,
+        reservationCompleted: row.reservationCompleted,
+        lastSentAt: lastSentByProposal.get(row.proposalId) ?? null,
+        priorDaysSent: priorDaysByProposal.get(row.proposalId) ?? [],
+        clientFirstName: row.client?.firstName ?? null,
+        now,
+      },
+      bookedStats,
+    );
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({

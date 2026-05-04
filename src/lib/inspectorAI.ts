@@ -166,3 +166,143 @@ export function extractDaysFromInput(input: unknown): number[] {
     (n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0,
   );
 }
+
+// ─── Outcome-aware aggregation (Inspector AI v2) ────────────────────────
+//
+// Cheap aggregation over the org's booked AISuggestion history so the
+// per-card suggestion can lead with what's actually worked instead of
+// a static rule. Computed once per dashboard load (single bounded
+// query, JS-side rollup) and shared across every card the suggester
+// processes.
+//
+// Sample-size discipline: only surface a stat when the bucket has at
+// least STATS_MIN_SAMPLE bookings (default 3). Below that, the
+// suggester falls back to the v1 heuristic message — a noisy stat
+// ("1 deal closed after Day 7") would feel arbitrary.
+
+export type BookedDayStat = {
+  /** How many booked AISuggestions had this day in their resolved.days. */
+  count: number;
+  /** Median minutes between sentAt and bookedAt across those bookings. */
+  medianMinutes: number;
+  whatsappCount: number;
+  emailCount: number;
+};
+
+export type BookedStats = {
+  totalBooked: number;
+  byDay: Map<number, BookedDayStat>;
+};
+
+const STATS_MIN_SAMPLE = 3;
+
+// Aggregate raw booked-suggestion rows into a queryable stat shape.
+// Pure function; deterministic; bounded by rows.length × max days
+// per row (in practice tiny). The caller filters to outcome="booked"
+// + sentAt + bookedAt set; we re-check defensively.
+export function aggregateBookedStats(
+  rows: Array<{
+    channel: string | null;
+    sentAt: Date | null;
+    bookedAt: Date | null;
+    input: unknown;
+  }>,
+): BookedStats {
+  type Bucket = {
+    count: number;
+    totals: number[];
+    whatsappCount: number;
+    emailCount: number;
+  };
+  const buckets = new Map<number, Bucket>();
+  let totalBooked = 0;
+
+  for (const row of rows) {
+    if (!row.sentAt || !row.bookedAt) continue;
+    totalBooked += 1;
+    const days = extractDaysFromInput(row.input);
+    if (days.length === 0) continue;
+    const dtMin = Math.max(
+      0,
+      (row.bookedAt.getTime() - row.sentAt.getTime()) / 60_000,
+    );
+    for (const d of days) {
+      const e = buckets.get(d) ?? {
+        count: 0,
+        totals: [],
+        whatsappCount: 0,
+        emailCount: 0,
+      };
+      e.count += 1;
+      e.totals.push(dtMin);
+      if (row.channel === "whatsapp") e.whatsappCount += 1;
+      else if (row.channel === "email") e.emailCount += 1;
+      buckets.set(d, e);
+    }
+  }
+
+  const byDay = new Map<number, BookedDayStat>();
+  for (const [d, v] of buckets.entries()) {
+    v.totals.sort((a, b) => a - b);
+    const median = v.totals.length > 0 ? v.totals[Math.floor(v.totals.length / 2)] : 0;
+    byDay.set(d, {
+      count: v.count,
+      medianMinutes: Math.round(median),
+      whatsappCount: v.whatsappCount,
+      emailCount: v.emailCount,
+    });
+  }
+  return { totalBooked, byDay };
+}
+
+// Inspector AI v2 — outcome-aware. Calls suggestNextStep first
+// (the v1 rules) to get the candidate next action, then tries to
+// upgrade the message with real stats when the bucket has enough
+// data to be trustworthy. Falls back cleanly to v1 when stats are
+// missing or below the sample threshold.
+export function suggestNextStepWithStats(
+  input: InspectorInput,
+  stats: BookedStats | null | undefined,
+): InspectorSuggestion | null {
+  const base = suggestNextStep(input);
+  if (!base || !stats || stats.totalBooked === 0) return base;
+
+  // Only the day-pattern suggestions can be data-validated. The
+  // open-ended ones ("answer a pricing question") don't have a
+  // matching aggregation bucket; leave them as heuristic copy.
+  const dayMatch = base.actionCommand?.match(/day (\d+)/i);
+  if (!dayMatch) return base;
+
+  const day = parseInt(dayMatch[1], 10);
+  const stat = stats.byDay.get(day);
+  if (!stat || stat.count < STATS_MIN_SAMPLE) return base;
+
+  const timePhrase = formatMinutes(stat.medianMinutes);
+  const channelPhrase = dominantChannelPhrase(stat);
+  const message =
+    `${stat.count} similar bookings closed within ${timePhrase} after sending Day ${day}${channelPhrase}.`;
+  return { ...base, message };
+}
+
+function formatMinutes(min: number): string {
+  if (min < 1) return "<1 min";
+  if (min < 60) return `${min} min`;
+  if (min < 24 * 60) {
+    const hours = Math.round(min / 60);
+    return `${hours} h`;
+  }
+  const days = Math.round(min / (24 * 60));
+  return `${days} d`;
+}
+
+// Surface a channel hint only when one channel clearly dominates
+// (≥70% share AND at least 2 bookings on that channel). Avoids
+// claiming "via WhatsApp" off a 2-vs-1 split that's basically noise.
+function dominantChannelPhrase(stat: BookedDayStat): string {
+  const total = stat.whatsappCount + stat.emailCount;
+  if (total < 3) return "";
+  const waRatio = stat.whatsappCount / total;
+  if (waRatio >= 0.7 && stat.whatsappCount >= 2) return " via WhatsApp";
+  if (waRatio <= 0.3 && stat.emailCount >= 2) return " via Email";
+  return "";
+}
