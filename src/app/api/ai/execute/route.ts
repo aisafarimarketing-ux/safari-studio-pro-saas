@@ -547,6 +547,18 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
     }
     const inclusions = Array.isArray(content?.inclusions) ? content.inclusions : [];
     const exclusions = Array.isArray(content?.exclusions) ? content.exclusions : [];
+    // Adults drives the total computation (per-person × adults).
+    // contentJson.client.adults is `number | undefined`; treat anything
+    // non-numeric or non-positive as "unknown" — formatter falls back
+    // to a per-person-only headline.
+    const adults =
+      typeof content?.client?.adults === "number" && content.client.adults > 0
+        ? content.client.adults
+        : null;
+    const nights =
+      typeof content?.trip?.nights === "number" && content.trip.nights > 0
+        ? content.trip.nights
+        : null;
 
     const snippet = formatPricingSnippet({
       channel,
@@ -556,6 +568,8 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       activeTier,
       inclusions,
       exclusions,
+      adults,
+      nights,
       operatorFirstName,
     });
 
