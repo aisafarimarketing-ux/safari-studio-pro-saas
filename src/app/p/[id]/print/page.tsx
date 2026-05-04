@@ -123,6 +123,24 @@ export default function PrintProposalPage({
       // compressed image swap-ins, then flag ready.
       await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
       if (cancelled) return;
+      // Page total injection — count rendered .pdf-page elements
+      // after layout settle and stamp the total on .pdf-document as
+      // a CSS custom property. The page-number pseudo-element below
+      // reads it via var() so the footer reads "1 / 12" instead of
+      // a bare "1". Done here (after compression + settle, before
+      // __SS_READY__) so Playwright captures the final value.
+      try {
+        const pageCount = document.querySelectorAll(".pdf-page").length;
+        const docEl = document.querySelector(".pdf-document") as HTMLElement | null;
+        if (docEl && pageCount > 0) {
+          docEl.style.setProperty(
+            "--pdf-total-text",
+            `"${pageCount}"`,
+          );
+        }
+      } catch {
+        /* fail silent — falls back to bare page numbers */
+      }
       (window as unknown as { __SS_READY__?: boolean }).__SS_READY__ = true;
       if (autoPrint) setTimeout(() => window.print(), 60);
     };
@@ -260,9 +278,13 @@ function PrintCss({
          numerals + small caps tracking gives a premium-brochure feel
          instead of a generic browser footer. Hidden on full-bleed
          pages (cover, closing, footer) where the layout paints to
-         the page edge and a number would land mid-image. */
+         the page edge and a number would land mid-image.
+         Format: "1 / 12" via the page counter + an injected
+         CSS custom property (--pdf-total-text). The fallback empty
+         string means the footer reads as a bare "1" if the JS
+         injection ran late or failed — still readable, never broken. */
       .pdf-page::before {
-        content: counter(pdf-page);
+        content: counter(pdf-page) var(--pdf-total-separator, " / ") var(--pdf-total-text, "");
         position: absolute;
         right: 18mm;
         bottom: 7mm;
@@ -273,6 +295,14 @@ function PrintCss({
         color: rgba(10, 20, 17, 0.45);
         font-family: var(--font-body, system-ui, sans-serif);
         pointer-events: none;
+      }
+      /* When the total hasn't been injected yet (or no separator
+         configured), suppress the separator so the footer reads "1"
+         not "1 / ". Achieved by overriding the separator var to an
+         empty string when the total is also empty — this rule fires
+         until the JS pass replaces the total. */
+      .pdf-document:not([style*="--pdf-total-text"]) .pdf-page::before {
+        content: counter(pdf-page);
       }
       /* Suppress the anchor + page number on full-bleed pages — those
          paint to the page edge and the hairline / number would land
