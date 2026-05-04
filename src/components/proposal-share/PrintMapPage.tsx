@@ -91,8 +91,57 @@ export function PrintMapPage({
           borderBottom: `1px solid ${tokens.border}`,
         }}
       >
+        {/* Behind-map text route diagram. Sits at z-index 0 so the
+            Leaflet map paints over it when tiles load successfully.
+            When tiles fail (sidecar can't reach the tile provider,
+            tile cache miss, etc.) this fallback shows through —
+            the page reads as an editorial route summary instead of
+            a giant black rectangle. Operator brief: "no broken
+            pages." */}
+        {stops.length > 0 && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center px-16"
+            style={{ background: tokens.pageBg, zIndex: 0 }}
+          >
+            <div
+              className="text-[10px] uppercase tracking-[0.24em] font-semibold mb-6"
+              style={{ color: tokens.mutedText, opacity: 0.85 }}
+            >
+              The route
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-3 max-w-[700px]">
+              {stops.map((stop, i) => (
+                <span
+                  key={`${stop}-${i}`}
+                  className="inline-flex items-center gap-2"
+                >
+                  <span
+                    className="text-[14px]"
+                    style={{
+                      color: tokens.headingText,
+                      fontFamily: `'${theme.displayFont}', serif`,
+                      fontWeight: 700,
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {stop}
+                  </span>
+                  {i < stops.length - 1 && (
+                    <span
+                      aria-hidden
+                      className="text-[14px]"
+                      style={{ color: tokens.accent, opacity: 0.7 }}
+                    >
+                      →
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {days.length > 0 ? (
-          <div className="absolute inset-0">
+          <div className="absolute inset-0" style={{ zIndex: 1 }}>
             <RouteMap
               days={days}
               tokens={tokens}
@@ -104,7 +153,7 @@ export function PrintMapPage({
         ) : (
           <div
             className="absolute inset-0 flex items-center justify-center text-[12px] uppercase tracking-[0.24em]"
-            style={{ color: tokens.mutedText }}
+            style={{ color: tokens.mutedText, zIndex: 1 }}
           >
             Route coming soon
           </div>

@@ -405,20 +405,35 @@ function PrintCss({
       /* Strip all interactive booking / CTA chrome — these have no
          meaning on a printed PDF and operator screenshots showed
          "Secure This Safari", "Share", "Download", "Request Changes",
-         "Visit Our Website" buttons rendering in the footer. The
-         class names are stable; the title-attribute matchers also
-         catch any aria-labelled affordances. */
+         "Visit Our Website" CTAs rendering in the closing/footer
+         sections. Strengthened selector covers anchor tags styled
+         as buttons (which Tailwind-based UIs frequently emit) plus
+         the named CTA classes — the previous rule only caught
+         <button> elements, missing the <a>-styled variants the
+         operator actually had. */
       .pdf-page button:not([data-print-keep]),
       .pdf-page [role="button"]:not([data-print-keep]),
-      .pdf-page a[href^="mailto:"]:not([data-print-keep])::after,
+      .pdf-page a[role="button"]:not([data-print-keep]),
+      .pdf-page a.btn:not([data-print-keep]),
+      .pdf-page a[class*="ss-button"]:not([data-print-keep]),
+      .pdf-page a[class*="ss-cta"]:not([data-print-keep]),
+      .pdf-page a[href*="reserve"]:not([data-print-keep]),
+      .pdf-page a[href*="deposit"]:not([data-print-keep]),
+      .pdf-page a[href*="share"]:not([data-print-keep]),
       [data-print-hide],
       [data-cta-block],
       .ss-cta-block,
       .ss-share-bar,
       .ss-deposit-button,
       .ss-reserve-bar,
+      .ss-secure-bar,
+      .ss-action-bar,
       [data-section-type="footer"] button,
-      [data-section-type="footer"] [role="button"] {
+      [data-section-type="footer"] [role="button"],
+      [data-section-type="footer"] a[role="button"],
+      [data-section-type="closing"] button,
+      [data-section-type="closing"] [role="button"],
+      [data-section-type="closing"] a[role="button"] {
         display: none !important;
       }
 
