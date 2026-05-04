@@ -54,6 +54,9 @@ type ExecuteSuccess = {
    *  the panel header / context strip so the operator sees they're
    *  sending a preview rather than a follow-up. */
   previewItineraryLabel?: string;
+  /** Set when the ready response is a pricing-summary send. Drives
+   *  the same header / context-strip swap as previews. */
+  pricingSummary?: boolean;
 };
 
 type ExecuteDisambiguation = {
@@ -79,6 +82,7 @@ type Mode =
 const PLACEHOLDER_EXAMPLES = [
   'Try: "send Jennifer day 2 and 3"',
   'Try: "send a 5 day safari to Lilian"',
+  'Try: "send pricing to Lilian"',
   'Try: "share a honeymoon safari preview with Mara"',
   'Try: "whatsapp Collins day 1 and 2"',
 ];
@@ -170,17 +174,22 @@ export function CommandBar({
       }
       if (data.status === "ready") {
         // Hand off to FollowUpPanel via the existing event surface.
-        // Two contexts produce different header copy:
+        // Three contexts produce different header copy:
         //   - send_proposal_days: "{trip title} · proposal {ago} · {channel}"
         //     and headerSuffix="Follow-up" (the default)
         //   - send_preview_itinerary: "{label} preview · {channel}"
         //     and headerSuffix="Preview"
+        //   - send_pricing_summary: "{trip title} · pricing · {channel}"
+        //     and headerSuffix="Pricing"
         const channelWord = data.channel === "whatsapp" ? "WhatsApp" : "Email";
         const isPreview = Boolean(data.previewItineraryLabel);
+        const isPricing = Boolean(data.pricingSummary);
         const contextLabel = isPreview
           ? `${data.previewItineraryLabel} preview · ${channelWord}`
-          : `${data.proposal.title} · proposal ${formatRelativeShort(data.proposal.updatedAt)} · ${channelWord}`;
-        const headerSuffix = isPreview ? "Preview" : "Follow-up";
+          : isPricing
+            ? `${data.proposal.title} · pricing · ${channelWord}`
+            : `${data.proposal.title} · proposal ${formatRelativeShort(data.proposal.updatedAt)} · ${channelWord}`;
+        const headerSuffix = isPreview ? "Preview" : isPricing ? "Pricing" : "Follow-up";
         window.dispatchEvent(
           new CustomEvent("ss:openFollowUp", {
             detail: {

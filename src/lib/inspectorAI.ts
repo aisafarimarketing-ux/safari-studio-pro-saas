@@ -130,18 +130,20 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
     // way down rarely lingers more than 30s on the section).
     if (stats && stats.pricingDwellSeconds >= 60) {
       return {
-        message: `They've spent ${formatDwell(stats.pricingDwellSeconds)} on pricing — they're evaluating. A clarifying note often unsticks this.`,
-        actionLabel: "Open command",
+        message: `They've spent ${formatDwell(stats.pricingDwellSeconds)} on pricing — sharing the breakdown often unsticks this.`,
+        actionLabel: "Send pricing",
+        actionCommand: `send pricing to ${cmdName}`,
       };
     }
     if (input.lastEventType === "price_viewed" || input.priceViewed) {
-      // Pricing-stuck moments deserve a clarifying message, not a
-      // next-day push. Pricing answers tend to be bespoke, so the
-      // CTA opens the command bar without a prefilled snippet —
-      // operator types the actual clarification.
+      // Pricing-stuck moments now route through send_pricing_summary
+      // — the operator's own structured breakdown lands faster than
+      // hand-typed clarifications. Operator can still edit the
+      // snippet in the FollowUpPanel preview before dispatching.
       return {
-        message: "They're evaluating — a quick clarification helps here.",
-        actionLabel: "Open command",
+        message: "They're evaluating — sending the pricing breakdown helps here.",
+        actionLabel: "Send pricing",
+        actionCommand: `send pricing to ${cmdName}`,
       };
     }
     if (input.clickedReservation) {

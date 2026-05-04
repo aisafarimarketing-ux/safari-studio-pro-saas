@@ -13,6 +13,7 @@ import {
 } from "@/lib/executionTools";
 import {
   formatPreviewSnippet,
+  formatPricingSnippet,
   formatProposalDaysSnippet,
 } from "@/lib/executionFormat";
 import {
@@ -21,7 +22,7 @@ import {
   type PreviewItineraryId,
 } from "@/lib/previewItineraries";
 import { friendlyConsultantName } from "@/lib/consultantIdentity";
-import type { TierKey } from "@/lib/types";
+import type { PricingData, TierKey } from "@/lib/types";
 
 // POST /api/ai/execute
 //
@@ -72,14 +73,24 @@ Available tools:
    - "share the 7 day safari with Collins" → { clientHint: "Collins", itineraryType: "7-day-safari" }
    itineraryType values: "3-day-safari", "5-day-safari", "7-day-safari", "honeymoon-safari".
 
+3. send_pricing_summary
+   For commands that share a structured pricing breakdown of a client's existing proposal.
+   - "send pricing to Lilian" → { clientHint: "Lilian" }
+   - "whatsapp Jennifer pricing" → { clientHint: "Jennifer", channel: "whatsapp" }
+   - "share cost breakdown with Collins" → { clientHint: "Collins" }
+   - "email the price breakdown to Mara" → { clientHint: "Mara", channel: "email" }
+   - "send Jennifer the cost summary" → { clientHint: "Jennifer" }
+   Trigger words: "pricing", "price", "cost", "breakdown", "cost summary".
+
 Rules:
 - Always pass the client reference verbatim into clientHint. Server-side resolution handles matching.
 - send_proposal_days: days are 1-indexed integers.
 - send_preview_itinerary: pick the itineraryType that best matches the operator's wording. When the operator says "5 day safari", pick "5-day-safari". When they say "honeymoon" anywhere, pick "honeymoon-safari".
 - Pick send_proposal_days when the operator names specific day numbers AND the wording suggests an existing proposal.
 - Pick send_preview_itinerary when the wording is "typical", "sample", "preview", "what does ... look like", or when the duration is given without specific day numbers.
+- Pick send_pricing_summary when the operator asks to send pricing / cost / price breakdown without naming day numbers. If they ask for both pricing AND specific days, prefer send_proposal_days — the operator can run the pricing command separately afterwards.
 - Omit channel unless the operator explicitly mentioned WhatsApp or email — server picks the operator's preferred channel otherwise.
-- If the command fits neither tool, do NOT call any. Return text explaining what was unclear.`;
+- If the command fits no tool, do NOT call any. Return text explaining what was unclear.`;
 
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
@@ -138,6 +149,28 @@ const TOOLS: Anthropic.Messages.Tool[] = [
       required: ["clientHint", "itineraryType"],
     },
   },
+  {
+    name: "send_pricing_summary",
+    description:
+      "Send a structured pricing breakdown (per-person price, what's included, what's not, notes) for a client's existing proposal via WhatsApp or email.",
+    input_schema: {
+      type: "object",
+      properties: {
+        clientHint: {
+          type: "string",
+          description:
+            "How the operator referred to the client. Pass through verbatim.",
+        },
+        channel: {
+          type: "string",
+          enum: ["whatsapp", "email"],
+          description:
+            "Channel the operator explicitly mentioned. Omit if not specified.",
+        },
+      },
+      required: ["clientHint"],
+    },
+  },
 ];
 
 type Body = {
@@ -173,6 +206,11 @@ type ExecuteResponse =
        *  header eyebrow ("Safari Studio AI · Preview" vs
        *  "...Follow-up") and the context strip. */
       previewItineraryLabel?: string;
+      /** Set when the ready response is a pricing-summary send.
+       *  Drives the same FollowUpPanel header swap — eyebrow +
+       *  context strip — without needing the dashboard to inspect
+       *  intent.kind directly. */
+      pricingSummary?: boolean;
     }
   | {
       status: "needs_disambiguation";
@@ -198,6 +236,11 @@ type ParsedIntent =
       kind: "send_preview_itinerary";
       clientHint: string;
       itineraryType: PreviewItineraryId;
+      channel: "whatsapp" | "email" | null;
+    }
+  | {
+      kind: "send_pricing_summary";
+      clientHint: string;
       channel: "whatsapp" | "email" | null;
     };
 
@@ -303,7 +346,10 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
   let client: ClientLite;
   let proposalForDays: LoadedProposal | null = null;
 
-  if (explicitProposalId && intent.kind === "send_proposal_days") {
+  if (
+    explicitProposalId &&
+    (intent.kind === "send_proposal_days" || intent.kind === "send_pricing_summary")
+  ) {
     const directProposal = await loadProposalDirect(orgId, explicitProposalId);
     if (!directProposal) {
       return NextResponse.json({
@@ -448,6 +494,126 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       preview: snippet,
       warnings: [],
       previewItineraryLabel: itinerary.label,
+    });
+  }
+
+  // ─── SEND_PRICING_SUMMARY branch ─────────────────────────────────────
+  // Same proposal-load pattern as send_proposal_days, then the pricing
+  // formatter renders the breakdown deterministically. No content is
+  // ever LLM-generated — only the operator's own pricing data, formatted.
+  if (intent.kind === "send_pricing_summary") {
+    let proposalForPricing = proposalForDays;
+    if (!proposalForPricing) {
+      if (client.resolvedProposalId) {
+        const directProposal = await loadProposalDirect(orgId, client.resolvedProposalId);
+        if (!directProposal) {
+          return NextResponse.json({
+            status: "error",
+            command,
+            message: `Couldn't load the proposal linked to ${client.fullName}.`,
+          });
+        }
+        proposalForPricing = directProposal.proposal;
+      } else {
+        const proposalResult = await loadLatestProposal(orgId, client.id);
+        if (proposalResult.status === "not-found") {
+          return NextResponse.json({
+            status: "error",
+            command,
+            message: `${client.fullName} has no proposals on file yet. Create one before sending a pricing summary.`,
+          });
+        }
+        proposalForPricing = proposalResult.proposal;
+      }
+    }
+    const proposal = proposalForPricing;
+    const content = proposal.contentJson;
+    const pricing = (content?.pricing ?? null) as PricingData | null;
+    if (!pricing) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `${client.fullName}'s proposal "${proposal.title}" has no pricing set yet. Open the proposal and add pricing first.`,
+      });
+    }
+    const activeTier = (content?.activeTier as TierKey) || "premier";
+    const headlineTier = pricing[activeTier];
+    if (!headlineTier?.pricePerPerson?.trim()) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `${client.fullName}'s proposal "${proposal.title}" has no per-person price set on the active tier.`,
+      });
+    }
+    const inclusions = Array.isArray(content?.inclusions) ? content.inclusions : [];
+    const exclusions = Array.isArray(content?.exclusions) ? content.exclusions : [];
+
+    const snippet = formatPricingSnippet({
+      channel,
+      clientFirstName,
+      tripTitle: proposal.title,
+      pricing,
+      activeTier,
+      inclusions,
+      exclusions,
+      operatorFirstName,
+    });
+
+    const logged = await logSuggestion({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      // Same kind as day-snippet sends so the dashboard's
+      // "lastSentByProposal" guard + the booking-credit query both
+      // see pricing dispatches without code changes. The intent
+      // discriminator inside `input` distinguishes the two when a
+      // future surface needs to.
+      kind: "execution",
+      targetType: "proposal",
+      targetId: proposal.id,
+      input: {
+        command,
+        intent: { ...intent },
+        resolved: {
+          clientId: client.id,
+          clientName: client.fullName,
+          proposalId: proposal.id,
+          proposalTitle: proposal.title,
+          activeTier,
+          channel,
+        },
+        warnings: [],
+      },
+      output: snippet.text,
+    });
+    const suggestionId = logged?.id;
+    if (!suggestionId) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: "Couldn't log the action. Try again in a moment.",
+      });
+    }
+    await prisma.aISuggestion.update({
+      where: { id: suggestionId },
+      data: { channel },
+    });
+
+    return NextResponse.json({
+      status: "ready",
+      suggestionId,
+      command,
+      intent,
+      client,
+      proposal: {
+        id: proposal.id,
+        title: proposal.title,
+        trackingId: proposal.trackingId,
+        updatedAt: proposal.updatedAt,
+      },
+      channel,
+      preview: snippet,
+      warnings: [],
+      pricingSummary: true,
     });
   }
 
@@ -648,6 +814,13 @@ async function parseIntent(
         `[execute] parsed intent · kind=send_preview_itinerary · clientHint="${clientHint}" · itineraryType=${itineraryType} · channel=${channel ?? "(unset)"}`,
       );
       return { kind: "send_preview_itinerary", clientHint, itineraryType, channel };
+    }
+
+    if (block.name === "send_pricing_summary") {
+      console.log(
+        `[execute] parsed intent · kind=send_pricing_summary · clientHint="${clientHint}" · channel=${channel ?? "(unset)"}`,
+      );
+      return { kind: "send_pricing_summary", clientHint, channel };
     }
   }
   return null;

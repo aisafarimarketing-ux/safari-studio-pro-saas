@@ -1,4 +1,4 @@
-import type { Day, Proposal, TierKey } from "@/lib/types";
+import type { Day, PricingData, Proposal, TierKey } from "@/lib/types";
 
 // ─── Snippet formatters — deterministic, no LLM ─────────────────────────────
 //
@@ -277,6 +277,180 @@ function interleave<T>(items: T[], sep: T): T[] {
 // modules makes it easier to swap in a different proposal source
 // later (e.g. a saved snippet template).
 export type { Proposal };
+
+// ─── Pricing summary — deterministic breakdown ─────────────────────────────
+//
+// Sibling of formatProposalDaysSnippet for the "send pricing to X"
+// command. Reads the same proposal contentJson (PricingData +
+// inclusions/exclusions) and produces a structured, calm breakdown:
+// per-person price for the active tier, what's included, what's not,
+// optional notes. No AI generation, no copy-rewriting — the operator's
+// own pricing data, formatted readable.
+//
+// Tier choice: always uses proposal.activeTier (the tier the operator
+// has marked as the headline pick). v1 doesn't surface alternative
+// tiers — a single price per send keeps the message tight. Operators
+// who want to share alternative tiers can edit in the FollowUpPanel
+// preview before dispatching.
+
+export type PricingFormatInput = {
+  channel: SnippetChannel;
+  clientFirstName: string;
+  tripTitle: string;
+  pricing: PricingData;
+  activeTier: TierKey;
+  inclusions: string[];
+  exclusions: string[];
+  operatorFirstName: string | null;
+};
+
+export function formatPricingSnippet(
+  input: PricingFormatInput,
+): FormattedSnippet {
+  if (input.channel === "whatsapp") {
+    return formatPricingWhatsApp(input);
+  }
+  return formatPricingEmail(input);
+}
+
+function formatPricingWhatsApp(input: PricingFormatInput): FormattedSnippet {
+  const tier = input.pricing[input.activeTier];
+  const pricedHeadline = tierHeadline(tier);
+
+  const greeting = `Hi ${input.clientFirstName} — here's a clear breakdown of your safari pricing:`;
+
+  const blocks: string[] = [];
+  if (pricedHeadline) {
+    // *bold* in WhatsApp's flavour. cleanWhatsAppMarkdown is
+    // unnecessary here (we're already producing single-asterisk
+    // markup), but routing it through stays defensive against any
+    // operator-supplied label fields containing markdown they typed
+    // into the editor.
+    blocks.push(cleanWhatsAppMarkdown(`*Per person* ${pricedHeadline}`));
+  }
+
+  const inclusions = filterCleanList(input.inclusions);
+  if (inclusions.length > 0) {
+    const lines = ["*What's included*", ...inclusions.map((s) => `• ${s}`)];
+    blocks.push(cleanWhatsAppMarkdown(lines.join("\n")));
+  }
+
+  const exclusions = filterCleanList(input.exclusions);
+  if (exclusions.length > 0) {
+    const lines = ["*What's not included*", ...exclusions.map((s) => `• ${s}`)];
+    blocks.push(cleanWhatsAppMarkdown(lines.join("\n")));
+  }
+
+  const notes = input.pricing.notes?.trim();
+  if (notes) {
+    blocks.push(cleanWhatsAppMarkdown(stripHtml(notes)));
+  }
+
+  const closing = "Let me know if you'd like to adjust anything.";
+  const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+
+  const text = [greeting, "", ...interleave(blocks, ""), "", closing + signOff]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { text, html: "", subject: "" };
+}
+
+function formatPricingEmail(input: PricingFormatInput): FormattedSnippet {
+  const tier = input.pricing[input.activeTier];
+  const pricedHeadline = tierHeadline(tier);
+
+  const subject = `Pricing for your ${input.tripTitle}`;
+  const greeting = `<p style="margin:0 0 14px;">Hi ${escapeHtml(input.clientFirstName)} — here's a clear breakdown of your safari pricing:</p>`;
+
+  const blocks: string[] = [];
+  if (pricedHeadline) {
+    blocks.push(`
+      <div style="margin:0 0 18px;">
+        <div style="font-size:12.5px;letter-spacing:0.04em;text-transform:uppercase;color:rgba(10,20,17,0.55);">Per person</div>
+        <div style="font-size:18px;font-weight:600;color:#0a1411;">${escapeHtml(pricedHeadline)}</div>
+      </div>
+    `);
+  }
+
+  const inclusions = filterCleanList(input.inclusions);
+  if (inclusions.length > 0) {
+    const items = inclusions
+      .map((s) => `<li style="margin:0 0 4px;">${escapeHtml(s)}</li>`)
+      .join("");
+    blocks.push(`
+      <div style="margin:0 0 18px;">
+        <h3 style="margin:0 0 8px;font-size:14.5px;color:#0a1411;font-family:'Playfair Display',Georgia,serif;letter-spacing:-0.005em;">What's included</h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.55;color:#0a1411;">${items}</ul>
+      </div>
+    `);
+  }
+
+  const exclusions = filterCleanList(input.exclusions);
+  if (exclusions.length > 0) {
+    const items = exclusions
+      .map((s) => `<li style="margin:0 0 4px;">${escapeHtml(s)}</li>`)
+      .join("");
+    blocks.push(`
+      <div style="margin:0 0 18px;">
+        <h3 style="margin:0 0 8px;font-size:14.5px;color:#0a1411;font-family:'Playfair Display',Georgia,serif;letter-spacing:-0.005em;">What's not included</h3>
+        <ul style="margin:0;padding-left:18px;line-height:1.55;color:#0a1411;">${items}</ul>
+      </div>
+    `);
+  }
+
+  const notes = input.pricing.notes?.trim();
+  if (notes) {
+    blocks.push(
+      `<p style="margin:0 0 14px;font-size:13px;color:rgba(10,20,17,0.65);line-height:1.5;">${escapeHtml(stripHtml(notes))}</p>`,
+    );
+  }
+
+  const closing = `<p style="margin:18px 0 0;color:#0a1411;">Let me know if you'd like to adjust anything.</p>`;
+  const signOff = input.operatorFirstName
+    ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+    : "";
+
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14.5px;color:#0a1411;line-height:1.5;">
+      ${greeting}
+      ${blocks.join("")}
+      ${closing}
+      ${signOff}
+    </div>
+  `.replace(/\s+\n/g, "\n").trim();
+
+  // Plain-text alternative reuses the WhatsApp rendering — same
+  // information, different visual treatment.
+  const textVariant = formatPricingWhatsApp(input).text;
+  return { text: textVariant, html, subject };
+}
+
+// "USD 4,250" / "USD 4,250 (Premier)". Returns null when the tier has
+// no parseable price so the formatter can drop the per-person line
+// entirely rather than rendering "Per person (empty)".
+function tierHeadline(tier: PricingData[TierKey] | undefined): string | null {
+  if (!tier) return null;
+  const price = tier.pricePerPerson?.trim();
+  if (!price) return null;
+  const currency = tier.currency?.trim() || "";
+  const label = tier.label?.trim();
+  const head = currency ? `${currency} ${price}` : price;
+  return label ? `${head} (${label})` : head;
+}
+
+// Light cleanup of operator-supplied lists. Strips HTML, drops empties,
+// trims, and caps at 12 items so a runaway list doesn't bloat the
+// message. The 12-item cap mirrors the proposal-share view's pricing
+// section's typical density.
+function filterCleanList(items: string[] | undefined): string[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((s) => stripHtml(s ?? "").trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 12);
+}
 
 // ─── Preview-itinerary snippets — Exploration Mode ──────────────────────
 //
