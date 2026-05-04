@@ -252,8 +252,13 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
               floats with cream around it. Aspect ratio bumped from 4:3
               to 3:2 (wider / more cinematic landscape) to match the
               wider grid column and to make the photo dominate the
-              spread visually. */}
-          <div className={`min-w-0 h-full ${actIImageOrder}`}>
+              spread visually.
+              overflow-hidden on the grid cell as a hard guard against
+              the absolutely-positioned image inside ImageSlot bleeding
+              into the adjacent narrative cell. The image was rendering
+              under text on certain widths because the cell wasn't
+              clipping its absolute children. */}
+          <div className={`min-w-0 h-full overflow-hidden ${actIImageOrder}`}>
             <ImageSlot
               url={data.destinationImageUrl}
               alt={data.destinationName}
@@ -266,15 +271,24 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
               style={{
                 aspectRatio: "3 / 2",
                 borderRadius: 8,
-                minHeight: "100%",
+                // height:100% + an absolute floor (240px) keeps the
+                // image cell from over-stretching when the narrative
+                // column is unusually long. minHeight:100% (the
+                // previous value) was forcing the image wrapper to
+                // match a tall text cell, breaking the aspect ratio.
+                height: "100%",
+                minHeight: 240,
               }}
               position={data.destinationImagePosition ?? undefined}
               onPositionChange={onDestinationImagePositionChange}
             />
           </div>
 
-          {/* Narrative */}
-          <div className={`min-w-0 relative ${actITextOrder}`}>
+          {/* Narrative — overflow-hidden keeps long unbroken words /
+              edge-case URLs from bleeding into the image column;
+              break-words forces wrap on anything that won't fit the
+              track width. */}
+          <div className={`min-w-0 relative overflow-hidden break-words ${actITextOrder}`}>
             {isEditor && (
               <div className="absolute -top-2 right-0 z-[35]">
                 <AIWriteButton
@@ -351,8 +365,11 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
                 property image right, or vice-versa). items-stretch
                 lets the gallery scale to match the narrative column's
                 natural height instead of floating small in the
-                middle. */}
-            <div className={`min-w-0 h-full ${actIIImageOrder}`}>
+                middle.
+                overflow-hidden — same fix as Act I's image cell:
+                clips the absolutely-positioned gallery image from
+                bleeding into the adjacent property-details column. */}
+            <div className={`min-w-0 h-full overflow-hidden ${actIIImageOrder}`}>
               <PropertyGallery
                 property={data.property}
                 isEditor={isEditor}
@@ -363,7 +380,7 @@ export function FlipCard(props: DayCardLayoutProps & { flip: "left" | "right" })
             </div>
 
             {/* Property narrative */}
-            <div className={`min-w-0 ${actIITextOrder}`}>
+            <div className={`min-w-0 overflow-hidden break-words ${actIITextOrder}`}>
               <div
                 className="text-[10.5px] uppercase tracking-[0.28em] font-semibold mb-3"
                 style={{ color: tokens.mutedText }}
