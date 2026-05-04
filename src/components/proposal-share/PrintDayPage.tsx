@@ -143,54 +143,32 @@ export function PrintDayPageMain({
 
       {/* Hero — when this day has a tail page (rich content), the hero
           is generous (44%). Single-page days get a slightly shorter hero
-          (38%) so the bottom can carry accommodation + activities. */}
-      <div
-        className="relative w-full shrink-0 overflow-hidden"
-        style={{
-          height: hasTail ? "44%" : "38%",
-          background: tokens.cardBg,
-          borderTop: `1px solid ${tokens.border}`,
-          borderBottom: `1px solid ${tokens.border}`,
-        }}
-      >
-        {heroUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          (38%) so the bottom can carry accommodation + activities.
+          Skipped entirely when the day has no heroImageUrl: the
+          previous "branded fallback" rendered a gradient + destination
+          label inside the wrapper, but on dark themes both gradient
+          and text colour collapsed into the page bg, leaving a 38%
+          tall black rectangle with no readable content. Better to
+          give that space back to narrative + accommodation. */}
+      {heroUrl && (
+        <div
+          className="relative w-full shrink-0 overflow-hidden"
+          style={{
+            height: hasTail ? "44%" : "38%",
+            background: tokens.cardBg,
+            borderTop: `1px solid ${tokens.border}`,
+            borderBottom: `1px solid ${tokens.border}`,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={heroUrl}
             alt={destination}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ objectPosition: day.heroImagePosition || "center" }}
           />
-        ) : (
-          /* Branded fallback — same editorial style as the property
-             page placeholder. Never "No image" text. */
-          <div
-            className="w-full h-full flex flex-col items-center justify-center"
-            style={{
-              background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
-            }}
-          >
-            <div
-              className="text-[10px] uppercase tracking-[0.32em] font-semibold mb-3"
-              style={{ color: tokens.mutedText }}
-            >
-              Day {day.dayNumber}
-            </div>
-            <div
-              className="font-bold text-center leading-[1.05]"
-              style={{
-                color: tokens.headingText,
-                fontFamily: `'${theme.displayFont}', serif`,
-                fontSize: "clamp(28px, 4vw, 44px)",
-                opacity: 0.75,
-                letterSpacing: "-0.015em",
-              }}
-            >
-              {destination}
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 px-12 pt-7 pb-9 flex flex-col gap-5">
         {/* Narrative — clamped so a runaway essay never blows the page.

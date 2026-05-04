@@ -162,6 +162,17 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
 function renderSection(section: Section, proposalId: string) {
   const bleed = FULL_BLEED_TYPES.has(section.type);
 
+  // Divider + spacer sections are visual rhythm controls on the
+  // flowing on-screen layout — a thin line, a vertical gap. In the
+  // strict A4 print deck they each consumed an entire page that
+  // rendered as ~98% empty (just the section's bg + the divider's
+  // hairline strip). Skipped here so the printed deck stays
+  // continuous; the on-screen view still renders them via the
+  // normal SectionRenderer path. Operator brief: "no blank pages."
+  if (section.type === "divider" || section.type === "spacer") {
+    return null;
+  }
+
   // dayJourney — one PdfPage per day.
   if (section.type === "dayJourney") {
     return <DayJourneyPages key={section.id} section={section} />;
