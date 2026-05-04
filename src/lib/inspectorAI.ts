@@ -433,6 +433,98 @@ export function suggestNextStepForLead(
   };
 }
 
+// ─── "Right now" insight — read-only narrative ───────────────────────────
+//
+// One observational line per deal card, rendered between the live-
+// activity strip and the momentum reason. Distinct from
+// suggestNextStep: no button, no metric quoted, no timestamp — just
+// what the client is doing, framed in a way the operator can act on
+// without thinking. Same Inspector AI playbook, different surface.
+//
+// Signal priority (only one fires per card; never stacks):
+//   1. Pricing dwell ≥10s     → "comparing options"
+//   2. Day-card dwell ≥15s    → "imagining the trip"
+//   3. Scroll <40% w/ session → "haven't seen the full itinerary"
+//   4. Idle (60s–5min after a real session) → "paused here"
+//
+// Guards:
+//   - reservationCompleted    → null (closed deals stay quiet)
+//   - lastSentAt < 2h ago     → null (suppress after a recent send)
+//   - sessionCount === 0      → null (no view data yet)
+//
+// 10–15s thresholds enforce "sustained behaviour" — a casual
+// scroll-through never triggers an insight.
+
+export type RightNowInsight = {
+  message: string;
+};
+
+export type RightNowInput = {
+  reservationCompleted: boolean;
+  lastSentAt: Date | null;
+  /** Last engagement event timestamp on the proposal — used by the
+   *  idle branch to detect "they were here, then went quiet" within
+   *  the live-activity 5-minute window. */
+  lastEventAt: Date | null;
+  behaviorStats: InspectorBehaviorStats | null;
+  /** For testability. */
+  now?: Date;
+};
+
+const RIGHT_NOW_PRICING_DWELL_S = 10;
+const RIGHT_NOW_DAY_DWELL_S = 15;
+const RIGHT_NOW_SCROLL_THRESHOLD = 40;
+const RIGHT_NOW_IDLE_MIN_MS = 60_000;
+const RIGHT_NOW_IDLE_MAX_MS = 5 * 60_000;
+const RIGHT_NOW_IDLE_DWELL_S = 10;
+
+export function deriveRightNowInsight(input: RightNowInput): RightNowInsight | null {
+  const now = input.now ?? new Date();
+  if (input.reservationCompleted) return null;
+  if (
+    input.lastSentAt &&
+    now.getTime() - input.lastSentAt.getTime() < RECENT_SEND_WINDOW_MS
+  ) {
+    return null;
+  }
+
+  const stats = input.behaviorStats;
+  if (!stats || stats.sessionCount === 0) return null;
+
+  if (stats.pricingDwellSeconds >= RIGHT_NOW_PRICING_DWELL_S) {
+    return {
+      message: "They’re comparing options — a quick clarification helps here.",
+    };
+  }
+  if (stats.dayDwellSeconds >= RIGHT_NOW_DAY_DWELL_S) {
+    return {
+      message: "They’re imagining the trip — sending the next day keeps momentum.",
+    };
+  }
+  if (stats.maxScrollPct > 0 && stats.maxScrollPct < RIGHT_NOW_SCROLL_THRESHOLD) {
+    return {
+      message: "They haven’t seen the full itinerary — a short highlight can re-engage.",
+    };
+  }
+  // Idle: someone engaged earlier (real session + non-trivial dwell)
+  // but the last event landed 1–5 min ago. Outside that window the
+  // live-activity strip disappears anyway, so this insight only
+  // surfaces in the same recency band.
+  if (input.lastEventAt) {
+    const ms = now.getTime() - input.lastEventAt.getTime();
+    if (
+      ms >= RIGHT_NOW_IDLE_MIN_MS &&
+      ms <= RIGHT_NOW_IDLE_MAX_MS &&
+      stats.totalDwellSeconds >= RIGHT_NOW_IDLE_DWELL_S
+    ) {
+      return {
+        message: "They paused here — a gentle nudge can restart the conversation.",
+      };
+    }
+  }
+  return null;
+}
+
 // ─── Live activity interpretation ───────────────────────────────────────
 //
 // Surfaces a short "what's happening right now" string for the deal

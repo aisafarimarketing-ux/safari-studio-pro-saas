@@ -92,6 +92,12 @@ type ActivityCard = {
     state: "viewing" | "just-acted";
     label: string;
   } | null;
+  /** "Right now" insight — single-line observational narrative from
+   *  the share-view behaviour signals. Calm, button-less line that
+   *  sits between the live-activity strip and the momentum reason.
+   *  Server picks one signal in priority order; UI renders the
+   *  message verbatim. */
+  rightNowInsight: { message: string } | null;
   preferredChannel: "whatsapp" | "email" | null;
   client: {
     id: string;
@@ -1123,6 +1129,20 @@ function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
                 <span className="ss-recency-dot" aria-label="Active right now" />
               )}
               <span>{card.liveActivity.label}</span>
+            </div>
+          )}
+          {/* "Right now" insight — observational one-liner from the
+              share-view behaviour signals. No metrics, no button, no
+              timestamp. Sits between live activity (what) and
+              momentum reason (longer-term bucket). Server-side guards
+              ensure only one signal fires; the UI renders the
+              already-interpreted message verbatim. */}
+          {card.rightNowInsight && (
+            <div
+              className="text-[11.5px] mt-1.5 italic"
+              style={{ color: tokens.body }}
+            >
+              {card.rightNowInsight.message}
             </div>
           )}
           <div className="text-[11.5px] mt-1.5" style={{ color: tokens.muted }}>

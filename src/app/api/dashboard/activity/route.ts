@@ -13,12 +13,14 @@ import { normaliseFollowUpMode } from "@/lib/followUpMode";
 import {
   aggregateBookedStats,
   deriveLiveActivity,
+  deriveRightNowInsight,
   extractDaysFromInput,
   matchesNextStepHeuristic,
   suggestNextStepForLead,
   suggestNextStepWithStats,
   type InspectorSuggestion,
   type LiveActivity,
+  type RightNowInsight,
 } from "@/lib/inspectorAI";
 import {
   classifyLeadMomentum,
@@ -102,6 +104,14 @@ type Card = {
    *  Distinct from momentumReason which describes the longer-term
    *  bucket. */
   liveActivity: LiveActivity | null;
+  /** "Right now" insight — read-only one-line narrative observation
+   *  derived from the share-view behaviour signals (pricing/day
+   *  dwell, scroll depth, idle within the live-activity window).
+   *  Picks one signal in priority order; never stacks. Renders
+   *  between the live-activity strip and the momentum reason on the
+   *  deal card. Null when no sustained behaviour has been observed
+   *  or a recent send muted it. */
+  rightNowInsight: RightNowInsight | null;
   /** Channel the dashboard should default to for this card. Mirrors
    *  the spec's priority order: WhatsApp when client.phone exists,
    *  Email otherwise. Null when neither contact method is available
@@ -518,6 +528,13 @@ export async function GET(req: Request) {
       reservationCompleted: row.reservationCompleted,
       now,
     });
+    const rightNowInsight = deriveRightNowInsight({
+      reservationCompleted: row.reservationCompleted,
+      lastSentAt: lastSentByProposal.get(row.proposalId) ?? null,
+      lastEventAt: row.lastEventAt,
+      behaviorStats,
+      now,
+    });
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({
@@ -537,6 +554,7 @@ export async function GET(req: Request) {
       autoSendEligibility,
       nextSuggestion,
       liveActivity,
+      rightNowInsight,
       preferredChannel: row.client?.phone
         ? "whatsapp"
         : row.client?.email
