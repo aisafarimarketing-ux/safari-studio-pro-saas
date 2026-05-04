@@ -240,6 +240,28 @@ model BrandDNAProfile {
   // Free-text AI instructions
   aiInstructions String?
 
+  // ─── Client-facing copy formats ─────────────────────────────────────
+  // Templates the org wants every client-facing send to follow.
+  // {firstName} and {operatorFirstName} placeholders get expanded by
+  // the formatters at render time — kept simple so a non-engineer
+  // admin can edit the format without learning a templating language.
+  // All optional: when null, the formatters fall back to their
+  // existing hardcoded copy so no migration is needed.
+  greetingFormat          String? // e.g. "Hi {firstName} —"
+  signoffFormat           String? // e.g. "— {operatorFirstName}"
+  whatsappSignatureFormat String? // appended to WhatsApp sends
+  emailSignatureFormat    String? // appended to email sends (HTML allowed)
+
+  // ─── Master proposal template ──────────────────────────────────────
+  // Optional: admin designates ONE existing Proposal as the company's
+  // master template. New-proposal creation prefers the master over
+  // the generic system template; section order, layouts, typography
+  // come along for the ride. Stored as a soft pointer (no FK
+  // constraint) so deleting the source proposal doesn't break Brand
+  // DNA — the next /api/proposals/from-template call simply falls
+  // back to the system template until a new master is chosen.
+  masterTemplateProposalId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

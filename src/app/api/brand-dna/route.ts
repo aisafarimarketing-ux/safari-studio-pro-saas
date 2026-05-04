@@ -134,5 +134,38 @@ function sanitize(body: Record<string, unknown>) {
   // AI Instructions
   setIf("aiInstructions", str(body.aiInstructions));
 
+  // ─── Client-facing copy formats ──────────────────────────────────
+  // Caps applied here defend against pasted essays — these fields
+  // surface verbatim in every client-facing send, so the bound is
+  // tight (greeting + signoff are one-liners; signatures are short
+  // blocks). Anything longer is almost certainly a paste mistake.
+  setIf("greetingFormat", capStr(str(body.greetingFormat), 200));
+  setIf("signoffFormat", capStr(str(body.signoffFormat), 200));
+  setIf(
+    "whatsappSignatureFormat",
+    capStr(str(body.whatsappSignatureFormat), 800),
+  );
+  setIf(
+    "emailSignatureFormat",
+    capStr(str(body.emailSignatureFormat), 4000),
+  );
+
+  // Master template pointer — soft FK (no relation), so the client
+  // can pass any proposalId in their org. The from-template route
+  // is responsible for org-scoping the lookup at read time.
+  setIf("masterTemplateProposalId", capStr(str(body.masterTemplateProposalId), 64));
+
   return out;
+}
+
+// Length cap helper — null and undefined pass through; non-empty
+// strings get truncated to max chars. Applied AFTER the trim+empty
+// collapse from str() so we never store a giant string verbatim.
+function capStr(
+  v: string | null | undefined,
+  max: number,
+): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  return v.length <= max ? v : v.slice(0, max);
 }
