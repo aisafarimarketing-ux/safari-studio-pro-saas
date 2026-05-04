@@ -13,6 +13,8 @@ import {
   type BrandImage,
   type BrandSectionStyles,
 } from "@/lib/brandDNA";
+import type { Proposal } from "@/lib/types";
+import crypto from "node:crypto";
 
 // ─── POST /api/proposals/from-template ─────────────────────────────────────
 //
@@ -59,14 +61,88 @@ export async function POST(req: Request) {
     name: ctx.user.name,
     email: ctx.user.email,
   });
-  const proposal = buildProposalFromTemplate(tpl, {
-    mode: "clone",
-    operator: {
-      companyName: ctx.organization.name ?? "",
-      consultantName: polishedName,
-      email: ctx.user.email ?? "",
-    },
+
+  // ── Brand master takes precedence over the slug-picked template.
+  //    When the org has tagged a proposal as their master, every
+  //    new proposal clones from that one — slug-derived shape is
+  //    used only as the fallback when no master is set or the
+  //    master proposal has been deleted. The master IS the brand:
+  //    its theme, sections, day layouts, pricing structure, and
+  //    typography all carry over.
+  const masterPointer = await prisma.brandDNAProfile.findUnique({
+    where: { organizationId: ctx.organization.id },
+    select: { masterTemplateProposalId: true },
   });
+  let proposal: Proposal | null = null;
+  if (masterPointer?.masterTemplateProposalId) {
+    const master = await prisma.proposal.findFirst({
+      where: {
+        id: masterPointer.masterTemplateProposalId,
+        organizationId: ctx.organization.id,
+      },
+      select: { contentJson: true },
+    });
+    if (master?.contentJson) {
+      // Deep-clone via JSON round-trip — the contentJson shape is
+      // plain JSON (no Dates, no functions, no circular refs), so
+      // round-trip is safe and avoids dragging in a deep-clone lib.
+      const cloned = JSON.parse(JSON.stringify(master.contentJson)) as Proposal;
+      cloned.id = crypto.randomUUID();
+      cloned.metadata = {
+        ...cloned.metadata,
+        status: "draft",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      // Reset client-specific carryover so the operator personalises
+      // from a clean slate. Keep theme / sections / days / pricing /
+      // properties — those are the brand the master was crafted for.
+      cloned.client = {
+        ...cloned.client,
+        guestNames: "",
+        adults: undefined,
+        children: undefined,
+        arrivalFlight: "",
+        departureFlight: "",
+        specialOccasion: "",
+        dietary: "",
+        rooming: "",
+      };
+      // Trip dates come from the actual booking, not the master's
+      // example. Nights / destinations stay — they're part of the
+      // canonical itinerary the brand was designed against.
+      cloned.trip = {
+        ...cloned.trip,
+        dates: "",
+        arrivalDate: undefined,
+        departureDate: undefined,
+      };
+      // Operator block gets fully replaced below by
+      // applyIdentityToOperator — but seed the basics first so the
+      // shape stays consistent with the slug path.
+      cloned.operator = {
+        ...cloned.operator,
+        companyName: ctx.organization.name ?? cloned.operator?.companyName ?? "",
+        consultantName: polishedName,
+        email: ctx.user.email ?? "",
+      };
+      proposal = cloned;
+    }
+    // If the master pointer is set but the proposal is gone, fall
+    // through to the slug path — better to clone something than
+    // 404 the operator.
+  }
+
+  if (!proposal) {
+    proposal = buildProposalFromTemplate(tpl, {
+      mode: "clone",
+      operator: {
+        companyName: ctx.organization.name ?? "",
+        consultantName: polishedName,
+        email: ctx.user.email ?? "",
+      },
+    });
+  }
 
   proposal.operator = applyIdentityToOperator(proposal.operator, {
     name: polishedName,

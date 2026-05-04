@@ -65,6 +65,70 @@ export function EditorToolbar({
   const [smartPropertyOpen, setSmartPropertyOpen] = useState(false);
   const [aiMenuOpen, setAIMenuOpen] = useState(false);
 
+  // ── Brand master state ─────────────────────────────────────────────
+  // Fetched once on mount. Drives the "Brand master mode" badge in
+  // the title area + the admin-only "Use as company brand master"
+  // menu item. canEdit gates the menu item; masterId compared to
+  // proposal.id drives the badge. Refreshes after a master-write so
+  // both surfaces reflect the new state without a page reload.
+  const [brandMaster, setBrandMaster] = useState<{
+    canEdit: boolean;
+    masterId: string | null;
+  }>({ canEdit: false, masterId: null });
+  const [brandMasterBusy, setBrandMasterBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/brand-dna/master-template", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (cancelled) return;
+        setBrandMaster({
+          canEdit: Boolean(body.canEdit),
+          masterId:
+            typeof body.masterTemplateProposalId === "string"
+              ? body.masterTemplateProposalId
+              : null,
+        });
+      } catch {
+        /* fail silent — toolbar still works without master state */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isBrandMaster =
+    brandMaster.masterId !== null && brandMaster.masterId === proposal.id;
+  const handleSetAsBrandMaster = async () => {
+    if (brandMasterBusy) return;
+    setBrandMasterBusy(true);
+    try {
+      const res = await fetch("/api/brand-dna/master-template", {
+        method: isBrandMaster ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: isBrandMaster ? undefined : JSON.stringify({ proposalId: proposal.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.warn("[brand-master] toggle failed:", body);
+        return;
+      }
+      setBrandMaster((prev) => ({
+        ...prev,
+        masterId:
+          typeof body.masterTemplateProposalId === "string"
+            ? body.masterTemplateProposalId
+            : null,
+      }));
+    } finally {
+      setBrandMasterBusy(false);
+    }
+  };
+
   // "Proposal is X MB — too big to auto-save" is the signal that the
   // user's saved images exceed the body-size cap. Only that specific
   // error is fixable by re-encoding; others need different handling.
@@ -261,6 +325,20 @@ export function EditorToolbar({
         >
           {proposal.metadata.title}
         </div>
+        {isBrandMaster && (
+          <span
+            className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 text-[10.5px] font-semibold rounded-full whitespace-nowrap shrink-0"
+            style={{
+              background: "rgba(201,168,76,0.18)",
+              color: "#8a7125",
+              letterSpacing: "0.04em",
+            }}
+            title="Brand master mode — Changes affect future proposals only. Existing proposals are unchanged unless you apply brand."
+          >
+            <span aria-hidden style={{ fontSize: 10 }}>★</span>
+            Brand master
+          </span>
+        )}
       </div>
 
       {/* Centre: 3-mode editor view switch — Edit / Structure / Style.
@@ -296,6 +374,10 @@ export function EditorToolbar({
           pdfState={pdfState}
           onDuplicate={handleDuplicate}
           duplicating={duplicating}
+          brandMasterEditable={brandMaster.canEdit}
+          isBrandMaster={isBrandMaster}
+          brandMasterBusy={brandMasterBusy}
+          onToggleBrandMaster={handleSetAsBrandMaster}
         />
 
         {/* AI Tools — proposal-wide AI actions in a small dropdown.
@@ -675,6 +757,10 @@ function ActionsMenu({
   pdfState,
   onDuplicate,
   duplicating,
+  brandMasterEditable,
+  isBrandMaster,
+  brandMasterBusy,
+  onToggleBrandMaster,
 }: {
   open: boolean;
   setOpen: (v: boolean) => void;
@@ -685,6 +771,14 @@ function ActionsMenu({
   pdfState: "idle" | "rendering" | "error";
   onDuplicate: () => void;
   duplicating: boolean;
+  /** Admin/owner gate: when true the brand-master toggle item is
+   *  rendered. Members never see this item. */
+  brandMasterEditable: boolean;
+  /** Whether THIS proposal is currently the org's master. Drives the
+   *  toggle copy ("Use as…" vs "Remove as…"). */
+  isBrandMaster: boolean;
+  brandMasterBusy: boolean;
+  onToggleBrandMaster: () => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -733,6 +827,27 @@ function ActionsMenu({
           <MenuItem onClick={onDuplicate} disabled={duplicating}>
             {duplicating ? "Duplicating…" : "Duplicate"}
           </MenuItem>
+          {brandMasterEditable && (
+            <>
+              <div
+                className="my-1 border-t"
+                style={{ borderColor: "rgba(0,0,0,0.06)" }}
+              />
+              <MenuItem
+                onClick={() => {
+                  setOpen(false);
+                  onToggleBrandMaster();
+                }}
+                disabled={brandMasterBusy}
+              >
+                {brandMasterBusy
+                  ? "Updating…"
+                  : isBrandMaster
+                    ? "Remove as company brand master"
+                    : "Use as company brand master"}
+              </MenuItem>
+            </>
+          )}
         </div>
       )}
     </div>
