@@ -14,6 +14,8 @@ import {
 } from "./PrintDayPage";
 import { PrintFooterPage } from "./PrintFooterPage";
 import { PrintMapPage } from "./PrintMapPage";
+import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
+import { FEATURES } from "@/lib/featureFlags";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
 import type { Section, SectionType, TierKey } from "@/lib/types";
@@ -217,6 +219,14 @@ function renderSection(section: Section, proposalId: string) {
   // operator's reminder to come back and fill them.
   if (isContentlessSection(section)) {
     return null;
+  }
+
+  // PDF-Fit layouts — reverse-engineered print system. Pilot stage:
+  // only cover sections route through it. Everything else falls
+  // through to the legacy paths below. Flag-gated so we can A/B
+  // against the legacy renderer without code changes.
+  if (FEATURES.pdfFitLayouts && section.type === "cover") {
+    return <PdfFitCoverPage key={section.id} section={section} />;
   }
 
   // dayJourney — one PdfPage per day.

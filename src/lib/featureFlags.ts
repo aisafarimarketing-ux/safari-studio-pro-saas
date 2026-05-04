@@ -58,6 +58,15 @@ export const FEATURES = {
    *  Off until the supplier orchestration has shipped to a couple
    *  of pilot operators and the cadence is calibrated. */
   bookingOps: readFlag("NEXT_PUBLIC_FEATURE_BOOKING_OPS"),
+
+  /** PDF-Fit layout system — reverse-engineered print layouts where
+   *  every slot has explicit mm coordinates and content has explicit
+   *  caps. Replaces the legacy "render the web layout into A4" path
+   *  with one designed for paper first. Pilot stage: only the cover
+   *  section uses the new system; everything else still goes through
+   *  the legacy SectionRenderer. Flip this on per-deploy to A/B
+   *  against the legacy path. */
+  pdfFitLayouts: readFlag("NEXT_PUBLIC_FEATURE_PDF_FIT_LAYOUTS"),
 } as const;
 
 export type FeatureFlag = keyof typeof FEATURES;
