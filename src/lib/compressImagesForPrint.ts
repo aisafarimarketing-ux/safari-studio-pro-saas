@@ -6,24 +6,26 @@
 // threshold, re-encodes it through a canvas at a tighter JPEG quality
 // and smaller max-dimension.
 //
-// Net effect on PDF size is roughly:
-//   • 10-property proposal, 5 images each (50 images) at 1MB original
-//     data URLs ~= 50MB of embedded bytes. After this pass ~10-12MB.
-//   • Leaflet tiles, Unsplash remote URLs, SVGs → left alone (browser
-//     caches them; Playwright downloads them fresh anyway).
+// Quality settings (April 2026 bump for print fidelity):
+//   • 0.82 JPEG quality — visibly sharper than the previous 0.62 at
+//     A4 viewing distance; still ~half the size of source images.
+//   • 1800px long edge — A4 at 300dpi is 2480 × 3508 px, so 1800px on
+//     the long edge gives ≥250 effective dpi for full-bleed images
+//     and 300+ dpi for any image rendered at half-page or smaller.
+//   • 0.5MB skip threshold — small UI thumbnails (avatars, logos)
+//     stay untouched; bytes-saved math doesn't pay off below that.
 //
-// Deliberate tradeoffs:
-//   • 0.62 JPEG quality is invisible to the eye at A4 viewing size but
-//     halves bytes vs 0.82 (our upload default).
-//   • 1400px long edge matches A4 at 300dpi with a ~2x safety margin —
-//     still sharp for print, significantly smaller than 1600-2000px
-//     source images operators upload.
-//   • Non-JPEG inputs (PNGs with transparency) get converted to JPEG
-//     anyway — nothing in a safari proposal needs alpha channels.
+// Bandwidth tradeoff: a 10-property proposal that previously came out
+// to ~10–12MB now lands closer to 16–20MB. Acceptable for shareable
+// PDFs; the alternative (soft images on luxury safari proposals)
+// reads as low quality regardless of the rest of the design.
+//
+// Non-JPEG inputs (PNGs with transparency) get converted to JPEG
+// anyway — nothing in a safari proposal needs alpha channels.
 
-const TARGET_LONG_EDGE = 1400;
-const TARGET_QUALITY = 0.62;
-const MIN_COMPRESS_BYTES = 60_000; // skip tiny images
+const TARGET_LONG_EDGE = 1800;
+const TARGET_QUALITY = 0.82;
+const MIN_COMPRESS_BYTES = 100_000; // skip thumbnails / icons
 
 type CompressionResult = {
   processed: number;

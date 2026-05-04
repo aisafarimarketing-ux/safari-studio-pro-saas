@@ -193,16 +193,25 @@ function PrintCss({
       /* ── Document column ─────────────────────────────────────────
          On screen, centre an A4-width column so the operator previews
          the printed output before exporting. In actual print, the
-         @page rule takes over and this column becomes the page itself. */
+         @page rule takes over and this column becomes the page itself.
+         counter-reset on the document seeds the page-number counter
+         that each .pdf-page increments — a CSS-only pagination that
+         works cleanly through Playwright's rendering without sidecar
+         changes. */
       .pdf-document {
         width: 210mm;
         margin: 0 auto;
         background: ${pageBg};
+        counter-reset: pdf-page;
       }
 
       /* ── Strict A4 page ──────────────────────────────────────────
          Fixed dimensions, clipped overflow, hard page breaks. Every
-         major section renders inside one of these. */
+         major section renders inside one of these.
+         print-color-adjust: exact on the page itself (in addition to
+         html/body) ensures section backgrounds and brand colours
+         render exactly as designed instead of being "optimised" by
+         the printer driver. */
       .pdf-page {
         position: relative;
         width: 210mm;
@@ -213,6 +222,9 @@ function PrintCss({
         break-inside: avoid;
         page-break-inside: avoid;
         background: ${pageBg};
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        color-adjust: exact;
       }
       .pdf-page:last-child {
         break-after: auto;
@@ -220,6 +232,54 @@ function PrintCss({
       }
       .pdf-page > * {
         max-width: 100%;
+      }
+      /* Page-number counter — seeded on .pdf-document, incremented
+         on each .pdf-page. Renders bottom-right via the ::before
+         pseudo-element below. */
+      .pdf-page {
+        counter-increment: pdf-page;
+      }
+      /* Bottom-of-page anchor — a hairline ~10mm from the foot of
+         every page. Sections that fill the full page cover it; on
+         pages where the section ends short, the hairline shows
+         through and reads as "intentional whitespace" rather than
+         "missing content". z-index 0 + pointer-events: none keeps
+         it cosmetic. */
+      .pdf-page::after {
+        content: "";
+        position: absolute;
+        left: 18mm;
+        right: 18mm;
+        bottom: 10mm;
+        height: 0.5pt;
+        background: rgba(10, 20, 17, 0.10);
+        z-index: 0;
+        pointer-events: none;
+      }
+      /* Page number — bottom-right, sitting on the hairline. Tabular
+         numerals + small caps tracking gives a premium-brochure feel
+         instead of a generic browser footer. Hidden on full-bleed
+         pages (cover, closing, footer) where the layout paints to
+         the page edge and a number would land mid-image. */
+      .pdf-page::before {
+        content: counter(pdf-page);
+        position: absolute;
+        right: 18mm;
+        bottom: 7mm;
+        z-index: 1;
+        font-size: 8.5pt;
+        font-feature-settings: "tnum";
+        letter-spacing: 0.04em;
+        color: rgba(10, 20, 17, 0.45);
+        font-family: var(--font-body, system-ui, sans-serif);
+        pointer-events: none;
+      }
+      /* Suppress the anchor + page number on full-bleed pages — those
+         paint to the page edge and the hairline / number would land
+         mid-image. Cover, closing, and footer use the bleed class. */
+      .pdf-page--bleed::after,
+      .pdf-page--bleed::before {
+        display: none;
       }
 
       /* ── Print-only section fills ──
@@ -312,6 +372,15 @@ function PrintCss({
            in actual print — the page IS the canvas. */
         .pdf-document { width: auto; }
         .pdf-page { box-shadow: none !important; }
+        /* Crisp hairlines for print. A 1px screen border becomes a
+           chunky, fuzzy line on paper — most printers can't honour
+           sub-pixel widths and round up. 0.5pt (≈ 0.18mm) prints
+           crisply and reads premium. Targets the common border
+           classes Tailwind generates without painting over the
+           per-section style overrides operators set explicitly. */
+        .pdf-page [class*="border-"]:not([style*="border"]):not([style*="border:"]) {
+          border-width: 0.5pt;
+        }
       }
 
       /* ── Debug mode (only when ?debugPdf=true) ─────────────────── */
