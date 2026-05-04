@@ -20,6 +20,9 @@ import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
 import { PdfFitPersonalNotePage } from "./PdfFit/PdfFitPersonalNotePage";
 import { PdfFitPricingPage } from "./PdfFit/PdfFitPricingPage";
 import { PdfFitPracticalInfoPages } from "./PdfFit/PdfFitPracticalInfoPage";
+import { PdfFitTripSummaryPage } from "./PdfFit/PdfFitTripSummaryPage";
+import { PdfFitClosingPage } from "./PdfFit/PdfFitClosingPage";
+import { PdfFitFooterPage } from "./PdfFit/PdfFitFooterPage";
 import { FEATURES } from "@/lib/featureFlags";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
@@ -248,6 +251,15 @@ function renderSection(section: Section, proposalId: string) {
     }
     if (section.type === "practicalInfo") {
       return <PdfFitPracticalInfoPages key={section.id} section={section} />;
+    }
+    if (section.type === "tripSummary") {
+      return <PdfFitTripSummaryPage key={section.id} section={section} />;
+    }
+    if (section.type === "closing") {
+      return <PdfFitClosingPage key={section.id} section={section} />;
+    }
+    if (section.type === "footer") {
+      return <PdfFitFooterPage key={section.id} section={section} />;
     }
   }
 
