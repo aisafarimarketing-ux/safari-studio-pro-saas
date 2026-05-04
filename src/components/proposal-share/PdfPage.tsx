@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useProposalStore } from "@/store/proposalStore";
 
 // ─── PdfPage — strict A4 page wrapper for the print view ─────────────────
 //
@@ -15,6 +16,15 @@ import type { ReactNode } from "react";
 // The clip is deliberate: a clipped page is ugly but visible and
 // fixable; an uncontrolled spillover produces the blank-page / orphan-
 // gallery / split-card issues the operator was seeing.
+//
+// Footer: every non-bleed page renders a thin brand strip at the
+// bottom — brand name on the left, page number on the right (CSS
+// counter; see globals/print stylesheet). The page number is a
+// pseudo-element so it doesn't touch React state; the brand name is
+// real DOM so it can read the live operator.companyName from the
+// proposal store. Both are pointer-events:none + low z-index so
+// section content that fills the page covers them; sections that
+// end short surface them as an intentional brand anchor.
 
 export type PdfPageProps = {
   children: ReactNode;
@@ -43,6 +53,14 @@ export function PdfPage({
   className = "",
   continuation = false,
 }: PdfPageProps) {
+  // Brand name pulled from the live proposal — operator.companyName
+  // is the canonical source-of-truth for "what to call this brand"
+  // across the whole deck. Falls back to empty string when not set
+  // so the footer simply doesn't render the brand half.
+  const brandName = useProposalStore(
+    (s) => s.proposal.operator?.companyName?.trim() ?? "",
+  );
+
   return (
     <section
       className={`pdf-page ${bleed ? "pdf-page--bleed" : "pdf-page--padded"} ${className}`}
@@ -51,6 +69,34 @@ export function PdfPage({
       style={background ? { background } : undefined}
     >
       {children}
+      {!bleed && brandName && (
+        <span
+          className="pdf-page-brand"
+          aria-hidden
+          // Inline style keeps this self-contained; avoids depending
+          // on Tailwind classes that could be tree-shaken or whose
+          // print rendering is unpredictable.
+          style={{
+            position: "absolute",
+            left: "18mm",
+            bottom: "7mm",
+            zIndex: 1,
+            fontSize: "8.5pt",
+            letterSpacing: "0.04em",
+            color: "rgba(10, 20, 17, 0.45)",
+            fontFamily: "var(--font-body, system-ui, sans-serif)",
+            pointerEvents: "none",
+            // Truncate runaway brand names so the footer can't wrap
+            // and overlap the page number on the right.
+            maxWidth: "120mm",
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {brandName}
+        </span>
+      )}
     </section>
   );
 }
