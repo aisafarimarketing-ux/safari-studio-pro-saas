@@ -275,7 +275,10 @@ function PropertyBlock({
         </div>
       )}
       <div className="max-w-6xl mx-auto px-5 md:px-12">
-        <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-10 items-start">
+        {/* Column gap tightened from 10 → 8 so the property details
+            sit closer to the gallery — the side panel was reading
+            as a separate fragment instead of the same card. */}
+        <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] gap-8 items-start">
           {/* ── Left sidebar ──────────────────────────────────────── */}
           <div>
             {/* Property class eyebrow — sourced from the library
@@ -434,11 +437,11 @@ function PropertyBlock({
                 the field). */}
             {((property.amenities ?? []).length > 0 || isEditor) && (
               <div
-                className="mt-7 mb-1"
+                className="mt-5 mb-1"
                 style={{ borderTop: `1px solid ${tokens.border}` }}
               >
                 <div
-                  className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mt-5 mb-3"
+                  className="text-[9.5px] uppercase tracking-[0.28em] font-semibold mt-4 mb-2.5"
                   style={{ color: tokens.mutedText }}
                 >
                   At a glance
@@ -1260,10 +1263,14 @@ function FactBlock({
   tokens: ThemeTokens;
   children: React.ReactNode;
 }) {
+  // Spacing compressed (mt-8 → mt-5, mb-3 → mb-2.5) so the left
+  // sidebar reads as one cohesive card. Previous 32px between
+  // blocks made each fact group feel like a separate fragment
+  // floating in the column.
   return (
-    <div className="mt-8">
+    <div className="mt-5">
       <div
-        className="text-[14px] font-semibold mb-3"
+        className="text-[13.5px] font-semibold mb-2.5"
         style={{ color: tokens.headingText }}
       >
         {label}

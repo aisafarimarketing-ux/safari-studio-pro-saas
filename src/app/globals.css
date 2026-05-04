@@ -30,16 +30,28 @@
    responsive Tailwind classes at every viewport width and forced two
    columns on phones — image and narrative collided.
    ─────────────────────────────────────────────────────────────────── */
+/* Gap sized to give the narrative column a clear safe-zone away
+ * from the image edge in both flip directions (operator brief:
+ * "image and text should each take their safe zone"). The md+
+ * bump from 2.5rem → 3rem reads as a clean column break instead
+ * of a tight crammed gap; lg+ adds another 0.5rem of air now that
+ * the spread is wide enough to absorb it without breaking
+ * editorial rhythm. */
 .ss-act-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 2rem;
+  gap: 2.25rem;
   align-items: stretch;
 }
 @media (min-width: 768px) {
   .ss-act-grid {
     grid-template-columns: var(--act-cols-md, 1fr 1fr);
-    gap: 2.5rem;
+    gap: 3rem;
+  }
+}
+@media (min-width: 1024px) {
+  .ss-act-grid {
+    gap: 3.5rem;
   }
 }
 
