@@ -85,12 +85,17 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // ── Cmd/Ctrl-K toggle + custom-event opener ─────────────────────────
+  // ── Cmd/Ctrl-Shift-K toggle + custom-event opener ───────────────────
+  // Note: plain Cmd/Ctrl-K was rebound to the Execution AI command bar
+  // (Safari Studio AI's primary action surface). The org-search palette
+  // moved to Cmd/Ctrl-Shift-K so it stays keyboard-accessible without
+  // colliding with the higher-frequency action shortcut. Click-to-open
+  // via the search icon in the dashboard top bar still works as before.
   useEffect(() => {
     if (!isSignedIn) return;
     const onKey = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey;
-      if (isMeta && (e.key === "k" || e.key === "K")) {
+      if (isMeta && e.shiftKey && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setOpen((o) => !o);
       }
@@ -316,6 +321,7 @@ function ResultsList({
             <ul>
               {items.map((r) => {
                 const idx = runningIdx;
+                // eslint-disable-next-line react-hooks/immutability
                 runningIdx += 1;
                 const active = idx === highlightIndex;
                 const flatRef = flatResults[idx];

@@ -14,6 +14,7 @@ import { PipelineStrip, type PipelineData } from "./PipelineStrip";
 import { FollowUpPanel } from "./FollowUpPanel";
 import { ReservationSummaryDialog } from "./ReservationSummaryDialog";
 import { ToastHost, fireToast } from "./Toast";
+import { CommandBar } from "./CommandBar";
 import {
   ACTION_LABEL,
   MOMENTUM_COLORS,
@@ -179,6 +180,10 @@ function CommandCenterShell() {
   const [followUpTarget, setFollowUpTarget] = useState<FollowUpTarget | null>(null);
   const [reservationSummaryTarget, setReservationSummaryTarget] =
     useState<ReservationSummaryTarget | null>(null);
+  // Command bar (⌘K). Opens on global shortcut + the "Press ⌘K" pill
+  // in the top bar. Closes on Escape, outside click, or successful
+  // command (the FollowUpPanel takes over).
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
 
   // Bumping this re-runs the activity-fetch effect below. Auto-send
   // fires + scheduling actions dispatch "ss:refreshActivity" so the
@@ -196,13 +201,35 @@ function CommandCenterShell() {
       if (detail?.reservationId) setReservationSummaryTarget(detail);
     };
     const onRefresh = () => setRefreshTick((n) => n + 1);
+    // ⌘K (mac) / Ctrl-K (other) toggles the command bar globally.
+    // Ignore when an input/textarea/contentEditable already has focus
+    // unless the user is *inside* the command bar already (so they
+    // can dismiss it via the same shortcut).
+    const onShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        const target = e.target as HTMLElement | null;
+        const inEditable =
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.getAttribute("contenteditable") === "true");
+        // Always allow when the command bar itself is mounted (so ⌘K
+        // closes it cleanly).
+        const inCommandBar = !!target?.closest('[role="dialog"]');
+        if (inEditable && !inCommandBar) return;
+        e.preventDefault();
+        setCommandBarOpen((v) => !v);
+      }
+    };
     window.addEventListener("ss:openFollowUp", onFollowUp);
     window.addEventListener("ss:openReservationSummary", onSummary);
     window.addEventListener("ss:refreshActivity", onRefresh);
+    window.addEventListener("keydown", onShortcut);
     return () => {
       window.removeEventListener("ss:openFollowUp", onFollowUp);
       window.removeEventListener("ss:openReservationSummary", onSummary);
       window.removeEventListener("ss:refreshActivity", onRefresh);
+      window.removeEventListener("keydown", onShortcut);
     };
   }, []);
 
@@ -320,6 +347,7 @@ function CommandCenterShell() {
       <main className="px-5 py-5 md:px-7 md:py-6 min-w-0 space-y-5">
         <CommandTopBar
           onOpenSidebar={() => setMobileNavOpen(true)}
+          onOpenCommandBar={() => setCommandBarOpen(true)}
           scope={activityScope}
           onScopeChange={setActivityScope}
           canViewAll={activity?.canViewAll ?? false}
@@ -394,6 +422,7 @@ function CommandCenterShell() {
           onClose={() => setFollowUpTarget(null)}
         />
       )}
+      <CommandBar open={commandBarOpen} onClose={() => setCommandBarOpen(false)} />
       <ToastHost />
       {reservationSummaryTarget && (
         <ReservationSummaryDialog
@@ -574,11 +603,13 @@ function SidebarItem({
 
 function CommandTopBar({
   onOpenSidebar,
+  onOpenCommandBar,
   scope,
   onScopeChange,
   canViewAll,
 }: {
   onOpenSidebar: () => void;
+  onOpenCommandBar: () => void;
   scope: "mine" | "all";
   onScopeChange: (s: "mine" | "all") => void;
   canViewAll: boolean;
@@ -667,7 +698,36 @@ function CommandTopBar({
             />
           </div>
         )}
-        <IconBtn label="Search (⌘K)" onClick={openCommandPalette}>
+        {/* Execution AI hint pill — discovery surface for the new
+            command bar. Always visible, click to open. The keyboard
+            shortcut ⌘K is wired globally one level up. */}
+        <button
+          type="button"
+          onClick={onOpenCommandBar}
+          className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-full transition active:scale-[0.98]"
+          style={{
+            background: tokens.tileBg,
+            border: `1px solid ${tokens.ring}`,
+            color: tokens.body,
+          }}
+          title="Open Safari Studio AI command bar"
+        >
+          <span aria-hidden style={{ color: "#1b3a2d", fontSize: 13 }}>✦</span>
+          <span className="text-[12px] font-semibold" style={{ color: tokens.heading }}>
+            Send anything
+          </span>
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+            style={{
+              background: "rgba(0,0,0,0.06)",
+              color: "rgba(0,0,0,0.55)",
+            }}
+            aria-hidden
+          >
+            ⌘K
+          </span>
+        </button>
+        <IconBtn label="Search (⌘⇧K)" onClick={openCommandPalette}>
           <SearchIcon />
         </IconBtn>
         <IconBtn label="Notifications">

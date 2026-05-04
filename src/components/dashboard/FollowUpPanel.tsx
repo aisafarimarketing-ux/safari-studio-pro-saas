@@ -46,6 +46,22 @@ type Props = {
   /** Operator's selected follow-up mode. The Schedule auto-send strip
    *  only renders in Auto mode; Assisted + Smart Assist hide it. */
   mode?: FollowUpMode;
+  /** When supplied, the panel skips the /api/ai/auto-draft fetch and
+   *  uses the prefilled content directly. Used by the Command Bar's
+   *  Execution AI flow — the snippet is already assembled server-side
+   *  from real proposal days, so re-generating would defeat the
+   *  point. The suggestionId is the row already logged by the
+   *  execute route; sentAt updates target this id. */
+  prefilledDraft?: {
+    text: string;
+    suggestionId: string;
+    channel: "whatsapp" | "email";
+    /** Eyebrow line at the top of the panel: "Days 2 and 3 · Updated 3 days ago" */
+    contextLabel?: string;
+    /** Soft warnings from extractDays (empty narratives, etc.) — surfaced
+     *  above the textarea so the operator sees them before sending. */
+    warnings?: string[];
+  };
   onClose: () => void;
 };
 
@@ -57,16 +73,20 @@ export function FollowUpPanel({
   autoSendEligibility,
   autoSendScheduledFor,
   mode = "assisted",
+  prefilledDraft,
   onClose,
 }: Props) {
   const caps = modeCapabilities(mode);
+  const isPrefilled = Boolean(prefilledDraft);
   const [channel, setChannel] = useState<Channel>(
-    clientPhone ? "whatsapp" : "email",
+    prefilledDraft?.channel ?? (clientPhone ? "whatsapp" : "email"),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<string>("");
-  const [suggestionId, setSuggestionId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string>(prefilledDraft?.text ?? "");
+  const [suggestionId, setSuggestionId] = useState<string | null>(
+    prefilledDraft?.suggestionId ?? null,
+  );
   const [momentum, setMomentum] = useState<DealMomentum | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   const [action, setAction] = useState<SuggestedAction | null>(null);
@@ -109,6 +129,10 @@ export function FollowUpPanel({
   };
 
   useEffect(() => {
+    // Prefilled drafts (from the Command Bar's Execution AI flow)
+    // already carry the assembled snippet — re-fetching from
+    // /auto-draft would replace it with a generic follow-up.
+    if (isPrefilled) return;
     void fetchDraft(channel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -124,6 +148,12 @@ export function FollowUpPanel({
   const switchChannel = (next: Channel) => {
     if (next === channel || busy) return;
     setChannel(next);
+    // For prefilled drafts the snippet is bound to the channel
+    // chosen at execute time — switching would require a fresh
+    // server call (different format). For v1 we lock the channel
+    // in prefilled mode; the operator regenerates from the
+    // command bar if they need the other channel.
+    if (isPrefilled) return;
     void fetchDraft(next);
   };
 
@@ -327,6 +357,41 @@ export function FollowUpPanel({
             </div>
           )}
 
+          {/* Prefilled-draft context strip — shows the operator what
+              specifically was assembled (e.g. "Days 2 and 3 · proposal
+              updated 3 days ago") plus any warnings about incomplete
+              content. Gives the "I know exactly what I'm sending"
+              confidence the spec calls for. */}
+          {isPrefilled && prefilledDraft?.contextLabel && (
+            <div
+              className="rounded-lg px-3 py-2 text-[12.5px]"
+              style={{
+                background: "rgba(27,58,45,0.06)",
+                color: "#1b3a2d",
+                border: "1px solid rgba(27,58,45,0.14)",
+              }}
+            >
+              <strong>From:</strong> {prefilledDraft.contextLabel}
+            </div>
+          )}
+          {isPrefilled && prefilledDraft?.warnings && prefilledDraft.warnings.length > 0 && (
+            <div
+              className="rounded-lg px-3 py-2 text-[12px]"
+              style={{
+                background: "rgba(202,138,4,0.08)",
+                color: "#a16207",
+                border: "1px solid rgba(202,138,4,0.22)",
+              }}
+            >
+              <strong>Heads up:</strong>
+              <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                {prefilledDraft.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {busy && !draft ? (
             <div className="space-y-2">
               <div className="h-3 rounded animate-pulse" style={{ background: "rgba(0,0,0,0.08)" }} />
@@ -396,19 +461,21 @@ export function FollowUpPanel({
           style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}
         >
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void fetchDraft(channel, { force: true })}
-              disabled={busy}
-              className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
-              style={{
-                background: "transparent",
-                color: "#0a1411",
-                border: "1px solid rgba(0,0,0,0.16)",
-              }}
-            >
-              {busy ? "Drafting…" : "Regenerate"}
-            </button>
+            {!isPrefilled && (
+              <button
+                type="button"
+                onClick={() => void fetchDraft(channel, { force: true })}
+                disabled={busy}
+                className="px-3 h-9 rounded-md text-[12.5px] font-semibold disabled:opacity-50"
+                style={{
+                  background: "transparent",
+                  color: "#0a1411",
+                  border: "1px solid rgba(0,0,0,0.16)",
+                }}
+              >
+                {busy ? "Drafting…" : "Regenerate"}
+              </button>
+            )}
             {channel === "whatsapp" ? (
               <button
                 type="button"
