@@ -43,6 +43,12 @@ export type InspectorInput = {
    *  AISuggestion.input.resolved.days). Empty when no execution
    *  snippet has fired for this deal. */
   priorDaysSent: number[];
+  /** Most recent sentAt for any preview-itinerary the operator has
+   *  sent to this client (any itinerary type, any channel). Null
+   *  when none has ever been sent. Used to gate the COOLING / COLD
+   *  preview-suggestion branches: don't suggest sending another
+   *  preview if one went out in the last 24h. */
+  lastPreviewSentAt: Date | null;
   /** Used in the action-command prefill so the operator's ⌘K input
    *  reads naturally ("send Jennifer day 3"). Null falls back to
    *  the literal "client". */
@@ -55,6 +61,11 @@ export type InspectorInput = {
 // the spec treats anything in the last 2 hours as "already in
 // motion". Mirrors the canAutoSend "don't double-tap" rule.
 const RECENT_SEND_WINDOW_MS = 2 * 60 * 60 * 1000;
+// Tighter "don't pile on previews" window — once a sample itinerary
+// goes out, the next preview suggestion stays muted for 24h. The
+// operator can still send another preview manually via the Command
+// Bar; this only suppresses the chip's nudge.
+const PREVIEW_QUIET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function suggestNextStep(input: InspectorInput): InspectorSuggestion | null {
   const now = input.now ?? new Date();
@@ -129,15 +140,41 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
     return null;
   }
 
+  // Preview-suggestion guard: if we've already sent a preview in the
+  // last 24h, the operator's playbook says give the client time —
+  // don't pile on another preview right away. Falls through to the
+  // existing day-pattern branches when applicable.
+  const previewRecentlySent =
+    input.lastPreviewSentAt !== null &&
+    now.getTime() - input.lastPreviewSentAt.getTime() < PREVIEW_QUIET_WINDOW_MS;
+
+  // Was the deal sent something within the last day, regardless of
+  // the 2h "don't double-tap" window above? Used by the COOLING
+  // branch to decide between "Day N+1" follow-ups and a fresh
+  // preview to restart the conversation.
+  const longQuietGate =
+    input.lastSentAt === null ||
+    now.getTime() - input.lastSentAt.getTime() > 24 * 60 * 60 * 1000;
+
   // ─── COOLING ─────────────────────────────────────────────────────
-  // Quiet for a day or two. A single re-engagement message is the
-  // textbook play here.
+  // Quiet for a day or two. Two flavours of nudge:
+  //   - When the operator's mid-conversation (sent days before),
+  //     suggest the next day to keep momentum.
+  //   - When it's been quiet for >24h AND no preview has gone out
+  //     in the last day, suggest a preview as a softer re-opener.
   if (input.momentum === "COOLING") {
     if (sentSomethingBefore && nextDay !== null) {
       return {
         message: `Quiet for a day or two — sending Day ${nextDay} reopens the conversation without sounding like a chase.`,
         actionLabel: `Send Day ${nextDay}`,
         actionCommand: `send ${cmdName} day ${nextDay}`,
+      };
+    }
+    if (longQuietGate && !previewRecentlySent) {
+      return {
+        message: `Quiet for a day or two — a short safari preview often reopens the conversation.`,
+        actionLabel: "Send preview",
+        actionCommand: `send a 5 day safari to ${cmdName}`,
       };
     }
     return {
@@ -147,8 +184,22 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
   }
 
   // ─── COLD ────────────────────────────────────────────────────────
-  // Already represented in the dashboard's COLD opportunities. We
-  // don't add a second nudge here — that's noise.
+  // No engagement, nothing sent. The textbook "start a conversation"
+  // play is a sample itinerary — gives the client something to react
+  // to without committing to a full proposal yet.
+  if (input.momentum === "COLD") {
+    if (!sentSomethingBefore && !previewRecentlySent) {
+      return {
+        message: `No engagement yet — share a sample safari to start the conversation.`,
+        actionLabel: "Send preview",
+        actionCommand: `send a 5 day safari to ${cmdName}`,
+      };
+    }
+    // Sent days before but went cold, or a preview already went out
+    // recently — stay quiet so we don't pile on.
+    return null;
+  }
+
   return null;
 }
 

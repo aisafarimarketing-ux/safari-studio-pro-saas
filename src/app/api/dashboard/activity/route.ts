@@ -278,6 +278,31 @@ export async function GET(req: Request) {
     priorDaysByProposal.set(k, v.slice().sort((a, b) => a - b));
   }
 
+  // ── Preview-itinerary history — gates Inspector AI's "send a
+  //    preview" suggestions on COOLING / COLD deals. We pull every
+  //    preview send for the org and group by client id (extracted
+  //    from input.resolved.clientId). Bounded by the org's preview
+  //    volume; in practice tiny.
+  const previewsRaw = await prisma.aISuggestion.findMany({
+    where: {
+      organizationId: orgId,
+      kind: "preview-itinerary",
+      sentAt: { not: null },
+    },
+    orderBy: { sentAt: "desc" },
+    select: { input: true, sentAt: true },
+    take: 200,
+  });
+  const lastPreviewByClient = new Map<string, Date>();
+  for (const row of previewsRaw) {
+    if (!row.sentAt) continue;
+    const clientId = extractResolvedClientId(row.input);
+    if (!clientId) continue;
+    if (!lastPreviewByClient.has(clientId)) {
+      lastPreviewByClient.set(clientId, row.sentAt);
+    }
+  }
+
   const summaries = summariesRaw.map((row) => {
     const refreshed = refreshStatusForRead(
       {
@@ -347,6 +372,9 @@ export async function GET(req: Request) {
         reservationCompleted: row.reservationCompleted,
         lastSentAt: lastSentByProposal.get(row.proposalId) ?? null,
         priorDaysSent: priorDaysByProposal.get(row.proposalId) ?? [],
+        lastPreviewSentAt: row.client?.id
+          ? lastPreviewByClient.get(row.client.id) ?? null
+          : null,
         clientFirstName: row.client?.firstName ?? null,
         now,
       },
@@ -753,6 +781,20 @@ function deriveCreditLabel(kind: string, input: unknown): string {
   }
   if (kind === "follow-up") return "Follow-up message";
   return "Message";
+}
+
+// Pull a client id from an AISuggestion.input blob (the same shape
+// /api/ai/execute writes for both proposal-days and preview-
+// itinerary intents). Used to group preview history by client so the
+// Inspector AI's "don't pile on previews" guard can fire per-client
+// rather than per-org.
+function extractResolvedClientId(input: unknown): string | null {
+  if (!input || typeof input !== "object") return null;
+  const obj = input as Record<string, unknown>;
+  const resolved = obj.resolved;
+  if (!resolved || typeof resolved !== "object") return null;
+  const id = (resolved as Record<string, unknown>).clientId;
+  return typeof id === "string" && id.trim().length > 0 ? id : null;
 }
 
 // Compact phrase used inside the reinforcement parens. Drops the
