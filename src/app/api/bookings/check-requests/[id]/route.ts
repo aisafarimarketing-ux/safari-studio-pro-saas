@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { friendlyConsultantName } from "@/lib/consultantIdentity";
-import {
-  formatBookingCheckFollowUp,
-  formatBookingCheckUrgent,
-} from "@/lib/bookingOps/format";
+import { formatBookingCheckFollowUp } from "@/lib/bookingOps/format";
 import {
   computeNextActionAt,
   deriveSuggestedAction,
@@ -175,10 +172,24 @@ export async function PATCH(
   // ── Action: record_followup_sent ────────────────────────────────────
   // The operator clicked "Send follow-up" → the UI fires this action
   // after copying / dispatching. We bump attemptCount, advance
-  // nextActionAt by 24h, and rewrite draftText to the next-cadence
-  // variant (gentle for attempt 1→2, urgent for 2→3+). Status stays
+  // nextActionAt with cadence (24h for attempt 1, 48h for attempt 2),
+  // and rewrite draftText to a gentle follow-up. Status stays
   // "sent" — the row is still awaiting reply, just a follow-up later.
+  //
+  // Hard cap at attempt 2: two messages already out is the
+  // escalation threshold. A third follow-up tends to feel like
+  // pestering, so we refuse — the orchestrate hint guides the
+  // operator to call the property or switch to an alternative.
   if (body.action === "record_followup_sent") {
+    if ((existing.attemptCount ?? 0) >= 2) {
+      return NextResponse.json(
+        {
+          error:
+            "Two follow-ups have already been sent. Time to call the property or switch to an alternative.",
+        },
+        { status: 422 },
+      );
+    }
     // Pull the trip + booking ref so the regenerated draft matches
     // what the initial send used. Single extra query, only fires on
     // this action path.
@@ -212,19 +223,16 @@ export async function PATCH(
       }),
       operatorFirstName,
     };
+    // Always the gentle variant — attempt 2 is the last follow-up
+    // we'll generate. The urgent escalation copy is no longer
+    // produced; instead the UI surfaces "call or switch" guidance.
+    const followUpDraft = formatBookingCheckFollowUp(messageInput);
     const nextAttempt = (existing.attemptCount ?? 1) + 1;
-    // attempt 1 was the initial. attempt 2 = first follow-up =
-    // gentle. attempt 3+ = urgent. Stays at urgent indefinitely;
-    // we never escalate beyond that level automatically.
-    const followUpDraft =
-      nextAttempt >= 3
-        ? formatBookingCheckUrgent(messageInput)
-        : formatBookingCheckFollowUp(messageInput);
     data.attemptCount = nextAttempt;
     data.lastSentAt = now;
-    // Cadence widens after the first follow-up (attempt 2+ →
-    // +48h) so an already-pinged property gets breathing room
-    // before the urgent note.
+    // Cadence widens after the first follow-up (attempt 2 → +48h)
+    // so a pinged property gets breathing room before the
+    // operator-side escalation kicks in.
     data.nextActionAt = computeNextActionAt(nextAttempt, now);
     data.draftText = followUpDraft;
     // Status: if the operator was on follow_up_needed, flip back to

@@ -12,9 +12,9 @@ import type { Proposal, TierKey } from "@/lib/types";
 export type NextActionKind =
   | "send_initial"        // status=not_sent
   | "awaiting_reply"      // status=sent, before nextActionAt
-  | "send_followup"       // status=sent, due (24h)
-  | "send_urgent"         // status=sent, due AND attemptCount >= 2 (48h+)
-  | "send_followup_now"   // status=follow_up_needed (operator already flagged)
+  | "send_followup"       // status=sent, due AND attemptCount === 1
+  | "escalate"            // status=sent or follow_up_needed, due AND attemptCount >= 2
+  | "send_followup_now"   // status=follow_up_needed AND attemptCount === 1
   | "mark_outcome"        // status=replied
   | "tell_client"         // status=available
   | "offer_alternatives"  // status=not_available
@@ -42,23 +42,40 @@ export function deriveNextAction(row: RowForAction, now: Date = new Date()): Nex
       const due =
         row.nextActionAt !== null && row.nextActionAt.getTime() <= nowMs;
       if (!due) return { kind: "awaiting_reply", hint: "Awaiting reply." };
-      // attemptCount === 1 means initial sent, no follow-ups yet.
+      // attemptCount === 1 means initial sent, no follow-ups yet —
+      // the gentle 24h-after-initial follow-up is the right move.
       if (row.attemptCount <= 1) {
         return {
           kind: "send_followup",
           hint: "It's been over 24h — a gentle follow-up is suggested.",
         };
       }
+      // attemptCount >= 2 means initial + at least one follow-up
+      // already out. Sending a third write tends to feel like
+      // pestering — guide the operator to escalate (alternative
+      // property or a direct call) instead of looping.
       return {
-        kind: "send_urgent",
-        hint: "Still no reply — a firmer note is appropriate now.",
+        kind: "escalate",
+        hint: "Two messages already out — try an alternative or place a call.",
       };
     }
-    case "follow_up_needed":
+    case "follow_up_needed": {
+      // Operator-flagged stall. Same escalation rule: if they've
+      // already sent a follow-up in the past, the next click should
+      // surface the escalation guidance, not another follow-up
+      // draft. attemptCount === 1 means only the initial went out
+      // — a normal flagged follow-up is still right.
+      if (row.attemptCount >= 2) {
+        return {
+          kind: "escalate",
+          hint: "You flagged this — but two messages are already out. Time to escalate.",
+        };
+      }
       return {
         kind: "send_followup_now",
         hint: "Send the follow-up message you flagged.",
       };
+    }
     case "replied":
       return { kind: "mark_outcome", hint: "Mark Available or Not available." };
     case "available":

@@ -56,7 +56,10 @@ type Row = {
 type Orchestrate = {
   nextAction: { kind: NextActionKind; hint: string };
   suggestedAction: "follow_up" | "switch" | "confirm_client" | null;
-  followUpDraft: string;
+  /** Pre-rendered gentle follow-up draft. Null when escalation is
+   *  the right path — the UI hides the "Copy follow-up" button in
+   *  that state and shows the escalation panel instead. */
+  followUpDraft: string | null;
   alternatives: { name: string; destination: string | null; occurrences: number }[];
   alternativeRequest: string | null;
   clientGoodNews: string | null;
@@ -67,7 +70,7 @@ type NextActionKind =
   | "send_initial"
   | "awaiting_reply"
   | "send_followup"
-  | "send_urgent"
+  | "escalate"
   | "send_followup_now"
   | "mark_outcome"
   | "tell_client"
@@ -450,34 +453,32 @@ function PropertyCard({
               Flag follow-up
             </button>
           )}
-          {/* Send follow-up — copies the next-cadence draft to the
-              clipboard, marks the action recorded server-side. The
-              draft variant (gentle vs urgent) is picked by the
-              orchestrate endpoint based on attemptCount. */}
-          {(followUpNeeded || row.status === "follow_up_needed") && orch?.followUpDraft && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(orch.followUpDraft);
-                } catch {
-                  /* clipboard unavailable */
-                }
-                await onAction("record_followup_sent");
-              }}
-              className="text-[12px] px-2.5 py-1.5 rounded-md"
-              style={{
-                background: row.attemptCount >= 2 ? "#b34334" : "#1b3a2d",
-                color: "#F7F3E8",
-                fontWeight: 600,
-              }}
-              title={row.attemptCount >= 2
-                ? "Copies an urgency follow-up to your clipboard."
-                : "Copies a gentle follow-up to your clipboard."}
-            >
-              {row.attemptCount >= 2 ? "Copy urgent follow-up" : "Copy follow-up"}
-            </button>
-          )}
+          {/* Send follow-up — copies the gentle draft to the clipboard,
+              marks the action recorded server-side. Only renders when
+              orchestrate says a follow-up is the right next move
+              (followUpDraft is set + kind ∈ send_followup /
+              send_followup_now). On the escalation path the button
+              is hidden and the panel below takes over. */}
+          {(followUpNeeded || row.status === "follow_up_needed") &&
+            orch?.followUpDraft &&
+            orch.nextAction.kind !== "escalate" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(orch.followUpDraft ?? "");
+                  } catch {
+                    /* clipboard unavailable */
+                  }
+                  await onAction("record_followup_sent");
+                }}
+                className="text-[12px] px-2.5 py-1.5 rounded-md"
+                style={{ background: "#1b3a2d", color: "#F7F3E8", fontWeight: 600 }}
+                title="Copies a gentle follow-up to your clipboard."
+              >
+                Copy follow-up
+              </button>
+            )}
           {(row.status === "available" || row.status === "not_available" || row.status === "replied") && (
             <button
               type="button"
@@ -513,6 +514,73 @@ function PropertyCard({
             <div className="text-[11px] opacity-60 mt-1">
               Edits are saved automatically. The audit trail keeps the
               latest version per property.
+            </div>
+          </div>
+        )}
+
+        {/* Escalation branch: two messages already out and still no
+            reply. Surface the same alternatives flow as the
+            not_available state — but proactively, before the
+            operator marks the row dead. The operator then picks
+            "switch" (mark not_available, work the alternatives) or
+            "call" (mark replied once contact is made manually).
+            No third follow-up button is offered. */}
+        {orch?.nextAction.kind === "escalate" && (
+          <div
+            className="mt-3 rounded-md p-3"
+            style={{ background: "rgba(202,138,4,0.08)", border: "1px solid rgba(202,138,4,0.22)" }}
+          >
+            <div className="text-[11.5px] mb-2" style={{ color: "#a16207", fontWeight: 600 }}>
+              Two messages already out — time to call or switch.
+            </div>
+            <div className="text-[11.5px] mb-3 opacity-80">
+              A third write rarely helps. Either pick up the phone, or move
+              the booking to an alternative property below.
+            </div>
+            {orch.alternatives.length > 0 && (
+              <>
+                <div className="text-[11px] uppercase tracking-[0.06em] opacity-60 mb-1" style={{ fontWeight: 600 }}>
+                  Alternatives in the same region
+                </div>
+                <ul className="text-[12.5px] space-y-1 mb-3">
+                  {orch.alternatives.map((alt) => (
+                    <li key={alt.name}>
+                      <span style={{ fontWeight: 500 }}>{alt.name}</span>
+                      {alt.destination && <span className="opacity-70"> · {alt.destination}</span>}
+                      {alt.occurrences > 1 && (
+                        <span className="opacity-60"> · used in {alt.occurrences} past proposals</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {orch.alternativeRequest && (
+                  <ClientMessageRow
+                    label={`Outbound to ${orch.alternatives[0].name}`}
+                    text={orch.alternativeRequest}
+                    accent="amber"
+                  />
+                )}
+              </>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onUpdate({ status: "not_available" })}
+                className="text-[12px] px-2.5 py-1.5 rounded-md"
+                style={{ background: "#a16207", color: "#F7F3E8", fontWeight: 600 }}
+                title="Move this row to the not_available flow so the alternatives become the active path."
+              >
+                Switch to alternative
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdate({ status: "replied" })}
+                className="text-[12px] px-2.5 py-1.5 rounded-md"
+                style={{ background: "rgba(0,0,0,0.06)", fontWeight: 500 }}
+                title="Mark replied once you've reached the property by phone."
+              >
+                I called them
+              </button>
             </div>
           </div>
         )}

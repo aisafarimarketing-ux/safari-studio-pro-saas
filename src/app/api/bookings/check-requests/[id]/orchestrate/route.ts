@@ -6,7 +6,6 @@ import {
   formatAlternativeOfferMessage,
   formatAlternativeRequestMessage,
   formatBookingCheckFollowUp,
-  formatBookingCheckUrgent,
   formatGoodNewsMessage,
 } from "@/lib/bookingOps/format";
 import {
@@ -114,22 +113,26 @@ export async function GET(
   };
 
   // ── Follow-up draft ──────────────────────────────────────────────────
-  // Pre-render the draft the operator would dispatch on the NEXT
-  // attempt. attempt 1 sent → next would be #2 (gentle). attempt 2
-  // sent → next would be #3 (urgent). The draft is identical to what
-  // the PATCH `record_followup_sent` action will write into the row,
-  // so the operator's preview matches what gets persisted.
-  const nextAttempt = (row.attemptCount ?? 1) + 1;
+  // Pre-render the gentle draft the operator would dispatch on the
+  // NEXT attempt — but only when a follow-up is actually the right
+  // move. Once attemptCount reaches 2 the cadence escalates instead
+  // (call or switch) and we suppress the draft so the UI doesn't
+  // accidentally surface a third write button.
   const followUpDraft =
-    nextAttempt >= 3
-      ? formatBookingCheckUrgent(messageInput)
-      : formatBookingCheckFollowUp(messageInput);
+    nextAction.kind === "send_followup" || nextAction.kind === "send_followup_now"
+      ? formatBookingCheckFollowUp(messageInput)
+      : null;
 
   // ── Alternative properties ──────────────────────────────────────────
-  // Only resolved when the row is not_available — otherwise we skip
-  // the query to keep the orchestrate call cheap.
+  // Resolved when the row is genuinely stuck — explicitly
+  // not_available OR in the escalation phase (two follow-ups out
+  // and still nothing). The escalation case wants alternatives
+  // visible so the operator can choose between calling and
+  // switching without an extra round trip.
+  const wantsAlternatives =
+    row.status === "not_available" || nextAction.kind === "escalate";
   let alternatives: Awaited<ReturnType<typeof findAlternativeProperties>> = [];
-  if (row.status === "not_available") {
+  if (wantsAlternatives) {
     alternatives = await findAlternativeProperties({
       organizationId: orgId,
       destination: row.destination,
@@ -166,8 +169,11 @@ export async function GET(
   }
 
   // ── Outbound to first alternative (when applicable) ─────────────────
+  // Now also generated when in the escalation phase so the operator
+  // has a ready-to-paste outbound if they choose "switch" over
+  // "call".
   let alternativeRequest: string | null = null;
-  if (row.status === "not_available" && alternatives.length > 0) {
+  if (wantsAlternatives && alternatives.length > 0) {
     const first = alternatives[0];
     alternativeRequest = formatAlternativeRequestMessage({
       ...messageInput,
