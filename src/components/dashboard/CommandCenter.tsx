@@ -38,6 +38,7 @@ import {
   normaliseFollowUpMode,
   type FollowUpMode,
 } from "@/lib/followUpMode";
+import { FEATURES } from "@/lib/featureFlags";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -1113,8 +1114,10 @@ function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
               (present tense, last 60s) reads as live; "Just viewed
               pricing · 2 min ago" (past tense) reads as a fresh
               breadcrumb. Distinct from momentumReason which describes
-              the longer-term bucket. */}
-          {card.liveActivity && (
+              the longer-term bucket.
+              Gated by FEATURES.liveBehavior — kept off in the demo
+              flow so cards stay focused on send-action chips. */}
+          {FEATURES.liveBehavior && card.liveActivity && (
             <div
               className="text-[11px] mt-1.5 inline-flex items-center gap-1.5"
               style={{
@@ -1136,8 +1139,10 @@ function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
               timestamp. Sits between live activity (what) and
               momentum reason (longer-term bucket). Server-side guards
               ensure only one signal fires; the UI renders the
-              already-interpreted message verbatim. */}
-          {card.rightNowInsight && (
+              already-interpreted message verbatim.
+              Gated by the same FEATURES.liveBehavior flag — these
+              two surfaces are conceptually one feature. */}
+          {FEATURES.liveBehavior && card.rightNowInsight && (
             <div
               className="text-[11.5px] mt-1.5 italic"
               style={{ color: tokens.body }}
@@ -2436,8 +2441,12 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
               - Generic: "✓ Booked after [WhatsApp] Day 3 snippet
                 sent 12 min before". Time-delta from sentAt →
                 bookedAt, so it answers "how long after I sent the
-                message did the booking come in?". */}
-        {row.creditedSuggestion?.followedSuggestion ? (
+                message did the booking come in?".
+            Gated by FEATURES.bookingAttribution — kept off until
+            the credit logic has been validated end-to-end on real
+            booked deals; a misattribution here erodes operator
+            trust faster than the chip earns it back. */}
+        {FEATURES.bookingAttribution && row.creditedSuggestion?.followedSuggestion ? (
           <div
             className="text-[11px] mt-1 leading-snug flex items-center gap-1.5 flex-wrap"
             style={{ color: "#15803d" }}
@@ -2459,7 +2468,7 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
                 : `(${row.creditedSuggestion.dayLabel ?? row.creditedSuggestion.label} worked here)`}
             </span>
           </div>
-        ) : row.creditedSuggestion ? (
+        ) : FEATURES.bookingAttribution && row.creditedSuggestion ? (
           <div
             className="text-[11px] mt-1 leading-snug flex items-center gap-1.5 flex-wrap"
             style={{ color: "#15803d" }}
