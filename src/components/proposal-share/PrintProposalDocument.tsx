@@ -276,6 +276,17 @@ function renderSection(section: Section, proposalId: string, proposalSections: S
 // content within the A4 frame. If content exceeds caps we truncate
 // (per the operator's spec rules); we never spill into a second page.
 
+// Rotation order for day-card layouts when the operator hasn't set
+// one explicitly. Drives the "never the same layout twice in a row"
+// rhythm rule in the design brief — Day 1 narrative, Day 2 image-led,
+// Day 3 balanced (standard), Day 4 narrative, … so consecutive days
+// always feel different. The operator's per-day override always wins.
+const DAY_VARIANT_ROTATION = [
+  "day-card-narrative",
+  "day-card-image-led",
+  "day-card-standard",
+] as const;
+
 function PdfFitDayJourneyPages({ section }: { section: Section }) {
   const proposal = useProposalStore((s) => s.proposal);
   const days = proposal.days;
@@ -290,14 +301,25 @@ function PdfFitDayJourneyPages({ section }: { section: Section }) {
   }
   return (
     <>
-      {days.map((day) => (
-        <PdfFitDayPage
-          key={day.id}
-          section={section}
-          day={day}
-          totalDays={days.length}
-        />
-      ))}
+      {days.map((day, idx) => {
+        // Pick a rotated default unless the day already has its own
+        // layoutVariant set; PdfFitDayPage honours `day.layoutVariant`
+        // first, so we synthesise one when absent.
+        const synthetic = day.layoutVariant
+          ? day
+          : {
+              ...day,
+              layoutVariant: DAY_VARIANT_ROTATION[idx % DAY_VARIANT_ROTATION.length],
+            };
+        return (
+          <PdfFitDayPage
+            key={day.id}
+            section={section}
+            day={synthetic}
+            totalDays={days.length}
+          />
+        );
+      })}
     </>
   );
 }

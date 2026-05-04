@@ -3,7 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Day, Section, TierKey } from "@/lib/types";
-import { DAY_CARD_STANDARD } from "@/lib/pdfFit/manifests/day_card";
+import { DAY_CARD_LAYOUTS, DAY_CARD_STANDARD } from "@/lib/pdfFit/manifests/day_card";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
@@ -42,6 +42,15 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     typeof section.content?.variantId === "string"
       ? section.content.variantId
       : "balanced";
+
+  // Per-day layout pick — operator may store layoutVariant on the
+  // day record (day.layoutVariant = "day-card-narrative") to mix
+  // variants across the deck; the rhythm engine also synthesises
+  // one when none is set. Falls back to the section-level
+  // layoutVariant, then to the standard balanced layout.
+  const dayLayoutVariantRaw = day.layoutVariant ?? section.layoutVariant;
+  const manifest =
+    DAY_CARD_LAYOUTS.find((l) => l.id === dayLayoutVariantRaw) ?? DAY_CARD_STANDARD;
 
   // ─── Content resolution ──────────────────────────────────────────────
   const dayDate = day.date?.trim() || null;
@@ -105,7 +114,7 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     <PdfPage label={`Day ${day.dayNumber}${destination ? ` · ${destination}` : ""}`} bleed>
       <div data-section-type="dayJourney" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={DAY_CARD_STANDARD}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}

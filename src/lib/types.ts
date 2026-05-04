@@ -166,6 +166,10 @@ export interface Day {
   subtitle?: string;
   description: string;
   board: string;
+  /** Per-day PdfFit layout id — overrides the section's default
+   *  variant for just this one day. Lets the operator (or the
+   *  rhythm engine) say "this day reads better as image-led". */
+  layoutVariant?: string;
   heroImageUrl?: string;
   /** CSS object-position for the hero image — operators drag the image in
    *  the editor to recompose the crop. Format: "X% Y%" (e.g. "62.5% 38%").
