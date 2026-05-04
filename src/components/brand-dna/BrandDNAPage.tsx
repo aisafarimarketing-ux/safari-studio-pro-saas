@@ -11,8 +11,7 @@ import {
 import { computeBrandDNACompletion, type BrandDNACompletion, type SectionKey } from "@/lib/brandDNA";
 import { BrandCoreTab } from "./BrandCoreTab";
 import { VoiceToneTab } from "./VoiceToneTab";
-import { VisualStyleTab } from "./VisualStyleTab";
-import { SectionsTab } from "./SectionsTab";
+import { MasterTemplateTab } from "./MasterTemplateTab";
 import { PropertyPreferencesTab } from "./PropertyPreferencesTab";
 import { AIInstructionsTab } from "./AIInstructionsTab";
 import { OverviewTab } from "./OverviewTab";
@@ -21,22 +20,31 @@ import { BrandPreviewSurface } from "./BrandPreviewSurface";
 import type { BrandDNAForm, PropertyPrefRow } from "./types";
 import { EMPTY_FORM } from "./types";
 
-type Tab = "overview" | "brandCore" | "voiceTone" | "visualStyle" | "sections" | "propertyPreferences" | "aiInstructions";
+type Tab =
+  | "overview"
+  | "brandCore"
+  | "voiceTone"
+  | "masterTemplate"
+  | "propertyPreferences"
+  | "aiInstructions";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "brandCore", label: "Brand Core" },
   { id: "voiceTone", label: "Voice & Tone" },
-  { id: "visualStyle", label: "Visual Style" },
-  { id: "sections", label: "Sections" },
+  { id: "masterTemplate", label: "Master Template" },
   { id: "propertyPreferences", label: "Property Preferences" },
   { id: "aiInstructions", label: "AI Instructions" },
 ];
 
+// Legacy SectionKey values still resolve so completion-ring deep
+// links keep working — visualStyle now points at masterTemplate
+// (where the visual fallback controls live), avoiding broken hash
+// targets after the tab restructure.
 const SECTION_TO_TAB: Record<SectionKey, Tab> = {
   brandCore: "brandCore",
   voiceTone: "voiceTone",
-  visualStyle: "visualStyle",
+  visualStyle: "masterTemplate",
   propertyPreferences: "propertyPreferences",
   aiInstructions: "aiInstructions",
 };
@@ -47,16 +55,25 @@ const VALID_TABS: readonly Tab[] = [
   "overview",
   "brandCore",
   "voiceTone",
-  "visualStyle",
-  "sections",
+  "masterTemplate",
   "propertyPreferences",
   "aiInstructions",
 ] as const;
 
+// Legacy hash aliases — old deep-links into #visualStyle / #sections
+// land on masterTemplate so existing bookmarks don't 404 the tab
+// state and silently fall back to overview.
+const HASH_ALIASES: Record<string, Tab> = {
+  visualStyle: "masterTemplate",
+  sections: "masterTemplate",
+};
+
 function tabFromHash(): Tab {
   if (typeof window === "undefined") return "overview";
-  const raw = window.location.hash.replace(/^#/, "") as Tab;
-  return VALID_TABS.includes(raw) ? raw : "overview";
+  const raw = window.location.hash.replace(/^#/, "");
+  if ((VALID_TABS as readonly string[]).includes(raw)) return raw as Tab;
+  if (raw in HASH_ALIASES) return HASH_ALIASES[raw];
+  return "overview";
 }
 
 export function BrandDNAPage() {
@@ -195,8 +212,9 @@ export function BrandDNAPage() {
                 )}
                 {tab === "brandCore" && <BrandCoreTab form={form} update={update} />}
                 {tab === "voiceTone" && <VoiceToneTab form={form} update={update} />}
-                {tab === "visualStyle" && <VisualStyleTab form={form} update={update} />}
-                {tab === "sections" && <SectionsTab form={form} update={update} />}
+                {tab === "masterTemplate" && (
+                  <MasterTemplateTab form={form} update={update} />
+                )}
                 {tab === "propertyPreferences" && (
                   <PropertyPreferencesTab
                     form={form}

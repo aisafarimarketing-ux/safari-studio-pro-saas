@@ -137,9 +137,45 @@ export function BrandPreviewSurface({ form }: { form: BrandDNAForm }) {
     : `— ${sampleOperatorFirstName}`;
 
   const sourceLabel = sourceLabelFor(data.data);
+  const isMasterSource = data.data.source === "master";
 
   return (
     <PreviewShell sourceLabel={sourceLabel}>
+      {/* Master template callout — only when the preview is being
+          driven by an explicit master. Reinforces "this is what
+          future proposals will look like" + gives a one-click
+          shortcut into the master so the admin can edit it. */}
+      {isMasterSource && data.data.proposalRef && (
+        <div
+          className="rounded-lg p-3 mb-3"
+          style={{
+            background: "rgba(201,168,76,0.10)",
+            border: "1px solid rgba(201,168,76,0.30)",
+          }}
+        >
+          <div
+            className="text-[10.5px] uppercase tracking-[0.18em] font-semibold mb-1"
+            style={{ color: "#8a7125" }}
+          >
+            ★ Master template
+          </div>
+          <div className="text-[12.5px] text-black/75 leading-snug mb-2">
+            Future proposals start from{" "}
+            <strong className="text-black/85">
+              {data.data.proposalRef.title}
+            </strong>
+            . Edit it in the editor to change colors, fonts, sections, and
+            layouts.
+          </div>
+          <a
+            href={`/studio?id=${encodeURIComponent(data.data.proposalRef.id)}`}
+            className="inline-block text-[11.5px] font-semibold"
+            style={{ color: "#1b3a2d" }}
+          >
+            Open master in editor →
+          </a>
+        </div>
+      )}
       <div
         className="rounded-xl overflow-hidden"
         style={{
