@@ -1,0 +1,123 @@
+"use client";
+
+import { useProposalStore } from "@/store/proposalStore";
+import { resolveTokens } from "@/lib/theme";
+import type { Property, Section } from "@/lib/types";
+import { PROPERTY_CARD_STANDARD } from "@/lib/pdfFit/manifests/property_card";
+import { PdfFitLayout } from "./PdfFitLayout";
+import { PdfPage } from "../PdfPage";
+import type { SlotContent } from "./PdfFitSlot";
+
+// ─── PDF-Fit property page renderer ────────────────────────────────────────
+//
+// One PdfPage per property in the showcase. Resolves content for the
+// property_card_standard manifest:
+//
+//   section_title  ← "Property N of M"
+//   property_name  ← property.name
+//   location_meta  ← property.location + " · " + property.tier (when set)
+//   description    ← property.description (HTML stripped) || shortDesc
+//   stay_details   ← compound: rooms · meal · check-in/out
+//   features_list  ← top 6 amenities
+//   main_image     ← property.leadImageUrl
+//   thumb_1/2/3    ← first 3 gallery URLs (excluding the lead)
+//
+// Variants (image_luxury / info_rich / balanced) tweak emphasis only.
+
+type Props = {
+  section: Section;
+  property: Property;
+  index: number;
+  total: number;
+};
+
+export function PdfFitPropertyPage({ section, property, index, total }: Props) {
+  const { proposal } = useProposalStore();
+  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
+
+  const variantId =
+    typeof section.content?.variantId === "string"
+      ? section.content.variantId
+      : "balanced";
+
+  // ─── Content resolution ──────────────────────────────────────────────
+  const sectionTitle = `Property ${index + 1} of ${total}`;
+  const propertyName = property.name?.trim() || "Untitled property";
+  const locationMeta = [
+    property.location?.trim() || "",
+    property.tier?.trim() || "",
+  ].filter(Boolean).join(" · ");
+
+  const description =
+    stripHtml(property.description ?? "").trim() ||
+    property.shortDesc?.trim() ||
+    "";
+
+  // Stay details — packed into a single multiline block. Operator's
+  // editor sets these per-property; missing fields are omitted.
+  const stayDetails = [
+    property.roomType ? `Room: ${property.roomType}` : null,
+    property.mealPlan ? `Meal plan: ${property.mealPlan}` : null,
+    property.nights ? `Nights: ${property.nights}` : null,
+    property.checkInTime ? `Check-in: ${property.checkInTime}` : null,
+    property.checkOutTime ? `Check-out: ${property.checkOutTime}` : null,
+  ].filter(Boolean).join("\n");
+
+  // Features list — top 6 amenities, comma-separated. The slot caps
+  // at 200 chars so we trim to fit.
+  const featuresList = (property.amenities ?? [])
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("  ·  ");
+
+  // Image resolution — leadImage as main; first 3 gallery URLs as
+  // thumbs. When gallery is short, missing thumbs render as soft
+  // fills (PdfFitSlot's no-image fallback).
+  const gallery = (property.galleryUrls ?? []).filter(Boolean);
+  const mainImageUrl = property.leadImageUrl?.trim() || gallery[0] || null;
+  // Skip the lead image from the thumbs to avoid duplication.
+  const thumbs = gallery.filter((u) => u !== mainImageUrl).slice(0, 3);
+
+  const contents: Record<string, SlotContent> = {
+    section_title: { kind: "text", value: sectionTitle },
+    property_name: { kind: "text", value: propertyName },
+    location_meta: { kind: "text", value: locationMeta },
+    description: { kind: "text", value: description },
+    stay_details: { kind: "text", value: stayDetails },
+    features_list: { kind: "text", value: featuresList },
+    main_image: { kind: "image", url: mainImageUrl, alt: propertyName },
+    thumb_1: { kind: "image", url: thumbs[0] ?? null, alt: "" },
+    thumb_2: { kind: "image", url: thumbs[1] ?? null, alt: "" },
+    thumb_3: { kind: "image", url: thumbs[2] ?? null, alt: "" },
+  };
+
+  return (
+    <PdfPage label={`Property ${index + 1} · ${propertyName}`} bleed>
+      <div data-section-type="propertyShowcase" data-property-id={property.id} style={{ width: "100%", height: "100%" }}>
+        <PdfFitLayout
+          manifest={PROPERTY_CARD_STANDARD}
+          contents={contents}
+          theme={proposal.theme}
+          tokens={tokens}
+          variantId={variantId}
+        />
+      </div>
+    </PdfPage>
+  );
+}
+
+function stripHtml(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div)>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

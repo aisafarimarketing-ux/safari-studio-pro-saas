@@ -15,6 +15,8 @@ import {
 import { PrintFooterPage } from "./PrintFooterPage";
 import { PrintMapPage } from "./PrintMapPage";
 import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
+import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
+import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
 import { FEATURES } from "@/lib/featureFlags";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
@@ -221,12 +223,20 @@ function renderSection(section: Section, proposalId: string) {
     return null;
   }
 
-  // PDF-Fit layouts — reverse-engineered print system. Pilot stage:
-  // only cover sections route through it. Everything else falls
-  // through to the legacy paths below. Flag-gated so we can A/B
-  // against the legacy renderer without code changes.
-  if (FEATURES.pdfFitLayouts && section.type === "cover") {
-    return <PdfFitCoverPage key={section.id} section={section} />;
+  // PDF-Fit layouts — reverse-engineered print system. Cover, day
+  // journey, and property showcase route through PDF-Fit when the
+  // feature flag is on. Everything else still falls through to the
+  // legacy paths below until those layouts ship.
+  if (FEATURES.pdfFitLayouts) {
+    if (section.type === "cover") {
+      return <PdfFitCoverPage key={section.id} section={section} />;
+    }
+    if (section.type === "dayJourney") {
+      return <PdfFitDayJourneyPages key={section.id} section={section} />;
+    }
+    if (section.type === "propertyShowcase") {
+      return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
+    }
   }
 
   // dayJourney — one PdfPage per day.
@@ -477,6 +487,66 @@ function DayJourneyPages({ section }: { section: Section }) {
 // metadata (e.g. break-before hints).
 function Fragmented({ children }: { children: ReactNode }) {
   return <>{children}</>;
+}
+
+// ─── PDF-Fit multi-page wrappers ──────────────────────────────────────────
+//
+// PDF-Fit pages are single-shot per day / per property — no tail
+// continuation needed because the manifest has fixed slots that cap
+// content within the A4 frame. If content exceeds caps we truncate
+// (per the operator's spec rules); we never spill into a second page.
+
+function PdfFitDayJourneyPages({ section }: { section: Section }) {
+  const proposal = useProposalStore((s) => s.proposal);
+  const days = proposal.days;
+  if (days.length === 0) {
+    return (
+      <PdfPage label="Day-by-day (empty)" bleed={false}>
+        <div data-section-type="dayJourney">
+          <SectionRenderer section={section} />
+        </div>
+      </PdfPage>
+    );
+  }
+  return (
+    <>
+      {days.map((day) => (
+        <PdfFitDayPage
+          key={day.id}
+          section={section}
+          day={day}
+          totalDays={days.length}
+        />
+      ))}
+    </>
+  );
+}
+
+function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
+  const proposal = useProposalStore((s) => s.proposal);
+  const properties = proposal.properties ?? [];
+  if (properties.length === 0) {
+    return (
+      <PdfPage label="Properties (empty)" bleed>
+        <div data-section-type="propertyShowcase">
+          <SectionRenderer section={section} />
+        </div>
+      </PdfPage>
+    );
+  }
+  return (
+    <>
+      {properties.map((property, idx) => (
+        <PdfFitPropertyPage
+          key={property.id}
+          section={section}
+          property={property}
+          index={idx}
+          total={properties.length}
+        />
+      ))}
+    </>
+  );
 }
 
 function labelFor(section: Section): string {
