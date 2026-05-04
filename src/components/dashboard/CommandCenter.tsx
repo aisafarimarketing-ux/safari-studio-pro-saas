@@ -84,6 +84,14 @@ type ActivityCard = {
     actionLabel?: string;
     actionCommand?: string;
   } | null;
+  /** Live-activity strip — surfaces what the client is doing right
+   *  now. "viewing" state = present-tense (last event within 60s);
+   *  "just-acted" = past-tense with "X min ago". Null when the
+   *  client hasn't been active in the last 5 minutes. */
+  liveActivity: {
+    state: "viewing" | "just-acted";
+    label: string;
+  } | null;
   preferredChannel: "whatsapp" | "email" | null;
   client: {
     id: string;
@@ -1068,6 +1076,29 @@ function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
           >
             {tripSummary}
           </div>
+          {/* Live activity strip — only renders when the client has
+              been active in the last 5 minutes. "Viewing pricing"
+              (present tense, last 60s) reads as live; "Just viewed
+              pricing · 2 min ago" (past tense) reads as a fresh
+              breadcrumb. Distinct from momentumReason which describes
+              the longer-term bucket. */}
+          {card.liveActivity && (
+            <div
+              className="text-[11px] mt-1.5 inline-flex items-center gap-1.5"
+              style={{
+                color:
+                  card.liveActivity.state === "viewing"
+                    ? "#15803d"
+                    : tokens.body,
+                fontWeight: card.liveActivity.state === "viewing" ? 600 : 500,
+              }}
+            >
+              {card.liveActivity.state === "viewing" && (
+                <span className="ss-recency-dot" aria-label="Active right now" />
+              )}
+              <span>{card.liveActivity.label}</span>
+            </div>
+          )}
           <div className="text-[11.5px] mt-1.5" style={{ color: tokens.muted }}>
             {card.momentumReason}
           </div>

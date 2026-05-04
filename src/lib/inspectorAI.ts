@@ -94,18 +94,35 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
   if (input.momentum === "VERY_HOT") {
     if (input.lastEventType === "price_viewed" || input.priceViewed) {
       // Pricing-stuck moments deserve a clarifying message, not a
-      // next-day push. We don't auto-pre-fill a specific snippet
-      // here because pricing answers tend to be bespoke; just open
-      // the command bar empty.
+      // next-day push. Pricing answers tend to be bespoke, so the
+      // CTA opens the command bar without a prefilled snippet —
+      // operator types the actual clarification.
       return {
-        message: `${name} just looked at pricing — a quick clarification often unlocks the booking.`,
+        message: "They're evaluating — a quick clarification helps here.",
         actionLabel: "Open command",
       };
     }
     if (input.clickedReservation) {
       return {
-        message: `${name} opened the reservation form — a short nudge with arrival logistics often closes from here.`,
+        message: "They opened the reservation form — a short nudge with arrival logistics often closes from here.",
         actionLabel: "Open command",
+      };
+    }
+    if (input.lastEventType === "itinerary_clicked") {
+      // Itinerary engagement = client is imagining the trip. A
+      // next-day snippet (or first day if nothing sent) keeps that
+      // visualisation fresh.
+      if (sentSomethingBefore && nextDay !== null) {
+        return {
+          message: "They're imagining the trip — share the next day to keep it vivid.",
+          actionLabel: `Send Day ${nextDay}`,
+          actionCommand: `send ${cmdName} day ${nextDay}`,
+        };
+      }
+      return {
+        message: "They're imagining the trip — a snippet of the first couple of days helps them see it.",
+        actionLabel: "Send Day 1 and 2",
+        actionCommand: `send ${cmdName} day 1 and 2`,
       };
     }
     if (sentSomethingBefore && nextDay !== null) {
@@ -155,6 +172,12 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
   const longQuietGate =
     input.lastSentAt === null ||
     now.getTime() - input.lastSentAt.getTime() > 24 * 60 * 60 * 1000;
+  // Two-day-plus quiet — beyond a normal weekend, the conversation
+  // is genuinely stalled. Triggers a softer "check-in" copy variant
+  // rather than another preview push.
+  const veryLongQuiet =
+    input.lastSentAt !== null &&
+    now.getTime() - input.lastSentAt.getTime() > 48 * 60 * 60 * 1000;
 
   // ─── COOLING ─────────────────────────────────────────────────────
   // Quiet for a day or two. Two flavours of nudge:
@@ -170,15 +193,23 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
         actionCommand: `send ${cmdName} day ${nextDay}`,
       };
     }
+    // Two-day-plus stall: drop the preview push, suggest a plain
+    // check-in. Operator usually knows the right line at this stage.
+    if (veryLongQuiet) {
+      return {
+        message: "A quick check-in can restart this.",
+        actionLabel: "Open command",
+      };
+    }
     if (longQuietGate && !previewRecentlySent) {
       return {
-        message: `Quiet for a day or two — a short safari preview often reopens the conversation.`,
+        message: "Quiet for a day — a short safari preview often reopens the conversation.",
         actionLabel: "Send preview",
         actionCommand: `send a 5 day safari to ${cmdName}`,
       };
     }
     return {
-      message: `Quiet for a day or two — a brief check-in often re-opens the conversation.`,
+      message: "Quiet for a day or two — a brief check-in often re-opens the conversation.",
       actionLabel: "Open command",
     };
   }
@@ -244,6 +275,97 @@ export function matchesNextStepHeuristic(
   // Heuristic with priors → "Send Day {max(prior) + 1}".
   const lastPriorMax = sortedPrior[sortedPrior.length - 1];
   return sortedExecuted.length === 1 && sortedExecuted[0] === lastPriorMax + 1;
+}
+
+// ─── Live activity interpretation ───────────────────────────────────────
+//
+// Surfaces a short "what's happening right now" string for the deal
+// card's live-activity strip. Reads from the engagement events the
+// share-view tracker is already firing (lastEventAt + lastEventType
+// on every ProposalActivitySummary). No new tracking needed — recency
+// thresholds give the live feel.
+//
+// State tiers:
+//   "viewing"     — last event within 60s. Present-tense label
+//                   ("Viewing pricing"). Used when the operator might
+//                   literally be watching the client right now.
+//   "just-acted"  — last event 60s–5min ago. Past-tense label
+//                   ("Just viewed pricing · 2 min ago").
+//   null          — older than 5 min, or no events at all. Strip
+//                   suppressed entirely.
+
+export type LiveActivity = {
+  state: "viewing" | "just-acted";
+  /** One-line operator-readable label. Already includes timing
+   *  context for the "just-acted" state. */
+  label: string;
+};
+
+const LIVE_VIEWING_WINDOW_MS = 60 * 1000;
+const LIVE_RECENT_WINDOW_MS = 5 * 60 * 1000;
+
+export function deriveLiveActivity(input: {
+  lastEventAt: Date | null;
+  lastEventType: string | null;
+  reservationCompleted: boolean;
+  now?: Date;
+}): LiveActivity | null {
+  if (input.reservationCompleted) return null;
+  if (!input.lastEventAt) return null;
+  const now = input.now ?? new Date();
+  const diffMs = now.getTime() - input.lastEventAt.getTime();
+  if (diffMs > LIVE_RECENT_WINDOW_MS) return null;
+
+  const isViewing = diffMs <= LIVE_VIEWING_WINDOW_MS;
+  if (isViewing) {
+    return {
+      state: "viewing",
+      label: presentLabel(input.lastEventType),
+    };
+  }
+  const minsAgo = Math.max(1, Math.round(diffMs / 60_000));
+  return {
+    state: "just-acted",
+    label: `${pastLabel(input.lastEventType)} · ${minsAgo} min ago`,
+  };
+}
+
+function presentLabel(eventType: string | null): string {
+  switch (eventType) {
+    case "price_viewed":
+      return "Viewing pricing";
+    case "itinerary_clicked":
+      return "Tapping the itinerary";
+    case "proposal_scrolled":
+      return "Reading proposal";
+    case "proposal_viewed":
+      return "Reading proposal";
+    case "reservation_started":
+      return "On the reservation form";
+    case "reservation_completed":
+      return "Completing reservation";
+    default:
+      return "Active on the proposal";
+  }
+}
+
+function pastLabel(eventType: string | null): string {
+  switch (eventType) {
+    case "price_viewed":
+      return "Just viewed pricing";
+    case "itinerary_clicked":
+      return "Just tapped the itinerary";
+    case "proposal_scrolled":
+      return "Just read through the proposal";
+    case "proposal_viewed":
+      return "Just opened the proposal";
+    case "reservation_started":
+      return "Just opened the reservation form";
+    case "reservation_completed":
+      return "Just submitted reservation";
+    default:
+      return "Just active on the proposal";
+  }
 }
 
 // Helper for callers that have a raw input JSON blob (the same shape

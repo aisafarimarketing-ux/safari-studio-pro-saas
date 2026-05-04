@@ -12,10 +12,12 @@ import {
 import { normaliseFollowUpMode } from "@/lib/followUpMode";
 import {
   aggregateBookedStats,
+  deriveLiveActivity,
   extractDaysFromInput,
   matchesNextStepHeuristic,
   suggestNextStepWithStats,
   type InspectorSuggestion,
+  type LiveActivity,
 } from "@/lib/inspectorAI";
 
 // GET /api/dashboard/activity
@@ -89,6 +91,12 @@ type Card = {
    *  cold). The dashboard renders this as a small chip below the
    *  momentum reason. */
   nextSuggestion: InspectorSuggestion | null;
+  /** "Live activity" interpretation for the deal card's live strip.
+   *  Reads existing engagement timestamps — no new tracking. Set
+   *  when lastEventAt is within the last 5 minutes; null otherwise.
+   *  Distinct from momentumReason which describes the longer-term
+   *  bucket. */
+  liveActivity: LiveActivity | null;
   /** Channel the dashboard should default to for this card. Mirrors
    *  the spec's priority order: WhatsApp when client.phone exists,
    *  Email otherwise. Null when neither contact method is available
@@ -380,6 +388,12 @@ export async function GET(req: Request) {
       },
       bookedStats,
     );
+    const liveActivity = deriveLiveActivity({
+      lastEventAt: row.lastEventAt,
+      lastEventType: row.lastEventType,
+      reservationCompleted: row.reservationCompleted,
+      now,
+    });
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({
@@ -398,6 +412,7 @@ export async function GET(req: Request) {
       draft,
       autoSendEligibility,
       nextSuggestion,
+      liveActivity,
       preferredChannel: row.client?.phone
         ? "whatsapp"
         : row.client?.email
