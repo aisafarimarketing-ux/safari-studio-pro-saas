@@ -28,6 +28,38 @@ export function BrandCoreTab({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [clean, setClean] = useState<CleanState>({ kind: "idle" });
+  // URL paste mode — operator types/pastes a hosted logo URL instead
+  // of uploading a file. Stored locally until Apply so a half-typed
+  // URL doesn't clobber the existing logoUrl on every keystroke.
+  const [urlOpen, setUrlOpen] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  function applyLogoUrl() {
+    setUrlError(null);
+    const trimmed = urlDraft.trim();
+    if (!trimmed) {
+      setUrlError("Paste a URL first.");
+      return;
+    }
+    // Light validation — accept http/https URLs only. We don't fetch
+    // the image to verify it loads (that'd add a network round-trip
+    // for a button click); the cover render will surface a broken
+    // image visually if the URL is wrong.
+    try {
+      const u = new URL(trimmed);
+      if (u.protocol !== "http:" && u.protocol !== "https:") {
+        throw new Error("Use an http:// or https:// URL.");
+      }
+    } catch {
+      setUrlError("That doesn't look like a valid URL.");
+      return;
+    }
+    update({ logoUrl: trimmed });
+    setUrlDraft("");
+    setUrlOpen(false);
+    setClean({ kind: "idle" });
+  }
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -183,6 +215,76 @@ export function BrandCoreTab({
                 >
                   Remove
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Paste URL — second path that bypasses the uploader for
+              admins who already have a hosted logo (CDN, brand kit,
+              press page). Closed by default so the upload flow stays
+              the primary affordance. */}
+          {clean.kind === "idle" && (
+            <div className="mt-2">
+              {!urlOpen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUrlOpen(true);
+                    setUrlError(null);
+                    setUrlDraft(form.logoUrl || "");
+                  }}
+                  disabled={uploading}
+                  className="text-[11.5px] text-black/45 hover:text-black/70 underline-offset-2 hover:underline transition disabled:opacity-50"
+                >
+                  Or paste a logo URL
+                </button>
+              ) : (
+                <div>
+                  <input
+                    type="url"
+                    value={urlDraft}
+                    onChange={(e) => {
+                      setUrlDraft(e.target.value);
+                      if (urlError) setUrlError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyLogoUrl();
+                      }
+                    }}
+                    placeholder="https://cdn.example.com/logo.png"
+                    autoFocus
+                    className="w-full px-2.5 py-1.5 text-[12.5px] rounded-md border border-black/15 bg-white outline-none focus:border-black/40 transition"
+                    style={{ fontFamily: "inherit" }}
+                  />
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={applyLogoUrl}
+                      className="px-3 py-1 rounded-md text-[12px] font-medium"
+                      style={{ background: "#1b3a2d", color: "#F7F3E8" }}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUrlOpen(false);
+                        setUrlError(null);
+                        setUrlDraft("");
+                      }}
+                      className="text-[11.5px] text-black/45 hover:text-black/70 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {urlError && (
+                    <div className="mt-1 text-[11.5px] text-[#b34334]">
+                      {urlError}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
