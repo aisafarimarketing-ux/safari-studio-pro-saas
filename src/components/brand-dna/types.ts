@@ -35,6 +35,19 @@ export interface BrandDNAForm {
 
   // AI Instructions
   aiInstructions: string;
+
+  // Client-facing copy formats — applied to every preview / pricing /
+  // day-snippet send across the org. Empty string means "fall back to
+  // the formatter's hardcoded copy", consistent with the API's
+  // null-or-empty handling in /api/brand-dna PUT.
+  greetingFormat: string;
+  signoffFormat: string;
+  whatsappSignatureFormat: string;
+  emailSignatureFormat: string;
+
+  // Master template — soft pointer to a proposal in this org.
+  // Empty string = no master picked.
+  masterTemplateProposalId: string;
 }
 
 export interface PropertyPrefRow {
@@ -67,4 +80,9 @@ export const EMPTY_FORM: BrandDNAForm = {
   tierBias: "",
   styleBias: [],
   aiInstructions: "",
+  greetingFormat: "",
+  signoffFormat: "",
+  whatsappSignatureFormat: "",
+  emailSignatureFormat: "",
+  masterTemplateProposalId: "",
 };

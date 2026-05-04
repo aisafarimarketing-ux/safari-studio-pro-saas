@@ -17,6 +17,7 @@ import { PropertyPreferencesTab } from "./PropertyPreferencesTab";
 import { AIInstructionsTab } from "./AIInstructionsTab";
 import { OverviewTab } from "./OverviewTab";
 import { CompletionRing } from "./CompletionRing";
+import { BrandPreviewSurface } from "./BrandPreviewSurface";
 import type { BrandDNAForm, PropertyPrefRow } from "./types";
 import { EMPTY_FORM } from "./types";
 
@@ -170,36 +171,48 @@ export function BrandDNAPage() {
 
         <Tabs tab={tab} setTab={setTab} />
 
-        <div className="mt-6">
-          {!loaded && <div className="text-sm text-black/40 py-20 text-center">Loading…</div>}
-          {loaded && loadError && (
-            <div className="rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-5 text-[#b34334]">
-              <div className="font-semibold">Couldn&apos;t load Brand DNA</div>
-              <div className="text-sm mt-1 break-words">{loadError}</div>
-            </div>
-          )}
+        {/* Two-column layout. Left: existing tabbed form. Right:
+            BrandPreviewSurface — sticky on lg+ screens so the
+            preview stays visible while the admin scrolls long
+            tabs (sectionStyles, propertyPreferences). Preview
+            stacks below on small screens. */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-6">
+          <div>
+            {!loaded && <div className="text-sm text-black/40 py-20 text-center">Loading…</div>}
+            {loaded && loadError && (
+              <div className="rounded-xl border border-[#b34334]/30 bg-[#b34334]/5 p-5 text-[#b34334]">
+                <div className="font-semibold">Couldn&apos;t load Brand DNA</div>
+                <div className="text-sm mt-1 break-words">{loadError}</div>
+              </div>
+            )}
+            {loaded && !loadError && (
+              <>
+                {tab === "overview" && (
+                  <OverviewTab
+                    completion={completion}
+                    onGoto={(s) => setTab(SECTION_TO_TAB[s])}
+                  />
+                )}
+                {tab === "brandCore" && <BrandCoreTab form={form} update={update} />}
+                {tab === "voiceTone" && <VoiceToneTab form={form} update={update} />}
+                {tab === "visualStyle" && <VisualStyleTab form={form} update={update} />}
+                {tab === "sections" && <SectionsTab form={form} update={update} />}
+                {tab === "propertyPreferences" && (
+                  <PropertyPreferencesTab
+                    form={form}
+                    update={update}
+                    prefs={propertyPrefs}
+                    setPrefs={setPropertyPrefs}
+                  />
+                )}
+                {tab === "aiInstructions" && <AIInstructionsTab form={form} update={update} />}
+              </>
+            )}
+          </div>
           {loaded && !loadError && (
-            <>
-              {tab === "overview" && (
-                <OverviewTab
-                  completion={completion}
-                  onGoto={(s) => setTab(SECTION_TO_TAB[s])}
-                />
-              )}
-              {tab === "brandCore" && <BrandCoreTab form={form} update={update} />}
-              {tab === "voiceTone" && <VoiceToneTab form={form} update={update} />}
-              {tab === "visualStyle" && <VisualStyleTab form={form} update={update} />}
-              {tab === "sections" && <SectionsTab form={form} update={update} />}
-              {tab === "propertyPreferences" && (
-                <PropertyPreferencesTab
-                  form={form}
-                  update={update}
-                  prefs={propertyPrefs}
-                  setPrefs={setPropertyPrefs}
-                />
-              )}
-              {tab === "aiInstructions" && <AIInstructionsTab form={form} update={update} />}
-            </>
+            <aside className="lg:sticky lg:top-6 lg:self-start">
+              <BrandPreviewSurface form={form} />
+            </aside>
           )}
         </div>
 
@@ -427,6 +440,15 @@ function hydrateForm(profile: LoadedProfile | null): BrandDNAForm {
     styleBias: Array.isArray(profile.styleBias) ? (profile.styleBias as string[]) : [],
 
     aiInstructions: (profile.aiInstructions as string | null) ?? "",
+
+    greetingFormat: (profile.greetingFormat as string | null) ?? "",
+    signoffFormat: (profile.signoffFormat as string | null) ?? "",
+    whatsappSignatureFormat:
+      (profile.whatsappSignatureFormat as string | null) ?? "",
+    emailSignatureFormat:
+      (profile.emailSignatureFormat as string | null) ?? "",
+    masterTemplateProposalId:
+      (profile.masterTemplateProposalId as string | null) ?? "",
   };
 }
 

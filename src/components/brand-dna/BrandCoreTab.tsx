@@ -273,6 +273,73 @@ export function BrandCoreTab({
           </Field>
         </div>
       </div>
+
+      {/* ─── Send formats ──────────────────────────────────────────
+          Templates the org wants every client-facing send to follow.
+          Applied automatically by the preview / pricing / day-snippet
+          formatters. Use {firstName} and {operatorFirstName} as
+          placeholders; unknown placeholders pass through verbatim. */}
+      <div className="pt-8 border-t border-black/8">
+        <h2 className="text-lg font-semibold text-black/85 tracking-tight">
+          Send formats
+        </h2>
+        <p className="mt-1.5 text-[14px] text-black/55 max-w-2xl leading-relaxed">
+          Greeting, signoff, and signature blocks. Used on every preview /
+          pricing / day-snippet send across the org. Use{" "}
+          <code className="text-[12px] bg-black/5 px-1 rounded">
+            {`{firstName}`}
+          </code>{" "}
+          for the client and{" "}
+          <code className="text-[12px] bg-black/5 px-1 rounded">
+            {`{operatorFirstName}`}
+          </code>{" "}
+          for the consultant. Leave blank to use the default copy.
+        </p>
+
+        <div className="mt-5 grid md:grid-cols-2 gap-5">
+          <Field label="Greeting">
+            <TextInput
+              value={form.greetingFormat}
+              onChange={(v) => update({ greetingFormat: v })}
+              placeholder="Hi {firstName} —"
+            />
+          </Field>
+          <Field label="Signoff">
+            <TextInput
+              value={form.signoffFormat}
+              onChange={(v) => update({ signoffFormat: v })}
+              placeholder="— {operatorFirstName}"
+            />
+          </Field>
+        </div>
+
+        <div className="mt-5">
+          <Field label="WhatsApp signature">
+            <TextArea
+              value={form.whatsappSignatureFormat}
+              onChange={(v) => update({ whatsappSignatureFormat: v })}
+              placeholder={"{operatorFirstName} | Safari Specialist\n+254 712 345 678 | hello@example.com"}
+              rows={3}
+              maxLength={800}
+            />
+          </Field>
+        </div>
+
+        <div className="mt-5">
+          <Field
+            label="Email signature (HTML allowed)"
+            hint="Renders verbatim in email sends. Plain HTML supported."
+          >
+            <TextArea
+              value={form.emailSignatureFormat}
+              onChange={(v) => update({ emailSignatureFormat: v })}
+              placeholder={'<strong>{operatorFirstName}</strong><br>Safari Specialist · Your brand<br>+254 712 345 678'}
+              rows={5}
+              maxLength={4000}
+            />
+          </Field>
+        </div>
+      </div>
     </div>
   );
 }
