@@ -3,13 +3,13 @@
 import { useEffect, useState, use } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
-import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { SpreadView } from "@/components/editor/SpreadView";
 import { CommentPanel } from "@/components/proposal-share/CommentPanel";
 import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
 import { ViewTracker } from "@/components/proposal-share/ViewTracker";
 import { DepositPayButton } from "@/components/proposal-share/DepositPayButton";
-import type { Proposal, Section } from "@/lib/types";
+import { PrintProposalDocument } from "@/components/proposal-share/PrintProposalDocument";
+import type { Proposal } from "@/lib/types";
 
 export default function ClientProposalPage({
   params,
@@ -87,9 +87,6 @@ export default function ClientProposalPage({
   }
 
   const { theme, operator } = proposal;
-  const sorted = [...proposal.sections]
-    .filter((s: Section) => s.visible)
-    .sort((a: Section, b: Section) => a.order - b.order);
 
   return (
     <div className="min-h-screen proposal-canvas" style={{ background: theme.tokens.pageBg }}>
@@ -108,23 +105,17 @@ export default function ClientProposalPage({
         // to breathe and the right column reads at editorial width.
         <SpreadView />
       ) : (
+        // Magazine view — render the same PdfFit pages the print
+        // pipeline produces. Client + operator both see the editorial
+        // pages stacked vertically (210×297mm each) so the share view
+        // and the printed PDF are pixel-identical. Operator never has
+        // to mentally reconcile "what does this look like as a PDF?";
+        // they're already looking at it.
         <div
-          className="max-w-[900px] mx-auto"
-          style={{ background: theme.tokens.pageBg }}
+          className="mx-auto"
+          style={{ background: theme.tokens.pageBg, maxWidth: "210mm" }}
         >
-          {sorted.map((section: Section) => (
-            // Wrapper carries the id + data-section-type the
-            // ViewTracker uses to attribute engagement events to a
-            // section. Same shape used by the editor canvas
-            // (SectionChrome) so styling and tracking stay aligned.
-            <div
-              key={section.id}
-              id={`section-${section.id}`}
-              data-section-type={section.type}
-            >
-              <SectionRenderer section={section} />
-            </div>
-          ))}
+          <PrintProposalDocument />
         </div>
       )}
 

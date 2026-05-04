@@ -421,7 +421,7 @@ export interface Proposal {
    * Optional + falsy → magazine (no migration needed for existing
    * proposals).
    */
-  viewMode?: "magazine" | "spread";
+  viewMode?: "magazine" | "spread" | "pdf-fit";
   /** Client-selected optional activities (from the share view "Add to my
    *  itinerary" toggles). Written only in non-editor mode. */
   selectedAddOns?: SelectedAddOn[];

@@ -114,7 +114,7 @@ interface ProposalState {
   /** Flip the proposal between the magazine (single-column) and
    *  spread (two-column sticky-photo) render modes. Same data; just
    *  changes which canvas chrome wraps the sections. */
-  updateViewMode: (next: "magazine" | "spread") => void;
+  updateViewMode: (next: "magazine" | "spread" | "pdf-fit") => void;
   updateClient: (patch: Partial<Proposal["client"]>) => void;
   updateOperator: (patch: Partial<Proposal["operator"]>) => void;
   updateTrip: (patch: Partial<Proposal["trip"]>) => void;

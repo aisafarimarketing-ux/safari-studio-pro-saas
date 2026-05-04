@@ -464,7 +464,13 @@ export function EditorToolbar({
             switches the chrome. Tucked next to Preview so it sits
             with the other "how does this proposal show up" controls. */}
         <ViewModeSwitch
-          mode={proposal.viewMode === "spread" ? "spread" : "magazine"}
+          mode={
+            proposal.viewMode === "spread"
+              ? "spread"
+              : proposal.viewMode === "pdf-fit"
+                ? "pdf-fit"
+                : "magazine"
+          }
           onChange={(next) => useProposalStore.getState().updateViewMode(next)}
         />
 
@@ -657,12 +663,13 @@ function ViewModeSwitch({
   mode,
   onChange,
 }: {
-  mode: "magazine" | "spread";
-  onChange: (next: "magazine" | "spread") => void;
+  mode: "magazine" | "spread" | "pdf-fit";
+  onChange: (next: "magazine" | "spread" | "pdf-fit") => void;
 }) {
-  const items: { key: "magazine" | "spread"; label: string }[] = [
+  const items: { key: "magazine" | "spread" | "pdf-fit"; label: string }[] = [
     { key: "magazine", label: "Magazine" },
     { key: "spread", label: "Spread" },
+    { key: "pdf-fit", label: "PDF" },
   ];
   return (
     <div

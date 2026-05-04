@@ -19,6 +19,7 @@ import { SectionChrome } from "./SectionChrome";
 import { SectionRenderer } from "./SectionRenderer";
 import { AddSectionInserter } from "./AddSectionInserter";
 import { SpreadView } from "./SpreadView";
+import { PrintProposalDocument } from "@/components/proposal-share/PrintProposalDocument";
 
 export function ProposalCanvas() {
   const { proposal, moveSection } = useProposalStore();
@@ -38,6 +39,29 @@ export function ProposalCanvas() {
   // switch. The toggle lives in the editor toolbar.
   if (proposal.viewMode === "spread") {
     return <SpreadView />;
+  }
+
+  // PDF-Fit view = exactly the layout the printed PDF will produce.
+  // Operator sees the editorial pages stacked vertically (210×297mm
+  // each) and edits inline via the Layout / Content panels — no
+  // mental reconciliation between "what I see" and "what prints."
+  // Inline section chrome is intentionally muted here because the
+  // PdfFit components own their own layout; structural edits move
+  // to the side panels.
+  if (proposal.viewMode === "pdf-fit") {
+    return (
+      <div
+        className="flex-1 overflow-auto"
+        style={{ background: proposal.theme.tokens.pageBg }}
+      >
+        <div
+          className="mx-auto"
+          style={{ background: proposal.theme.tokens.pageBg, maxWidth: "210mm" }}
+        >
+          <PrintProposalDocument />
+        </div>
+      </div>
+    );
   }
 
   // Clicking on the page gutter (outside the proposal card) edits pageBg
