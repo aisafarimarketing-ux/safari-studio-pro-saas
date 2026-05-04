@@ -5,17 +5,54 @@
 // history. Returns at most ONE suggestion per deal, or null when
 // the dashboard should stay quiet.
 //
+// ─── Decision rubric ──────────────────────────────────────────────────
+//
+// One question drives every branch: "what is the client trying to
+// figure out right now?" — NOT what was sent last, NOT what step
+// comes next in a fixed sequence.
+//
+// Four actions, exactly one chosen per call:
+//
+//   1. PREVIEW   → send a sample itinerary (no proposal needed).
+//                  Use for new / cold leads to make the trip feel real.
+//
+//   2. SNIPPET   → send a focused piece of the trip. Strict rule: only
+//                  fires as the canonical opener (Day 1+2) BEFORE a
+//                  full proposal exists. Once priorDaysSent.length > 0
+//                  we never auto-suggest "Day N+1" — the operator
+//                  picks the specific snippet that answers a real
+//                  question via the Command Bar instead.
+//
+//   3. PRICING   → send a clear pricing breakdown. Triggered by any
+//                  price-evaluation signal (price_viewed flag, sustained
+//                  pricing dwell).
+//
+//   4. NONE      → return null. The default whenever nothing clearly
+//                  moves the client closer to booking.
+//
+// After a full proposal is sent, the rubric is intentionally narrow:
+// only PRICING (clarification) fires automatically. Everything else
+// becomes NONE — we trust the operator to drive specific snippets
+// from inbound questions, not autosuggest from behavioural noise.
+//
 // Spec is explicit: no automation, no AI generation, no schema
-// changes, no charts. This module is the "why don't I just ask the
-// model what to do next?" temptation deliberately resisted. The
-// rules below are the operator's playbook codified — they're easy
-// to extend, easy to reason about, and easy to silence if a bucket
-// ever feels noisy.
+// changes. This module is the "why don't I just ask the model what
+// to do next?" temptation deliberately resisted.
 
 import type { DealMomentum } from "@/lib/dealMomentum";
 import type { LeadMomentum } from "@/lib/leadMomentum";
 
+/** Coarse-grained discriminator on what the suggestion is asking the
+ *  operator to do. Mirrors the four-action decision rubric documented
+ *  at the top of this file. Callers can switch on it for richer
+ *  rendering; the existing chip render still uses message + actionLabel
+ *  + actionCommand directly. */
+export type DecisionAction = "preview" | "snippet" | "pricing" | "none";
+
 export type InspectorSuggestion = {
+  /** Coarse action category. Always set going forward; older callers
+   *  that don't read it remain unaffected. */
+  action: DecisionAction;
   /** Operator-readable line. Already includes the why. */
   message: string;
   /** Button label when the suggestion has an actionable next step.
@@ -109,205 +146,87 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
     return null;
   }
 
-  const name = input.clientFirstName?.trim() || "this client";
   const cmdName = (input.clientFirstName?.trim() || "client").toLowerCase();
-  const lastDay = input.priorDaysSent.length > 0 ? Math.max(...input.priorDaysSent) : null;
-  const nextDay = lastDay !== null ? lastDay + 1 : null;
-  const sentSomethingBefore = lastDay !== null;
+  const proposalAlreadySent = input.priorDaysSent.length > 0;
+  const stats = input.behaviorStats;
 
-  // ─── VERY_HOT ────────────────────────────────────────────────────
-  // Highest-leverage moment. The operator should act now. Bias toward
-  // a buying-signal-aware suggestion (pricing → clarification) over
-  // a pitch. Behaviour-signal branches run BEFORE the boolean ones —
-  // dwell time is a stronger intent signal than the one-shot
-  // priceViewed / itinerary_clicked flags.
-  if (input.momentum === "VERY_HOT") {
-    const stats = input.behaviorStats;
+  // Two strong "client is evaluating price" signals — sustained
+  // dwell on the pricing section, or the priceViewed flag firing
+  // even without dwell data. Either lights up the PRICING branch.
+  const pricingSignal =
+    (stats && stats.pricingDwellSeconds >= 60) ||
+    input.lastEventType === "price_viewed" ||
+    input.priceViewed;
 
-    // Pricing dwell — they're sitting on the price page. The
-    // strongest pre-buy signal we have. Threshold tuned to filter
-    // out scroll-throughs (a client glancing past pricing on the
-    // way down rarely lingers more than 30s on the section).
-    if (stats && stats.pricingDwellSeconds >= 60) {
-      return {
-        message: `They've spent ${formatDwell(stats.pricingDwellSeconds)} on pricing — sharing the breakdown often unsticks this.`,
-        actionLabel: "Send pricing",
-        actionCommand: `send pricing to ${cmdName}`,
-      };
-    }
-    if (input.lastEventType === "price_viewed" || input.priceViewed) {
-      // Pricing-stuck moments now route through send_pricing_summary
-      // — the operator's own structured breakdown lands faster than
-      // hand-typed clarifications. Operator can still edit the
-      // snippet in the FollowUpPanel preview before dispatching.
-      return {
-        message: "They're evaluating — sending the pricing breakdown helps here.",
-        actionLabel: "Send pricing",
-        actionCommand: `send pricing to ${cmdName}`,
-      };
-    }
-    if (input.clickedReservation) {
-      return {
-        message: "They opened the reservation form — a short nudge with arrival logistics often closes from here.",
-        actionLabel: "Open command",
-      };
-    }
-    // Day dwell — sustained time on the day cards. Same intent as
-    // an itinerary click, but stronger: they've been reading, not
-    // just tapping. Suggest the next day to keep the picture moving.
-    if (stats && stats.dayDwellSeconds >= 90) {
-      if (sentSomethingBefore && nextDay !== null) {
-        return {
-          message: `${formatDwell(stats.dayDwellSeconds)} on the day cards — Day ${nextDay} keeps the picture moving while it's fresh.`,
-          actionLabel: `Send Day ${nextDay}`,
-          actionCommand: `send ${cmdName} day ${nextDay}`,
-        };
-      }
-      return {
-        message: `${formatDwell(stats.dayDwellSeconds)} on the day cards — share Day 1 and 2 to keep momentum.`,
-        actionLabel: "Send Day 1 and 2",
-        actionCommand: `send ${cmdName} day 1 and 2`,
-      };
-    }
-    if (input.lastEventType === "itinerary_clicked") {
-      // Itinerary engagement = client is imagining the trip. A
-      // next-day snippet (or first day if nothing sent) keeps that
-      // visualisation fresh.
-      if (sentSomethingBefore && nextDay !== null) {
-        return {
-          message: "They're imagining the trip — share the next day to keep it vivid.",
-          actionLabel: `Send Day ${nextDay}`,
-          actionCommand: `send ${cmdName} day ${nextDay}`,
-        };
-      }
-      return {
-        message: "They're imagining the trip — a snippet of the first couple of days helps them see it.",
-        actionLabel: "Send Day 1 and 2",
-        actionCommand: `send ${cmdName} day 1 and 2`,
-      };
-    }
-    // Low scroll depth — they're VERY_HOT (recent activity) but
-    // never reached past the cover/intro area. Different play from
-    // the day-by-day pitch: a tight highlight pulls them back into
-    // the proposal. Skip when no scroll data exists yet (sessionless
-    // VERY_HOT happens when the only activity is a click on the
-    // reservation form, which other branches already cover).
-    if (
-      stats &&
-      stats.sessionCount > 0 &&
-      stats.maxScrollPct > 0 &&
-      stats.maxScrollPct < 40
-    ) {
-      return {
-        message: `They opened the proposal but only scrolled to ${stats.maxScrollPct}% — a tight highlight pulls them back in.`,
-        actionLabel: "Send preview",
-        actionCommand: `send a 5 day safari to ${cmdName}`,
-      };
-    }
-    if (sentSomethingBefore && nextDay !== null) {
-      return {
-        message: `You sent Day ${lastDay} earlier — Day ${nextDay} often works next while attention is fresh.`,
-        actionLabel: `Send Day ${nextDay}`,
-        actionCommand: `send ${cmdName} day ${nextDay}`,
-      };
-    }
-    // No prior send. Suggest the opening salvo: days 1 and 2 give the
-    // client a feel for the trip without overwhelming.
+  // Preview-suggestion guard: if we've already sent a preview in
+  // the last 24h, the operator's playbook says give the client time.
+  const previewRecentlySent =
+    input.lastPreviewSentAt !== null &&
+    now.getTime() - input.lastPreviewSentAt.getTime() < PREVIEW_QUIET_WINDOW_MS;
+
+  // ─── PRICING — fires across momentum buckets ─────────────────────
+  // Strongest pre-buy signal we have, regardless of how warm or cold
+  // the deal is overall. If the client is sitting on the price page
+  // (or the boolean flag fired), the right thing is the pricing
+  // breakdown — not a snippet, not a preview.
+  if (pricingSignal) {
     return {
-      message: `${name} is active right now — a snippet of the first couple of days often lands well.`,
+      action: "pricing",
+      message: "They're evaluating pricing. Sharing the breakdown helps here.",
+      actionLabel: "Send pricing",
+      actionCommand: `send pricing to ${cmdName}`,
+    };
+  }
+
+  // ─── STRICT RULE — proposal already sent, no auto SNIPPET ───────
+  // Once a full proposal exists, we never auto-suggest "Day N+1"
+  // off behavioural signals. The operator picks specific snippets
+  // from real client questions via the Command Bar. Anything else
+  // here is NONE — silence beats pestering.
+  if (proposalAlreadySent) {
+    return null;
+  }
+
+  // ─── No proposal yet — the SNIPPET / PREVIEW band ────────────────
+
+  // VERY_HOT without a proposal: the client is actively engaging
+  // with no formal itinerary in front of them yet. The canonical
+  // opener (Day 1 + 2) gives them a tangible feel for the trip
+  // without pretending it's a personalised plan.
+  if (input.momentum === "VERY_HOT") {
+    if (input.clickedReservation) {
+      // They went straight to the reservation form on a deck without
+      // an itinerary — usually means a curious returning client.
+      // Stay quiet here; the operator handles this directly.
+      return null;
+    }
+    return {
+      action: "snippet",
+      message: "Active right now — sharing the first couple of days fits here.",
       actionLabel: "Send Day 1 and 2",
       actionCommand: `send ${cmdName} day 1 and 2`,
     };
   }
 
-  // ─── WARM ────────────────────────────────────────────────────────
-  // Activity in the last 24h but not red-hot. Worth nudging only
-  // when we have a clear "next thing" to send.
+  // WARM, no proposal: low-information state. Stay silent rather
+  // than nudging. The deal card's other affordances cover this.
   if (input.momentum === "WARM") {
-    if (sentSomethingBefore && nextDay !== null) {
-      return {
-        message: `Momentum's still moving — Day ${nextDay} keeps the conversation going.`,
-        actionLabel: `Send Day ${nextDay}`,
-        actionCommand: `send ${cmdName} day ${nextDay}`,
-      };
-    }
-    // Warm but no prior send: stay quiet. The dashboard's existing
-    // "Send now" button on the deal card already covers this.
     return null;
   }
 
-  // Preview-suggestion guard: if we've already sent a preview in the
-  // last 24h, the operator's playbook says give the client time —
-  // don't pile on another preview right away. Falls through to the
-  // existing day-pattern branches when applicable.
-  const previewRecentlySent =
-    input.lastPreviewSentAt !== null &&
-    now.getTime() - input.lastPreviewSentAt.getTime() < PREVIEW_QUIET_WINDOW_MS;
-
-  // Was the deal sent something within the last day, regardless of
-  // the 2h "don't double-tap" window above? Used by the COOLING
-  // branch to decide between "Day N+1" follow-ups and a fresh
-  // preview to restart the conversation.
-  const longQuietGate =
-    input.lastSentAt === null ||
-    now.getTime() - input.lastSentAt.getTime() > 24 * 60 * 60 * 1000;
-  // Two-day-plus quiet — beyond a normal weekend, the conversation
-  // is genuinely stalled. Triggers a softer "check-in" copy variant
-  // rather than another preview push.
-  const veryLongQuiet =
-    input.lastSentAt !== null &&
-    now.getTime() - input.lastSentAt.getTime() > 48 * 60 * 60 * 1000;
-
-  // ─── COOLING ─────────────────────────────────────────────────────
-  // Quiet for a day or two. Two flavours of nudge:
-  //   - When the operator's mid-conversation (sent days before),
-  //     suggest the next day to keep momentum.
-  //   - When it's been quiet for >24h AND no preview has gone out
-  //     in the last day, suggest a preview as a softer re-opener.
-  if (input.momentum === "COOLING") {
-    if (sentSomethingBefore && nextDay !== null) {
-      return {
-        message: `Quiet for a day or two — sending Day ${nextDay} reopens the conversation without sounding like a chase.`,
-        actionLabel: `Send Day ${nextDay}`,
-        actionCommand: `send ${cmdName} day ${nextDay}`,
-      };
-    }
-    // Two-day-plus stall: drop the preview push, suggest a plain
-    // check-in. Operator usually knows the right line at this stage.
-    if (veryLongQuiet) {
-      return {
-        message: "A quick check-in can restart this.",
-        actionLabel: "Open command",
-      };
-    }
-    if (longQuietGate && !previewRecentlySent) {
-      return {
-        message: "Quiet for a day — a short safari preview often reopens the conversation.",
-        actionLabel: "Send preview",
-        actionCommand: `send a 5 day safari to ${cmdName}`,
-      };
-    }
+  // COOLING / COLD: re-engage with a sample safari. Suppressed when
+  // a preview already went out recently so we don't pile on.
+  if (input.momentum === "COOLING" || input.momentum === "COLD") {
+    if (previewRecentlySent) return null;
     return {
-      message: "Quiet for a day or two — a brief check-in often re-opens the conversation.",
-      actionLabel: "Open command",
+      action: "preview",
+      message:
+        input.momentum === "COLD"
+          ? "No engagement yet — a sample safari restarts the conversation."
+          : "Quiet for a day — a sample safari often re-opens this.",
+      actionLabel: "Send preview",
+      actionCommand: `send a 5 day safari to ${cmdName}`,
     };
-  }
-
-  // ─── COLD ────────────────────────────────────────────────────────
-  // No engagement, nothing sent. The textbook "start a conversation"
-  // play is a sample itinerary — gives the client something to react
-  // to without committing to a full proposal yet.
-  if (input.momentum === "COLD") {
-    if (!sentSomethingBefore && !previewRecentlySent) {
-      return {
-        message: `No engagement yet — share a sample safari to start the conversation.`,
-        actionLabel: "Send preview",
-        actionCommand: `send a 5 day safari to ${cmdName}`,
-      };
-    }
-    // Sent days before but went cold, or a preview already went out
-    // recently — stay quiet so we don't pile on.
-    return null;
   }
 
   return null;
@@ -410,18 +329,16 @@ export function suggestNextStepForLead(
   const cmdName = (input.clientFirstName?.trim() || "client").toLowerCase();
 
   if (input.momentum === "VERY_ACTIVE") {
-    // The "warm now, send while attention is fresh" moment. Spec
-    // example: "Send Day 1 and 2 preview". Our canonical previews
-    // are whole-itinerary (3/5/7-day), so the prefill stays a
-    // 5-day preview — but the chip copy leans into the urgency.
     return {
-      message: "Lead is active right now — sharing a sample safari while attention is fresh lands well.",
+      action: "preview",
+      message: "Lead is active right now — a sample safari fits the moment.",
       actionLabel: "Send preview",
       actionCommand: `send a 5 day safari to ${cmdName}`,
     };
   }
   if (input.momentum === "QUIET") {
     return {
+      action: "preview",
       message: "Quiet lead — a short safari preview can re-open the conversation.",
       actionLabel: "Send preview",
       actionCommand: `send a 5 day safari to ${cmdName}`,
@@ -429,7 +346,8 @@ export function suggestNextStepForLead(
   }
   // NEW
   return {
-    message: "New lead — share a sample safari to start the conversation.",
+    action: "preview",
+    message: "New lead — a sample safari starts the conversation.",
     actionLabel: "Send preview",
     actionCommand: `send a 5 day safari to ${cmdName}`,
   };
@@ -759,18 +677,6 @@ function formatMinutes(min: number): string {
   }
   const days = Math.round(min / (24 * 60));
   return `${days} d`;
-}
-
-// Operator-facing dwell formatting. Distinct from formatMinutes —
-// dwell is in seconds and we want sub-minute granularity ("45s on
-// pricing" reads better than "<1 min on pricing"). Above a minute we
-// round down to whole minutes so the chip stays compact.
-function formatDwell(seconds: number): string {
-  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
-  const min = Math.round(seconds / 60);
-  if (min < 60) return `${min} min`;
-  const hours = Math.round(min / 60);
-  return `${hours} h`;
 }
 
 // Surface a channel hint only when one channel clearly dominates
