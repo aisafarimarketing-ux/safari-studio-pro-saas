@@ -10,6 +10,11 @@ import {
   type SuggestedAction,
 } from "@/lib/dealMomentum";
 import { normaliseFollowUpMode } from "@/lib/followUpMode";
+import {
+  extractDaysFromInput,
+  suggestNextStep,
+  type InspectorSuggestion,
+} from "@/lib/inspectorAI";
 
 // GET /api/dashboard/activity
 //
@@ -76,6 +81,12 @@ type Card = {
    *  "Schedule auto-send" button is disabled with the reason as a
    *  tooltip — same logic the /schedule route enforces server-side. */
   autoSendEligibility: { ok: true } | { ok: false; reason: string };
+  /** Inspector AI's "what to do next" line. Pure heuristic over the
+   *  card's momentum + engagement signals + prior-sent history.
+   *  Null when the dashboard should stay quiet (booked, just sent,
+   *  cold). The dashboard renders this as a small chip below the
+   *  momentum reason. */
+  nextSuggestion: InspectorSuggestion | null;
   /** Channel the dashboard should default to for this card. Mirrors
    *  the spec's priority order: WhatsApp when client.phone exists,
    *  Email otherwise. Null when neither contact method is available
@@ -199,6 +210,47 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Execution AI history — feeds Inspector AI's "next day" rule ──
+  // Pull every sent execution snippet for the visible proposals so we
+  // know which day numbers the operator has already covered. Mostly
+  // small (one or two rows per proposal in practice); the take cap
+  // keeps it bounded. Best-effort — a query failure here just means
+  // Inspector AI falls back to its no-history suggestions.
+  const executionRaw = proposalIds.length
+    ? await prisma.aISuggestion.findMany({
+        where: {
+          organizationId: orgId,
+          kind: "execution",
+          targetType: "proposal",
+          targetId: { in: proposalIds },
+          sentAt: { not: null },
+        },
+        orderBy: { sentAt: "desc" },
+        select: { targetId: true, sentAt: true, input: true },
+        take: proposalIds.length * 4,
+      })
+    : [];
+  const priorDaysByProposal = new Map<string, number[]>();
+  for (const row of executionRaw) {
+    const days = extractDaysFromInput(row.input);
+    if (days.length === 0) continue;
+    // Roll the latest sent timestamp into lastSentByProposal too so
+    // execution snippets count toward the "don't double-tap" guard
+    // alongside follow-ups.
+    if (row.sentAt) {
+      const existing = lastSentByProposal.get(row.targetId);
+      if (!existing || row.sentAt > existing) {
+        lastSentByProposal.set(row.targetId, row.sentAt);
+      }
+    }
+    const list = priorDaysByProposal.get(row.targetId) ?? [];
+    for (const d of days) if (!list.includes(d)) list.push(d);
+    priorDaysByProposal.set(row.targetId, list);
+  }
+  for (const [k, v] of priorDaysByProposal.entries()) {
+    priorDaysByProposal.set(k, v.slice().sort((a, b) => a - b));
+  }
+
   const summaries = summariesRaw.map((row) => {
     const refreshed = refreshStatusForRead(
       {
@@ -251,6 +303,22 @@ export async function GET(req: Request) {
           : null,
       now,
     });
+    // Inspector AI — read-only "what to do next" suggester. Returns
+    // null on cold deals, recently-touched deals, and booked deals;
+    // dashboard renders nothing for those. The actionCommand string
+    // is what we drop into the ⌘K bar when the operator clicks the
+    // suggestion's button.
+    const nextSuggestion = suggestNextStep({
+      momentum: momentum.momentum,
+      lastEventType: row.lastEventType,
+      priceViewed: row.priceViewed,
+      clickedReservation: row.clickedReservation,
+      reservationCompleted: row.reservationCompleted,
+      lastSentAt: lastSentByProposal.get(row.proposalId) ?? null,
+      priorDaysSent: priorDaysByProposal.get(row.proposalId) ?? [],
+      clientFirstName: row.client?.firstName ?? null,
+      now,
+    });
     const card: Card = {
       proposalId: row.proposalId,
       trackingId: displayTrackingId({
@@ -268,6 +336,7 @@ export async function GET(req: Request) {
       suggestedAction: momentum.suggestedAction,
       draft,
       autoSendEligibility,
+      nextSuggestion,
       preferredChannel: row.client?.phone
         ? "whatsapp"
         : row.client?.email
@@ -599,17 +668,3 @@ function deriveCreditLabel(kind: string, input: unknown): string {
   return "Message";
 }
 
-function extractDaysFromInput(input: unknown): number[] {
-  if (!input || typeof input !== "object") return [];
-  const obj = input as Record<string, unknown>;
-  // /api/ai/execute writes input.resolved.days; the older follow-up
-  // path doesn't carry a days field.
-  const resolved = obj.resolved;
-  if (resolved && typeof resolved === "object") {
-    const d = (resolved as Record<string, unknown>).days;
-    if (Array.isArray(d)) {
-      return d.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
-    }
-  }
-  return [];
-}

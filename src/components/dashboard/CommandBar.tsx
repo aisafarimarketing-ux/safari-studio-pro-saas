@@ -80,9 +80,15 @@ const PLACEHOLDER_EXAMPLES = [
 
 export function CommandBar({
   open,
+  prefill,
   onClose,
 }: {
   open: boolean;
+  /** Initial command string seeded into the input on open. Used by
+   *  Inspector AI suggestion chips that pre-fill commands like
+   *  "send jennifer day 3" — the operator hits Enter to confirm
+   *  rather than retyping. Null/undefined = empty input. */
+  prefill?: string | null;
   onClose: () => void;
 }) {
   const [command, setCommand] = useState("");
@@ -106,11 +112,20 @@ export function CommandBar({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlaceholder(next);
     setMode({ kind: "input" });
-    setCommand("");
-    // Focus on next tick so the modal mount transition doesn't steal it.
-    const t = setTimeout(() => inputRef.current?.focus(), 30);
+    // Seed the input with the prefilled command when one was passed
+    // in (Inspector AI flow); otherwise reset to empty.
+    setCommand(prefill?.trim() ?? "");
+    // Focus on next tick so the modal mount transition doesn't steal
+    // it. When prefilled, also select-all so the operator can either
+    // confirm with Enter or type to overwrite.
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+      if (prefill && inputRef.current) {
+        inputRef.current.select();
+      }
+    }, 30);
     return () => clearTimeout(t);
-  }, [open]);
+  }, [open, prefill]);
 
   useEffect(() => {
     if (!open) return;

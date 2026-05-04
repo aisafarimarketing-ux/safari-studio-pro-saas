@@ -76,6 +76,14 @@ type ActivityCard = {
     autoSent: boolean;
   } | null;
   autoSendEligibility: { ok: true } | { ok: false; reason: string };
+  /** Inspector AI's "what to do next" suggestion. Heuristic-only
+   *  (no LLM); rendered as a small green chip below the suggested-
+   *  action line. Null when the system should stay quiet. */
+  nextSuggestion: {
+    message: string;
+    actionLabel?: string;
+    actionCommand?: string;
+  } | null;
   preferredChannel: "whatsapp" | "email" | null;
   client: {
     id: string;
@@ -198,6 +206,10 @@ function CommandCenterShell() {
   // in the top bar. Closes on Escape, outside click, or successful
   // command (the FollowUpPanel takes over).
   const [commandBarOpen, setCommandBarOpen] = useState(false);
+  // Optional prefill string passed in when the bar is summoned from
+  // an Inspector AI suggestion chip ("Send Day 3" → seed the input
+  // with `send jennifer day 3`). Cleared on close.
+  const [commandBarPrefill, setCommandBarPrefill] = useState<string | null>(null);
 
   // Bumping this re-runs the activity-fetch effect below. Auto-send
   // fires + scheduling actions dispatch "ss:refreshActivity" so the
@@ -215,6 +227,14 @@ function CommandCenterShell() {
       if (detail?.reservationId) setReservationSummaryTarget(detail);
     };
     const onRefresh = () => setRefreshTick((n) => n + 1);
+    // Inspector AI suggestion chips dispatch this event with a
+    // prefilled command string. The bar opens and seeds the input —
+    // the operator hits Enter to dispatch.
+    const onOpenCommandBar = (e: Event) => {
+      const detail = (e as CustomEvent<{ prefill?: string }>).detail;
+      setCommandBarPrefill(detail?.prefill?.trim() || null);
+      setCommandBarOpen(true);
+    };
     // ⌘K (mac) / Ctrl-K (other) toggles the command bar globally.
     // Ignore when an input/textarea/contentEditable already has focus
     // unless the user is *inside* the command bar already (so they
@@ -238,11 +258,13 @@ function CommandCenterShell() {
     window.addEventListener("ss:openFollowUp", onFollowUp);
     window.addEventListener("ss:openReservationSummary", onSummary);
     window.addEventListener("ss:refreshActivity", onRefresh);
+    window.addEventListener("ss:openCommandBar", onOpenCommandBar);
     window.addEventListener("keydown", onShortcut);
     return () => {
       window.removeEventListener("ss:openFollowUp", onFollowUp);
       window.removeEventListener("ss:openReservationSummary", onSummary);
       window.removeEventListener("ss:refreshActivity", onRefresh);
+      window.removeEventListener("ss:openCommandBar", onOpenCommandBar);
       window.removeEventListener("keydown", onShortcut);
     };
   }, []);
@@ -437,7 +459,14 @@ function CommandCenterShell() {
           onClose={() => setFollowUpTarget(null)}
         />
       )}
-      <CommandBar open={commandBarOpen} onClose={() => setCommandBarOpen(false)} />
+      <CommandBar
+        open={commandBarOpen}
+        prefill={commandBarPrefill}
+        onClose={() => {
+          setCommandBarOpen(false);
+          setCommandBarPrefill(null);
+        }}
+      />
       <ToastHost />
       {reservationSummaryTarget && (
         <ReservationSummaryDialog
@@ -1141,6 +1170,58 @@ function DealCard({ card, mode }: { card: ActivityCard; mode: FollowUpMode }) {
             Recommended — client is active
           </div>
         )}
+
+      {/* Inspector AI — "what to do next" suggestion. Pure heuristic
+          over momentum + sent-history. Renders only when the lib
+          decided the operator would benefit from a nudge (cold deals
+          and recently-touched ones return null). The action button
+          opens the ⌘K command bar with a prefilled string — one
+          click into the existing Execution AI pipeline. */}
+      {card.nextSuggestion && !autoScheduledIso && !autoSent && (
+        <div
+          className="mt-2 px-2.5 py-2 rounded-md text-[11.5px] flex items-start gap-2"
+          style={{
+            background: "rgba(27,58,45,0.06)",
+            border: "1px solid rgba(27,58,45,0.16)",
+          }}
+        >
+          <span aria-hidden style={{ color: "#1b3a2d", lineHeight: 1, marginTop: 1 }}>
+            ✦
+          </span>
+          <div className="flex-1 min-w-0">
+            <div
+              className="text-[10px] uppercase tracking-[0.18em] font-bold"
+              style={{ color: "#1b3a2d", opacity: 0.8 }}
+            >
+              Suggested next step
+            </div>
+            <div className="mt-0.5" style={{ color: tokens.body }}>
+              {card.nextSuggestion.message}
+            </div>
+          </div>
+          {card.nextSuggestion.actionLabel && (
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent<{ prefill?: string }>("ss:openCommandBar", {
+                    detail: { prefill: card.nextSuggestion?.actionCommand },
+                  }),
+                );
+              }}
+              className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md text-[11.5px] font-semibold transition active:scale-[0.97] shrink-0"
+              style={{ background: "#1b3a2d", color: "#ffffff" }}
+              title={
+                card.nextSuggestion.actionCommand
+                  ? `Opens command bar with: "${card.nextSuggestion.actionCommand}"`
+                  : "Open command bar"
+              }
+            >
+              {card.nextSuggestion.actionLabel}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {action === "WAIT" ? (
