@@ -11,7 +11,15 @@ import {
   type ClientLite,
   type LoadedProposal,
 } from "@/lib/executionTools";
-import { formatProposalDaysSnippet } from "@/lib/executionFormat";
+import {
+  formatPreviewSnippet,
+  formatProposalDaysSnippet,
+} from "@/lib/executionFormat";
+import {
+  PREVIEW_ITINERARY_IDS,
+  getPreviewItinerary,
+  type PreviewItineraryId,
+} from "@/lib/previewItineraries";
 import { friendlyConsultantName } from "@/lib/consultantIdentity";
 import type { TierKey } from "@/lib/types";
 
@@ -45,20 +53,33 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `You are the command parser for Safari Studio's Execution AI.
 
-The operator types a command; you call the send_proposal_days tool with parsed parameters. You never generate client-visible content. You never call any tool other than send_proposal_days.
+The operator types a command; you choose ONE tool and call it with parsed parameters. You never generate client-visible content. You never call any tool outside the available list.
 
-Examples — exact day list extraction is critical:
-- "send Jennifer day 2 and 3" → { clientHint: "Jennifer", days: [2, 3] }
-- "send Jennifer days 2 to 4" → { clientHint: "Jennifer", days: [2, 3, 4] }
-- "share day 5 with the Mara family" → { clientHint: "Mara family", days: [5] }
-- "send Collins first two days via email" → { clientHint: "Collins", days: [1, 2], channel: "email" }
-- "whatsapp Jennifer day 3" → { clientHint: "Jennifer", days: [3], channel: "whatsapp" }
+Available tools:
+
+1. send_proposal_days
+   For commands referencing specific days of a client's existing proposal.
+   - "send Jennifer day 2 and 3" → { clientHint: "Jennifer", days: [2, 3] }
+   - "send Jennifer days 2 to 4" → { clientHint: "Jennifer", days: [2, 3, 4] }
+   - "share day 5 with the Mara family" → { clientHint: "Mara family", days: [5] }
+   - "send Collins first two days via email" → { clientHint: "Collins", days: [1, 2], channel: "email" }
+
+2. send_preview_itinerary
+   For early-stage commands that share a sample / typical / preview itinerary — when the client doesn't have a proposal yet.
+   - "send a typical 5 day safari to Jennifer" → { clientHint: "Jennifer", itineraryType: "5-day-safari" }
+   - "share a sample 3 day safari with Lilian" → { clientHint: "Lilian", itineraryType: "3-day-safari" }
+   - "send a honeymoon safari preview to Mara" → { clientHint: "Mara", itineraryType: "honeymoon-safari" }
+   - "share the 7 day safari with Collins" → { clientHint: "Collins", itineraryType: "7-day-safari" }
+   itineraryType values: "3-day-safari", "5-day-safari", "7-day-safari", "honeymoon-safari".
 
 Rules:
 - Always pass the client reference verbatim into clientHint. Server-side resolution handles matching.
-- Days are 1-indexed integers.
+- send_proposal_days: days are 1-indexed integers.
+- send_preview_itinerary: pick the itineraryType that best matches the operator's wording. When the operator says "5 day safari", pick "5-day-safari". When they say "honeymoon" anywhere, pick "honeymoon-safari".
+- Pick send_proposal_days when the operator names specific day numbers AND the wording suggests an existing proposal.
+- Pick send_preview_itinerary when the wording is "typical", "sample", "preview", "what does ... look like", or when the duration is given without specific day numbers.
 - Omit channel unless the operator explicitly mentioned WhatsApp or email — server picks the operator's preferred channel otherwise.
-- If the command is not a request to send specific days from a proposal, do NOT call the tool. Return text explaining what was unclear.`;
+- If the command fits neither tool, do NOT call any. Return text explaining what was unclear.`;
 
 const TOOLS: Anthropic.Messages.Tool[] = [
   {
@@ -87,6 +108,34 @@ const TOOLS: Anthropic.Messages.Tool[] = [
         },
       },
       required: ["clientHint", "days"],
+    },
+  },
+  {
+    name: "send_preview_itinerary",
+    description:
+      "Send a canonical preview itinerary (3-day, 5-day, 7-day, honeymoon) to a client when they don't yet have a proposal. Used for early-stage exploration commands.",
+    input_schema: {
+      type: "object",
+      properties: {
+        clientHint: {
+          type: "string",
+          description:
+            "How the operator referred to the client. Pass through verbatim.",
+        },
+        itineraryType: {
+          type: "string",
+          enum: PREVIEW_ITINERARY_IDS as unknown as string[],
+          description:
+            "Which canonical itinerary to send. 3-day-safari, 5-day-safari, 7-day-safari, or honeymoon-safari.",
+        },
+        channel: {
+          type: "string",
+          enum: ["whatsapp", "email"],
+          description:
+            "Channel the operator explicitly mentioned. Omit if not specified.",
+        },
+      },
+      required: ["clientHint", "itineraryType"],
     },
   },
 ];
@@ -119,6 +168,11 @@ type ExecuteResponse =
       channel: "whatsapp" | "email";
       preview: { text: string; html: string; subject: string };
       warnings: string[];
+      /** Set when the ready response is for a preview-itinerary
+       *  send. The dashboard uses this to swap the FollowUpPanel
+       *  header eyebrow ("Safari Studio AI · Preview" vs
+       *  "...Follow-up") and the context strip. */
+      previewItineraryLabel?: string;
     }
   | {
       status: "needs_disambiguation";
@@ -133,11 +187,19 @@ type ExecuteResponse =
       hint?: string;
     };
 
-type ParsedIntent = {
-  clientHint: string;
-  days: number[];
-  channel: "whatsapp" | "email" | null;
-};
+type ParsedIntent =
+  | {
+      kind: "send_proposal_days";
+      clientHint: string;
+      days: number[];
+      channel: "whatsapp" | "email" | null;
+    }
+  | {
+      kind: "send_preview_itinerary";
+      clientHint: string;
+      itineraryType: PreviewItineraryId;
+      channel: "whatsapp" | "email" | null;
+    };
 
 export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>> {
   // Top-level guard: any unhandled exception in the body below is
@@ -225,24 +287,23 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       status: "error",
       command,
       message:
-        "I couldn't parse that as a send-days command. Try: \"send Jennifer day 2 and 3\".",
+        "I couldn't parse that. Try: \"send Jennifer day 2 and 3\" or \"send a 5 day safari to Jennifer\".",
     });
   }
 
-  // ── Step 2 — resolve target ──────────────────────────────────────────
-  // Three resolution paths, in priority order:
-  //   1. Operator already picked a proposal directly from a
-  //      reservation/contentJson disambiguation hit → use that
-  //      proposalId, build a minimal client lite from the proposal.
-  //   2. Operator picked a Client-row match from disambiguation →
-  //      findClientById + loadLatestProposal.
-  //   3. Fresh command → findClient (which now searches Client rows
-  //      AND ProposalReservations AND Proposal.contentJson).
+  // ── Step 2 — resolve client ──────────────────────────────────────────
+  // Same three resolution paths regardless of intent kind:
+  //   1. explicitProposalId (only used by send_proposal_days flow when
+  //      the operator picked a reservation / contentJson match from
+  //      the disambiguation list).
+  //   2. explicitClientId (Client-row pick from disambiguation).
+  //   3. Fresh hint → findClient (Client rows + reservations + proposal
+  //      contentJson).
   const orgId = ctx.organization.id;
   let client: ClientLite;
-  let proposal: LoadedProposal;
+  let proposalForDays: LoadedProposal | null = null;
 
-  if (explicitProposalId) {
+  if (explicitProposalId && intent.kind === "send_proposal_days") {
     const directProposal = await loadProposalDirect(orgId, explicitProposalId);
     if (!directProposal) {
       return NextResponse.json({
@@ -251,36 +312,18 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
         message: "That proposal isn't accessible.",
       });
     }
-    proposal = directProposal.proposal;
+    proposalForDays = directProposal.proposal;
     client = directProposal.client;
   } else if (explicitClientId) {
     const clientResult = await findClientById(orgId, explicitClientId);
-    if (clientResult.status === "not-found") {
+    if (clientResult.status !== "found") {
       return NextResponse.json({
         status: "error",
         command,
         message: "That client isn't accessible.",
       });
     }
-    if (clientResult.status === "ambiguous") {
-      // findClientById can't return ambiguous (single id) — narrow.
-      return NextResponse.json({
-        status: "error",
-        command,
-        message: "Client lookup conflict.",
-      });
-    }
     client = clientResult.client;
-
-    const proposalResult = await loadLatestProposal(orgId, client.id);
-    if (proposalResult.status === "not-found") {
-      return NextResponse.json({
-        status: "error",
-        command,
-        message: `${client.fullName} has no proposals on file yet. Create one before sending day snippets.`,
-      });
-    }
-    proposal = proposalResult.proposal;
   } else {
     const fresh = await findClient(orgId, intent.clientHint);
     console.log(
@@ -307,11 +350,111 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       });
     }
     client = fresh.client;
+  }
 
-    // Source-aware proposal load. Reservation/contentJson hits carry
-    // a direct resolvedProposalId; Client-row hits need
-    // loadLatestProposal because the Client may have multiple
-    // proposals.
+  // ── Step 3 — branch on intent kind ───────────────────────────────────
+  const channel = pickChannel(intent.channel, client);
+  if (channel === "no-phone") {
+    return NextResponse.json({
+      status: "error",
+      command,
+      message: `${client.fullName} has no phone number on file — can't send via WhatsApp.`,
+    });
+  }
+  if (channel === "no-contact") {
+    return NextResponse.json({
+      status: "error",
+      command,
+      message: `${client.fullName} has no phone or email on file.`,
+    });
+  }
+
+  const operatorFirstName =
+    friendlyConsultantName({ name: ctx.user.name, email: ctx.user.email }).split(/\s+/)[0] || null;
+  const clientFirstName =
+    client.firstName?.trim() || client.fullName.split(/\s+/)[0] || "there";
+
+  // ─── PREVIEW-ITINERARY branch ────────────────────────────────────────
+  if (intent.kind === "send_preview_itinerary") {
+    const itinerary = getPreviewItinerary(intent.itineraryType);
+    if (!itinerary) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `Unknown itinerary type "${intent.itineraryType}".`,
+      });
+    }
+    const snippet = formatPreviewSnippet({
+      days: itinerary.days,
+      channel,
+      itineraryPhrase: itinerary.phrase,
+      itineraryLabel: itinerary.label,
+      clientFirstName,
+      operatorFirstName,
+    });
+
+    const logged = await logSuggestion({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      kind: "preview-itinerary",
+      // No proposal context for previews — target the canonical itinerary
+      // itself so the audit row remains queryable.
+      targetType: "preview",
+      targetId: itinerary.id,
+      input: {
+        command,
+        intent: { ...intent },
+        resolved: {
+          clientId: client.id,
+          clientName: client.fullName,
+          itineraryType: itinerary.id,
+          itineraryLabel: itinerary.label,
+          channel,
+        },
+      },
+      output: snippet.text,
+    });
+    const suggestionId = logged?.id;
+    if (!suggestionId) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: "Couldn't log the action. Try again in a moment.",
+      });
+    }
+    await prisma.aISuggestion.update({
+      where: { id: suggestionId },
+      data: { channel },
+    });
+
+    return NextResponse.json({
+      status: "ready",
+      suggestionId,
+      command,
+      intent,
+      client,
+      proposal: {
+        // Synthetic proposal payload — preview previews don't have a
+        // real Proposal row. The dashboard's FollowUpPanel skips
+        // proposalId-dependent code paths in prefilled mode, so
+        // populating with the itinerary id keeps the response shape
+        // stable.
+        id: itinerary.id,
+        title: `${itinerary.label} preview`,
+        trackingId: null,
+        updatedAt: new Date().toISOString(),
+      },
+      channel,
+      preview: snippet,
+      warnings: [],
+      previewItineraryLabel: itinerary.label,
+    });
+  }
+
+  // ─── SEND_PROPOSAL_DAYS branch ───────────────────────────────────────
+  // Source-aware proposal load when we don't already have one from
+  // the explicit-proposal path above.
+  if (!proposalForDays) {
     if (client.resolvedProposalId) {
       const directProposal = await loadProposalDirect(orgId, client.resolvedProposalId);
       if (!directProposal) {
@@ -321,9 +464,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
           message: `Couldn't load the proposal linked to ${client.fullName}.`,
         });
       }
-      proposal = directProposal.proposal;
-      // Keep the client lite returned from findClient — its source
-      // tag and contact info beat the synthesised one.
+      proposalForDays = directProposal.proposal;
     } else {
       const proposalResult = await loadLatestProposal(orgId, client.id);
       if (proposalResult.status === "not-found") {
@@ -333,19 +474,14 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
           message: `${client.fullName} has no proposals on file yet. Create one before sending day snippets.`,
         });
       }
-      proposal = proposalResult.proposal;
+      proposalForDays = proposalResult.proposal;
     }
   }
+  const proposal = proposalForDays;
 
-  // ── Step 4 — extract requested days ──────────────────────────────────
   const daysResult = extractDays(proposal, intent.days);
   if (daysResult.status === "missing-days") {
     if (daysResult.available === 0) {
-      // The proposal exists but has no day-by-day itinerary. This is
-      // a real state — proposals created from a request without a
-      // duration can land here. Surface it specifically so the
-      // operator opens the proposal and adds days, rather than
-      // assuming the system is broken.
       return NextResponse.json({
         status: "error",
         command,
@@ -363,51 +499,15 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
     });
   }
 
-  // ── Step 5 — pick channel ────────────────────────────────────────────
-  // Explicit channel wins; otherwise prefer phone (WhatsApp) when
-  // available; otherwise email; otherwise refuse.
-  let channel: "whatsapp" | "email";
-  if (intent.channel === "whatsapp") {
-    if (!client.phone) {
-      return NextResponse.json({
-        status: "error",
-        command,
-        message: `${client.fullName} has no phone number on file — can't send via WhatsApp.`,
-      });
-    }
-    channel = "whatsapp";
-  } else if (intent.channel === "email") {
-    channel = "email";
-  } else if (client.phone) {
-    channel = "whatsapp";
-  } else if (client.email) {
-    channel = "email";
-  } else {
-    return NextResponse.json({
-      status: "error",
-      command,
-      message: `${client.fullName} has no phone or email on file.`,
-    });
-  }
-
-  // ── Step 6 — format snippet (deterministic) ──────────────────────────
-  const operatorFirstName =
-    friendlyConsultantName({ name: ctx.user.name, email: ctx.user.email }).split(/\s+/)[0] || null;
   const snippet = formatProposalDaysSnippet({
     days: daysResult.days,
     channel,
-    clientFirstName: client.firstName?.trim() || client.fullName.split(/\s+/)[0] || "there",
+    clientFirstName,
     tripTitle: proposal.title,
     activeTier: (proposal.contentJson?.activeTier as TierKey) || "premier",
     operatorFirstName,
   });
 
-  // ── Step 7 — log + return preview ────────────────────────────────────
-  // Output is the channel-appropriate body — text for WhatsApp,
-  // text-alternative for email so the FollowUpPanel textarea displays
-  // a coherent operator-editable string. The HTML variant rides along
-  // in the response for the eventual email send path; we don't store
-  // it on AISuggestion.output (the textarea drives the send anyway).
   const logged = await logSuggestion({
     organizationId: orgId,
     userId: ctx.user.id,
@@ -416,7 +516,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
     targetId: proposal.id,
     input: {
       command,
-      intent: { ...intent, channel: intent.channel },
+      intent: { ...intent },
       resolved: {
         clientId: client.id,
         clientName: client.fullName,
@@ -468,15 +568,29 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
   });
 }
 
-// Force tool_use. The model MUST emit a send_proposal_days tool call;
-// it cannot wriggle out by returning free text. If the command genuinely
-// can't be expressed as send-days, the tool call will arrive with empty
-// days or empty clientHint and the downstream validation here returns
-// null. The caller's "couldn't parse" error then fires.
-//
-// Note on tool_choice: the SDK's typed `tool_choice` overload supports
-// { type: "tool", name } to mandate a specific tool. This is the
-// production lever for "the AI must always parse, never editorialise".
+// Channel selection — explicit intent wins; otherwise WhatsApp
+// preferred (phone exists), email fallback. Returns sentinel strings
+// for the two error cases so the route can fire specific messages.
+function pickChannel(
+  intentChannel: "whatsapp" | "email" | null,
+  client: ClientLite,
+): "whatsapp" | "email" | "no-phone" | "no-contact" {
+  if (intentChannel === "whatsapp") {
+    return client.phone ? "whatsapp" : "no-phone";
+  }
+  if (intentChannel === "email") return "email";
+  if (client.phone) return "whatsapp";
+  if (client.email) return "email";
+  return "no-contact";
+}
+
+// Force tool_use. The model MUST emit one of the available tool
+// calls; it cannot wriggle out by returning free text. tool_choice
+// "any" means the model picks between send_proposal_days and
+// send_preview_itinerary based on the command shape. If the command
+// genuinely can't be expressed as either, the call arrives with
+// empty clientHint / days / itineraryType and downstream validation
+// returns null — the caller's "couldn't parse" error then fires.
 async function parseIntent(
   apiKey: string,
   command: string,
@@ -487,7 +601,7 @@ async function parseIntent(
     msg = await client.messages.create({
       model: MODEL,
       max_tokens: 400,
-      tool_choice: { type: "tool", name: "send_proposal_days" },
+      tool_choice: { type: "any" },
       tools: TOOLS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: command }],
@@ -498,22 +612,42 @@ async function parseIntent(
   }
 
   for (const block of msg.content) {
-    if (block.type === "tool_use" && block.name === "send_proposal_days") {
-      const input = block.input as Record<string, unknown> | null;
-      if (!input) return null;
-      const clientHint = typeof input.clientHint === "string" ? input.clientHint.trim() : "";
+    if (block.type !== "tool_use") continue;
+    const input = block.input as Record<string, unknown> | null;
+    if (!input) continue;
+    const clientHint =
+      typeof input.clientHint === "string" ? input.clientHint.trim() : "";
+    if (!clientHint) continue;
+    const channelRaw = typeof input.channel === "string" ? input.channel : null;
+    const channel: "whatsapp" | "email" | null =
+      channelRaw === "whatsapp" || channelRaw === "email" ? channelRaw : null;
+
+    if (block.name === "send_proposal_days") {
       const daysRaw = Array.isArray(input.days) ? input.days : [];
       const days = daysRaw
         .map((d) => (typeof d === "number" ? Math.floor(d) : NaN))
         .filter((n) => Number.isFinite(n) && n > 0);
-      const channelRaw = typeof input.channel === "string" ? input.channel : null;
-      const channel: "whatsapp" | "email" | null =
-        channelRaw === "whatsapp" || channelRaw === "email" ? channelRaw : null;
       console.log(
-        `[execute] parsed intent · clientHint="${clientHint}" · days=[${days.join(",")}] · channel=${channel ?? "(unset)"}`,
+        `[execute] parsed intent · kind=send_proposal_days · clientHint="${clientHint}" · days=[${days.join(",")}] · channel=${channel ?? "(unset)"}`,
       );
-      if (!clientHint || days.length === 0) return null;
-      return { clientHint, days, channel };
+      if (days.length === 0) return null;
+      return { kind: "send_proposal_days", clientHint, days, channel };
+    }
+
+    if (block.name === "send_preview_itinerary") {
+      const itineraryRaw =
+        typeof input.itineraryType === "string" ? input.itineraryType : "";
+      if (!(PREVIEW_ITINERARY_IDS as string[]).includes(itineraryRaw)) {
+        console.warn(
+          `[execute] preview-itinerary tool call had unknown itineraryType: "${itineraryRaw}"`,
+        );
+        return null;
+      }
+      const itineraryType = itineraryRaw as PreviewItineraryId;
+      console.log(
+        `[execute] parsed intent · kind=send_preview_itinerary · clientHint="${clientHint}" · itineraryType=${itineraryType} · channel=${channel ?? "(unset)"}`,
+      );
+      return { kind: "send_preview_itinerary", clientHint, itineraryType, channel };
     }
   }
   return null;

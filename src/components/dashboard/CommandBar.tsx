@@ -50,6 +50,10 @@ type ExecuteSuccess = {
   channel: "whatsapp" | "email";
   preview: { text: string; html: string; subject: string };
   warnings: string[];
+  /** Set when the ready response is a preview-itinerary send. Drives
+   *  the panel header / context strip so the operator sees they're
+   *  sending a preview rather than a follow-up. */
+  previewItineraryLabel?: string;
 };
 
 type ExecuteDisambiguation = {
@@ -74,7 +78,8 @@ type Mode =
 
 const PLACEHOLDER_EXAMPLES = [
   'Try: "send Jennifer day 2 and 3"',
-  'Try: "share day 5 with the Mara family"',
+  'Try: "send a 5 day safari to Lilian"',
+  'Try: "share a honeymoon safari preview with Mara"',
   'Try: "whatsapp Collins day 1 and 2"',
 ];
 
@@ -165,13 +170,17 @@ export function CommandBar({
       }
       if (data.status === "ready") {
         // Hand off to FollowUpPanel via the existing event surface.
-        // Building the contextLabel here keeps the panel lean — it
-        // doesn't need to know how the snippet was assembled.
-        const dayWord = "Day(s) prepared";
-        void dayWord; // intent is now embedded in the snippet itself
-        const updatedAgo = formatRelativeShort(data.proposal.updatedAt);
+        // Two contexts produce different header copy:
+        //   - send_proposal_days: "{trip title} · proposal {ago} · {channel}"
+        //     and headerSuffix="Follow-up" (the default)
+        //   - send_preview_itinerary: "{label} preview · {channel}"
+        //     and headerSuffix="Preview"
         const channelWord = data.channel === "whatsapp" ? "WhatsApp" : "Email";
-        const contextLabel = `${data.proposal.title} · proposal ${updatedAgo} · ${channelWord}`;
+        const isPreview = Boolean(data.previewItineraryLabel);
+        const contextLabel = isPreview
+          ? `${data.previewItineraryLabel} preview · ${channelWord}`
+          : `${data.proposal.title} · proposal ${formatRelativeShort(data.proposal.updatedAt)} · ${channelWord}`;
+        const headerSuffix = isPreview ? "Preview" : "Follow-up";
         window.dispatchEvent(
           new CustomEvent("ss:openFollowUp", {
             detail: {
@@ -185,6 +194,7 @@ export function CommandBar({
                 channel: data.channel,
                 contextLabel,
                 warnings: data.warnings,
+                headerSuffix,
               },
             },
           }),

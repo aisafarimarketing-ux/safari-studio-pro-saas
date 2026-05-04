@@ -277,3 +277,116 @@ function interleave<T>(items: T[], sep: T): T[] {
 // modules makes it easier to swap in a different proposal source
 // later (e.g. a saved snippet template).
 export type { Proposal };
+
+// ─── Preview-itinerary snippets — Exploration Mode ──────────────────────
+//
+// Sibling of formatProposalDaysSnippet for the canonical preview
+// itineraries (no proposal needed). Same WhatsApp markdown discipline
+// + same channel split (whatsapp = plain text, email = HTML).
+//
+// The canonical itinerary's days[] shape is intentionally simpler than
+// a full Proposal Day (no tier accommodation, no hero image, no
+// transfer/board metadata). This formatter expects that simpler shape
+// and produces a slightly shorter snippet — the preview is a teaser,
+// not a brief.
+
+export type PreviewSnippetDay = {
+  dayNumber: number;
+  destination: string;
+  description: string;
+  accommodation?: string;
+};
+
+export type PreviewFormatInput = {
+  days: PreviewSnippetDay[];
+  channel: SnippetChannel;
+  /** Lower-case phrase for the greeting line — "5-day safari",
+   *  "honeymoon safari", etc. Inserted into "...what a typical
+   *  {phrase} looks like". */
+  itineraryPhrase: string;
+  /** Operator-facing label used in the email subject line. Pass the
+   *  PreviewItinerary.label as-is. */
+  itineraryLabel: string;
+  clientFirstName: string;
+  operatorFirstName: string | null;
+};
+
+export function formatPreviewSnippet(
+  input: PreviewFormatInput,
+): FormattedSnippet {
+  if (input.channel === "whatsapp") {
+    return formatPreviewWhatsApp(input);
+  }
+  return formatPreviewEmail(input);
+}
+
+function formatPreviewWhatsApp(input: PreviewFormatInput): FormattedSnippet {
+  const greeting = `Hi ${input.clientFirstName} — here's what a typical ${input.itineraryPhrase} looks like with us:`;
+
+  const dayBlocks = input.days.map((d) => {
+    const header = `Day ${d.dayNumber}${d.destination ? ` — ${d.destination}` : ""}`;
+    const narrative = cleanWhatsAppMarkdown(
+      trimSentences(stripHtml(d.description ?? ""), 320),
+    );
+    const stay = d.accommodation
+      ? cleanWhatsAppMarkdown(`Stay: ${d.accommodation}`)
+      : null;
+    const lines = [header];
+    if (narrative) lines.push(narrative);
+    if (stay) lines.push(stay);
+    return lines.join("\n");
+  });
+
+  const closing = "Let me know if you'd like me to tailor this for you.";
+  const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+
+  const text = [greeting, "", ...interleave(dayBlocks, ""), "", closing + signOff]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { text, html: "", subject: "" };
+}
+
+function formatPreviewEmail(input: PreviewFormatInput): FormattedSnippet {
+  // Subject is concrete on purpose — no "Following up" / "Just sharing".
+  const subject = `What a typical ${input.itineraryLabel} looks like`;
+
+  const greeting = `<p style="margin:0 0 14px;">Hi ${escapeHtml(input.clientFirstName)} — sharing what a typical <strong>${escapeHtml(input.itineraryLabel)}</strong> looks like with us:</p>`;
+
+  const dayBlocks = input.days.map((d) => {
+    const header = `Day ${d.dayNumber}${d.destination ? ` — ${escapeHtml(d.destination)}` : ""}`;
+    const narrative = stripHtml(d.description ?? "").trim();
+    const narrativeHtml = narrative
+      ? `<p style="margin:0 0 8px;line-height:1.55;color:#0a1411;">${escapeHtml(narrative)}</p>`
+      : "";
+    const stayHtml = d.accommodation
+      ? `<p style="margin:0 0 18px;font-size:13px;color:rgba(10,20,17,0.6);"><strong>Stay:</strong> ${escapeHtml(d.accommodation)}</p>`
+      : "";
+    return `
+      <div style="margin:0 0 14px;">
+        <h3 style="margin:0 0 6px;font-size:14.5px;color:#0a1411;font-family:'Playfair Display',Georgia,serif;letter-spacing:-0.005em;">${header}</h3>
+        ${narrativeHtml}
+        ${stayHtml}
+      </div>
+    `;
+  });
+
+  const closing = `<p style="margin:18px 0 0;color:#0a1411;">Let me know if you'd like me to tailor this for you.</p>`;
+  const signOff = input.operatorFirstName
+    ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+    : "";
+
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14.5px;color:#0a1411;line-height:1.5;">
+      ${greeting}
+      ${dayBlocks.join("")}
+      ${closing}
+      ${signOff}
+    </div>
+  `.replace(/\s+\n/g, "\n").trim();
+
+  // Plain-text alternative for email clients that strip HTML.
+  const textVariant = formatPreviewWhatsApp(input).text;
+  return { text: textVariant, html, subject };
+}

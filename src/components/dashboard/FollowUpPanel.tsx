@@ -61,6 +61,10 @@ type Props = {
     /** Soft warnings from extractDays (empty narratives, etc.) — surfaced
      *  above the textarea so the operator sees them before sending. */
     warnings?: string[];
+    /** Suffix appended to the header eyebrow: "Safari Studio AI · {suffix}".
+     *  Defaults to "Follow-up". Preview-itinerary sends pass "Preview" so
+     *  the operator sees what kind of message they're dispatching. */
+    headerSuffix?: string;
   };
   onClose: () => void;
 };
@@ -260,7 +264,7 @@ export function FollowUpPanel({
               className="text-[10.5px] uppercase tracking-[0.28em] font-semibold"
               style={{ color: "rgba(10,20,17,0.55)" }}
             >
-              Safari Studio AI · Follow-up
+              Safari Studio AI · {prefilledDraft?.headerSuffix?.trim() || "Follow-up"}
             </div>
             <h2
               className="font-bold leading-[1.1] mt-0.5 truncate"

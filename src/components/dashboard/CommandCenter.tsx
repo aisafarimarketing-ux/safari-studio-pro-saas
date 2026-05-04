@@ -517,6 +517,10 @@ type FollowUpTarget = {
     channel: "whatsapp" | "email";
     contextLabel?: string;
     warnings?: string[];
+    /** Eyebrow suffix in the panel: "Safari Studio AI · {suffix}".
+     *  Defaults to "Follow-up". Preview sends pass "Preview" so the
+     *  operator sees what kind of message they're dispatching. */
+    headerSuffix?: string;
   };
 };
 
