@@ -1,19 +1,9 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { PdfPage } from "./PdfPage";
-import { PrintPropertyPage } from "./PrintPropertyPage";
-import { PrintPracticalInfoPage, CARDS_PER_PAGE } from "./PrintPracticalInfoPage";
-import {
-  PrintDayPageMain,
-  PrintDayPageTail,
-  dayHasTailContent,
-  resolveDayProperty,
-} from "./PrintDayPage";
-import { PrintFooterPage } from "./PrintFooterPage";
-import { PrintMapPage } from "./PrintMapPage";
 import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
 import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
 import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
@@ -23,10 +13,7 @@ import { PdfFitPracticalInfoPages } from "./PdfFit/PdfFitPracticalInfoPage";
 import { PdfFitTripSummaryPage } from "./PdfFit/PdfFitTripSummaryPage";
 import { PdfFitClosingPage } from "./PdfFit/PdfFitClosingPage";
 import { PdfFitFooterPage } from "./PdfFit/PdfFitFooterPage";
-import { FEATURES } from "@/lib/featureFlags";
-import { resolveTokens } from "@/lib/theme";
-import { resolveDayCard } from "@/components/sections/day-card/resolve";
-import type { Section, SectionType, TierKey } from "@/lib/types";
+import type { Section, SectionType } from "@/lib/types";
 
 // ─── PrintProposalDocument — orchestrator for the printed deck ───────────
 //
@@ -229,73 +216,36 @@ function renderSection(section: Section, proposalId: string) {
     return null;
   }
 
-  // PDF-Fit layouts — reverse-engineered print system. Cover, day
-  // journey, and property showcase route through PDF-Fit when the
-  // feature flag is on. Everything else still falls through to the
-  // legacy paths below until those layouts ship.
-  if (FEATURES.pdfFitLayouts) {
-    if (section.type === "cover") {
-      return <PdfFitCoverPage key={section.id} section={section} />;
-    }
-    if (section.type === "dayJourney") {
-      return <PdfFitDayJourneyPages key={section.id} section={section} />;
-    }
-    if (section.type === "propertyShowcase") {
-      return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
-    }
-    if (section.type === "personalNote") {
-      return <PdfFitPersonalNotePage key={section.id} section={section} />;
-    }
-    if (section.type === "pricing") {
-      return <PdfFitPricingPage key={section.id} section={section} />;
-    }
-    if (section.type === "practicalInfo") {
-      return <PdfFitPracticalInfoPages key={section.id} section={section} />;
-    }
-    if (section.type === "tripSummary") {
-      return <PdfFitTripSummaryPage key={section.id} section={section} />;
-    }
-    if (section.type === "closing") {
-      return <PdfFitClosingPage key={section.id} section={section} />;
-    }
-    if (section.type === "footer") {
-      return <PdfFitFooterPage key={section.id} section={section} />;
-    }
+  // PDF-Fit layouts — reverse-engineered print system, always on.
+  // Slot positions are locked in mm, content is capped per slot, and
+  // the manifest decides what fits on each A4 page. No legacy "render
+  // the web layout into A4" path — we design for paper first.
+  if (section.type === "cover") {
+    return <PdfFitCoverPage key={section.id} section={section} />;
   }
-
-  // dayJourney — one PdfPage per day.
   if (section.type === "dayJourney") {
-    return <DayJourneyPages key={section.id} section={section} />;
+    return <PdfFitDayJourneyPages key={section.id} section={section} />;
   }
-
-  // propertyShowcase — one PdfPage per property using a print-specific
-  // single-property layout. Replaces the carousel which left half a
-  // page empty when there were < 4 properties.
   if (section.type === "propertyShowcase") {
-    return <PropertyPages key={section.id} section={section} />;
+    return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
   }
-
-  // practicalInfo — chunk into pages of CARDS_PER_PAGE so a long list
-  // splits cleanly instead of overflowing a single page. Second+ pages
-  // get a "— Continued" subtitle.
+  if (section.type === "personalNote") {
+    return <PdfFitPersonalNotePage key={section.id} section={section} />;
+  }
+  if (section.type === "pricing") {
+    return <PdfFitPricingPage key={section.id} section={section} />;
+  }
   if (section.type === "practicalInfo") {
-    return <PracticalInfoPages key={section.id} />;
+    return <PdfFitPracticalInfoPages key={section.id} section={section} />;
   }
-
-  // footer — on-screen FooterSection is intentionally a thin contact
-  // strip (single row). On A4 that strip leaves 87% of the page empty.
-  // Route through PrintFooterPage which renders a full editorial
-  // closing card filling the page.
+  if (section.type === "tripSummary" || section.type === "map") {
+    return <PdfFitTripSummaryPage key={section.id} section={section} />;
+  }
+  if (section.type === "closing") {
+    return <PdfFitClosingPage key={section.id} section={section} />;
+  }
   if (section.type === "footer") {
-    return <FooterPage key={section.id} />;
-  }
-
-  // map — on-screen MapSection has a 240px rail beside the map. In
-  // print that rail steals half the page width and duplicates the
-  // day-by-day info that lives on the very next pages. PrintMapPage
-  // drops the rail and lets the route map fill the full A4 width.
-  if (section.type === "map") {
-    return <MapPage key={section.id} section={section} />;
+    return <PdfFitFooterPage key={section.id} section={section} />;
   }
 
   // Every other section — single page, clipped to A4.
@@ -312,206 +262,6 @@ function renderSection(section: Section, proposalId: string) {
   );
 }
 
-function FooterPage() {
-  const proposal = useProposalStore((s) => s.proposal);
-  return (
-    <PdfPage label="Contact" bleed>
-      <div data-section-type="footer">
-        <PrintFooterPage proposal={proposal} />
-      </div>
-    </PdfPage>
-  );
-}
-
-function MapPage({ section }: { section: Section }) {
-  const proposal = useProposalStore((s) => s.proposal);
-  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
-  return (
-    <PdfPage label="Map" bleed>
-      <div data-section-type="map">
-        <PrintMapPage
-          section={section}
-          days={proposal.days}
-          theme={proposal.theme}
-          tokens={tokens}
-        />
-      </div>
-    </PdfPage>
-  );
-}
-
-function PropertyPages({ section }: { section: Section }) {
-  const proposal = useProposalStore((s) => s.proposal);
-  const properties = proposal.properties ?? [];
-  if (properties.length === 0) {
-    return (
-      <PdfPage label="Properties (empty)" bleed>
-        <div data-section-type="propertyShowcase">
-          <SectionRenderer section={section} />
-        </div>
-      </PdfPage>
-    );
-  }
-  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
-  const total = properties.length;
-  return (
-    <>
-      {properties.map((property, idx) => (
-        <PdfPage
-          key={property.id}
-          label={`Property ${idx + 1} of ${total} · ${property.name}`}
-          bleed
-        >
-          <div data-section-type="propertyShowcase" data-property-id={property.id}>
-            <PrintPropertyPage
-              property={property}
-              theme={proposal.theme}
-              tokens={tokens}
-              indexLabel={`Property ${idx + 1} of ${total}`}
-            />
-          </div>
-        </PdfPage>
-      ))}
-    </>
-  );
-}
-
-function PracticalInfoPages() {
-  const proposal = useProposalStore((s) => s.proposal);
-  const cards = proposal.practicalInfo ?? [];
-  if (cards.length === 0) return null;
-
-  const chunks: typeof cards[] = [];
-  for (let i = 0; i < cards.length; i += CARDS_PER_PAGE) {
-    chunks.push(cards.slice(i, i + CARDS_PER_PAGE));
-  }
-  // Use the practicalInfo section's overrides if it exists, otherwise
-  // theme defaults.
-  const section = proposal.sections.find((s) => s.type === "practicalInfo");
-  const tokens = resolveTokens(proposal.theme.tokens, section?.styleOverrides);
-
-  return (
-    <>
-      {chunks.map((chunk, idx) => {
-        const partLabel =
-          chunks.length > 1 && idx > 0
-            ? chunks.length === 2
-              ? "— Continued"
-              : `— Part ${idx + 1} of ${chunks.length}`
-            : undefined;
-        return (
-          <PdfPage
-            key={`pi-${idx}`}
-            label={`Good to know${partLabel ? " " + partLabel.replace("— ", "") : ""}`}
-            bleed
-          >
-            <div data-section-type="practicalInfo">
-              <PrintPracticalInfoPage
-                cards={chunk}
-                theme={proposal.theme}
-                tokens={tokens}
-                partLabel={partLabel}
-              />
-            </div>
-          </PdfPage>
-        );
-      })}
-    </>
-  );
-}
-
-function DayJourneyPages({ section }: { section: Section }) {
-  const proposal = useProposalStore((s) => s.proposal);
-  const days = proposal.days;
-  if (days.length === 0) {
-    return (
-      <PdfPage label="Day-by-day (empty)" bleed={false}>
-        <div data-section-type="dayJourney">
-          <SectionRenderer section={section} />
-        </div>
-      </PdfPage>
-    );
-  }
-  // Each day renders into a print-specific main page (story half) and
-  // — when the day actually has activities or accommodation — a
-  // dedicated continuation page. This pre-empts the overflow problem:
-  // we do not let a day try to fit hero + narrative + activities +
-  // accommodation gallery in a single A4 frame. Instead we split
-  // intentionally and label both halves so a guest reading the PDF
-  // immediately sees "Day 3 · Continued" rather than a clipped page.
-  const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
-  const activeTier = proposal.activeTier as TierKey;
-  return (
-    <>
-      {days.map((day) => {
-        // Resolve the day's stay so the tail page can render the
-        // accommodation block; also drives the has-tail decision.
-        const property = resolveDayProperty(day, proposal.properties, activeTier);
-        const hasTail = dayHasTailContent(day, property);
-        // Reuse the day-card data resolver just for date formatting —
-        // it owns the UTC-safe arrival-date math so we stay consistent
-        // with the on-screen view.
-        const dayData = resolveDayCard(day, proposal, activeTier, "editorial-stack");
-        return (
-          <Fragmented key={day.id}>
-            <PdfPage
-              label={`Day ${day.dayNumber}${day.destination ? " · " + day.destination : ""}`}
-              bleed
-            >
-              <div
-                data-section-type="dayJourney"
-                data-day-number={day.dayNumber}
-                data-day-page="main"
-                data-has-continuation={hasTail ? "yes" : "no"}
-              >
-                <PrintDayPageMain
-                  day={day}
-                  dayDate={dayData.dayDate}
-                  theme={proposal.theme}
-                  tokens={tokens}
-                  totalDays={days.length}
-                  property={property}
-                  hasTail={hasTail}
-                />
-              </div>
-            </PdfPage>
-            {hasTail && (
-              <PdfPage
-                label={`Day ${day.dayNumber} · Continued${day.destination ? " · " + day.destination : ""}`}
-                bleed
-                continuation
-              >
-                <div
-                  data-section-type="dayJourney"
-                  data-day-number={day.dayNumber}
-                  data-day-page="tail"
-                  data-continuation="true"
-                >
-                  <PrintDayPageTail
-                    day={day}
-                    property={property}
-                    theme={proposal.theme}
-                    tokens={tokens}
-                    totalDays={days.length}
-                  />
-                </div>
-              </PdfPage>
-            )}
-          </Fragmented>
-        );
-      })}
-    </>
-  );
-}
-
-// Tiny key-stable fragment wrapper. React's Fragment doesn't accept a
-// data-attribute; using a plain Fragment with a key is enough for the
-// outer .map(). Wrapping in a function gives us a single source of
-// truth for the day-pair structure if we later need to attach extra
-// metadata (e.g. break-before hints).
-function Fragmented({ children }: { children: ReactNode }) {
-  return <>{children}</>;
-}
 
 // ─── PDF-Fit multi-page wrappers ──────────────────────────────────────────
 //
