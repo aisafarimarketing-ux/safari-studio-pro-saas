@@ -2,6 +2,7 @@
 
 import type { LayoutManifest, Slot } from "@/lib/pdfFit/types";
 import type { ProposalTheme, ThemeTokens } from "@/lib/types";
+import { resolveVariantAdjustment } from "@/lib/pdfFit/variants";
 import { PdfFitSlot, type SlotContent } from "./PdfFitSlot";
 
 // ─── PdfFitLayout — manifest-driven layout renderer ────────────────────────
@@ -9,10 +10,11 @@ import { PdfFitSlot, type SlotContent } from "./PdfFitSlot";
 // Takes a LayoutManifest + a content map (slot name → resolved content)
 // + theme/tokens, returns a full-A4 absolutely-positioned slot stack.
 //
-// The caller is responsible for resolving each slot's content_key /
-// content_pattern against the proposal data. We don't do that here
-// because resolution is section-specific (cover reads operator.logoUrl,
-// day card reads day.heroImageUrl, etc.) — caller knows the shape.
+// Optional variantId selects a visual treatment from the variant
+// registry — variants never change positions, only typography emphasis,
+// color emphasis, image filters, and fill overrides. The layout
+// container resolves the variant adjustment for each slot once and
+// passes it to PdfFitSlot.
 
 type Props = {
   manifest: LayoutManifest;
@@ -21,13 +23,18 @@ type Props = {
   contents: Record<string, SlotContent>;
   theme: ProposalTheme;
   tokens: ThemeTokens;
+  /** Variant id from the section's variant axis. e.g. "cinematic" /
+   *  "editorial" / "minimal_luxury" for cover. Falls back to base
+   *  styling when undefined. */
+  variantId?: string;
 };
 
-export function PdfFitLayout({ manifest, contents, theme, tokens }: Props) {
+export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: Props) {
   return (
     <div
       data-pdf-fit-layout={manifest.id}
       data-pdf-fit-section={manifest.section}
+      data-pdf-fit-variant={variantId ?? ""}
       style={{
         position: "relative",
         width: "210mm",
@@ -43,6 +50,7 @@ export function PdfFitLayout({ manifest, contents, theme, tokens }: Props) {
           content={contents[slot.name]}
           theme={theme}
           tokens={tokens}
+          adjustment={resolveVariantAdjustment(manifest.section, variantId, slot.name)}
         />
       ))}
     </div>

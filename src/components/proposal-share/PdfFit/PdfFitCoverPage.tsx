@@ -38,6 +38,16 @@ export function PdfFitCoverPage({ section }: Props) {
   const manifest =
     COVER_LAYOUTS.find((l) => l.id === section.layoutVariant) ?? COVER_LAYOUTS[0];
 
+  // Variant id — visual treatment layered on the manifest. Stored
+  // separately from layoutVariant on section.content so an operator
+  // can pair "cover-cinematic-hero" structure with "editorial"
+  // emphasis without duplicating the manifest. Falls back to
+  // "cinematic" — matches the default look for this layout.
+  const variantId =
+    typeof section.content?.variantId === "string"
+      ? section.content.variantId
+      : "cinematic";
+
   // ─── Content resolution ──────────────────────────────────────────────
   const heroImageUrl =
     (section.content.heroImageUrl as string | undefined) ||
@@ -77,6 +87,7 @@ export function PdfFitCoverPage({ section }: Props) {
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}
+          variantId={variantId}
         />
       </div>
     </PdfPage>
