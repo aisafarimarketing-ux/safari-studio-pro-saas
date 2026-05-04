@@ -57,7 +57,9 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     (typeof section.content?.eyebrow === "string" && section.content.eyebrow.trim()) ||
     "Trip summary";
 
-  // Itinerary lines — "01 · Serengeti  ·  3 nights"
+  // Itinerary block — magazine-style numbered list. Each stop gets
+  // two lines: "NN  Destination" then a muted "Days X–Y · N nights",
+  // separated by a blank line so the eye finds each entry quickly.
   const stopLines: string[] = [];
   let cursor = 0;
   for (const stop of stops) {
@@ -69,7 +71,10 @@ export function PdfFitTripSummaryPage({ section }: Props) {
       dayNumbers.length > 1
         ? `Days ${dayNumbers[0]}–${dayNumbers[dayNumbers.length - 1]}`
         : `Day ${dayNumbers[0] ?? cursor}`;
-    stopLines.push(`${pad2(cursor)}  ${stop}  ·  ${dayRange}  ·  ${nights}n`);
+    const nightsLabel = nights === 1 ? "1 night" : `${nights} nights`;
+    if (cursor > 1) stopLines.push("");
+    stopLines.push(`${pad2(cursor)}    ${stop}`);
+    stopLines.push(`        ${dayRange}  ·  ${nightsLabel}`);
   }
   const itineraryText = stopLines.join("\n");
 

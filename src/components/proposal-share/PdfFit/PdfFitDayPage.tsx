@@ -64,12 +64,23 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     property?.galleryUrls?.[0]?.trim() ||
     null;
 
-  const lodgeText = formatLodgeText({
-    campName: tier?.camp ?? property?.name ?? "",
-    location: tier?.location ?? property?.location ?? "",
-    mealPlan: property?.mealPlan ?? day.board ?? "",
-    shortDesc: property?.shortDesc ?? "",
-  });
+  // Accommodation card layout: eyebrow ("WHERE YOU'LL STAY"), camp
+  // name as the title, then a small stats line + short description.
+  const lodgeEyebrow = "WHERE YOU'LL STAY";
+  const campName = tier?.camp?.trim() || property?.name?.trim() || "";
+  const lodgeLocation = tier?.location?.trim() || property?.location?.trim() || "";
+  const mealPlan = property?.mealPlan?.trim() || day.board?.trim() || "";
+  const shortDesc = property?.shortDesc?.trim() || tier?.note?.trim() || "";
+  const lodgeStats = [lodgeLocation, mealPlan].filter(Boolean).join("  ·  ");
+  const lodgeText = [
+    campName ? campName : "",
+    lodgeStats,
+    shortDesc ? "" : null,
+    shortDesc,
+  ]
+    .filter((v): v is string => typeof v === "string" && v.length >= 0)
+    .filter((v, i, arr) => !(v === "" && i === arr.length - 1))
+    .join("\n");
 
   const contents: Record<string, SlotContent> = {
     day_label: { kind: "text", value: dayLabel },
@@ -86,6 +97,7 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
       url: lodgeImageUrl,
       alt: tier?.camp ?? "",
     },
+    lodge_eyebrow: { kind: "text", value: lodgeEyebrow },
     lodge_text_block: { kind: "text", value: lodgeText },
   };
 
@@ -102,22 +114,6 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
       </div>
     </PdfPage>
   );
-}
-
-function formatLodgeText({
-  campName, location, mealPlan, shortDesc,
-}: {
-  campName: string;
-  location: string;
-  mealPlan: string;
-  shortDesc: string;
-}): string {
-  const lines: string[] = [];
-  if (campName) lines.push(`Stay: ${campName}${location ? ` (${location})` : ""}`);
-  if (mealPlan) lines.push(`Board: ${mealPlan}`);
-  if (shortDesc) lines.push("");
-  if (shortDesc) lines.push(shortDesc);
-  return lines.join("\n");
 }
 
 function stripHtml(html: string): string {
