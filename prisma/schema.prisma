@@ -760,6 +760,16 @@ model BookingCheckRequest {
   repliedAt  DateTime?
   resolvedAt DateTime?
 
+  // Orchestration state. attemptCount tracks how many outbound
+  // dispatches have happened (initial send = 1, each follow-up
+  // increments). nextActionAt is when the next operator action is
+  // due — set to sentAt + 24h on initial send, then bumped forward
+  // on each follow-up dispatch. Cleared when status resolves to
+  // "available" / "not_available". Drives the per-card "Suggested
+  // next action" hint and the follow-up CTA visibility.
+  attemptCount Int        @default(0)
+  nextActionAt DateTime?
+
   // Operator free-form notes — paste the property's reply, internal
   // reminders, anything that needs to live with this stay's record.
   notes String?

@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { friendlyConsultantName } from "@/lib/consultantIdentity";
+import {
+  formatBookingCheckFollowUp,
+  formatBookingCheckUrgent,
+} from "@/lib/bookingOps/format";
+import { nextActionAfterSend } from "@/lib/bookingOps/orchestrate";
+import { displayTrackingId } from "@/lib/proposalTracking";
+import type { TierKey } from "@/lib/types";
 
 // PATCH /api/bookings/check-requests/[id]
 //
 // Operator-driven status transitions and notes updates for one
 // BookingCheckRequest row. v1 keeps this dumb: the operator picks
-// the next status, we set the matching timestamp. No automatic
+// the next status, we set the matching timestamp + adjust the
+// orchestration fields (nextActionAt, attemptCount). No automatic
 // transitions, no reply parsing — those land in v2.
 //
 // Body shape:
@@ -15,14 +24,27 @@ import { prisma } from "@/lib/prisma";
 //            | "not_available" | "follow_up_needed",
 //     notes?: string,
 //     draftText?: string,   // operator-edited copy
+//     action?: "record_followup_sent",  // marks a follow-up as
+//                                        // dispatched: bumps
+//                                        // attemptCount + resets
+//                                        // nextActionAt + replaces
+//                                        // draftText with the next
+//                                        // variant in the cadence.
 //   }
 //
 // Side effects per status:
 //   - "sent"           → sentAt = now if not already set
+//                        attemptCount = max(1, current)
+//                        nextActionAt = now + 24h
 //   - "replied"        → repliedAt = now if not already set
+//                        nextActionAt = null
 //   - "available"      → repliedAt set + resolvedAt = now
+//                        nextActionAt = null
 //   - "not_available"  → repliedAt set + resolvedAt = now
-//   - "not_sent" / "follow_up_needed" → no timestamp changes
+//                        nextActionAt = null
+//   - "follow_up_needed" → nextActionAt = now (so the UI flags it
+//                          as overdue immediately)
+//   - "not_sent"       → clears all timestamps + attemptCount = 0
 
 const ALLOWED_STATUSES = new Set([
   "not_sent",
@@ -51,7 +73,12 @@ export async function PATCH(
     return NextResponse.json({ error: "id required." }, { status: 400 });
   }
 
-  let body: { status?: string; notes?: string; draftText?: string };
+  let body: {
+    status?: string;
+    notes?: string;
+    draftText?: string;
+    action?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -60,6 +87,24 @@ export async function PATCH(
 
   const existing = await prisma.bookingCheckRequest.findFirst({
     where: { id, organizationId: orgId },
+    select: {
+      id: true,
+      status: true,
+      sentAt: true,
+      repliedAt: true,
+      attemptCount: true,
+      nextActionAt: true,
+      proposalId: true,
+      propertyName: true,
+      destination: true,
+      tierKey: true,
+      checkInDate: true,
+      checkOutDate: true,
+      nights: true,
+      adults: true,
+      children: true,
+      roomingNotes: true,
+    },
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -73,36 +118,103 @@ export async function PATCH(
   if (typeof body.draftText === "string") {
     data.draftText = body.draftText.slice(0, 8000);
   }
+  const now = new Date();
   if (typeof body.status === "string") {
     if (!ALLOWED_STATUSES.has(body.status)) {
       return NextResponse.json({ error: `Invalid status "${body.status}".` }, { status: 400 });
     }
     data.status = body.status;
-    const now = new Date();
     switch (body.status) {
       case "sent":
         if (!existing.sentAt) data.sentAt = now;
+        // attemptCount jumps to 1 on the initial send. Bumping
+        // forwards on follow-ups happens via the
+        // record_followup_sent action below.
+        if (existing.attemptCount < 1) data.attemptCount = 1;
+        data.nextActionAt = nextActionAfterSend(now);
         break;
       case "replied":
         if (!existing.repliedAt) data.repliedAt = now;
+        data.nextActionAt = null;
         break;
       case "available":
       case "not_available":
         if (!existing.repliedAt) data.repliedAt = now;
         data.resolvedAt = now;
+        data.nextActionAt = null;
         break;
       case "not_sent":
-        // Operator manually reverted — clear sent/replied/resolved
-        // so the timeline doesn't lie.
+        // Operator manually reverted — clear all the timeline
+        // fields so the row matches the visible "fresh" state.
         data.sentAt = null;
         data.repliedAt = null;
         data.resolvedAt = null;
+        data.nextActionAt = null;
+        data.attemptCount = 0;
         break;
       case "follow_up_needed":
-        // Operator-flagged stall. Don't touch timestamps — the row
-        // is still in "sent" state from the operator's perspective.
+        // Operator-flagged stall. Set nextActionAt = now so the UI
+        // sees this as "overdue" immediately and the next-action
+        // hint reads "send the follow-up message you flagged".
+        data.nextActionAt = now;
         break;
     }
+  }
+
+  // ── Action: record_followup_sent ────────────────────────────────────
+  // The operator clicked "Send follow-up" → the UI fires this action
+  // after copying / dispatching. We bump attemptCount, advance
+  // nextActionAt by 24h, and rewrite draftText to the next-cadence
+  // variant (gentle for attempt 1→2, urgent for 2→3+). Status stays
+  // "sent" — the row is still awaiting reply, just a follow-up later.
+  if (body.action === "record_followup_sent") {
+    // Pull the trip + booking ref so the regenerated draft matches
+    // what the initial send used. Single extra query, only fires on
+    // this action path.
+    const proposal = await prisma.proposal.findFirst({
+      where: { id: existing.proposalId, organizationId: orgId },
+      select: { id: true, title: true, trackingId: true },
+    });
+    if (!proposal) {
+      return NextResponse.json({ error: "Proposal not found." }, { status: 404 });
+    }
+    const operatorFirstName =
+      friendlyConsultantName({ name: auth.user.name, email: auth.user.email })
+        .split(/\s+/)[0] || null;
+    const tierKey = (existing.tierKey === "classic" || existing.tierKey === "premier" || existing.tierKey === "signature")
+      ? (existing.tierKey as TierKey)
+      : null;
+    const messageInput = {
+      propertyName: existing.propertyName,
+      destination: existing.destination,
+      tierKey,
+      checkInDate: existing.checkInDate,
+      checkOutDate: existing.checkOutDate,
+      nights: existing.nights,
+      adults: existing.adults,
+      children: existing.children,
+      roomingNotes: existing.roomingNotes,
+      tripTitle: proposal.title ?? "your safari",
+      bookingReference: displayTrackingId({
+        id: proposal.id,
+        trackingId: proposal.trackingId,
+      }),
+      operatorFirstName,
+    };
+    const nextAttempt = (existing.attemptCount ?? 1) + 1;
+    // attempt 1 was the initial. attempt 2 = first follow-up =
+    // gentle. attempt 3+ = urgent. Stays at urgent indefinitely;
+    // we never escalate beyond that level automatically.
+    const followUpDraft =
+      nextAttempt >= 3
+        ? formatBookingCheckUrgent(messageInput)
+        : formatBookingCheckFollowUp(messageInput);
+    data.attemptCount = nextAttempt;
+    data.nextActionAt = nextActionAfterSend(now);
+    data.draftText = followUpDraft;
+    // Status: if the operator was on follow_up_needed, flip back to
+    // sent now that they've actually sent the follow-up.
+    if (existing.status === "follow_up_needed") data.status = "sent";
   }
 
   if (Object.keys(data).length === 0) {
@@ -131,6 +243,8 @@ export async function PATCH(
       sentAt: updated.sentAt?.toISOString() ?? null,
       repliedAt: updated.repliedAt?.toISOString() ?? null,
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
+      attemptCount: updated.attemptCount,
+      nextActionAt: updated.nextActionAt?.toISOString() ?? null,
       notes: updated.notes,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),

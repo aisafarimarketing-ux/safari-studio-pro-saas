@@ -126,3 +126,155 @@ export function formatBookingCheckFollowUp(
   }
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+
+// ─── Urgent follow-up (48h+) ────────────────────────────────────────────────
+//
+// Firmer than the 24h gentle check-in. Names the booking deadline
+// pressure without losing the calm tone — the recipient is still a
+// camp reservations desk, not a debtor. Used by the orchestration
+// layer when attemptCount has reached 2 (initial + one follow-up
+// already out).
+
+export function formatBookingCheckUrgent(
+  input: BookingCheckMessageInput,
+): string {
+  const lines = [
+    "Hello,",
+    "",
+    `Checking in once more on the booking I sent through for ${input.propertyName}, ${formatDate(input.checkInDate)}–${formatDate(input.checkOutDate)} (${input.nights} ${input.nights === 1 ? "night" : "nights"}, booking reference ${input.bookingReference}).`,
+    "",
+    "We need to confirm availability soon to keep the trip on track. If the dates aren't clear yet, the closest available alternative would also help.",
+  ];
+  if (input.operatorFirstName) {
+    lines.push("");
+    lines.push("Thank you,");
+    lines.push(input.operatorFirstName);
+  }
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ─── Client-facing: good news (property confirmed) ─────────────────────────
+//
+// Operator-paste message for "we have your camp locked in". Calm
+// confirmation, the dates, the camp, and a soft next-step. Single
+// short paragraph — clients on WhatsApp don't want a press release.
+
+export type ClientMessageInput = {
+  clientFirstName: string;
+  propertyName: string;
+  destination: string | null;
+  checkInDate: Date;
+  checkOutDate: Date;
+  nights: number;
+  operatorFirstName: string | null;
+};
+
+export function formatGoodNewsMessage(input: ClientMessageInput): string {
+  const where = input.destination
+    ? `${input.propertyName} in ${input.destination}`
+    : input.propertyName;
+  const lines = [
+    `Hi ${input.clientFirstName} — quick update.`,
+    "",
+    `${where} have confirmed your stay for ${formatDate(input.checkInDate)} to ${formatDate(input.checkOutDate)} (${input.nights} ${input.nights === 1 ? "night" : "nights"}). That part of the trip is now locked in.`,
+    "",
+    "I'll keep you posted as the rest of the bookings come back.",
+  ];
+  if (input.operatorFirstName) {
+    lines.push("");
+    lines.push("— " + input.operatorFirstName);
+  }
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ─── Client-facing: alternative offer (property unavailable) ───────────────
+//
+// When the original camp is fully booked, the operator pastes this
+// to surface 1–2 alternatives. Honest framing — no spin, no "even
+// better option" sales talk. The operator picks which alternatives
+// to surface; this just drops them into a sentence.
+
+export type AlternativeOfferInput = {
+  clientFirstName: string;
+  originalProperty: string;
+  destination: string | null;
+  checkInDate: Date;
+  checkOutDate: Date;
+  /** Up to 2 alternative camp names. The formatter handles 1 or 2;
+   *  passing 0 falls back to a "we'll find an option" copy. */
+  alternatives: string[];
+  operatorFirstName: string | null;
+};
+
+export function formatAlternativeOfferMessage(
+  input: AlternativeOfferInput,
+): string {
+  const dateRange = `${formatDate(input.checkInDate)}–${formatDate(input.checkOutDate)}`;
+  const where = input.destination
+    ? `in ${input.destination}`
+    : "for those dates";
+  const alts = input.alternatives.filter((s) => s.trim().length > 0).slice(0, 2);
+
+  const lines = [`Hi ${input.clientFirstName} — small update.`];
+  lines.push("");
+  if (alts.length === 0) {
+    lines.push(
+      `${input.originalProperty} is full ${where} on ${dateRange}. I'm checking the closest alternatives now and will come back to you shortly.`,
+    );
+  } else if (alts.length === 1) {
+    lines.push(
+      `${input.originalProperty} is full ${where} on ${dateRange}. The closest match for the same dates is ${alts[0]} — happy to hold it if you'd like to go ahead, or keep looking if you'd rather see other options.`,
+    );
+  } else {
+    lines.push(
+      `${input.originalProperty} is full ${where} on ${dateRange}. Two alternatives sit close to the same experience for those dates: ${alts[0]} and ${alts[1]}. Either would work — let me know which feels right and I'll lock it in.`,
+    );
+  }
+  if (input.operatorFirstName) {
+    lines.push("");
+    lines.push("— " + input.operatorFirstName);
+  }
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ─── Outbound to alternative property ──────────────────────────────────────
+//
+// When the original property's not_available, the operator wants to
+// reach out to an alternative camp with the same dates / guest count.
+// Same shape as the initial inquiry but framed honestly — the
+// recipient should know they're being asked because someone else
+// couldn't take it.
+
+export function formatAlternativeRequestMessage(
+  input: BookingCheckMessageInput & { replacingProperty: string },
+): string {
+  const guestLine = formatGuestLine(input.adults, input.children);
+  const roomLine = formatRoomLine(input.tierKey, input.roomingNotes);
+  const stayLines: string[] = [
+    `Property: ${input.propertyName}${input.destination ? ` (${input.destination})` : ""}`,
+    `Check-in: ${formatDate(input.checkInDate)}`,
+    `Check-out: ${formatDate(input.checkOutDate)}`,
+    `Nights: ${input.nights}`,
+    `Guests: ${guestLine}`,
+  ];
+  if (roomLine) stayLines.push(`Room: ${roomLine}`);
+
+  const lines: string[] = [
+    "Hello,",
+    "",
+    `I'm reaching out for a confirmed booking originally placed at ${input.replacingProperty}, which is unavailable for the dates. The ${input.tripTitle} client is happy to consider ${input.propertyName} for the same stay:`,
+    "",
+    ...stayLines,
+    "",
+    `Booking reference: ${input.bookingReference}`,
+    "",
+    "Could you let me know whether you can take this booking, or suggest the closest alternative on your end?",
+  ];
+
+  if (input.operatorFirstName) {
+    lines.push("");
+    lines.push("Thank you,");
+    lines.push(input.operatorFirstName);
+  }
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}

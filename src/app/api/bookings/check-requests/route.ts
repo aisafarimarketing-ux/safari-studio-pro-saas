@@ -58,6 +58,8 @@ export async function GET(req: Request) {
       sentAt: row.sentAt?.toISOString() ?? null,
       repliedAt: row.repliedAt?.toISOString() ?? null,
       resolvedAt: row.resolvedAt?.toISOString() ?? null,
+      attemptCount: row.attemptCount,
+      nextActionAt: row.nextActionAt?.toISOString() ?? null,
       notes: row.notes,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

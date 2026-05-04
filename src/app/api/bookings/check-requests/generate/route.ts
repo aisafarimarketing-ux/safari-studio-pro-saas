@@ -165,6 +165,8 @@ function serializeRow(row: {
   sentAt: Date | null;
   repliedAt: Date | null;
   resolvedAt: Date | null;
+  attemptCount: number;
+  nextActionAt: Date | null;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -185,6 +187,8 @@ function serializeRow(row: {
     sentAt: row.sentAt?.toISOString() ?? null,
     repliedAt: row.repliedAt?.toISOString() ?? null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    attemptCount: row.attemptCount,
+    nextActionAt: row.nextActionAt?.toISOString() ?? null,
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
