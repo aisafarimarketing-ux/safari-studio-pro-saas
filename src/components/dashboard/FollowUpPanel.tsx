@@ -419,12 +419,12 @@ export function FollowUpPanel({
           </p>
         </div>
 
-        {/* Auto-send strip — only renders in Auto follow-up mode. The
-            schedule button is also gated server-side via
-            canAutoSend(); this is the UX layer that hides it in
-            Assisted / Smart Assist mode so it doesn't read as a
-            broken / disabled affordance. */}
-        {caps.allowAutoSend && (
+        {/* Auto-send strip — only renders in Auto follow-up mode AND
+            when this isn't a prefilled execution snippet. Execution
+            drafts are one-shot sends ("send Jennifer day 1 and 2");
+            scheduling them as a delayed auto-follow-up makes no
+            semantic sense. */}
+        {caps.allowAutoSend && !isPrefilled && (
         <AutoSendStrip
           suggestionId={null /* fetched lazily; we don't need it to render */}
           channel={channel}

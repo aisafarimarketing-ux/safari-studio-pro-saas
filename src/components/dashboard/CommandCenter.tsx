@@ -419,6 +419,7 @@ function CommandCenterShell() {
           autoSendEligibility={followUpTarget.autoSendEligibility}
           autoSendScheduledFor={followUpTarget.autoSendScheduledFor ?? null}
           mode={followUpTarget.mode ?? activity?.followUpMode ?? FOLLOW_UP_MODE_DEFAULT}
+          prefilledDraft={followUpTarget.prefilledDraft}
           onClose={() => setFollowUpTarget(null)}
         />
       )}
@@ -445,6 +446,21 @@ type FollowUpTarget = {
   /** Operator's selected follow-up mode. Drives whether the panel
    *  exposes the Schedule auto-send strip. */
   mode?: FollowUpMode;
+  /** Pre-assembled draft from the Command Bar's Execution AI flow.
+   *  When present, the panel skips the /auto-draft fetch entirely
+   *  and uses this content directly. Without this field plumbed
+   *  through, the panel falls back to generating a generic
+   *  follow-up — which is exactly the bug that surfaced when an
+   *  operator's "send Jennifer day 1 and 2" command opened the
+   *  panel showing a booking-confirmation message instead of the
+   *  itinerary snippet. */
+  prefilledDraft?: {
+    text: string;
+    suggestionId: string;
+    channel: "whatsapp" | "email";
+    contextLabel?: string;
+    warnings?: string[];
+  };
 };
 
 type ReservationSummaryTarget = {
