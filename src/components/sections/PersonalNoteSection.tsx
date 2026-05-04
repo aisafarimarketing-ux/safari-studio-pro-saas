@@ -445,7 +445,13 @@ function EditorialLetterImageVariant({
       )}
 
       <div className="mx-auto px-6 md:px-12 py-4 md:py-6" style={{ maxWidth: 1140 }}>
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-8 lg:gap-12 items-stretch">
+        {/* Breakpoint dropped from lg: → md: so the two-column layout
+            (letter | image) activates at A4 width (793px) instead of
+            collapsing to single-column above the letter. The previous
+            lg: rule only fired at 1024px+ — leaving the printed PDF
+            with a giant dark image area on top and the letter pushed
+            to the bottom of the page. */}
+        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-8 md:gap-12 items-stretch">
           {/* LEFT — letter */}
           <div className="min-w-0 flex flex-col justify-center">
             {/* Greeting */}

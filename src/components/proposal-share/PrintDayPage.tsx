@@ -445,6 +445,39 @@ export function PrintDayPageTail({
 
 // ─── Sub-pieces ──────────────────────────────────────────────────────────
 
+// Convert the operator's saved HTML narrative into plain-text
+// paragraphs the print typography can render. The on-screen view
+// uses dangerouslySetInnerHTML; the print view splits into a
+// "lead with arrow + rest" pattern and so needs strings, not HTML.
+// Without this conversion, React's escaping rendered raw `<span
+// style="...">` as visible text in the PDF.
+function htmlNarrativeToParagraphs(html: string): string[] {
+  if (!html) return [];
+  // <br> and closing block tags become paragraph breaks so the
+  // operator's intended paragraphing survives the conversion.
+  let s = html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div)>/gi, "\n\n");
+  // Convert <strong>/<b> to **markdown** so the existing
+  // renderInlineBold path picks them up.
+  s = s.replace(/<\s*(strong|b)\s*>/gi, "**").replace(/<\s*\/\s*(strong|b)\s*>/gi, "**");
+  // Strip everything else.
+  s = s.replace(/<[^>]+>/g, "");
+  // Decode the common entities the rich editor emits.
+  s = s
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+  return s
+    .split(/\n{2,}|\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 function NarrativeBody({
   narrative, tokens, clamp,
 }: {
@@ -455,10 +488,7 @@ function NarrativeBody({
    *  activity chips off the page. */
   clamp?: number;
 }) {
-  const paragraphs = narrative
-    .split(/\n{2,}|\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const paragraphs = htmlNarrativeToParagraphs(narrative);
   if (paragraphs.length === 0) return null;
   const [lead, ...rest] = paragraphs;
   const clampStyle = clamp
