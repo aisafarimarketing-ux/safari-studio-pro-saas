@@ -41,10 +41,37 @@ export type FindClientResult =
   | { status: "ambiguous"; matches: ClientLite[] }
   | { status: "not-found"; hint: string };
 
+// Normalise a name hint into a list of lowercase tokens. Strips
+// punctuation (commas, periods — including middle-initial dots),
+// collapses whitespace, and splits. Unicode-aware so non-ASCII names
+// (Sørensen, Müller, etc.) tokenize correctly.
+function normalizeNameTokens(hint: string): string[] {
+  return hint
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}@.\s]/gu, " ") // keep @ and . for email-like hints, strip everything else
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
 // Case-insensitive lookup against firstName, lastName, email, and the
 // concatenated full name. We deliberately avoid fuzzy matching
 // (Levenshtein etc.) — the spec calls for fail-loud over guess-silent.
 // Multiple matches get bubbled up as "ambiguous" so the operator picks.
+//
+// Token-aware routing:
+//   1 token  → contains-search across firstName / lastName / email.
+//              Handles "Morris" / "Jennifer" / "jennifer.morris@…".
+//   2+ tokens → first-token vs firstName + last-token vs lastName.
+//              Middle tokens (e.g. "N" in "Jennifer N Morris") are
+//              ignored. Matches "Jennifer Morris" and
+//              "Jennifer N Morris" to the same client.
+//
+// Both paths produce a unified scored list, then pass through the
+// same decisive-match / ambiguity branching. Scores are tuned so that
+// a multi-token first+last EXACT match dominates a single-token
+// substring hit — picking up "Jennifer Morris" over a generic "Morris"
+// candidate that also has a matching email substring.
 export async function findClient(
   organizationId: string,
   hint: string,
@@ -52,61 +79,60 @@ export async function findClient(
   const trimmed = hint.trim();
   if (!trimmed) return { status: "not-found", hint: "(empty hint)" };
 
-  const candidates = await prisma.client.findMany({
+  const tokens = normalizeNameTokens(trimmed);
+  if (tokens.length === 0) return { status: "not-found", hint: trimmed };
+
+  // Two-stage candidate gather. First the precise multi-token query
+  // (when applicable); fall back to the generous single-token search
+  // when that returns nothing or when the hint is single-token to
+  // begin with. We dedupe by client.id when both queries fire.
+  const candidates = new Map<string, RawCandidate>();
+
+  if (tokens.length >= 2) {
+    const firstToken = tokens[0];
+    const lastToken = tokens[tokens.length - 1];
+    const multiTokenRows = await prisma.client.findMany({
+      where: {
+        organizationId,
+        AND: [
+          { firstName: { startsWith: firstToken, mode: "insensitive" } },
+          { lastName: { startsWith: lastToken, mode: "insensitive" } },
+        ],
+      },
+      select: clientSelect,
+      take: 6,
+    });
+    for (const row of multiTokenRows) {
+      candidates.set(row.id, row);
+    }
+  }
+
+  // Always run the single-token contains-search too — covers the
+  // single-token case directly, AND acts as a fallback when the
+  // multi-token query returned nothing (e.g. operator wrote
+  // "Mr Morris" — "mr" doesn't match a firstName, but "Morris"
+  // alone would still surface the right client). Bound by `take`
+  // so a generic hint can't fan out.
+  const fallbackHint = tokens.length === 1 ? tokens[0] : trimmed;
+  const containsRows = await prisma.client.findMany({
     where: {
       organizationId,
       OR: [
-        { firstName: { contains: trimmed, mode: "insensitive" } },
-        { lastName: { contains: trimmed, mode: "insensitive" } },
-        { email: { contains: trimmed, mode: "insensitive" } },
+        { firstName: { contains: fallbackHint, mode: "insensitive" } },
+        { lastName: { contains: fallbackHint, mode: "insensitive" } },
+        { email: { contains: fallbackHint, mode: "insensitive" } },
       ],
     },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      phone: true,
-      proposals: {
-        orderBy: { updatedAt: "desc" },
-        take: 1,
-        select: { title: true, updatedAt: true },
-      },
-    },
-    take: 6, // cap so a generic hint can't fan out
+    select: clientSelect,
+    take: 6,
   });
+  for (const row of containsRows) {
+    if (!candidates.has(row.id)) candidates.set(row.id, row);
+  }
 
-  // Score: exact firstName match wins over substring; substring of
-  // firstName beats substring of email. Used only to break ties when
-  // there's a clear "best" match; otherwise we still return ambiguous.
-  const scored = candidates
-    .map((c) => {
-      const fullName = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
-      const lc = trimmed.toLowerCase();
-      const firstLower = (c.firstName ?? "").toLowerCase();
-      const lastLower = (c.lastName ?? "").toLowerCase();
-      let score = 0;
-      if (firstLower === lc) score += 100;
-      if (lastLower === lc) score += 90;
-      if (fullName.toLowerCase() === lc) score += 95;
-      if (firstLower.startsWith(lc)) score += 60;
-      if (lastLower.startsWith(lc)) score += 55;
-      if (firstLower.includes(lc)) score += 30;
-      if (lastLower.includes(lc)) score += 25;
-      if (c.email.toLowerCase().includes(lc)) score += 10;
-      const lite: ClientLite = {
-        id: c.id,
-        firstName: c.firstName,
-        lastName: c.lastName,
-        email: c.email,
-        phone: c.phone,
-        fullName: fullName || c.email,
-        latestProposalTitle: c.proposals[0]?.title ?? null,
-        latestProposalUpdatedAt:
-          c.proposals[0]?.updatedAt?.toISOString() ?? null,
-      };
-      return { lite, score };
-    })
+  // Score every candidate against the original hint + tokens.
+  const scored = Array.from(candidates.values())
+    .map((c) => scoreCandidate(c, trimmed, tokens))
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
 
@@ -117,10 +143,9 @@ export async function findClient(
     return { status: "found", client: scored[0].lite };
   }
   // If the top score is meaningfully ahead AND that top is an exact
-  // first-name or full-name match, pick it. Otherwise surface the picker.
-  // This handles the case "send Jennifer" with one Jennifer and one
-  // Jenn-marie without forcing a picker every time. The threshold is
-  // intentionally conservative — we'd rather ask than auto-pick.
+  // first-name / full-name / first+last match, pick it. Otherwise
+  // surface the picker. The threshold is intentionally conservative
+  // — we'd rather ask than auto-pick.
   const top = scored[0];
   const second = scored[1];
   const exactMatch = top.score >= 95;
@@ -132,6 +157,97 @@ export async function findClient(
     status: "ambiguous",
     matches: scored.slice(0, 5).map((r) => r.lite),
   };
+}
+
+// ─── Internal scoring helpers ───────────────────────────────────────────
+
+type RawCandidate = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  phone: string | null;
+  proposals: { title: string | null; updatedAt: Date }[];
+};
+
+const clientSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  proposals: {
+    orderBy: { updatedAt: "desc" } as const,
+    take: 1,
+    select: { title: true, updatedAt: true },
+  },
+};
+
+function scoreCandidate(
+  c: RawCandidate,
+  rawHint: string,
+  tokens: string[],
+): { lite: ClientLite; score: number } {
+  const fullName = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
+  const firstLower = (c.firstName ?? "").toLowerCase();
+  const lastLower = (c.lastName ?? "").toLowerCase();
+  const fullLower = fullName.toLowerCase();
+  const emailLower = c.email.toLowerCase();
+  const rawLower = rawHint.toLowerCase();
+
+  let score = 0;
+
+  // Multi-token (first+last) signals dominate. "Jennifer Morris" and
+  // "Jennifer N Morris" both produce ["jennifer", "morris"] effectively
+  // for first+last and both should hit ~200 against a Jennifer Morris
+  // record.
+  if (tokens.length >= 2) {
+    const firstToken = tokens[0];
+    const lastToken = tokens[tokens.length - 1];
+    const firstExact = firstLower === firstToken;
+    const lastExact = lastLower === lastToken;
+    const firstStarts = firstLower.startsWith(firstToken);
+    const lastStarts = lastLower.startsWith(lastToken);
+
+    if (firstExact && lastExact) score += 200;
+    else if (firstExact && lastStarts) score += 170;
+    else if (firstStarts && lastExact) score += 170;
+    else if (firstStarts && lastStarts) score += 130;
+
+    // Soft credit when the entire hint (with middle tokens preserved)
+    // appears in the email — covers operators referring to a client by
+    // a familiar email handle.
+    if (emailLower.includes(rawLower)) score += 5;
+  }
+
+  // Single-token style scoring (also applies as a baseline for
+  // multi-token hints — covers the "Morris" alone case).
+  for (const t of tokens) {
+    if (firstLower === t) score += 100;
+    else if (lastLower === t) score += 90;
+    else if (fullLower === t) score += 95;
+    if (firstLower.startsWith(t)) score += 30;
+    if (lastLower.startsWith(t)) score += 28;
+    if (firstLower.includes(t)) score += 12;
+    if (lastLower.includes(t)) score += 11;
+    if (emailLower.includes(t)) score += 4;
+  }
+  // De-dup score: if the operator typed the full name verbatim
+  // ("jennifer morris"), surface the exact-fullName bonus so the
+  // picker doesn't fire on a tied second match.
+  if (fullLower === tokens.join(" ")) score += 50;
+
+  const lite: ClientLite = {
+    id: c.id,
+    firstName: c.firstName,
+    lastName: c.lastName,
+    email: c.email,
+    phone: c.phone,
+    fullName: fullName || c.email,
+    latestProposalTitle: c.proposals[0]?.title ?? null,
+    latestProposalUpdatedAt: c.proposals[0]?.updatedAt?.toISOString() ?? null,
+  };
+  return { lite, score };
 }
 
 // Direct fetch by id — used after the operator picks from the
