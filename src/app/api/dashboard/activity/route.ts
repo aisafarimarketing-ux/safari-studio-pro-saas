@@ -577,8 +577,13 @@ export async function GET(req: Request) {
     // heuristic would have suggested at the time. Only fires for
     // execution-kind credits — follow-up messages aren't day-
     // pattern actions and shouldn't claim "you followed the
-    // suggested step".
+    // suggested step". When matched, look up the org's booked-
+    // stats bucket for the same day(s) — when ≥3 prior bookings
+    // back the pattern, surface a stronger "consistently works"
+    // claim; otherwise stay with the calmer "right move" copy.
     let followedSuggestion = false;
+    let confidenceTier: "high" | "neutral" = "neutral";
+    let creditedDayLabel: string | null = null;
     if (credited && credited.kind === "execution" && credited.sentAt) {
       const executedDays = extractDaysFromInput(credited.input);
       if (executedDays.length > 0) {
@@ -593,6 +598,22 @@ export async function GET(req: Request) {
           }
         }
         followedSuggestion = matchesNextStepHeuristic(executedDays, priorDays);
+        if (followedSuggestion) {
+          // Compact day phrase used inside the reinforcement
+          // parens — "Day 3" / "Days 1 and 2" — distinct from the
+          // longer label ("Day 3 snippet") which still drives the
+          // off-script line.
+          creditedDayLabel = formatExecutedDayPhrase(executedDays);
+          // Confidence is "high" when the org has booked this exact
+          // day pattern at least 3 times before. Single-day matches
+          // check stats.byDay; multi-day matches require all days
+          // to clear the threshold to qualify.
+          const allBackByStats = executedDays.every((d) => {
+            const stat = bookedStats.byDay.get(d);
+            return stat ? stat.count >= 3 : false;
+          });
+          if (allBackByStats) confidenceTier = "high";
+        }
       }
     }
     return {
@@ -625,6 +646,8 @@ export async function GET(req: Request) {
             bookedAt: credited.bookedAt!.toISOString(),
             label: deriveCreditLabel(credited.kind, credited.input),
             followedSuggestion,
+            confidenceTier: followedSuggestion ? confidenceTier : ("neutral" as const),
+            dayLabel: creditedDayLabel,
           }
         : null,
     };
@@ -730,5 +753,17 @@ function deriveCreditLabel(kind: string, input: unknown): string {
   }
   if (kind === "follow-up") return "Follow-up message";
   return "Message";
+}
+
+// Compact phrase used inside the reinforcement parens. Drops the
+// "snippet" suffix from the credit label since the surrounding copy
+// ("that was the right move (Day 3 worked here)") is more natural
+// without it.
+function formatExecutedDayPhrase(days: number[]): string {
+  const sorted = [...days].sort((a, b) => a - b);
+  if (sorted.length === 1) return `Day ${sorted[0]}`;
+  if (sorted.length === 2) return `Days ${sorted[0]} and ${sorted[1]}`;
+  const head = sorted.slice(0, -1).join(", ");
+  return `Days ${head} and ${sorted[sorted.length - 1]}`;
 }
 

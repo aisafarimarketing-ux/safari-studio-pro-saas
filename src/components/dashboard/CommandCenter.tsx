@@ -127,10 +127,18 @@ type ReservationRow = {
     label: string;
     /** True when the credited send matches what Inspector AI v1
      *  would have suggested at the time (server-side check via
-     *  matchesNextStepHeuristic). Renders the reinforced copy
-     *  ("Booked — you followed the suggested step (Day 3)") instead
-     *  of the generic attribution line. */
+     *  matchesNextStepHeuristic). Drives the reinforcement copy. */
     followedSuggestion: boolean;
+    /** "high" when the org has booked this exact day pattern at
+     *  least 3 times before — surfaces "this step consistently
+     *  works". "neutral" when followed without that data backing —
+     *  surfaces "that was the right move". Always "neutral" for
+     *  non-followed credits (the UI never shows a high-confidence
+     *  claim off-script). */
+    confidenceTier: "high" | "neutral";
+    /** Compact day phrase ("Day 3" / "Days 1 and 2") used inside
+     *  the reinforcement parens. Null for non-execution credits. */
+    dayLabel: string | null;
   } | null;
 };
 
@@ -2216,7 +2224,9 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
           >
             <span aria-hidden style={{ fontWeight: 700 }}>✓</span>
             <span style={{ fontWeight: 600 }}>
-              Booked — you followed the suggested step
+              {row.creditedSuggestion.confidenceTier === "high"
+                ? "Booked — this step consistently works"
+                : "Booked — that was the right move"}
             </span>
             {row.creditedSuggestion.channel === "whatsapp" ? (
               <WhatsAppIcon size={11} />
@@ -2224,7 +2234,9 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
               <EmailIcon size={11} muted />
             )}
             <span style={{ color: "rgba(10,20,17,0.75)" }}>
-              ({row.creditedSuggestion.label})
+              {row.creditedSuggestion.confidenceTier === "high"
+                ? `(${row.creditedSuggestion.dayLabel ?? row.creditedSuggestion.label})`
+                : `(${row.creditedSuggestion.dayLabel ?? row.creditedSuggestion.label} worked here)`}
             </span>
           </div>
         ) : row.creditedSuggestion ? (
