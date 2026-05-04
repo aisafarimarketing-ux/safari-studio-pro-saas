@@ -57,11 +57,14 @@ function formatWhatsApp(input: FormatInput): FormattedSnippet {
 
   const dayBlocks = input.days.map((d) => {
     const header = `Day ${d.dayNumber}${d.destination ? ` — ${d.destination}` : ""}`;
-    const narrative = trimSentences(stripHtml(d.description ?? ""), 360);
+    const narrative = cleanWhatsAppMarkdown(
+      trimSentences(stripHtml(d.description ?? ""), 360),
+    );
     const stay = formatAccommodation(d, input.activeTier);
+    const cleanedStay = stay ? cleanWhatsAppMarkdown(stay) : null;
     const lines = [header];
     if (narrative) lines.push(narrative);
-    if (stay) lines.push(stay);
+    if (cleanedStay) lines.push(cleanedStay);
     return lines.join("\n");
   });
 
@@ -74,6 +77,62 @@ function formatWhatsApp(input: FormatInput): FormattedSnippet {
     .trim();
 
   return { text, html: "", subject: "" };
+}
+
+// Convert markdown emphasis to WhatsApp's flavour (single-character
+// wrappers) and strip anything that would render as literal punctuation.
+// WhatsApp's syntax:
+//   *bold*       — single asterisks
+//   _italic_     — single underscores
+//   ~strikethrough~
+//   ```code```   — triple backticks
+//
+// Operators paste `**bold**` from external editors all the time; left
+// untouched, those double asterisks render as literal text in
+// WhatsApp because the parser treats them as escaped. We translate
+// the common markdown patterns and drop stragglers so the output is
+// clean every time. Deterministic — no AI, no content rewrites.
+function cleanWhatsAppMarkdown(input: string): string {
+  if (!input) return "";
+  let s = input;
+
+  // Bold variants: **text** and __text__ → *text*
+  // Non-greedy match, single line, requires non-asterisk content so
+  // we don't collapse `**` adjacencies into something weird.
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, "*$1*");
+  s = s.replace(/__([^_\n]+?)__/g, "*$1*");
+
+  // Italic variants: *text* already correct for WhatsApp; _text_ is
+  // already correct too. Leave them alone — they're either valid
+  // WhatsApp markup or harmless punctuation.
+
+  // Triple backticks → strip the fences but keep the code text.
+  // WhatsApp's ``` rendering is fine when supported, but operators
+  // rarely use it for prose; safer to flatten.
+  s = s.replace(/```([^`]+?)```/g, "$1");
+
+  // Inline backticks `code` → strip backticks (WhatsApp renders fine
+  // either way; consistency wins).
+  s = s.replace(/`([^`\n]+?)`/g, "$1");
+
+  // Markdown headings (#, ##, ###) — strip the leading hashes plus
+  // the space. Day cards already have header lines we own; any
+  // operator-typed `## Highlights` would leak the literal hashes.
+  s = s.replace(/^#{1,6}\s+/gm, "");
+
+  // Markdown list bullets at line start: "- ", "* ", "+ " → keep the
+  // bullet but normalise to "• " for cleaner WhatsApp display. Skip
+  // when the line already starts with "•" or is part of a continued
+  // sentence.
+  s = s.replace(/^([-*+])\s+/gm, "• ");
+
+  // Stray double-asterisk / double-underscore artifacts left over from
+  // unbalanced markdown. Drop them so the message is never corrupted
+  // by visible markup.
+  s = s.replace(/\*\*+/g, "");
+  s = s.replace(/__+/g, "");
+
+  return s;
 }
 
 // ─── Email ──────────────────────────────────────────────────────────────────
