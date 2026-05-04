@@ -152,6 +152,49 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
   return null;
 }
 
+// Pure check: do the executed days match what suggestNextStep would
+// have suggested *at the time of this send*, given the prior sent days?
+//
+// Used by the booking-attribution surface to detect "the operator
+// followed Inspector AI's suggestion and the deal closed." Strict by
+// design — we only credit a clean match (exact next adjacent day, or
+// the canonical opener Day 1+2 when there were no priors). Anything
+// else falls through to the generic "Booked after X" line so we
+// never overstate the system's role.
+//
+// Pure; no IO; no LLM. Called server-side per credit.
+export function matchesNextStepHeuristic(
+  executedDays: number[],
+  priorDaysSent: number[],
+): boolean {
+  if (executedDays.length === 0) return false;
+  const sortedExecuted = Array.from(new Set(executedDays))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+  if (sortedExecuted.length === 0) return false;
+  const sortedPrior = Array.from(new Set(priorDaysSent))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+
+  if (sortedPrior.length === 0) {
+    // Heuristic with no priors → "Send Day 1 and 2".
+    // Treat any subset of {1, 2} as a match — sending Day 1 alone
+    // still represents "the operator took the suggested opening
+    // path", and Day 1+2 is the canonical match.
+    if (sortedExecuted.length === 2 && sortedExecuted[0] === 1 && sortedExecuted[1] === 2) {
+      return true;
+    }
+    if (sortedExecuted.length === 1 && (sortedExecuted[0] === 1 || sortedExecuted[0] === 2)) {
+      return true;
+    }
+    return false;
+  }
+
+  // Heuristic with priors → "Send Day {max(prior) + 1}".
+  const lastPriorMax = sortedPrior[sortedPrior.length - 1];
+  return sortedExecuted.length === 1 && sortedExecuted[0] === lastPriorMax + 1;
+}
+
 // Helper for callers that have a raw input JSON blob (the same shape
 // /api/ai/execute writes into AISuggestion.input). Extracts the days
 // safely; returns [] on any malformed shape.

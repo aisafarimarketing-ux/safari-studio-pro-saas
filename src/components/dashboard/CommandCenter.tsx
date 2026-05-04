@@ -125,6 +125,12 @@ type ReservationRow = {
     sentAt: string;
     bookedAt: string;
     label: string;
+    /** True when the credited send matches what Inspector AI v1
+     *  would have suggested at the time (server-side check via
+     *  matchesNextStepHeuristic). Renders the reinforced copy
+     *  ("Booked — you followed the suggested step (Day 3)") instead
+     *  of the generic attribution line. */
+    followedSuggestion: boolean;
   } | null;
 };
 
@@ -2193,11 +2199,35 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
         )}
         {/* Attribution line — the cause-and-effect signal. Renders
             only when a sent AISuggestion for this proposal had its
-            outcome flipped to "booked" by Phase 2 wiring. The
-            timeDelta is sentAt → bookedAt (the moment the booking
-            event landed), so it answers "how long after I sent
-            the message did the booking come in?". */}
-        {row.creditedSuggestion && (
+            outcome flipped to "booked" by Phase 2 wiring.
+            Two variants:
+              - Followed: "✓ Booked — you followed the suggested
+                step (Day 3)". Stronger reinforcement; fires only
+                when the executed snippet matches what Inspector AI
+                v1 would have suggested at the time.
+              - Generic: "✓ Booked after [WhatsApp] Day 3 snippet
+                sent 12 min before". Time-delta from sentAt →
+                bookedAt, so it answers "how long after I sent the
+                message did the booking come in?". */}
+        {row.creditedSuggestion?.followedSuggestion ? (
+          <div
+            className="text-[11px] mt-1 leading-snug flex items-center gap-1.5 flex-wrap"
+            style={{ color: "#15803d" }}
+          >
+            <span aria-hidden style={{ fontWeight: 700 }}>✓</span>
+            <span style={{ fontWeight: 600 }}>
+              Booked — you followed the suggested step
+            </span>
+            {row.creditedSuggestion.channel === "whatsapp" ? (
+              <WhatsAppIcon size={11} />
+            ) : (
+              <EmailIcon size={11} muted />
+            )}
+            <span style={{ color: "rgba(10,20,17,0.75)" }}>
+              ({row.creditedSuggestion.label})
+            </span>
+          </div>
+        ) : row.creditedSuggestion ? (
           <div
             className="text-[11px] mt-1 leading-snug flex items-center gap-1.5 flex-wrap"
             style={{ color: "#15803d" }}
@@ -2219,7 +2249,7 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
               {" before"}
             </span>
           </div>
-        )}
+        ) : null}
       </div>
       <div className="shrink-0 flex items-center gap-1.5">
         <button

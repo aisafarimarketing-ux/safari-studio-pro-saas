@@ -13,6 +13,7 @@ import { normaliseFollowUpMode } from "@/lib/followUpMode";
 import {
   aggregateBookedStats,
   extractDaysFromInput,
+  matchesNextStepHeuristic,
   suggestNextStepWithStats,
   type InspectorSuggestion,
 } from "@/lib/inspectorAI";
@@ -553,17 +554,47 @@ export async function GET(req: Request) {
       })
     : [];
   // Group by proposal id, keep the first (most-recent sentAt) per
-  // proposal. Operators see exactly one credit line per booking, even
-  // if a deal had multiple sent suggestions.
+  // proposal — that's the row we display credit for. Also bucket
+  // every execution row per proposal so we can look up "what was
+  // sent before this credit's sentAt" when computing the
+  // followedSuggestion flag (see below).
   const creditedByProposal = new Map<string, (typeof creditedRaw)[number]>();
+  const allExecutionsByProposal = new Map<string, (typeof creditedRaw)[number][]>();
   for (const row of creditedRaw) {
     if (!creditedByProposal.has(row.targetId)) {
       creditedByProposal.set(row.targetId, row);
+    }
+    if (row.kind === "execution") {
+      const list = allExecutionsByProposal.get(row.targetId) ?? [];
+      list.push(row);
+      allExecutionsByProposal.set(row.targetId, list);
     }
   }
 
   const reservations = reservationsRaw.map((r) => {
     const credited = r.proposal?.id ? creditedByProposal.get(r.proposal.id) : null;
+    // Decide if the credited send matches what Inspector AI's v1
+    // heuristic would have suggested at the time. Only fires for
+    // execution-kind credits — follow-up messages aren't day-
+    // pattern actions and shouldn't claim "you followed the
+    // suggested step".
+    let followedSuggestion = false;
+    if (credited && credited.kind === "execution" && credited.sentAt) {
+      const executedDays = extractDaysFromInput(credited.input);
+      if (executedDays.length > 0) {
+        const proposalExecutions = allExecutionsByProposal.get(credited.targetId) ?? [];
+        const priorDays: number[] = [];
+        for (const exec of proposalExecutions) {
+          if (exec.id === credited.id) continue;
+          if (!exec.sentAt) continue;
+          if (exec.sentAt >= credited.sentAt) continue;
+          for (const d of extractDaysFromInput(exec.input)) {
+            if (!priorDays.includes(d)) priorDays.push(d);
+          }
+        }
+        followedSuggestion = matchesNextStepHeuristic(executedDays, priorDays);
+      }
+    }
     return {
       id: r.id,
       clientName: `${r.firstName} ${r.lastName}`.trim() || "—",
@@ -593,6 +624,7 @@ export async function GET(req: Request) {
             sentAt: credited.sentAt!.toISOString(),
             bookedAt: credited.bookedAt!.toISOString(),
             label: deriveCreditLabel(credited.kind, credited.input),
+            followedSuggestion,
           }
         : null,
     };
