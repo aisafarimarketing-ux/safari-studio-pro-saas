@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { logSuggestion } from "@/lib/aiLog";
 import {
+  derivePricingContext,
   extractDays,
   findClient,
   findClientById,
@@ -560,6 +561,17 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
         ? content.trip.nights
         : null;
 
+    // Derive the reassurance context from the proposal's share-view
+    // behaviour. Best-effort — a query failure here can't hold up
+    // the send; the formatter falls back to the "comparison" copy
+    // when context is null.
+    let context: Awaited<ReturnType<typeof derivePricingContext>> = null;
+    try {
+      context = await derivePricingContext(orgId, proposal.id);
+    } catch (err) {
+      console.warn("[execute] derivePricingContext failed:", err);
+    }
+
     const snippet = formatPricingSnippet({
       channel,
       clientFirstName,
@@ -570,6 +582,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       exclusions,
       adults,
       nights,
+      context,
       operatorFirstName,
     });
 

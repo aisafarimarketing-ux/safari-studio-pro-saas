@@ -623,6 +623,74 @@ export async function loadLatestProposal(
   };
 }
 
+// ─── Pricing context derivation ─────────────────────────────────────────────
+//
+// Reads the share-view behaviour signals for one proposal and bucks
+// them into one of three contexts the pricing formatter uses to pick
+// its reassurance line. Tiny single-purpose query — meant to be
+// called inline from /api/ai/execute right before formatPricingSnippet.
+//
+// Buckets (priority order):
+//   "hesitation"  — pricing dwell ≥60s. They've been on the price
+//                   page long enough that the operator's first
+//                   instinct is right: this is a "what fits me"
+//                   conversation.
+//   "comparison"  — pricing was viewed (priceViewed flag fired) OR
+//                   any non-zero pricing dwell exists. Quick scan
+//                   pattern; reassurance frames the breakdown as a
+//                   structure-explainer.
+//   "confusion"   — no pricing engagement signal at all (the deck
+//                   was opened but pricing was never reached, OR no
+//                   share-view sessions exist yet). Reassurance
+//                   leans into "happy to clarify".
+//   null          — no proposal activity row at all (just-created
+//                   proposal). Caller defaults to "comparison".
+
+export type PricingContext = "hesitation" | "comparison" | "confusion" | null;
+
+const PRICING_HESITATION_DWELL_S = 60;
+
+export async function derivePricingContext(
+  organizationId: string,
+  proposalId: string,
+): Promise<PricingContext> {
+  // Two cheap queries: per-proposal pricing-dwell sum + the
+  // priceViewed flag from the activity summary. Org-scope guard on
+  // the summary side stays consistent with everything else in this
+  // module — never trust caller-supplied proposalId alone.
+  const [events, summary] = await Promise.all([
+    prisma.proposalViewEvent.findMany({
+      where: {
+        view: { proposalId },
+        sectionType: "pricing",
+        kind: { in: ["section", "close"] },
+        dwellSeconds: { not: null },
+      },
+      select: { dwellSeconds: true },
+      take: 200,
+    }),
+    prisma.proposalActivitySummary.findUnique({
+      where: { proposalId },
+      select: { priceViewed: true, organizationId: true, viewedCount: true },
+    }),
+  ]);
+  // Cross-org guard: if the activity summary exists but for a
+  // different org, treat as no signal. Nothing here returns the
+  // proposal's content, but staying paranoid keeps the call safe to
+  // share across surfaces.
+  if (summary && summary.organizationId !== organizationId) return null;
+  if (!summary) return null;
+
+  const totalPricingDwell = events.reduce(
+    (sum, e) => sum + (e.dwellSeconds ?? 0),
+    0,
+  );
+  if (totalPricingDwell >= PRICING_HESITATION_DWELL_S) return "hesitation";
+  if (summary.priceViewed || totalPricingDwell > 0) return "comparison";
+  if (summary.viewedCount > 0) return "confusion";
+  return null;
+}
+
 // ─── Day extraction ─────────────────────────────────────────────────────────
 //
 // Given a loaded Proposal and the requested day numbers, return the

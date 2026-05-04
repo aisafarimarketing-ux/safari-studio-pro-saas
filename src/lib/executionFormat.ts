@@ -298,6 +298,12 @@ export type { Proposal };
 // surface alternative tiers can edit in the FollowUpPanel preview
 // before dispatching.
 
+export type PricingContextHint =
+  | "hesitation"
+  | "comparison"
+  | "confusion"
+  | null;
+
 export type PricingFormatInput = {
   channel: SnippetChannel;
   clientFirstName: string;
@@ -314,6 +320,10 @@ export type PricingFormatInput = {
   /** Total nights from proposal.contentJson.trip.nights — appended
    *  to the total line as "for N nights". Optional. */
   nights: number | null;
+  /** Behaviour-derived context that picks the reassurance line.
+   *  Caller passes the result of derivePricingContext (executionTools);
+   *  null defaults to "comparison" — the safest neutral framing. */
+  context: PricingContextHint;
   operatorFirstName: string | null;
 };
 
@@ -326,13 +336,26 @@ export function formatPricingSnippet(
   return formatPricingEmail(input);
 }
 
-// One grounding line. Deterministic — we always pick the same
-// reassurance copy so the message tone stays predictable. Listed as
-// a constant so future edits route through one place rather than
-// drifting between WhatsApp and email branches.
-const PRICING_REASSURANCE =
-  "We can adjust this based on your dates or lodge preferences.";
-const PRICING_CLOSING = "Let me know if you'd like me to adjust anything.";
+// Reassurance copy, picked from the behaviour-derived context.
+// Deterministic — the formatter never randomises so the same
+// proposal + same context always yields the same line. Caller passes
+// the context; null falls back to "comparison" because that's the
+// most neutral framing for a no-data send.
+const PRICING_REASSURANCE: Record<
+  Exclude<PricingContextHint, null>,
+  string
+> = {
+  hesitation: "We can adjust this depending on what matters most to you.",
+  comparison: "This should give a clear sense of how the trip is structured.",
+  confusion: "Happy to clarify anything that isn't clear.",
+};
+function pickReassurance(context: PricingContextHint): string {
+  return PRICING_REASSURANCE[context ?? "comparison"];
+}
+
+// Stronger closing — replaces the previous passive "Let me know if
+// you'd like me to adjust anything." Active phrasing, low friction.
+const PRICING_CLOSING = "Happy to walk through it with you if helpful.";
 
 function formatPricingWhatsApp(input: PricingFormatInput): FormattedSnippet {
   const tier = input.pricing[input.activeTier];
@@ -384,8 +407,8 @@ function formatPricingWhatsApp(input: PricingFormatInput): FormattedSnippet {
     blocks.push(["What's not included", ...exclusions.map((s) => `• ${s}`)].join("\n"));
   }
 
-  // ── Light reassurance line (deterministic)
-  blocks.push(PRICING_REASSURANCE);
+  // ── Adaptive reassurance line (picked from context)
+  blocks.push(pickReassurance(input.context));
 
   const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
 
@@ -469,9 +492,9 @@ function formatPricingEmail(input: PricingFormatInput): FormattedSnippet {
     `);
   }
 
-  // ── Reassurance line
+  // ── Reassurance line (adaptive)
   blocks.push(
-    `<p style="margin:0 0 14px;color:#0a1411;">${escapeHtml(PRICING_REASSURANCE)}</p>`,
+    `<p style="margin:0 0 14px;color:#0a1411;">${escapeHtml(pickReassurance(input.context))}</p>`,
   );
 
   const closing = `<p style="margin:18px 0 0;color:#0a1411;">${escapeHtml(PRICING_CLOSING)}</p>`;
