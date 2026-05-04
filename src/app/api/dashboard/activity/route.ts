@@ -108,6 +108,13 @@ type Card = {
    *  — the inline contact-capture UI uses this signal to prompt for
    *  the missing field. */
   preferredChannel: "whatsapp" | "email" | null;
+  /** Aggregated behavioural signals for the share view — dwell-by-
+   *  section-type plus max scroll depth across all anonymous viewer
+   *  sessions of this proposal. Inspector AI reads these to surface
+   *  "they're evaluating pricing" / "they didn't reach later days" /
+   *  etc. Null when no view sessions exist yet (just-sent or never
+   *  opened). */
+  behaviorStats: BehaviorStats | null;
   client: {
     id: string;
     name: string | null;
@@ -115,6 +122,22 @@ type Card = {
     phone: string | null;
   } | null;
   consultant: { id: string; name: string | null; email: string | null } | null;
+};
+
+// Aggregated behaviour signals for one proposal across all view
+// sessions. Dwell is in seconds (matches ProposalViewEvent.dwellSeconds);
+// scroll depth is the max ever observed across sessions (0–100).
+//
+// dayDwellSeconds rolls up *every* dayJourney section — Inspector AI
+// uses it as "they're imagining the trip" rather than per-day signal,
+// because we don't carry day numbers in the section-type taxonomy.
+// pricingDwellSeconds is the same idea for pricing.
+type BehaviorStats = {
+  pricingDwellSeconds: number;
+  dayDwellSeconds: number;
+  totalDwellSeconds: number;
+  maxScrollPct: number;
+  sessionCount: number;
 };
 
 // ─── Lead row — pre-proposal funnel ─────────────────────────────────────
@@ -341,6 +364,75 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Behaviour signals — share-view dwell + scroll depth ─────────────
+  // Single batched query that pulls ProposalViewEvent rows with their
+  // parent ProposalView (for proposalId) for the visible set. We
+  // aggregate in JS rather than using Prisma's groupBy because we
+  // need to bucket by (proposalId, sectionType) which groupBy
+  // doesn't express cleanly. Bounded: visible proposals × ~10
+  // sections × ~3 sessions in a typical org. The take cap defends
+  // against runaway events on a single popular proposal.
+  const behaviorStatsByProposal = new Map<string, BehaviorStats>();
+  if (proposalIds.length) {
+    const [eventsRaw, viewsRaw] = await Promise.all([
+      prisma.proposalViewEvent.findMany({
+        where: {
+          view: { proposalId: { in: proposalIds } },
+          kind: { in: ["section", "close"] },
+          sectionType: { not: null },
+          dwellSeconds: { not: null },
+        },
+        select: {
+          sectionType: true,
+          dwellSeconds: true,
+          view: { select: { proposalId: true } },
+        },
+        take: 5000,
+      }),
+      prisma.proposalView.findMany({
+        where: { proposalId: { in: proposalIds } },
+        select: { proposalId: true, scrollDepthPct: true },
+      }),
+    ]);
+    for (const e of eventsRaw) {
+      const proposalId = e.view.proposalId;
+      const stats = behaviorStatsByProposal.get(proposalId) ?? {
+        pricingDwellSeconds: 0,
+        dayDwellSeconds: 0,
+        totalDwellSeconds: 0,
+        maxScrollPct: 0,
+        sessionCount: 0,
+      };
+      const dwell = e.dwellSeconds ?? 0;
+      stats.totalDwellSeconds += dwell;
+      if (e.sectionType === "pricing") stats.pricingDwellSeconds += dwell;
+      else if (e.sectionType === "dayJourney") stats.dayDwellSeconds += dwell;
+      behaviorStatsByProposal.set(proposalId, stats);
+    }
+    // Roll up scroll-depth + session count per proposal.
+    const sessionCountByProposal = new Map<string, number>();
+    for (const v of viewsRaw) {
+      const stats = behaviorStatsByProposal.get(v.proposalId) ?? {
+        pricingDwellSeconds: 0,
+        dayDwellSeconds: 0,
+        totalDwellSeconds: 0,
+        maxScrollPct: 0,
+        sessionCount: 0,
+      };
+      const scroll = v.scrollDepthPct ?? 0;
+      if (scroll > stats.maxScrollPct) stats.maxScrollPct = scroll;
+      behaviorStatsByProposal.set(v.proposalId, stats);
+      sessionCountByProposal.set(
+        v.proposalId,
+        (sessionCountByProposal.get(v.proposalId) ?? 0) + 1,
+      );
+    }
+    for (const [pid, count] of sessionCountByProposal.entries()) {
+      const stats = behaviorStatsByProposal.get(pid);
+      if (stats) stats.sessionCount = count;
+    }
+  }
+
   const summaries = summariesRaw.map((row) => {
     const refreshed = refreshStatusForRead(
       {
@@ -401,6 +493,7 @@ export async function GET(req: Request) {
     // 25 min after sending Day 3 via WhatsApp"). Below the sample
     // threshold the suggester falls back to the v1 heuristic copy
     // — never invents a stat off thin data.
+    const behaviorStats = behaviorStatsByProposal.get(row.proposalId) ?? null;
     const nextSuggestion = suggestNextStepWithStats(
       {
         momentum: momentum.momentum,
@@ -414,6 +507,7 @@ export async function GET(req: Request) {
           ? lastPreviewByClient.get(row.client.id) ?? null
           : null,
         clientFirstName: row.client?.firstName ?? null,
+        behaviorStats,
         now,
       },
       bookedStats,
@@ -448,6 +542,7 @@ export async function GET(req: Request) {
         : row.client?.email
           ? "email"
           : null,
+      behaviorStats,
       client: row.client
         ? {
             id: row.client.id,

@@ -28,6 +28,28 @@ export type InspectorSuggestion = {
   actionCommand?: string;
 };
 
+// Aggregated behaviour signals for the share-view tracker. Sourced from
+// /api/dashboard/activity which rolls up ProposalViewEvent.dwellSeconds
+// (bucketed by sectionType) + ProposalView.scrollDepthPct across all
+// anonymous viewer sessions of one proposal.
+//
+// Inspector AI uses these to upgrade VERY_HOT suggestions from "they
+// engaged" (boolean signals like priceViewed) to "they engaged for X
+// minutes" — the dwell signal is what tells "casual glance" from "they
+// keep coming back".
+export type InspectorBehaviorStats = {
+  pricingDwellSeconds: number;
+  dayDwellSeconds: number;
+  totalDwellSeconds: number;
+  /** Max scroll depth observed across sessions, 0–100. 0 means the
+   *  viewer never scrolled (cover-only view) or no sessions exist
+   *  yet. Used as a "did they reach later days?" signal — anything
+   *  below ~40 means the client bounced before the heart of the
+   *  proposal. */
+  maxScrollPct: number;
+  sessionCount: number;
+};
+
 export type InspectorInput = {
   momentum: DealMomentum;
   lastEventType: string | null;
@@ -54,6 +76,11 @@ export type InspectorInput = {
    *  reads naturally ("send Jennifer day 3"). Null falls back to
    *  the literal "client". */
   clientFirstName: string | null;
+  /** Aggregated share-view behaviour signals. Null when no view
+   *  sessions exist yet. The VERY_HOT branch reads these to lead
+   *  with the strongest dwell signal (pricing > day > scroll); the
+   *  other momentum buckets ignore them in v1. */
+  behaviorStats: InspectorBehaviorStats | null;
   /** For testability. Defaults to current time. */
   now?: Date;
 };
@@ -91,8 +118,22 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
   // ─── VERY_HOT ────────────────────────────────────────────────────
   // Highest-leverage moment. The operator should act now. Bias toward
   // a buying-signal-aware suggestion (pricing → clarification) over
-  // a pitch.
+  // a pitch. Behaviour-signal branches run BEFORE the boolean ones —
+  // dwell time is a stronger intent signal than the one-shot
+  // priceViewed / itinerary_clicked flags.
   if (input.momentum === "VERY_HOT") {
+    const stats = input.behaviorStats;
+
+    // Pricing dwell — they're sitting on the price page. The
+    // strongest pre-buy signal we have. Threshold tuned to filter
+    // out scroll-throughs (a client glancing past pricing on the
+    // way down rarely lingers more than 30s on the section).
+    if (stats && stats.pricingDwellSeconds >= 60) {
+      return {
+        message: `They've spent ${formatDwell(stats.pricingDwellSeconds)} on pricing — they're evaluating. A clarifying note often unsticks this.`,
+        actionLabel: "Open command",
+      };
+    }
     if (input.lastEventType === "price_viewed" || input.priceViewed) {
       // Pricing-stuck moments deserve a clarifying message, not a
       // next-day push. Pricing answers tend to be bespoke, so the
@@ -107,6 +148,23 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
       return {
         message: "They opened the reservation form — a short nudge with arrival logistics often closes from here.",
         actionLabel: "Open command",
+      };
+    }
+    // Day dwell — sustained time on the day cards. Same intent as
+    // an itinerary click, but stronger: they've been reading, not
+    // just tapping. Suggest the next day to keep the picture moving.
+    if (stats && stats.dayDwellSeconds >= 90) {
+      if (sentSomethingBefore && nextDay !== null) {
+        return {
+          message: `${formatDwell(stats.dayDwellSeconds)} on the day cards — Day ${nextDay} keeps the picture moving while it's fresh.`,
+          actionLabel: `Send Day ${nextDay}`,
+          actionCommand: `send ${cmdName} day ${nextDay}`,
+        };
+      }
+      return {
+        message: `${formatDwell(stats.dayDwellSeconds)} on the day cards — share Day 1 and 2 to keep momentum.`,
+        actionLabel: "Send Day 1 and 2",
+        actionCommand: `send ${cmdName} day 1 and 2`,
       };
     }
     if (input.lastEventType === "itinerary_clicked") {
@@ -124,6 +182,24 @@ export function suggestNextStep(input: InspectorInput): InspectorSuggestion | nu
         message: "They're imagining the trip — a snippet of the first couple of days helps them see it.",
         actionLabel: "Send Day 1 and 2",
         actionCommand: `send ${cmdName} day 1 and 2`,
+      };
+    }
+    // Low scroll depth — they're VERY_HOT (recent activity) but
+    // never reached past the cover/intro area. Different play from
+    // the day-by-day pitch: a tight highlight pulls them back into
+    // the proposal. Skip when no scroll data exists yet (sessionless
+    // VERY_HOT happens when the only activity is a click on the
+    // reservation form, which other branches already cover).
+    if (
+      stats &&
+      stats.sessionCount > 0 &&
+      stats.maxScrollPct > 0 &&
+      stats.maxScrollPct < 40
+    ) {
+      return {
+        message: `They opened the proposal but only scrolled to ${stats.maxScrollPct}% — a tight highlight pulls them back in.`,
+        actionLabel: "Send preview",
+        actionCommand: `send a 5 day safari to ${cmdName}`,
       };
     }
     if (sentSomethingBefore && nextDay !== null) {
@@ -589,6 +665,18 @@ function formatMinutes(min: number): string {
   }
   const days = Math.round(min / (24 * 60));
   return `${days} d`;
+}
+
+// Operator-facing dwell formatting. Distinct from formatMinutes —
+// dwell is in seconds and we want sub-minute granularity ("45s on
+// pricing" reads better than "<1 min on pricing"). Above a minute we
+// round down to whole minutes so the chip stays compact.
+function formatDwell(seconds: number): string {
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
+  const min = Math.round(seconds / 60);
+  if (min < 60) return `${min} min`;
+  const hours = Math.round(min / 60);
+  return `${hours} h`;
 }
 
 // Surface a channel hint only when one channel clearly dominates

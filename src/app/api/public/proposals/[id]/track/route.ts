@@ -70,9 +70,33 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!kind) return NextResponse.json({ error: "invalid kind" }, { status: 400 });
 
   const sectionId = typeof body.sectionId === "string" ? body.sectionId.slice(0, 64) : null;
+  // Section type comes from data-section-type on the share view.
+  // Whitelisted to a small fixed set so the column can't get polluted
+  // with arbitrary strings — Inspector AI keys off these names when
+  // aggregating dwell.
+  const ALLOWED_SECTION_TYPES = new Set([
+    "cover",
+    "intro",
+    "dayJourney",
+    "itineraryTable",
+    "map",
+    "pricing",
+    "lodge",
+    "reservation",
+    "contact",
+    "footer",
+  ]);
+  const sectionType =
+    typeof body.sectionType === "string" && ALLOWED_SECTION_TYPES.has(body.sectionType)
+      ? body.sectionType
+      : null;
   const dwellSeconds =
     typeof body.dwellSeconds === "number" && Number.isFinite(body.dwellSeconds)
       ? Math.max(0, Math.min(3600, Math.round(body.dwellSeconds)))
+      : null;
+  const scrollDepthPct =
+    typeof body.scrollDepthPct === "number" && Number.isFinite(body.scrollDepthPct)
+      ? Math.max(0, Math.min(100, Math.round(body.scrollDepthPct)))
       : null;
   // Caller-supplied metadata for org-level event kinds. Plain object
   // only (no arrays / primitives), capped to a small set of keys we
@@ -108,6 +132,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         userAgent,
         referrer,
         country,
+        scrollDepthPct,
       },
       update: {
         lastViewedAt: now,
@@ -120,11 +145,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       },
     });
 
+    // scrollDepthPct is monotonic per session — only bump when the new
+    // value is higher than what we already have. Using a separate
+    // update keeps the upsert above readable; the row was just created
+    // or fetched so the second roundtrip is on a hot row.
+    if (scrollDepthPct !== null && scrollDepthPct > (view.scrollDepthPct ?? 0)) {
+      await prisma.proposalView.update({
+        where: { id: view.id },
+        data: { scrollDepthPct },
+      });
+    }
+
     await prisma.proposalViewEvent.create({
       data: {
         viewId: view.id,
         kind,
         sectionId,
+        sectionType,
         dwellSeconds,
       },
     });

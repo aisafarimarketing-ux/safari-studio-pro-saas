@@ -18,8 +18,14 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
   useEffect(() => {
     const sessionId = ensureSessionId();
     let currentSectionId: string | null = null;
+    let currentSectionType: string | null = null;
     let sectionEnteredAt: number | null = null;
     let unloaded = false;
+    // Highest scroll depth observed in this session, 0–100. Posted on
+    // flush so Inspector AI can tell "viewed but bounced" (scrollDepthPct
+    // < 40) apart from "read deeply" — the existing 40% scrolled flag is
+    // boolean and doesn't surface that gap.
+    let maxScrollPct = 0;
 
     // ── Fire "open" once per session
     post(proposalId, { sessionId, kind: "open" });
@@ -37,6 +43,7 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
         // Flush dwell of the previous section.
         flushCurrent();
         currentSectionId = id;
+        currentSectionType = sectionTypeOf(visible.target as HTMLElement);
         sectionEnteredAt = Date.now();
       },
       { threshold: [0.2, 0.5, 0.8] },
@@ -56,20 +63,23 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
     const SCROLL_THRESHOLD = 0.4;
     let scrollFired = readOnceMarker(scrolledKey(proposalId, sessionId));
     const onScroll = () => {
-      if (scrollFired) return;
+      // Always update maxScrollPct (cheap), even after the 40% boolean
+      // has fired — Inspector AI cares about how *far* a viewer got, not
+      // just whether they crossed the threshold.
       const scrolled = window.scrollY || document.documentElement.scrollTop;
       const total = Math.max(
         document.documentElement.scrollHeight - window.innerHeight,
         1,
       );
-      if (scrolled / total >= SCROLL_THRESHOLD) {
+      const pct = Math.max(0, Math.min(100, Math.round((scrolled / total) * 100)));
+      if (pct > maxScrollPct) maxScrollPct = pct;
+      if (!scrollFired && pct >= SCROLL_THRESHOLD * 100) {
         scrollFired = true;
         writeOnceMarker(scrolledKey(proposalId, sessionId));
         post(proposalId, { sessionId, kind: "proposal_scrolled" });
-        window.removeEventListener("scroll", onScroll);
       }
     };
-    if (!scrollFired) window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
 
     // ── price_viewed — IntersectionObserver on any node carrying
     //    data-section-type="pricing". Fires once per (proposal,
@@ -156,7 +166,9 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
             sessionId,
             kind: "section",
             sectionId: currentSectionId,
+            sectionType: currentSectionType,
             dwellSeconds,
+            scrollDepthPct: maxScrollPct,
           });
         }
       }
@@ -168,9 +180,14 @@ export function ViewTracker({ proposalId }: { proposalId: string }) {
       flushCurrent();
       // navigator.sendBeacon is the reliable unload hook — XHR/fetch are
       // often cancelled when the page tears down.
-      const payload: Record<string, unknown> = { sessionId, kind: "close" };
+      const payload: Record<string, unknown> = {
+        sessionId,
+        kind: "close",
+        scrollDepthPct: maxScrollPct,
+      };
       if (currentSectionId && sectionEnteredAt != null) {
         payload.sectionId = currentSectionId;
+        if (currentSectionType) payload.sectionType = currentSectionType;
         payload.dwellSeconds = Math.round((Date.now() - sectionEnteredAt) / 1000);
       }
       const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
@@ -243,6 +260,20 @@ export function ensureSessionId(): string {
   } catch {
     return `anon-${Math.random().toString(36).slice(2, 10)}`;
   }
+}
+
+// Section root → section type. Reads data-section-type off the
+// observed root, falling back to the nearest ancestor that carries
+// it. DayCard and PricingSection set this attribute on the root they
+// also mark with id="day-..." / id="section-...", so the lookup is
+// almost always a single dataset read. Returns null when the root
+// has no type (e.g. legacy sections), letting Inspector AI ignore
+// dwell that can't be bucketed.
+function sectionTypeOf(el: HTMLElement): string | null {
+  const own = el.dataset.sectionType;
+  if (own) return own;
+  const ancestor = el.closest<HTMLElement>("[data-section-type]");
+  return ancestor?.dataset.sectionType ?? null;
 }
 
 function post(proposalId: string, body: Record<string, unknown>) {

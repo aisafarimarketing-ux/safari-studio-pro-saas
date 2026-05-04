@@ -420,6 +420,13 @@ model ProposalView {
   viewCount     Int      @default(1)
   totalSeconds  Int      @default(0)
 
+  // Max scroll depth observed in this session, 0–100. Bumped by the
+  // ViewTracker on `pagehide` / `visibilitychange` flushes. Lets the
+  // dashboard's Inspector AI tell apart "viewed and read deeply" from
+  // "viewed and bounced" — the existing scrolledCount only fires once
+  // at the 40% threshold, which doesn't distinguish 41% from 95%.
+  scrollDepthPct Int?
+
   events ProposalViewEvent[]
 
   @@unique([proposalId, sessionId])
@@ -434,6 +441,11 @@ model ProposalViewEvent {
   // "open" | "section" | "close"
   kind         String
   sectionId    String?
+  // Section type ("pricing" / "dayJourney" / "cover" / etc.) read off
+  // the section's data-section-type attribute on the share view. Lets
+  // /api/dashboard/activity aggregate dwell by type without joining
+  // back to the proposal's contentJson sections array.
+  sectionType  String?
   dwellSeconds Int?
 
   createdAt DateTime @default(now())
