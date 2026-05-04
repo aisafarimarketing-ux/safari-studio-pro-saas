@@ -22,6 +22,10 @@ export type FormatInput = {
   /** Operator's name for the sign-off line. Optional; we omit the line
    *  when missing rather than seeding "Best, undefined". */
   operatorFirstName: string | null;
+  /** Brand DNA copy templates — when present, override the default
+   *  greeting / signoff / signature blocks. Null fields fall through
+   *  to the existing hardcoded copy so older callers keep working. */
+  brand?: BrandFormatInput;
 };
 
 export type FormattedSnippet = {
@@ -51,9 +55,19 @@ export function formatProposalDaysSnippet(input: FormatInput): FormattedSnippet 
 // Greeting + sign-off bookend the days.
 
 function formatWhatsApp(input: FormatInput): FormattedSnippet {
-  const greeting = `Hi ${input.clientFirstName} — here ${
+  // Greeting: brand template replaces the salutation prefix; the
+  // content suffix ("here are days N of your safari:") still comes
+  // from the formatter. Lets admins control voice ("Hi", "Hey",
+  // "Habari") without micromanaging the day-snippet wording.
+  const tail = `here ${
     input.days.length === 1 ? "is day" : "are days"
   } ${formatDayList(input.days)} of your ${input.tripTitle}:`;
+  const greeting = input.brand?.greetingFormat
+    ? `${applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })} ${tail}`
+    : `Hi ${input.clientFirstName} — ${tail}`;
 
   const dayBlocks = input.days.map((d) => {
     const header = `Day ${d.dayNumber}${d.destination ? ` — ${d.destination}` : ""}`;
@@ -69,14 +83,70 @@ function formatWhatsApp(input: FormatInput): FormattedSnippet {
   });
 
   const closing = "Let me know if you have any questions on either.";
-  const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+  // Sign-off + optional brand signature block. The signoff line stays
+  // a single line; the signature is multi-line and lives below it.
+  // Both fall back to the existing hardcoded copy when brand fields
+  // are absent so older callers keep working unchanged.
+  const signOff = brandSignoff(input);
+  const signature = brandWhatsAppSignature(input);
 
-  const text = [greeting, "", ...interleave(dayBlocks, ""), "", closing + signOff]
+  const text = [
+    greeting,
+    "",
+    ...interleave(dayBlocks, ""),
+    "",
+    closing + signOff,
+    ...(signature ? ["", signature] : []),
+  ]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   return { text, html: "", subject: "" };
+}
+
+// Shared helpers — same brand-template fallback semantics for every
+// formatter. Kept outside the per-formatter branches so changes ripple
+// through previews / pricing / day snippets in one place.
+function brandSignoff(input: {
+  operatorFirstName: string | null;
+  brand?: BrandFormatInput;
+}): string {
+  const fmt = input.brand?.signoffFormat;
+  if (fmt) {
+    const expanded = applyBrandTemplate(fmt, {
+      operatorFirstName: input.operatorFirstName,
+    });
+    return `\n${expanded}`;
+  }
+  return input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+}
+
+function brandWhatsAppSignature(input: {
+  operatorFirstName: string | null;
+  brand?: BrandFormatInput;
+}): string {
+  const fmt = input.brand?.whatsappSignatureFormat;
+  if (!fmt) return "";
+  const expanded = applyBrandTemplate(fmt, {
+    operatorFirstName: input.operatorFirstName,
+  });
+  // Strip operator-typed markdown so phone rendering stays clean.
+  return cleanWhatsAppMarkdown(expanded);
+}
+
+function brandEmailSignatureHtml(input: {
+  operatorFirstName: string | null;
+  brand?: BrandFormatInput;
+}): string {
+  const fmt = input.brand?.emailSignatureFormat;
+  if (!fmt) return "";
+  // Email signatures may carry HTML the operator authored. Trust
+  // the value (admin-only field, owner-gated by /api/brand-dna) and
+  // expand placeholders without escaping.
+  return applyBrandTemplate(fmt, {
+    operatorFirstName: input.operatorFirstName,
+  });
 }
 
 // Convert markdown emphasis to WhatsApp's flavour (single-character
@@ -151,7 +221,13 @@ function formatEmail(input: FormatInput): FormattedSnippet {
       ? `Day ${input.days[0].dayNumber} of your ${input.tripTitle}`
       : `${formatDaysWord(input.days)} of your ${input.tripTitle}`;
 
-  const greeting = `<p style="margin:0 0 14px;">Hi ${escapeHtml(input.clientFirstName)} — sharing ${
+  const greetingPrefix = input.brand?.greetingFormat
+    ? applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })
+    : `Hi ${input.clientFirstName} —`;
+  const greeting = `<p style="margin:0 0 14px;">${escapeHtml(greetingPrefix)} sharing ${
     input.days.length === 1 ? "day" : "days"
   } ${escapeHtml(formatDayList(input.days))} of your <strong>${escapeHtml(input.tripTitle)}</strong>:</p>`;
 
@@ -175,8 +251,24 @@ function formatEmail(input: FormatInput): FormattedSnippet {
   });
 
   const closing = `<p style="margin:18px 0 0;color:#0a1411;">Let me know if you have any questions on either.</p>`;
-  const signOff = input.operatorFirstName
-    ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+  const signoffHtml = (() => {
+    const fmt = input.brand?.signoffFormat;
+    if (fmt) {
+      const expanded = applyBrandTemplate(fmt, {
+        operatorFirstName: input.operatorFirstName,
+      });
+      return `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">${escapeHtml(expanded)}</p>`;
+    }
+    return input.operatorFirstName
+      ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+      : "";
+  })();
+  // Email signature — admin-authored HTML allowed. Length-capped at
+  // 4 KB by /api/brand-dna PUT, so we render verbatim without
+  // re-escaping. Owner-only field, trusted source.
+  const sigHtml = brandEmailSignatureHtml(input);
+  const sigBlock = sigHtml
+    ? `<div style="margin:18px 0 0;color:rgba(10,20,17,0.75);">${sigHtml}</div>`
     : "";
 
   const html = `
@@ -184,7 +276,8 @@ function formatEmail(input: FormatInput): FormattedSnippet {
       ${greeting}
       ${dayBlocks.join("")}
       ${closing}
-      ${signOff}
+      ${signoffHtml}
+      ${sigBlock}
     </div>
   `.replace(/\s+\n/g, "\n").trim();
 
@@ -278,6 +371,61 @@ function interleave<T>(items: T[], sep: T): T[] {
 // later (e.g. a saved snippet template).
 export type { Proposal };
 
+// ─── Brand DNA format application ─────────────────────────────────────────
+//
+// Threading the org's BrandDNAProfile.greetingFormat / signoffFormat /
+// {whatsapp,email}SignatureFormat through the formatters so every
+// client-facing send uses the company's approved copy by default.
+//
+// Templates are operator-edited strings with two placeholders:
+//   {firstName}           — the client's first name
+//   {operatorFirstName}   — the consultant who's sending
+//
+// Both render verbatim when the placeholder isn't present. Templates
+// arriving without a placeholder still work (e.g. a fixed "Hi —"
+// salutation that doesn't personalise) — the substitution is a fill-
+// gap, not a requirement.
+//
+// All four format fields are optional: when null, the formatters fall
+// back to their existing hardcoded copy. Backwards-compatible by
+// design — no migration, no breakage on orgs without a Brand DNA
+// profile.
+
+export type BrandFormatInput = {
+  /** Salutation prefix. The formatter appends content after it
+   *  (e.g. greetingFormat="Hi {firstName} —" yields
+   *  "Hi Lilian — here are days 2 and 3 of your safari:"). */
+  greetingFormat?: string | null;
+  /** Sign-off line — single line, expanded just before any signature
+   *  block. e.g. "— {operatorFirstName}". */
+  signoffFormat?: string | null;
+  /** WhatsApp signature block — appended after signoffFormat. Plain
+   *  text only; markdown is stripped via cleanWhatsAppMarkdown so
+   *  formatting from external editors stays clean on phones. */
+  whatsappSignatureFormat?: string | null;
+  /** Email signature block — appended in the email HTML branch.
+   *  HTML is allowed (the operator owns this string); the formatter
+   *  trusts the value and renders it as-is. */
+  emailSignatureFormat?: string | null;
+};
+
+// Pure substitution. Recognises {firstName} and {operatorFirstName}.
+// Unknown placeholders pass through verbatim — better to render a
+// literal {weirdKey} than to silently drop content the operator
+// authored.
+export function applyBrandTemplate(
+  template: string,
+  values: { firstName?: string | null; operatorFirstName?: string | null },
+): string {
+  return template.replace(/\{(\w+)\}/g, (match, key) => {
+    if (key === "firstName") return values.firstName?.trim() || match;
+    if (key === "operatorFirstName") {
+      return values.operatorFirstName?.trim() || match;
+    }
+    return match;
+  });
+}
+
 // ─── Pricing summary — deterministic breakdown ─────────────────────────────
 //
 // Sibling of formatProposalDaysSnippet for the "send pricing to X"
@@ -325,6 +473,9 @@ export type PricingFormatInput = {
    *  null defaults to "comparison" — the safest neutral framing. */
   context: PricingContextHint;
   operatorFirstName: string | null;
+  /** Brand DNA copy templates — see FormatInput.brand. Optional;
+   *  null fields fall back to the existing hardcoded copy. */
+  brand?: BrandFormatInput;
 };
 
 export function formatPricingSnippet(
@@ -369,7 +520,13 @@ function formatPricingWhatsApp(input: PricingFormatInput): FormattedSnippet {
       : null;
   const nights = input.nights && input.nights > 0 ? input.nights : null;
 
-  const greeting = `Hi ${input.clientFirstName} — here's a clear breakdown of your safari pricing:`;
+  const tail = "here's a clear breakdown of your safari pricing:";
+  const greeting = input.brand?.greetingFormat
+    ? `${applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })} ${tail}`
+    : `Hi ${input.clientFirstName} — ${tail}`;
 
   const blocks: string[] = [];
 
@@ -410,9 +567,17 @@ function formatPricingWhatsApp(input: PricingFormatInput): FormattedSnippet {
   // ── Adaptive reassurance line (picked from context)
   blocks.push(pickReassurance(input.context));
 
-  const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+  const signOff = brandSignoff(input);
+  const signature = brandWhatsAppSignature(input);
 
-  const text = [greeting, "", ...interleave(blocks, ""), "", PRICING_CLOSING + signOff]
+  const text = [
+    greeting,
+    "",
+    ...interleave(blocks, ""),
+    "",
+    PRICING_CLOSING + signOff,
+    ...(signature ? ["", signature] : []),
+  ]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -433,7 +598,13 @@ function formatPricingEmail(input: PricingFormatInput): FormattedSnippet {
   const nights = input.nights && input.nights > 0 ? input.nights : null;
 
   const subject = `Pricing for your ${input.tripTitle}`;
-  const greeting = `<p style="margin:0 0 14px;">Hi ${escapeHtml(input.clientFirstName)} — here's a clear breakdown of your safari pricing:</p>`;
+  const greetingPrefix = input.brand?.greetingFormat
+    ? applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })
+    : `Hi ${input.clientFirstName} —`;
+  const greeting = `<p style="margin:0 0 14px;">${escapeHtml(greetingPrefix)} here's a clear breakdown of your safari pricing:</p>`;
 
   const blocks: string[] = [];
 
@@ -498,8 +669,21 @@ function formatPricingEmail(input: PricingFormatInput): FormattedSnippet {
   );
 
   const closing = `<p style="margin:18px 0 0;color:#0a1411;">${escapeHtml(PRICING_CLOSING)}</p>`;
-  const signOff = input.operatorFirstName
-    ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+  const signoffHtml = (() => {
+    const fmt = input.brand?.signoffFormat;
+    if (fmt) {
+      const expanded = applyBrandTemplate(fmt, {
+        operatorFirstName: input.operatorFirstName,
+      });
+      return `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">${escapeHtml(expanded)}</p>`;
+    }
+    return input.operatorFirstName
+      ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+      : "";
+  })();
+  const sigHtml = brandEmailSignatureHtml(input);
+  const sigBlock = sigHtml
+    ? `<div style="margin:18px 0 0;color:rgba(10,20,17,0.75);">${sigHtml}</div>`
     : "";
 
   const html = `
@@ -507,7 +691,8 @@ function formatPricingEmail(input: PricingFormatInput): FormattedSnippet {
       ${greeting}
       ${blocks.join("")}
       ${closing}
-      ${signOff}
+      ${signoffHtml}
+      ${sigBlock}
     </div>
   `.replace(/\s+\n/g, "\n").trim();
 
@@ -586,6 +771,9 @@ export type PreviewFormatInput = {
   itineraryLabel: string;
   clientFirstName: string;
   operatorFirstName: string | null;
+  /** Brand DNA copy templates — see FormatInput.brand. Optional;
+   *  null fields fall back to the existing hardcoded copy. */
+  brand?: BrandFormatInput;
 };
 
 export function formatPreviewSnippet(
@@ -598,7 +786,13 @@ export function formatPreviewSnippet(
 }
 
 function formatPreviewWhatsApp(input: PreviewFormatInput): FormattedSnippet {
-  const greeting = `Hi ${input.clientFirstName} — here's what a typical ${input.itineraryPhrase} looks like with us:`;
+  const tail = `here's what a typical ${input.itineraryPhrase} looks like with us:`;
+  const greeting = input.brand?.greetingFormat
+    ? `${applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })} ${tail}`
+    : `Hi ${input.clientFirstName} — ${tail}`;
 
   const dayBlocks = input.days.map((d) => {
     const header = `Day ${d.dayNumber}${d.destination ? ` — ${d.destination}` : ""}`;
@@ -615,9 +809,17 @@ function formatPreviewWhatsApp(input: PreviewFormatInput): FormattedSnippet {
   });
 
   const closing = "Let me know if you'd like me to tailor this for you.";
-  const signOff = input.operatorFirstName ? `\n— ${input.operatorFirstName}` : "";
+  const signOff = brandSignoff(input);
+  const signature = brandWhatsAppSignature(input);
 
-  const text = [greeting, "", ...interleave(dayBlocks, ""), "", closing + signOff]
+  const text = [
+    greeting,
+    "",
+    ...interleave(dayBlocks, ""),
+    "",
+    closing + signOff,
+    ...(signature ? ["", signature] : []),
+  ]
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -629,7 +831,13 @@ function formatPreviewEmail(input: PreviewFormatInput): FormattedSnippet {
   // Subject is concrete on purpose — no "Following up" / "Just sharing".
   const subject = `What a typical ${input.itineraryLabel} looks like`;
 
-  const greeting = `<p style="margin:0 0 14px;">Hi ${escapeHtml(input.clientFirstName)} — sharing what a typical <strong>${escapeHtml(input.itineraryLabel)}</strong> looks like with us:</p>`;
+  const greetingPrefix = input.brand?.greetingFormat
+    ? applyBrandTemplate(input.brand.greetingFormat, {
+        firstName: input.clientFirstName,
+        operatorFirstName: input.operatorFirstName,
+      })
+    : `Hi ${escapeHtml(input.clientFirstName)} —`;
+  const greeting = `<p style="margin:0 0 14px;">${escapeHtml(greetingPrefix)} sharing what a typical <strong>${escapeHtml(input.itineraryLabel)}</strong> looks like with us:</p>`;
 
   const dayBlocks = input.days.map((d) => {
     const header = `Day ${d.dayNumber}${d.destination ? ` — ${escapeHtml(d.destination)}` : ""}`;
@@ -650,8 +858,21 @@ function formatPreviewEmail(input: PreviewFormatInput): FormattedSnippet {
   });
 
   const closing = `<p style="margin:18px 0 0;color:#0a1411;">Let me know if you'd like me to tailor this for you.</p>`;
-  const signOff = input.operatorFirstName
-    ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+  const signoffHtml = (() => {
+    const fmt = input.brand?.signoffFormat;
+    if (fmt) {
+      const expanded = applyBrandTemplate(fmt, {
+        operatorFirstName: input.operatorFirstName,
+      });
+      return `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">${escapeHtml(expanded)}</p>`;
+    }
+    return input.operatorFirstName
+      ? `<p style="margin:14px 0 0;color:rgba(10,20,17,0.7);">— ${escapeHtml(input.operatorFirstName)}</p>`
+      : "";
+  })();
+  const sigHtml = brandEmailSignatureHtml(input);
+  const sigBlock = sigHtml
+    ? `<div style="margin:18px 0 0;color:rgba(10,20,17,0.75);">${sigHtml}</div>`
     : "";
 
   const html = `
@@ -659,7 +880,8 @@ function formatPreviewEmail(input: PreviewFormatInput): FormattedSnippet {
       ${greeting}
       ${dayBlocks.join("")}
       ${closing}
-      ${signOff}
+      ${signoffHtml}
+      ${sigBlock}
     </div>
   `.replace(/\s+\n/g, "\n").trim();
 

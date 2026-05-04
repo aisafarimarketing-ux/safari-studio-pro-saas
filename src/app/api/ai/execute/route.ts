@@ -16,6 +16,7 @@ import {
   formatPreviewSnippet,
   formatPricingSnippet,
   formatProposalDaysSnippet,
+  type BrandFormatInput,
 } from "@/lib/executionFormat";
 import {
   PREVIEW_ITINERARY_IDS,
@@ -421,6 +422,36 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
   const clientFirstName =
     client.firstName?.trim() || client.fullName.split(/\s+/)[0] || "there";
 
+  // ─── Brand DNA copy templates (org-wide defaults) ─────────────────
+  // Pulled once per call so all three formatters share the same
+  // greeting / signoff / signature without three separate queries.
+  // Best-effort: a query failure here can't block a send — the
+  // formatters fall back to their hardcoded copy when the field
+  // is null. Existing orgs with no Brand DNA profile see today's
+  // behaviour unchanged.
+  let brand: BrandFormatInput = {};
+  try {
+    const profile = await prisma.brandDNAProfile.findUnique({
+      where: { organizationId: orgId },
+      select: {
+        greetingFormat: true,
+        signoffFormat: true,
+        whatsappSignatureFormat: true,
+        emailSignatureFormat: true,
+      },
+    });
+    if (profile) {
+      brand = {
+        greetingFormat: profile.greetingFormat,
+        signoffFormat: profile.signoffFormat,
+        whatsappSignatureFormat: profile.whatsappSignatureFormat,
+        emailSignatureFormat: profile.emailSignatureFormat,
+      };
+    }
+  } catch (err) {
+    console.warn("[execute] brand DNA load failed:", err);
+  }
+
   // ─── PREVIEW-ITINERARY branch ────────────────────────────────────────
   if (intent.kind === "send_preview_itinerary") {
     const itinerary = getPreviewItinerary(intent.itineraryType);
@@ -438,6 +469,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       itineraryLabel: itinerary.label,
       clientFirstName,
       operatorFirstName,
+      brand,
     });
 
     const logged = await logSuggestion({
@@ -584,6 +616,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
       nights,
       context,
       operatorFirstName,
+      brand,
     });
 
     const logged = await logSuggestion({
@@ -699,6 +732,7 @@ async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> 
     tripTitle: proposal.title,
     activeTier: (proposal.contentJson?.activeTier as TierKey) || "premier",
     operatorFirstName,
+    brand,
   });
 
   const logged = await logSuggestion({
