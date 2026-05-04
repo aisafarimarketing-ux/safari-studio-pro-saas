@@ -9,6 +9,7 @@ import {
   findClientById,
   loadLatestProposal,
   type ClientLite,
+  type LoadedProposal,
 } from "@/lib/executionTools";
 import { formatProposalDaysSnippet } from "@/lib/executionFormat";
 import { friendlyConsultantName } from "@/lib/consultantIdentity";
@@ -92,7 +93,14 @@ const TOOLS: Anthropic.Messages.Tool[] = [
 
 type Body = {
   command?: string;
+  /** Set when the operator picked a Client-row match from the
+   *  disambiguation list. Server uses findClientById + loadLatestProposal. */
   clientId?: string;
+  /** Set when the operator picked a reservation / proposal-content
+   *  match — those synthesise a "client" without a Prisma Client row,
+   *  so the route loads the linked proposal directly and skips the
+   *  Client lookup entirely. */
+  proposalId?: string;
 };
 
 type ExecuteResponse =
@@ -171,6 +179,7 @@ export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>>
   }
   const command = body.command?.trim() ?? "";
   const explicitClientId = body.clientId?.trim();
+  const explicitProposalId = body.proposalId?.trim();
   if (!command) {
     return NextResponse.json(
       { status: "error", command, message: "Command is required." },
@@ -187,6 +196,7 @@ export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>>
   // ── Step 1 — parse the command via Anthropic tool-use ────────────────
   const intent = await parseIntent(apiKey, command);
   if (!intent) {
+    console.warn(`[execute] intent-parse failed: command="${command}"`);
     return NextResponse.json({
       status: "error",
       command,
@@ -195,49 +205,135 @@ export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>>
     });
   }
 
-  // ── Step 2 — resolve client ──────────────────────────────────────────
+  // ── Step 2 — resolve target ──────────────────────────────────────────
+  // Three resolution paths, in priority order:
+  //   1. Operator already picked a proposal directly from a
+  //      reservation/contentJson disambiguation hit → use that
+  //      proposalId, build a minimal client lite from the proposal.
+  //   2. Operator picked a Client-row match from disambiguation →
+  //      findClientById + loadLatestProposal.
+  //   3. Fresh command → findClient (which now searches Client rows
+  //      AND ProposalReservations AND Proposal.contentJson).
   const orgId = ctx.organization.id;
-  const clientResult = explicitClientId
-    ? await findClientById(orgId, explicitClientId)
-    : await findClient(orgId, intent.clientHint);
+  let client: ClientLite;
+  let proposal: LoadedProposal;
 
-  if (clientResult.status === "not-found") {
-    return NextResponse.json({
-      status: "error",
-      command,
-      message: `No client matches "${intent.clientHint}". Try a different name or part of the email.`,
-    });
-  }
-  if (clientResult.status === "ambiguous") {
-    return NextResponse.json({
-      status: "needs_disambiguation",
-      command,
-      intent,
-      matches: clientResult.matches,
-    });
-  }
-  const client = clientResult.client;
+  if (explicitProposalId) {
+    const directProposal = await loadProposalDirect(orgId, explicitProposalId);
+    if (!directProposal) {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: "That proposal isn't accessible.",
+      });
+    }
+    proposal = directProposal.proposal;
+    client = directProposal.client;
+  } else if (explicitClientId) {
+    const clientResult = await findClientById(orgId, explicitClientId);
+    if (clientResult.status === "not-found") {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: "That client isn't accessible.",
+      });
+    }
+    if (clientResult.status === "ambiguous") {
+      // findClientById can't return ambiguous (single id) — narrow.
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: "Client lookup conflict.",
+      });
+    }
+    client = clientResult.client;
 
-  // ── Step 3 — load most recent proposal ───────────────────────────────
-  const proposalResult = await loadLatestProposal(orgId, client.id);
-  if (proposalResult.status === "not-found") {
-    return NextResponse.json({
-      status: "error",
-      command,
-      message: `${client.fullName} has no proposals on file yet. Create one before sending day snippets.`,
-    });
+    const proposalResult = await loadLatestProposal(orgId, client.id);
+    if (proposalResult.status === "not-found") {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `${client.fullName} has no proposals on file yet. Create one before sending day snippets.`,
+      });
+    }
+    proposal = proposalResult.proposal;
+  } else {
+    const fresh = await findClient(orgId, intent.clientHint);
+    console.log(
+      `[execute] resolution · hint="${intent.clientHint}" · status=${fresh.status} · ` +
+        (fresh.status === "found"
+          ? `client=${fresh.client.fullName} (source=${fresh.client.source})`
+          : fresh.status === "ambiguous"
+            ? `matches=${fresh.matches.length}`
+            : "no-match"),
+    );
+    if (fresh.status === "not-found") {
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `No client matches "${intent.clientHint}". Try a different name, the email, or part of the booking.`,
+      });
+    }
+    if (fresh.status === "ambiguous") {
+      return NextResponse.json({
+        status: "needs_disambiguation",
+        command,
+        intent,
+        matches: fresh.matches,
+      });
+    }
+    client = fresh.client;
+
+    // Source-aware proposal load. Reservation/contentJson hits carry
+    // a direct resolvedProposalId; Client-row hits need
+    // loadLatestProposal because the Client may have multiple
+    // proposals.
+    if (client.resolvedProposalId) {
+      const directProposal = await loadProposalDirect(orgId, client.resolvedProposalId);
+      if (!directProposal) {
+        return NextResponse.json({
+          status: "error",
+          command,
+          message: `Couldn't load the proposal linked to ${client.fullName}.`,
+        });
+      }
+      proposal = directProposal.proposal;
+      // Keep the client lite returned from findClient — its source
+      // tag and contact info beat the synthesised one.
+    } else {
+      const proposalResult = await loadLatestProposal(orgId, client.id);
+      if (proposalResult.status === "not-found") {
+        return NextResponse.json({
+          status: "error",
+          command,
+          message: `${client.fullName} has no proposals on file yet. Create one before sending day snippets.`,
+        });
+      }
+      proposal = proposalResult.proposal;
+    }
   }
-  const proposal = proposalResult.proposal;
 
   // ── Step 4 — extract requested days ──────────────────────────────────
   const daysResult = extractDays(proposal, intent.days);
   if (daysResult.status === "missing-days") {
+    if (daysResult.available === 0) {
+      // The proposal exists but has no day-by-day itinerary. This is
+      // a real state — proposals created from a request without a
+      // duration can land here. Surface it specifically so the
+      // operator opens the proposal and adds days, rather than
+      // assuming the system is broken.
+      return NextResponse.json({
+        status: "error",
+        command,
+        message: `${client.fullName}'s proposal "${proposal.title}" has no day-by-day itinerary yet. Open the proposal and add days first.`,
+      });
+    }
     return NextResponse.json({
       status: "error",
       command,
       message: `Day ${daysResult.missing.join(", ")} ${
         daysResult.missing.length === 1 ? "doesn't exist" : "don't exist"
-      } on ${client.fullName}'s proposal (${daysResult.available} ${
+      } on ${client.fullName}'s proposal "${proposal.title}" (${daysResult.available} ${
         daysResult.available === 1 ? "day" : "days"
       } total).`,
     });
@@ -348,9 +444,15 @@ export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>>
   });
 }
 
-// Force tool_use; never accept free text. If the model returns text
-// (because the command isn't parseable as a send-days request), we
-// return null and the caller surfaces a clear "couldn't parse" error.
+// Force tool_use. The model MUST emit a send_proposal_days tool call;
+// it cannot wriggle out by returning free text. If the command genuinely
+// can't be expressed as send-days, the tool call will arrive with empty
+// days or empty clientHint and the downstream validation here returns
+// null. The caller's "couldn't parse" error then fires.
+//
+// Note on tool_choice: the SDK's typed `tool_choice` overload supports
+// { type: "tool", name } to mandate a specific tool. This is the
+// production lever for "the AI must always parse, never editorialise".
 async function parseIntent(
   apiKey: string,
   command: string,
@@ -361,10 +463,7 @@ async function parseIntent(
     msg = await client.messages.create({
       model: MODEL,
       max_tokens: 400,
-      // tool_choice forces the model to emit a tool_use block; if the
-      // command can't fit, the model can still return text that we
-      // detect below.
-      tool_choice: { type: "auto" },
+      tool_choice: { type: "tool", name: "send_proposal_days" },
       tools: TOOLS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: command }],
@@ -386,9 +485,114 @@ async function parseIntent(
       const channelRaw = typeof input.channel === "string" ? input.channel : null;
       const channel: "whatsapp" | "email" | null =
         channelRaw === "whatsapp" || channelRaw === "email" ? channelRaw : null;
+      console.log(
+        `[execute] parsed intent · clientHint="${clientHint}" · days=[${days.join(",")}] · channel=${channel ?? "(unset)"}`,
+      );
       if (!clientHint || days.length === 0) return null;
       return { clientHint, days, channel };
     }
   }
   return null;
 }
+
+// Direct proposal loader for reservation / proposal-content matches —
+// or for any disambiguation pick that pre-resolved the target proposal.
+// Synthesises a ClientLite from whichever source has the most info
+// (linked Client > ProposalReservation > contentJson.client). Returns
+// null when the proposal isn't accessible (wrong org, deleted, etc.).
+async function loadProposalDirect(
+  organizationId: string,
+  proposalId: string,
+): Promise<{ proposal: LoadedProposal; client: ClientLite } | null> {
+  const row = await prisma.proposal.findFirst({
+    where: { id: proposalId, organizationId },
+    select: {
+      id: true,
+      title: true,
+      trackingId: true,
+      contentJson: true,
+      updatedAt: true,
+      client: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      // Note the relation name: Proposal has both `reservations`
+      // (legacy Reservation model, no firstName/lastName) AND
+      // `proposalReservations` (current ProposalReservation model
+      // populated by the share-view booking form). We need the latter.
+      proposalReservations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+  });
+  if (!row) return null;
+
+  const proposal: LoadedProposal = {
+    id: row.id,
+    title: row.title ?? "Untitled proposal",
+    trackingId: row.trackingId ?? null,
+    contentJson: row.contentJson as unknown as LoadedProposal["contentJson"],
+    updatedAt: row.updatedAt.toISOString(),
+  };
+
+  // Build the ClientLite from the most-informative source available.
+  const linkedClient = row.client;
+  const lastReservation = row.proposalReservations[0];
+  const guestNames =
+    typeof (row.contentJson as Record<string, unknown> | null)?.client === "object"
+      ? ((row.contentJson as { client?: { guestNames?: unknown } }).client?.guestNames as string | undefined) ?? null
+      : null;
+
+  let firstName: string | null = null;
+  let lastName: string | null = null;
+  let email = "";
+  let phone: string | null = null;
+  let source: ClientLite["source"] = "client";
+
+  if (linkedClient) {
+    firstName = linkedClient.firstName;
+    lastName = linkedClient.lastName;
+    email = linkedClient.email;
+    phone = linkedClient.phone;
+    source = "client";
+  } else if (lastReservation) {
+    firstName = lastReservation.firstName;
+    lastName = lastReservation.lastName;
+    email = lastReservation.email;
+    phone = lastReservation.phone;
+    source = "reservation";
+  } else if (guestNames) {
+    const [f, ...rest] = guestNames.split(/\s+/);
+    firstName = f || null;
+    lastName = rest.join(" ").trim() || null;
+    source = "proposal-content";
+  }
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || guestNames || email || "Unknown";
+
+  const client: ClientLite = {
+    id: linkedClient?.id ?? `proposal:${row.id}`,
+    firstName,
+    lastName,
+    email,
+    phone,
+    fullName,
+    latestProposalTitle: proposal.title,
+    latestProposalUpdatedAt: proposal.updatedAt,
+    resolvedProposalId: row.id,
+    source,
+  };
+  return { proposal, client };
+}
+

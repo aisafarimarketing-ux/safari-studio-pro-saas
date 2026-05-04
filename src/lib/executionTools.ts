@@ -34,6 +34,17 @@ export type ClientLite = {
    *  no proposal has been linked yet. */
   latestProposalTitle: string | null;
   latestProposalUpdatedAt: string | null;
+  /** Direct proposal pointer when the candidate was resolved via a
+   *  ProposalReservation row or via Proposal.contentJson.client.guestNames
+   *  (i.e. no Prisma Client row exists for this person). When set, the
+   *  /execute route MUST use this proposalId directly and skip
+   *  loadLatestProposal — there is no Client row to call it against. */
+  resolvedProposalId?: string;
+  /** Where the match came from. Surfaced in the disambiguation picker
+   *  as a small badge ("from booking" / "from proposal draft") so the
+   *  operator can tell apart "Jennifer who has a Client row" from
+   *  "Jennifer who only exists on a reservation". */
+  source: "client" | "reservation" | "proposal-content";
 };
 
 export type FindClientResult =
@@ -130,9 +141,50 @@ export async function findClient(
     if (!candidates.has(row.id)) candidates.set(row.id, row);
   }
 
-  // Score every candidate against the original hint + tokens.
-  const scored = Array.from(candidates.values())
+  // Score Client-row candidates.
+  const clientScored = Array.from(candidates.values())
     .map((c) => scoreCandidate(c, trimmed, tokens))
+    .filter((r) => r.score > 0);
+
+  // ── Source 2 — ProposalReservation ──────────────────────────────────
+  // Booked clients show up here even when there's no Client row (the
+  // reservation form persists firstName + lastName + email + phone
+  // directly on ProposalReservation). Surface them so commands like
+  // "send Jennifer N Morris day 2 and 3" resolve when Jennifer only
+  // exists as a reservation row.
+  const reservationCandidates = await findReservationCandidates(
+    organizationId,
+    tokens,
+    trimmed,
+  );
+
+  // ── Source 3 — Proposal.contentJson.client.guestNames ───────────────
+  // Catches proposals drafted with a guest name but no linked Client
+  // row (manual editor, demo seed, import). Uses Postgres JSON path
+  // filtering via Prisma's path operator.
+  const contentCandidates = await findContentCandidates(
+    organizationId,
+    tokens,
+    trimmed,
+  );
+
+  // Merge + dedupe. Reservation/content matches that share a
+  // proposalId with a Client-row match are skipped (the Client row
+  // wins because we know more about that person). Otherwise, both
+  // surface.
+  const seenProposalIds = new Set(
+    clientScored
+      .map((r) => r.lite.latestProposalUpdatedAt && (r.lite as ClientLite & { _proposalId?: string })._proposalId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const allScored = [...clientScored];
+  for (const r of [...reservationCandidates, ...contentCandidates]) {
+    const pid = r.lite.resolvedProposalId;
+    if (pid && seenProposalIds.has(pid)) continue;
+    if (pid) seenProposalIds.add(pid);
+    allScored.push(r);
+  }
+  const scored = allScored
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
 
@@ -246,8 +298,226 @@ function scoreCandidate(
     fullName: fullName || c.email,
     latestProposalTitle: c.proposals[0]?.title ?? null,
     latestProposalUpdatedAt: c.proposals[0]?.updatedAt?.toISOString() ?? null,
+    source: "client",
   };
   return { lite, score };
+}
+
+// ─── Source 2 — ProposalReservation ─────────────────────────────────────
+//
+// The reservation form persists the booking client's contact info
+// directly on the ProposalReservation row. There may not be a Client
+// row for them. This source ensures "send [booking client] day X"
+// resolves when the operator references someone who only exists as
+// a booking submission.
+async function findReservationCandidates(
+  organizationId: string,
+  tokens: string[],
+  rawHint: string,
+): Promise<{ lite: ClientLite; score: number }[]> {
+  // Build the WHERE based on token count. Multi-token uses startsWith
+  // on first/last; single-token uses a contains-search across first/
+  // last/email. Mirrors the Client-row strategy above.
+  const where = (() => {
+    if (tokens.length >= 2) {
+      return {
+        organizationId,
+        AND: [
+          { firstName: { startsWith: tokens[0], mode: "insensitive" as const } },
+          { lastName: {
+            startsWith: tokens[tokens.length - 1],
+            mode: "insensitive" as const,
+          } },
+        ],
+      };
+    }
+    const t = tokens[0];
+    return {
+      organizationId,
+      OR: [
+        { firstName: { contains: t, mode: "insensitive" as const } },
+        { lastName: { contains: t, mode: "insensitive" as const } },
+        { email: { contains: t, mode: "insensitive" as const } },
+      ],
+    };
+  })();
+
+  const rows = await prisma.proposalReservation.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: {
+      id: true,
+      proposalId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      createdAt: true,
+      proposal: {
+        select: { id: true, title: true, updatedAt: true },
+      },
+    },
+  });
+
+  return rows.map((r) => {
+    const fullName = `${r.firstName} ${r.lastName}`.trim();
+    const firstLower = (r.firstName ?? "").toLowerCase();
+    const lastLower = (r.lastName ?? "").toLowerCase();
+    const emailLower = (r.email ?? "").toLowerCase();
+    let score = 0;
+    if (tokens.length >= 2) {
+      const ft = tokens[0];
+      const lt = tokens[tokens.length - 1];
+      if (firstLower === ft && lastLower === lt) score += 200;
+      else if (firstLower.startsWith(ft) && lastLower.startsWith(lt)) score += 130;
+    }
+    for (const t of tokens) {
+      if (firstLower === t) score += 100;
+      if (lastLower === t) score += 90;
+      if (firstLower.startsWith(t)) score += 30;
+      if (lastLower.startsWith(t)) score += 28;
+      if (emailLower.includes(t)) score += 4;
+    }
+    if (fullName.toLowerCase() === rawHint.toLowerCase()) score += 50;
+
+    const lite: ClientLite = {
+      // Synthetic id — never used to look up a Client row. The
+      // resolvedProposalId is what the route uses.
+      id: `reservation:${r.id}`,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      email: r.email,
+      phone: r.phone,
+      fullName: fullName || r.email,
+      latestProposalTitle: r.proposal?.title ?? null,
+      latestProposalUpdatedAt:
+        r.proposal?.updatedAt?.toISOString() ?? r.createdAt.toISOString(),
+      resolvedProposalId: r.proposalId,
+      source: "reservation",
+    };
+    return { lite, score };
+  });
+}
+
+// ─── Source 3 — Proposal.contentJson.client.guestNames ──────────────────
+//
+// Manual / imported / demo proposals often carry the guest's name only
+// in the contentJson blob (no Client / ProposalReservation row). Search
+// via Postgres' JSON path operator through Prisma.
+async function findContentCandidates(
+  organizationId: string,
+  tokens: string[],
+  rawHint: string,
+): Promise<{ lite: ClientLite; score: number }[]> {
+  // The path filter does a case-sensitive contains by default; we
+  // OR over each token plus the raw hint to catch case variations.
+  // Bounded `take` keeps this cheap even on orgs with many proposals.
+  const orConditions = [];
+  for (const t of tokens) {
+    orConditions.push({
+      contentJson: {
+        path: ["client", "guestNames"],
+        string_contains: t,
+      },
+    });
+    orConditions.push({
+      contentJson: {
+        path: ["client", "guestNames"],
+        string_contains: t.charAt(0).toUpperCase() + t.slice(1),
+      },
+    });
+  }
+  if (orConditions.length === 0) return [];
+
+  let rows: Array<{
+    id: string;
+    title: string | null;
+    updatedAt: Date;
+    contentJson: unknown;
+  }> = [];
+  try {
+    rows = await prisma.proposal.findMany({
+      where: {
+        organizationId,
+        // Skip proposals already linked to a Client row — those land
+        // via Source 1. This source is specifically for the gap.
+        clientId: null,
+        OR: orConditions,
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        contentJson: true,
+      },
+    });
+  } catch (err) {
+    // JSON path filters can vary by Postgres version / Prisma adapter.
+    // Fail soft — we still have Sources 1 and 2.
+    console.warn("[execute] contentJson search failed:", err);
+    return [];
+  }
+
+  return rows
+    .map((r) => {
+      const guestNames = extractGuestNames(r.contentJson);
+      if (!guestNames) return null;
+      const guestLower = guestNames.toLowerCase();
+      const rawLower = rawHint.toLowerCase();
+      let score = 0;
+
+      if (tokens.length >= 2) {
+        // For multi-token, only score if the guestNames contains
+        // first AND last token. Avoids spurious "Jennifer & Collins"
+        // matching on a hint of "Jennifer Smith".
+        const ft = tokens[0];
+        const lt = tokens[tokens.length - 1];
+        if (guestLower.includes(ft) && guestLower.includes(lt)) {
+          if (guestLower === `${ft} ${lt}`) score += 200;
+          else if (guestLower.startsWith(`${ft} `)) score += 150;
+          else score += 100;
+        }
+      }
+      for (const t of tokens) {
+        if (guestLower === t) score += 100;
+        if (guestLower.startsWith(`${t} `)) score += 50;
+        if (guestLower.includes(t)) score += 20;
+      }
+      if (guestLower === rawLower) score += 30;
+      if (score === 0) return null;
+
+      // Best-effort name split on first space.
+      const [firstName, ...rest] = guestNames.split(/\s+/);
+      const lastName = rest.join(" ").trim() || null;
+
+      const lite: ClientLite = {
+        id: `proposal-content:${r.id}`,
+        firstName: firstName || null,
+        lastName,
+        email: "",
+        phone: null,
+        fullName: guestNames,
+        latestProposalTitle: r.title ?? "Untitled proposal",
+        latestProposalUpdatedAt: r.updatedAt.toISOString(),
+        resolvedProposalId: r.id,
+        source: "proposal-content",
+      };
+      return { lite, score };
+    })
+    .filter((r): r is { lite: ClientLite; score: number } => r !== null);
+}
+
+function extractGuestNames(contentJson: unknown): string | null {
+  if (!contentJson || typeof contentJson !== "object") return null;
+  const c = (contentJson as Record<string, unknown>).client;
+  if (!c || typeof c !== "object") return null;
+  const g = (c as Record<string, unknown>).guestNames;
+  if (typeof g !== "string") return null;
+  const trimmed = g.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // Direct fetch by id — used after the operator picks from the
@@ -286,6 +556,7 @@ export async function findClientById(
       latestProposalTitle: c.proposals[0]?.title ?? null,
       latestProposalUpdatedAt:
         c.proposals[0]?.updatedAt?.toISOString() ?? null,
+      source: "client",
     },
   };
 }

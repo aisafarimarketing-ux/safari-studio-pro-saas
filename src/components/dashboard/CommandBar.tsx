@@ -25,8 +25,15 @@ type ClientLite = {
   id: string;
   fullName: string;
   email: string;
+  phone?: string | null;
   latestProposalTitle: string | null;
   latestProposalUpdatedAt: string | null;
+  /** Direct proposal pointer for reservation / proposal-content
+   *  matches (no Prisma Client row exists). When the operator picks
+   *  one of these from disambiguation, we send the proposalId back
+   *  to the route instead of a clientId. */
+  resolvedProposalId?: string;
+  source?: "client" | "reservation" | "proposal-content";
 };
 
 type ExecuteSuccess = {
@@ -116,7 +123,7 @@ export function CommandBar({
 
   if (!open) return null;
 
-  const submit = async (overrideClientId?: string) => {
+  const submit = async (override?: { clientId?: string; proposalId?: string }) => {
     const trimmed = command.trim();
     if (!trimmed) return;
     setMode({ kind: "submitting" });
@@ -126,7 +133,14 @@ export function CommandBar({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           command: trimmed,
-          ...(overrideClientId ? { clientId: overrideClientId } : {}),
+          // Prefer proposalId when the picked match was synthesised
+          // from a reservation / contentJson hit — the route uses it
+          // directly. Fall back to clientId for real Client-row picks.
+          ...(override?.proposalId
+            ? { proposalId: override.proposalId }
+            : override?.clientId
+              ? { clientId: override.clientId }
+              : {}),
         }),
       });
       const data = (await res.json().catch(() => null)) as ExecuteResponse | null;
@@ -259,48 +273,73 @@ export function CommandBar({
                 <strong>{mode.matches.length} matches</strong> — pick the right one:
               </div>
               <ul className="space-y-1.5">
-                {mode.matches.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      onClick={() => void submit(m.id)}
-                      className="w-full text-left px-3 py-2 rounded-md transition flex items-baseline justify-between gap-2"
-                      style={{
-                        background: "#ffffff",
-                        border: "1px solid rgba(0,0,0,0.10)",
-                      }}
-                    >
-                      <div className="min-w-0">
-                        <div className="text-[13.5px] font-semibold truncate">
-                          {m.fullName}
+                {mode.matches.map((m) => {
+                  const sourceBadge =
+                    m.source === "reservation"
+                      ? "from booking"
+                      : m.source === "proposal-content"
+                        ? "from proposal draft"
+                        : null;
+                  return (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void submit(
+                            m.resolvedProposalId
+                              ? { proposalId: m.resolvedProposalId }
+                              : { clientId: m.id },
+                          )
+                        }
+                        className="w-full text-left px-3 py-2 rounded-md transition flex items-baseline justify-between gap-2"
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid rgba(0,0,0,0.10)",
+                        }}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-[13.5px] font-semibold truncate flex items-baseline gap-1.5 flex-wrap">
+                            <span className="truncate">{m.fullName}</span>
+                            {sourceBadge && (
+                              <span
+                                className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded"
+                                style={{
+                                  background: "rgba(0,0,0,0.05)",
+                                  color: "rgba(10,20,17,0.55)",
+                                }}
+                              >
+                                {sourceBadge}
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className="text-[11.5px] truncate"
+                            style={{ color: "rgba(10,20,17,0.55)" }}
+                          >
+                            {m.email || "(no email)"}
+                          </div>
                         </div>
                         <div
-                          className="text-[11.5px] truncate"
+                          className="text-[11.5px] text-right shrink-0"
                           style={{ color: "rgba(10,20,17,0.55)" }}
                         >
-                          {m.email}
+                          {m.latestProposalTitle ? (
+                            <>
+                              <div className="truncate max-w-[180px]">{m.latestProposalTitle}</div>
+                              {m.latestProposalUpdatedAt && (
+                                <div style={{ opacity: 0.7 }}>
+                                  {formatRelativeShort(m.latestProposalUpdatedAt)}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span style={{ opacity: 0.5 }}>no proposals</span>
+                          )}
                         </div>
-                      </div>
-                      <div
-                        className="text-[11.5px] text-right shrink-0"
-                        style={{ color: "rgba(10,20,17,0.55)" }}
-                      >
-                        {m.latestProposalTitle ? (
-                          <>
-                            <div className="truncate max-w-[180px]">{m.latestProposalTitle}</div>
-                            {m.latestProposalUpdatedAt && (
-                              <div style={{ opacity: 0.7 }}>
-                                {formatRelativeShort(m.latestProposalUpdatedAt)}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <span style={{ opacity: 0.5 }}>no proposals</span>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
