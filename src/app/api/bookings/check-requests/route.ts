@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
+import { deriveSuggestedAction } from "@/lib/bookingOps/orchestrate";
 
 // GET /api/bookings/check-requests?reservationId=X
 //
@@ -41,6 +42,7 @@ export async function GET(req: Request) {
     orderBy: { checkInDate: "asc" },
   });
 
+  const now = new Date();
   return NextResponse.json({
     rows: rows.map((row) => ({
       id: row.id,
@@ -56,10 +58,15 @@ export async function GET(req: Request) {
       draftText: row.draftText,
       status: row.status,
       sentAt: row.sentAt?.toISOString() ?? null,
+      lastSentAt: row.lastSentAt?.toISOString() ?? null,
       repliedAt: row.repliedAt?.toISOString() ?? null,
       resolvedAt: row.resolvedAt?.toISOString() ?? null,
       attemptCount: row.attemptCount,
       nextActionAt: row.nextActionAt?.toISOString() ?? null,
+      suggestedAction: deriveSuggestedAction(
+        { status: row.status, nextActionAt: row.nextActionAt },
+        now,
+      ),
       notes: row.notes,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

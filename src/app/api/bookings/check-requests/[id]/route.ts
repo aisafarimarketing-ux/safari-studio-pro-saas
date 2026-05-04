@@ -6,7 +6,10 @@ import {
   formatBookingCheckFollowUp,
   formatBookingCheckUrgent,
 } from "@/lib/bookingOps/format";
-import { nextActionAfterSend } from "@/lib/bookingOps/orchestrate";
+import {
+  computeNextActionAt,
+  deriveSuggestedAction,
+} from "@/lib/bookingOps/orchestrate";
 import { displayTrackingId } from "@/lib/proposalTracking";
 import type { TierKey } from "@/lib/types";
 
@@ -91,6 +94,7 @@ export async function PATCH(
       id: true,
       status: true,
       sentAt: true,
+      lastSentAt: true,
       repliedAt: true,
       attemptCount: true,
       nextActionAt: true,
@@ -125,14 +129,20 @@ export async function PATCH(
     }
     data.status = body.status;
     switch (body.status) {
-      case "sent":
+      case "sent": {
         if (!existing.sentAt) data.sentAt = now;
-        // attemptCount jumps to 1 on the initial send. Bumping
-        // forwards on follow-ups happens via the
-        // record_followup_sent action below.
+        // Initial send always touches lastSentAt — even when sentAt
+        // was already set (idempotent re-send), the operator just
+        // dispatched, so the cadence clock restarts here.
+        data.lastSentAt = now;
+        // attemptCount jumps to 1 on the initial send; the
+        // record_followup_sent action below handles the bumps for
+        // every subsequent dispatch.
+        const nextAttempt = existing.attemptCount < 1 ? 1 : existing.attemptCount;
         if (existing.attemptCount < 1) data.attemptCount = 1;
-        data.nextActionAt = nextActionAfterSend(now);
+        data.nextActionAt = computeNextActionAt(nextAttempt, now);
         break;
+      }
       case "replied":
         if (!existing.repliedAt) data.repliedAt = now;
         data.nextActionAt = null;
@@ -147,6 +157,7 @@ export async function PATCH(
         // Operator manually reverted — clear all the timeline
         // fields so the row matches the visible "fresh" state.
         data.sentAt = null;
+        data.lastSentAt = null;
         data.repliedAt = null;
         data.resolvedAt = null;
         data.nextActionAt = null;
@@ -210,7 +221,11 @@ export async function PATCH(
         ? formatBookingCheckUrgent(messageInput)
         : formatBookingCheckFollowUp(messageInput);
     data.attemptCount = nextAttempt;
-    data.nextActionAt = nextActionAfterSend(now);
+    data.lastSentAt = now;
+    // Cadence widens after the first follow-up (attempt 2+ →
+    // +48h) so an already-pinged property gets breathing room
+    // before the urgent note.
+    data.nextActionAt = computeNextActionAt(nextAttempt, now);
     data.draftText = followUpDraft;
     // Status: if the operator was on follow_up_needed, flip back to
     // sent now that they've actually sent the follow-up.
@@ -241,10 +256,15 @@ export async function PATCH(
       draftText: updated.draftText,
       status: updated.status,
       sentAt: updated.sentAt?.toISOString() ?? null,
+      lastSentAt: updated.lastSentAt?.toISOString() ?? null,
       repliedAt: updated.repliedAt?.toISOString() ?? null,
       resolvedAt: updated.resolvedAt?.toISOString() ?? null,
       attemptCount: updated.attemptCount,
       nextActionAt: updated.nextActionAt?.toISOString() ?? null,
+      suggestedAction: deriveSuggestedAction(
+        { status: updated.status, nextActionAt: updated.nextActionAt },
+        new Date(),
+      ),
       notes: updated.notes,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),

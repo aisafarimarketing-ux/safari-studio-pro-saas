@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { friendlyConsultantName } from "@/lib/consultantIdentity";
 import { extractBookingChecks } from "@/lib/bookingOps/extract";
 import { formatBookingCheckMessage } from "@/lib/bookingOps/format";
+import { deriveSuggestedAction } from "@/lib/bookingOps/orchestrate";
 import type { Proposal } from "@/lib/types";
 import { displayTrackingId } from "@/lib/proposalTracking";
 
@@ -163,6 +164,7 @@ function serializeRow(row: {
   draftText: string;
   status: string;
   sentAt: Date | null;
+  lastSentAt: Date | null;
   repliedAt: Date | null;
   resolvedAt: Date | null;
   attemptCount: number;
@@ -185,10 +187,15 @@ function serializeRow(row: {
     draftText: row.draftText,
     status: row.status,
     sentAt: row.sentAt?.toISOString() ?? null,
+    lastSentAt: row.lastSentAt?.toISOString() ?? null,
     repliedAt: row.repliedAt?.toISOString() ?? null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
     attemptCount: row.attemptCount,
     nextActionAt: row.nextActionAt?.toISOString() ?? null,
+    suggestedAction: deriveSuggestedAction(
+      { status: row.status, nextActionAt: row.nextActionAt },
+      new Date(),
+    ),
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

@@ -11,8 +11,10 @@ import {
 } from "@/lib/bookingOps/format";
 import {
   deriveNextAction,
+  deriveSuggestedAction,
   findAlternativeProperties,
   type NextAction,
+  type SuggestedAction,
 } from "@/lib/bookingOps/orchestrate";
 import type { TierKey } from "@/lib/types";
 import { displayTrackingId } from "@/lib/proposalTracking";
@@ -77,6 +79,10 @@ export async function GET(
       nextActionAt: row.nextActionAt,
       attemptCount: row.attemptCount,
     },
+    now,
+  );
+  const suggestedAction: SuggestedAction = deriveSuggestedAction(
+    { status: row.status, nextActionAt: row.nextActionAt },
     now,
   );
 
@@ -173,6 +179,7 @@ export async function GET(
 
   return NextResponse.json({
     nextAction,
+    suggestedAction,
     followUpDraft,
     alternatives,
     alternativeRequest,

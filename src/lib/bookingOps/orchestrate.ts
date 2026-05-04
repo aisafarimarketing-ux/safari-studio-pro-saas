@@ -159,15 +159,58 @@ export async function findAlternativeProperties(input: {
 
 // ─── Follow-up scheduling helpers ──────────────────────────────────────────
 //
-// Centralises the cadence so the PATCH route, the orchestrate route,
-// and any future UI hint share one source of truth. 24h between
-// initial and first follow-up; another 24h between first and second
-// (so 48h after initial = "urgent"). After two follow-ups the row
-// stays in "send_urgent" until the operator marks an outcome — we
-// don't escalate further automatically.
+// Centralises the cadence so the PATCH route + orchestrate route +
+// any future UI share one source of truth. The cadence widens on
+// each step so a property that's already had a gentle nudge gets
+// breathing room before the urgent note.
+//
+//   attempt 1 (initial sent)        → next action in 24h
+//   attempt 2+ (any follow-up sent) → next action in 48h
+//
+// "attemptJustCompleted" is the value that was just written — i.e.
+// pass 1 right after the initial send, pass 2 right after the first
+// follow-up dispatch, and so on. Beyond attempt 2 we keep the same
+// 48h spacing rather than escalating further; the orchestrate hint
+// already flags the row as "send_urgent" once attemptCount ≥ 2.
 
-export const FOLLOWUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-export function nextActionAfterSend(now: Date): Date {
-  return new Date(now.getTime() + FOLLOWUP_INTERVAL_MS);
+export function computeNextActionAt(
+  attemptJustCompleted: number,
+  now: Date,
+): Date {
+  const intervalMs = attemptJustCompleted <= 1 ? ONE_DAY_MS : 2 * ONE_DAY_MS;
+  return new Date(now.getTime() + intervalMs);
+}
+
+// ─── Coarse-grained suggestedAction ────────────────────────────────────────
+//
+// Three-state derivation that downstream surfaces (counts, filters,
+// future dashboards) can pivot on without re-implementing the time
+// math. Distinct from `nextAction.kind` which is finer-grained for
+// the UI hint copy.
+//
+//   "follow_up"      — status=sent AND nextActionAt is in the past
+//   "switch"         — status=not_available (find an alternative)
+//   "confirm_client" — status=available (tell the client)
+//   null             — nothing actionable right now
+//
+// status="follow_up_needed" also returns "follow_up" — the operator
+// has explicitly flagged the row for a nudge, so the bucket matches.
+
+export type SuggestedAction = "follow_up" | "switch" | "confirm_client" | null;
+
+export function deriveSuggestedAction(
+  row: { status: string; nextActionAt: Date | null },
+  now: Date = new Date(),
+): SuggestedAction {
+  if (row.status === "available") return "confirm_client";
+  if (row.status === "not_available") return "switch";
+  if (row.status === "follow_up_needed") return "follow_up";
+  if (row.status === "sent") {
+    if (row.nextActionAt && row.nextActionAt.getTime() <= now.getTime()) {
+      return "follow_up";
+    }
+  }
+  return null;
 }

@@ -753,18 +753,20 @@ model BookingCheckRequest {
 
   status String @default("not_sent")
 
-  // Lifecycle timestamps. sentAt + repliedAt + resolvedAt are
-  // operator-set transitions; the 24h follow-up suggestion fires
-  // when status === "sent" and now > sentAt + 24h.
+  // Lifecycle timestamps. sentAt is the FIRST dispatch — frozen
+  // once written. lastSentAt tracks the MOST-RECENT outbound
+  // (initial OR any follow-up) and drives the cadence math.
+  // repliedAt + resolvedAt are operator-set transitions.
   sentAt     DateTime?
+  lastSentAt DateTime?
   repliedAt  DateTime?
   resolvedAt DateTime?
 
   // Orchestration state. attemptCount tracks how many outbound
   // dispatches have happened (initial send = 1, each follow-up
   // increments). nextActionAt is when the next operator action is
-  // due — set to sentAt + 24h on initial send, then bumped forward
-  // on each follow-up dispatch. Cleared when status resolves to
+  // due — cadence is attempt 1 → +24h, attempt 2+ → +48h, computed
+  // off lastSentAt at write time. Cleared when status resolves to
   // "available" / "not_available". Drives the per-card "Suggested
   // next action" hint and the follow-up CTA visibility.
   attemptCount Int        @default(0)

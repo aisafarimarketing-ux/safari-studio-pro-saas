@@ -33,10 +33,18 @@ type Row = {
   draftText: string;
   status: string;
   sentAt: string | null;
+  /** Most-recent outbound (initial OR any follow-up). Drives the
+   *  cadence math; sentAt stays frozen at the first dispatch for
+   *  audit purposes. */
+  lastSentAt: string | null;
   repliedAt: string | null;
   resolvedAt: string | null;
   attemptCount: number;
   nextActionAt: string | null;
+  /** Coarse-grained server-derived action bucket. Useful for
+   *  filters / counts; the UI hint copy stills comes from
+   *  orch.nextAction.kind. */
+  suggestedAction: "follow_up" | "switch" | "confirm_client" | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +55,7 @@ type Row = {
 // — alternatives list, client draft preview).
 type Orchestrate = {
   nextAction: { kind: NextActionKind; hint: string };
+  suggestedAction: "follow_up" | "switch" | "confirm_client" | null;
   followUpDraft: string;
   alternatives: { name: string; destination: string | null; occurrences: number }[];
   alternativeRequest: string | null;
@@ -290,6 +299,10 @@ function PropertyCard({
   useEffect(() => {
     setNowMs(Date.now());
   }, []);
+  // Server has already calculated nextActionAt with the right
+  // cadence (attempt 1 → +24h, attempt 2+ → +48h) — UI just trusts
+  // that value. The legacy fallback to sentAt + 24h handles old
+  // rows written before the cadence column existed.
   const followUpNeeded =
     nowMs !== null && row.status === "sent" && row.nextActionAt
       ? nowMs >= new Date(row.nextActionAt).getTime()
