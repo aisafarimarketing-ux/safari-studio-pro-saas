@@ -42,6 +42,18 @@ export async function compressPrintImages(): Promise<CompressionResult> {
       const src = img.src || img.getAttribute("src") || "";
       if (!src.startsWith("data:")) continue;
 
+      // Skip cover-section images. The cover is the brand's first
+      // impression on a luxury safari proposal — worth the few extra
+      // MB to keep the operator's uploaded resolution and quality
+      // intact. Identified by the section root's data-section-type
+      // attribute, which CoverSection.tsx sets in every variant.
+      if (img.closest('[data-section-type="cover"]')) continue;
+
+      // Skip explicitly opted-out images. Operators / future code can
+      // opt a specific image out of compression by tagging it with
+      // data-no-compress (or its parent container with same attr).
+      if (img.closest("[data-no-compress]")) continue;
+
       const before = approxDataUrlBytes(src);
       if (before < MIN_COMPRESS_BYTES) continue;
 
