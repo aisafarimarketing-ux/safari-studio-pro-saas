@@ -104,6 +104,20 @@ type ReservationRow = {
   createdAt: string;
   proposal: { id: string; title: string | null; trackingId: string } | null;
   assignedTo: { id: string; name: string | null; email: string | null } | null;
+  /** Booking attribution — when an AISuggestion that was sent for
+   *  this proposal flipped its outcome to "booked" (Phase 2 wiring),
+   *  the most recent qualifying suggestion lands here. Powers the
+   *  "Booked after WhatsApp · Day 3 snippet sent 12 min before" line
+   *  under the booking row. Null when no sent suggestion preceded
+   *  the booking. */
+  creditedSuggestion?: {
+    id: string;
+    kind: string;
+    channel: "whatsapp" | "email";
+    sentAt: string;
+    bookedAt: string;
+    label: string;
+  } | null;
 };
 
 type ActivityResponse = {
@@ -2096,6 +2110,35 @@ function BookingRow({ row, divider }: { row: ReservationRow; divider: boolean })
             Client has not received confirmation email yet.
           </div>
         )}
+        {/* Attribution line — the cause-and-effect signal. Renders
+            only when a sent AISuggestion for this proposal had its
+            outcome flipped to "booked" by Phase 2 wiring. The
+            timeDelta is sentAt → bookedAt (the moment the booking
+            event landed), so it answers "how long after I sent
+            the message did the booking come in?". */}
+        {row.creditedSuggestion && (
+          <div
+            className="text-[11px] mt-1 leading-snug flex items-center gap-1.5 flex-wrap"
+            style={{ color: "#15803d" }}
+          >
+            <span aria-hidden style={{ fontWeight: 700 }}>✓</span>
+            <span>Booked after</span>
+            {row.creditedSuggestion.channel === "whatsapp" ? (
+              <WhatsAppIcon size={11} />
+            ) : (
+              <EmailIcon size={11} muted />
+            )}
+            <span style={{ color: "rgba(10,20,17,0.75)" }}>
+              <strong>{row.creditedSuggestion.label}</strong>
+              {" sent "}
+              {formatDeltaShort(
+                row.creditedSuggestion.sentAt,
+                row.creditedSuggestion.bookedAt,
+              )}
+              {" before"}
+            </span>
+          </div>
+        )}
       </div>
       <div className="shrink-0 flex items-center gap-1.5">
         <button
@@ -2630,6 +2673,19 @@ function formatShortDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Compact "X min" / "X h" / "X d" delta between two ISO timestamps.
+// Used by the booking-credit line to answer "how long after sending
+// did the booking land?". Always returns a positive duration; the
+// caller controls how it's framed in copy ("12 min before").
+function formatDeltaShort(fromIso: string, toIso: string): string {
+  const ms = Math.max(0, new Date(toIso).getTime() - new Date(fromIso).getTime());
+  if (ms < 60_000) return "<1 min";
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)} min`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)} h`;
+  if (ms < 7 * 86_400_000) return `${Math.floor(ms / 86_400_000)} d`;
+  return `${Math.floor(ms / (7 * 86_400_000))} w`;
 }
 
 function formatDueLabel(iso: string | null): string {

@@ -417,28 +417,85 @@ export async function GET(req: Request) {
     },
   });
 
-  const reservations = reservationsRaw.map((r) => ({
-    id: r.id,
-    clientName: `${r.firstName} ${r.lastName}`.trim() || "—",
-    arrivalDate: r.arrivalDate.toISOString(),
-    departureDate: r.departureDate.toISOString(),
-    status: r.status,
-    emailStatus: r.emailStatus,
-    createdAt: r.createdAt.toISOString(),
-    proposal: r.proposal
-      ? {
-          id: r.proposal.id,
-          title: r.proposal.title ?? null,
-          trackingId: displayTrackingId({
+  // ── Booking attribution — credited AISuggestions ─────────────────────
+  // For each visible reservation, find the most recent AISuggestion
+  // that was sent for the same proposal AND whose outcome flipped to
+  // "booked" (Phase 2 wiring fires this when reservation_completed
+  // lands). Surfaces as a small "Booked after WhatsApp · Day 3 snippet
+  // sent 12 min before" line under the booking row — the operator's
+  // first cause-and-effect signal that the system is closing deals.
+  // Single batched query bounded by the visible reservation set.
+  const reservationProposalIds = reservationsRaw
+    .map((r) => r.proposal?.id)
+    .filter((id): id is string => Boolean(id));
+  const creditedRaw = reservationProposalIds.length
+    ? await prisma.aISuggestion.findMany({
+        where: {
+          organizationId: orgId,
+          kind: { in: ["follow-up", "execution"] },
+          targetType: "proposal",
+          targetId: { in: reservationProposalIds },
+          outcome: "booked",
+          sentAt: { not: null },
+          bookedAt: { not: null },
+        },
+        orderBy: { sentAt: "desc" },
+        select: {
+          id: true,
+          targetId: true,
+          kind: true,
+          channel: true,
+          sentAt: true,
+          bookedAt: true,
+          input: true,
+        },
+      })
+    : [];
+  // Group by proposal id, keep the first (most-recent sentAt) per
+  // proposal. Operators see exactly one credit line per booking, even
+  // if a deal had multiple sent suggestions.
+  const creditedByProposal = new Map<string, (typeof creditedRaw)[number]>();
+  for (const row of creditedRaw) {
+    if (!creditedByProposal.has(row.targetId)) {
+      creditedByProposal.set(row.targetId, row);
+    }
+  }
+
+  const reservations = reservationsRaw.map((r) => {
+    const credited = r.proposal?.id ? creditedByProposal.get(r.proposal.id) : null;
+    return {
+      id: r.id,
+      clientName: `${r.firstName} ${r.lastName}`.trim() || "—",
+      arrivalDate: r.arrivalDate.toISOString(),
+      departureDate: r.departureDate.toISOString(),
+      status: r.status,
+      emailStatus: r.emailStatus,
+      createdAt: r.createdAt.toISOString(),
+      proposal: r.proposal
+        ? {
             id: r.proposal.id,
-            trackingId: r.proposal.trackingId,
-          }),
-        }
-      : null,
-    assignedTo: r.assignedUser
-      ? { id: r.assignedUser.id, name: r.assignedUser.name, email: r.assignedUser.email }
-      : null,
-  }));
+            title: r.proposal.title ?? null,
+            trackingId: displayTrackingId({
+              id: r.proposal.id,
+              trackingId: r.proposal.trackingId,
+            }),
+          }
+        : null,
+      assignedTo: r.assignedUser
+        ? { id: r.assignedUser.id, name: r.assignedUser.name, email: r.assignedUser.email }
+        : null,
+      creditedSuggestion: credited
+        ? {
+            id: credited.id,
+            kind: credited.kind,
+            channel: credited.channel === "email" ? ("email" as const) : ("whatsapp" as const),
+            sentAt: credited.sentAt!.toISOString(),
+            bookedAt: credited.bookedAt!.toISOString(),
+            label: deriveCreditLabel(credited.kind, credited.input),
+          }
+        : null,
+    };
+  });
 
   // ── Pipeline strip data ────────────────────────────────────────────────
   // Five-stage live pipeline: Draft → Sent → Viewed → Booking requested
@@ -520,4 +577,39 @@ export async function GET(req: Request) {
     followUpMode,
     isPremium,
   });
+}
+
+// Pre-render the operator-facing label for a credited suggestion. We
+// keep the database-side input JSON internal — the dashboard only sees
+// a clean string ("Day 3 snippet" / "Days 2 and 3 snippet" / "Follow-up
+// message"). Defensive against malformed input shapes — falls back to
+// a generic "Follow-up message" if the days array can't be extracted.
+function deriveCreditLabel(kind: string, input: unknown): string {
+  if (kind === "execution") {
+    const days = extractDaysFromInput(input);
+    if (days.length === 1) return `Day ${days[0]} snippet`;
+    if (days.length === 2) return `Day ${days[0]} and ${days[1]} snippet`;
+    if (days.length > 2) {
+      const head = days.slice(0, -1).join(", ");
+      return `Days ${head} and ${days[days.length - 1]} snippet`;
+    }
+    return "Itinerary snippet";
+  }
+  if (kind === "follow-up") return "Follow-up message";
+  return "Message";
+}
+
+function extractDaysFromInput(input: unknown): number[] {
+  if (!input || typeof input !== "object") return [];
+  const obj = input as Record<string, unknown>;
+  // /api/ai/execute writes input.resolved.days; the older follow-up
+  // path doesn't carry a days field.
+  const resolved = obj.resolved;
+  if (resolved && typeof resolved === "object") {
+    const d = (resolved as Record<string, unknown>).days;
+    if (Array.isArray(d)) {
+      return d.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
+    }
+  }
+  return [];
 }
