@@ -77,6 +77,22 @@ export default function PrintProposalPage({
     return () => { cancelled = true; };
   }, [id]);
 
+  // PDF metadata title — set the document title from the proposal's
+  // metadata so PDF readers (Preview, Acrobat) show a meaningful
+  // window title / document property instead of a bare URL. Playwright
+  // bakes the document.title at capture time into the PDF's "Title"
+  // metadata field, so this is the cheapest possible upgrade to the
+  // exported file's first impression.
+  useEffect(() => {
+    if (!loaded) return;
+    const title =
+      proposal.metadata?.title?.trim() ||
+      proposal.trip?.title?.trim() ||
+      "Safari proposal";
+    const operator = proposal.operator?.companyName?.trim();
+    document.title = operator ? `${title} — ${operator}` : title;
+  }, [loaded, proposal]);
+
   // Once the proposal has rendered, wait for fonts + images, then flip the
   // ready flag and optionally trigger print. Also wait one paint after
   // image compression so the layout has settled before the PDF capture.
