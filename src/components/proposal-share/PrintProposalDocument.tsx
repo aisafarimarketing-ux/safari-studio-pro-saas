@@ -2,7 +2,9 @@
 
 import { useEffect } from "react";
 import { useProposalStore } from "@/store/proposalStore";
+import { useEditorStore } from "@/store/editorStore";
 import { SectionRenderer } from "@/components/editor/SectionRenderer";
+import { SectionChrome } from "@/components/editor/SectionChrome";
 import { PdfPage } from "./PdfPage";
 import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
 import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
@@ -187,9 +189,33 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
 
   return (
     <div className={`pdf-document ${debug ? "pdf-document--debug" : ""}`}>
-      {visible.map((section) => renderSection(section, proposal.id, proposal.sections))}
+      {visible.map((section) => (
+        <ChromedSection key={section.id} section={section}>
+          {renderSection(section, proposal.id, proposal.sections)}
+        </ChromedSection>
+      ))}
     </div>
   );
+}
+
+// Wraps each PdfFit page in SectionChrome ONLY in editor mode so the
+// operator gets the same hover-detected colour pickers, drag handle,
+// variant switcher, visibility toggle, and per-section style picker
+// they have on the Magazine view. In print + share modes, no chrome
+// is added so the rendered pages stay pixel-clean.
+function ChromedSection({
+  section,
+  children,
+}: {
+  section: Section;
+  children: React.ReactNode;
+}) {
+  const mode = useEditorStore((s) => s.mode);
+  if (children == null) return null;
+  if (mode !== "editor") {
+    return <>{children}</>;
+  }
+  return <SectionChrome section={section}>{children}</SectionChrome>;
 }
 
 function renderSection(section: Section, proposalId: string, proposalSections: Section[]) {

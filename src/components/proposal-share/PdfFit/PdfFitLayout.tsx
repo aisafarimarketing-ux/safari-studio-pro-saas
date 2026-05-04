@@ -40,13 +40,14 @@ export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: P
         width: "210mm",
         height: "297mm",
         overflow: "hidden",
-        // Use the theme's cream "paper" surface instead of pageBg.
-        // Many themes set pageBg to a saturated brand colour that
-        // works on screen but kills text contrast in print, where
-        // body text is dark by default. cardBg is the surface text
-        // is designed to sit on; the operator's brand still shows
-        // through accent strips, headings, and full-bleed images.
-        background: tokens.cardBg,
+        // Use the operator's section surface — the same token the
+        // legacy on-screen sections render against. This restores
+        // the "global theme + per-section override" container
+        // pattern: changing tokens.sectionSurface in the proposal
+        // theme repaints every PdfFit page, while a section's
+        // styleOverrides.sectionSurface only changes that one page.
+        // Both work simultaneously via resolveTokens upstream.
+        background: tokens.sectionSurface,
       }}
     >
       {manifest.slots.map((slot) => (
