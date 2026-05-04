@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { WhatsAppIcon, EmailIcon } from "@/lib/channelIcons";
+import { recordAction } from "@/lib/studioAI/lastAction";
 
 // CommandBar — Safari Studio's Execution AI surface.
 //
@@ -190,6 +191,25 @@ export function CommandBar({
             ? `${data.proposal.title} · pricing · ${channelWord}`
             : `${data.proposal.title} · proposal ${formatRelativeShort(data.proposal.updatedAt)} · ${channelWord}`;
         const headerSuffix = isPreview ? "Preview" : isPricing ? "Pricing" : "Follow-up";
+
+        // Record on the Studio AI rescue store. The /execute call
+        // resolved a draft cleanly — that's the "last successful
+        // action" anchor the rescue surface refers to if anything
+        // breaks afterwards. Summary is operator-readable so it
+        // can be quoted verbatim ("Your last action — Drafted
+        // pricing for Lilian, 2 min ago — went through cleanly.").
+        const firstName = data.client.fullName.split(/\s+/)[0] || "client";
+        const recordSummary = isPricing
+          ? `Drafted pricing for ${firstName}`
+          : isPreview
+            ? `Drafted ${data.previewItineraryLabel ?? "preview"} for ${firstName}`
+            : `Drafted day snippet for ${firstName}`;
+        const recordKind = isPricing
+          ? ("send_pricing" as const)
+          : isPreview
+            ? ("send_preview" as const)
+            : ("send_proposal_days" as const);
+        recordAction({ kind: recordKind, summary: recordSummary });
         window.dispatchEvent(
           new CustomEvent("ss:openFollowUp", {
             detail: {

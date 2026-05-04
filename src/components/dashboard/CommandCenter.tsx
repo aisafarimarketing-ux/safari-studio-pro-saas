@@ -39,6 +39,8 @@ import {
   type FollowUpMode,
 } from "@/lib/followUpMode";
 import { FEATURES } from "@/lib/featureFlags";
+import { StudioAIOnDuty } from "./StudioAIOnDuty";
+import { StudioAIErrorBoundary } from "./StudioAIErrorBoundary";
 
 // ─── Command Center — premium SaaS dashboard ──────────────────────────────
 //
@@ -234,7 +236,14 @@ type PrioritiesResponse = { summary: PrioritiesSummary };
 export function CommandCenter() {
   return (
     <DashboardThemeProvider>
-      <CommandCenterShell />
+      {/* Render-error boundary wraps the shell so a render-phase
+          throw lands on the rescue bus + falls back to a calm
+          stub instead of a white screen. The boundary's fallback
+          stays plain (no heavy components) so a bug in those
+          components can't recursively crash the boundary. */}
+      <StudioAIErrorBoundary>
+        <CommandCenterShell />
+      </StudioAIErrorBoundary>
     </DashboardThemeProvider>
   );
 }
@@ -530,6 +539,11 @@ function CommandCenterShell() {
           onClose={() => setReservationSummaryTarget(null)}
         />
       )}
+      {/* Studio AI rescue surface — listens to the error bus, shows
+          a calm bottom-right card on render / network / async
+          failures. Mounted at root so it survives error boundaries
+          tripping further down the tree. */}
+      <StudioAIOnDuty />
     </div>
   );
 }
