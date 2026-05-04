@@ -37,6 +37,42 @@ import type { Section, SectionType, TierKey } from "@/lib/types";
 
 const FULL_BLEED_TYPES = new Set<SectionType>(["cover", "closing", "footer"]);
 
+// Return true when the section is one of the content-only types AND
+// its body is empty enough that printing it on its own A4 page would
+// produce a near-empty page. Each section type's "content" lives at
+// a different content-key — operator's editor writes those keys, so
+// we whitelist the keys we know carry the meaningful body. Other
+// section types (cover, dayJourney, propertyShowcase, etc.) are
+// excluded from the check because they have rich computed content
+// from elsewhere on the proposal.
+function isContentlessSection(section: Section): boolean {
+  if (section.type === "customText" || section.type === "quote") {
+    const content = section.content as Record<string, unknown> | undefined;
+    const body = strField(content?.body) ?? strField(content?.text) ?? strField(content?.quote);
+    return !body || body.length === 0;
+  }
+  if (section.type === "gallery") {
+    const content = section.content as Record<string, unknown> | undefined;
+    const images = Array.isArray(content?.images) ? content.images : [];
+    return images.length === 0;
+  }
+  if (section.type === "inclusions") {
+    const content = section.content as Record<string, unknown> | undefined;
+    const items = Array.isArray(content?.items) ? content.items : [];
+    return items.length === 0;
+  }
+  return false;
+}
+
+function strField(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  // Strip HTML and whitespace before length-checking — operators
+  // sometimes paste an empty <p></p> from a rich editor that looks
+  // empty visually but isn't a zero-length string.
+  const stripped = v.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+  return stripped.length > 0 ? stripped : null;
+}
+
 export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
   const { proposal } = useProposalStore();
   const visible = [...proposal.sections]
@@ -170,6 +206,16 @@ function renderSection(section: Section, proposalId: string) {
   // continuous; the on-screen view still renders them via the
   // normal SectionRenderer path. Operator brief: "no blank pages."
   if (section.type === "divider" || section.type === "spacer") {
+    return null;
+  }
+
+  // Empty content sections — operator added a customText / quote /
+  // gallery / inclusions block but never filled the body. In the
+  // strict A4 deck these render as a section header strip on top
+  // of an otherwise empty page. Skip them so the printed deck
+  // stays content-dense; on-screen they still render as the
+  // operator's reminder to come back and fill them.
+  if (isContentlessSection(section)) {
     return null;
   }
 

@@ -41,40 +41,36 @@ export function PrintPropertyPage({
       style={{ background: tokens.pageBg, color: tokens.bodyText }}
     >
       {/* Hero — top 48% of the page. Full-bleed cover.
-          Never show "NO IMAGE" text in a guest-facing PDF — when the
-          property has no photo we fall back to a branded editorial
-          panel (location text + soft pattern) so the page still feels
-          intentional rather than broken. */}
-      <div
-        className="relative shrink-0 w-full overflow-hidden"
-        style={{
-          height: "48%",
-          background: tokens.cardBg,
-        }}
-      >
-        {heroUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
+          Skipped entirely when the property has no leadImageUrl or
+          gallery photo. The previous BrandedPlaceholder fallback
+          rendered as dark-on-dark on operator's themes (same root
+          cause as the day-card hero). Better to give that 48% back
+          to the body so the property card fills A4 with type and
+          tabbed amenities instead of a giant black rectangle. */}
+      {heroUrl ? (
+        <div
+          className="relative shrink-0 w-full overflow-hidden"
+          style={{
+            height: "48%",
+            background: tokens.cardBg,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={heroUrl}
             alt={property.name}
             className="w-full h-full object-cover"
           />
-        ) : (
-          <BrandedPlaceholder
-            label={property.location || property.name}
-            theme={theme}
-            tokens={tokens}
-          />
-        )}
-        {property.tier && (
-          <div
-            className="absolute top-4 left-4 text-[10px] uppercase tracking-[0.28em] font-bold px-2.5 py-1 rounded"
-            style={{ background: "rgba(255,255,255,0.94)", color: tokens.headingText }}
-          >
-            {property.tier}
-          </div>
-        )}
-      </div>
+          {property.tier && (
+            <div
+              className="absolute top-4 left-4 text-[10px] uppercase tracking-[0.28em] font-bold px-2.5 py-1 rounded"
+              style={{ background: "rgba(255,255,255,0.94)", color: tokens.headingText }}
+            >
+              {property.tier}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Body — flex-1 fills remaining ~52%. */}
       <div className="flex-1 min-h-0 px-12 py-8 flex flex-col">
@@ -182,54 +178,11 @@ export function PrintPropertyPage({
   );
 }
 
-// ─── Branded placeholder ──────────────────────────────────────────────
-//
-// Replaces the previous "NO IMAGE" text. Shown when a property has no
-// hero image — a soft gold-ish gradient with the location label set
-// large in the display serif. Reads as an editorial design choice
-// instead of a missing-asset error.
-
-function BrandedPlaceholder({
-  label, theme, tokens,
-}: {
-  label: string;
-  theme: ProposalTheme;
-  tokens: ThemeTokens;
-}) {
-  return (
-    <div
-      className="w-full h-full flex flex-col items-center justify-center px-12"
-      style={{
-        background: `linear-gradient(135deg, ${tokens.cardBg} 0%, ${tokens.sectionSurface} 100%)`,
-        color: tokens.mutedText,
-      }}
-    >
-      <div
-        className="text-[10px] uppercase tracking-[0.32em] font-semibold mb-3"
-        style={{ color: tokens.mutedText }}
-      >
-        On location
-      </div>
-      <div
-        className="font-bold text-center leading-[1.05]"
-        style={{
-          color: tokens.headingText,
-          fontFamily: `'${theme.displayFont}', serif`,
-          fontSize: "clamp(28px, 4vw, 44px)",
-          letterSpacing: "-0.015em",
-          opacity: 0.78,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        aria-hidden
-        className="mt-4 h-px"
-        style={{ width: 80, background: tokens.accent, opacity: 0.5 }}
-      />
-    </div>
-  );
-}
+// BrandedPlaceholder removed — the no-hero fallback rendered as
+// dark-on-dark on operator's themes (gradient between cardBg and
+// sectionSurface collapsed to near-page-bg, headingText vanished
+// against it). Properties without a leadImageUrl now skip the hero
+// block entirely, freeing the 48% of vertical space for body content.
 
 // ─── Sub-pieces ───────────────────────────────────────────────────────
 
