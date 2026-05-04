@@ -142,7 +142,7 @@ function TextRender({
         ...tunedStyleProps,
       }}
     >
-      <span style={{ width: "100%", display: "block" }}>{displayed}</span>
+      <span style={{ width: "100%", display: "block", whiteSpace: "pre-line" }}>{displayed}</span>
     </div>
   );
 }
@@ -160,16 +160,10 @@ function ImageRender({
 }) {
   const url = content?.kind === "image" ? content.url : null;
   if (!url) {
-    return (
-      <div
-        style={{
-          ...position,
-          background: tokens.cardBg,
-          opacity: 0.55,
-          overflow: "hidden",
-        }}
-      />
-    );
+    // Empty slot: render nothing so a missing image doesn't leave a
+    // grey rectangle on the page. Operator-visible "missing image"
+    // hints belong in the editor, not the printed deck.
+    return null;
   }
   return (
     <div style={{ ...position, overflow: "hidden", background: tokens.cardBg }}>

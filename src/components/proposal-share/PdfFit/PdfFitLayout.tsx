@@ -40,7 +40,13 @@ export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: P
         width: "210mm",
         height: "297mm",
         overflow: "hidden",
-        background: tokens.pageBg,
+        // Use the theme's cream "paper" surface instead of pageBg.
+        // Many themes set pageBg to a saturated brand colour that
+        // works on screen but kills text contrast in print, where
+        // body text is dark by default. cardBg is the surface text
+        // is designed to sit on; the operator's brand still shows
+        // through accent strips, headings, and full-bleed images.
+        background: tokens.cardBg,
       }}
     >
       {manifest.slots.map((slot) => (
