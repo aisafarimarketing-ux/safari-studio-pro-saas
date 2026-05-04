@@ -48,6 +48,7 @@ export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: P
           key={slot.name}
           slot={slot}
           content={contents[slot.name]}
+          contents={contents}
           theme={theme}
           tokens={tokens}
           adjustment={resolveVariantAdjustment(manifest.section, variantId, slot.name)}

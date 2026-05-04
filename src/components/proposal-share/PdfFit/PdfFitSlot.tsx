@@ -42,9 +42,13 @@ type Props = {
    *  through; PdfFitSlot here just applies them. Empty object when
    *  no variant is in play (base styling). */
   adjustment?: SlotAdjustment;
+  /** Optional content map. When present, group sub-slots resolve
+   *  their content from this map by child slot name. Top-level slots
+   *  use the explicit `content` prop instead. */
+  contents?: Record<string, SlotContent>;
 };
 
-export function PdfFitSlot({ slot, content, theme, tokens, adjustment = {} }: Props) {
+export function PdfFitSlot({ slot, content, theme, tokens, adjustment = {}, contents }: Props) {
   // Common position style — every slot type shares this. Position is
   // never adjusted by variants (locked per spec).
   const position: React.CSSProperties = {
@@ -67,7 +71,7 @@ export function PdfFitSlot({ slot, content, theme, tokens, adjustment = {} }: Pr
     case "line":
       return <LineRender slot={slot} tokens={tokens} position={position} />;
     case "group":
-      return <GroupRender slot={slot} theme={theme} tokens={tokens} position={position} />;
+      return <GroupRender slot={slot} theme={theme} tokens={tokens} position={position} contents={contents} />;
     case "vector":
       return <VectorRender slot={slot} content={content} position={position} />;
   }
@@ -233,17 +237,25 @@ function LineRender({
 // ─── Group (sub-slots positioned relative) ────────────────────────────────
 
 function GroupRender({
-  slot, theme, tokens, position,
+  slot, theme, tokens, position, contents,
 }: {
   slot: GroupSlot;
   theme: ProposalTheme;
   tokens: ThemeTokens;
   position: React.CSSProperties;
+  contents?: Record<string, SlotContent>;
 }) {
   return (
     <div style={{ ...position }}>
       {(slot.slots ?? []).map((child) => (
-        <PdfFitSlot key={child.name} slot={child} theme={theme} tokens={tokens} />
+        <PdfFitSlot
+          key={child.name}
+          slot={child}
+          content={contents?.[child.name]}
+          contents={contents}
+          theme={theme}
+          tokens={tokens}
+        />
       ))}
     </div>
   );

@@ -17,6 +17,9 @@ import { PrintMapPage } from "./PrintMapPage";
 import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
 import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
 import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
+import { PdfFitPersonalNotePage } from "./PdfFit/PdfFitPersonalNotePage";
+import { PdfFitPricingPage } from "./PdfFit/PdfFitPricingPage";
+import { PdfFitPracticalInfoPages } from "./PdfFit/PdfFitPracticalInfoPage";
 import { FEATURES } from "@/lib/featureFlags";
 import { resolveTokens } from "@/lib/theme";
 import { resolveDayCard } from "@/components/sections/day-card/resolve";
@@ -236,6 +239,15 @@ function renderSection(section: Section, proposalId: string) {
     }
     if (section.type === "propertyShowcase") {
       return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
+    }
+    if (section.type === "personalNote") {
+      return <PdfFitPersonalNotePage key={section.id} section={section} />;
+    }
+    if (section.type === "pricing") {
+      return <PdfFitPricingPage key={section.id} section={section} />;
+    }
+    if (section.type === "practicalInfo") {
+      return <PdfFitPracticalInfoPages key={section.id} section={section} />;
     }
   }
 
