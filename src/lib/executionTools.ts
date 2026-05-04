@@ -151,22 +151,36 @@ export async function findClient(
   // reservation form persists firstName + lastName + email + phone
   // directly on ProposalReservation). Surface them so commands like
   // "send Jennifer N Morris day 2 and 3" resolve when Jennifer only
-  // exists as a reservation row.
-  const reservationCandidates = await findReservationCandidates(
-    organizationId,
-    tokens,
-    trimmed,
-  );
+  // exists as a reservation row. Wrapped so a Prisma blip on this
+  // table doesn't crash the whole resolver — we still have Sources
+  // 1 and 3 as fallbacks.
+  let reservationCandidates: { lite: ClientLite; score: number }[] = [];
+  try {
+    reservationCandidates = await findReservationCandidates(
+      organizationId,
+      tokens,
+      trimmed,
+    );
+  } catch (err) {
+    console.warn("[execute] reservation source failed:", err);
+  }
 
   // ── Source 3 — Proposal.contentJson.client.guestNames ───────────────
   // Catches proposals drafted with a guest name but no linked Client
   // row (manual editor, demo seed, import). Uses Postgres JSON path
-  // filtering via Prisma's path operator.
-  const contentCandidates = await findContentCandidates(
-    organizationId,
-    tokens,
-    trimmed,
-  );
+  // filtering via Prisma's path operator. Defensively wrapped — JSON
+  // path filter syntax can vary across Prisma + Postgres versions and
+  // we'd rather degrade to "no contentJson source" than crash.
+  let contentCandidates: { lite: ClientLite; score: number }[] = [];
+  try {
+    contentCandidates = await findContentCandidates(
+      organizationId,
+      tokens,
+      trimmed,
+    );
+  } catch (err) {
+    console.warn("[execute] content source failed:", err);
+  }
 
   // Merge + dedupe. Reservation/content matches that share a
   // proposalId with a Client-row match are skipped (the Client row

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { openCommandPalette } from "@/components/CommandPalette";
@@ -617,12 +617,22 @@ function CommandTopBar({
   const { user } = useUser();
   const { tokens } = useDashboardTheme();
   const greetingName = (user?.firstName ?? user?.username ?? "").trim();
-  const greeting = useMemo(() => {
+  // Hour-based greeting derives from `new Date()`, which produces
+  // different values on the SSR pass (server timezone) vs the client
+  // mount (browser timezone). React 19 turns that diff into the
+  // hydration error #418 we saw in production. Compute the greeting
+  // only after mount so the SSR + first-paint use a stable neutral
+  // string.
+  const [greeting, setGreeting] = useState<string>("Hello");
+  useEffect(() => {
     const h = new Date().getHours();
-    if (h < 5) return "Working late";
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+    const next =
+      h < 5 ? "Working late" :
+      h < 12 ? "Good morning" :
+      h < 18 ? "Good afternoon" :
+      "Good evening";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGreeting(next);
   }, []);
 
   return (

@@ -140,6 +140,25 @@ type ParsedIntent = {
 };
 
 export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>> {
+  // Top-level guard: any unhandled exception in the body below is
+  // caught here and returned as JSON 500 with the error message
+  // surfaced to the dashboard. Without this, a thrown error bubbles
+  // up and Railway/Next responds with a bare 503 the operator can't
+  // act on. The console.error path also writes the full stack to
+  // the Railway logs so we can diagnose post-hoc.
+  try {
+    return await runExecute(req);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[ai/execute] UNHANDLED:", err);
+    return NextResponse.json(
+      { status: "error", command: "", message: `Server error: ${message}` },
+      { status: 500 },
+    );
+  }
+}
+
+async function runExecute(req: Request): Promise<NextResponse<ExecuteResponse>> {
   const ctx = await getAuthContext();
   if (!ctx) {
     return NextResponse.json(
@@ -192,6 +211,11 @@ export async function POST(req: Request): Promise<NextResponse<ExecuteResponse>>
       { status: 400 },
     );
   }
+
+  console.log(
+    `[execute] start · org=${ctx.organization.id} · user=${ctx.user.id} · command="${command}" · ` +
+      `explicit=${explicitProposalId ? `proposal:${explicitProposalId}` : explicitClientId ? `client:${explicitClientId}` : "(none)"}`,
+  );
 
   // ── Step 1 — parse the command via Anthropic tool-use ────────────────
   const intent = await parseIntent(apiKey, command);
