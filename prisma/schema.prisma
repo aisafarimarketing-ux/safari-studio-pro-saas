@@ -178,6 +178,7 @@ model Organization {
   activityEvents  ActivityEvent[]
   reservations         Reservation[]
   proposalReservations ProposalReservation[]
+  bookingCheckRequests BookingCheckRequest[]
   messages             Message[]
   integrationLogs      IntegrationLog[]
   proposalEvents       ProposalEvent[]
@@ -364,6 +365,7 @@ model Proposal {
   deposits             ProposalDeposit[]
   reservations         Reservation[]
   proposalReservations ProposalReservation[]
+  bookingCheckRequests BookingCheckRequest[]
   events               ProposalEvent[]
   activitySummary      ProposalActivitySummary?
 
@@ -685,6 +687,94 @@ model ProposalReservation {
   @@index([organizationId, createdAt])
   @@index([proposalId])
   @@index([assignedUserId])
+}
+
+// ─── Booking operations — property availability checks ─────────────────────
+//
+// One row per (proposal, property) the operator needs to confirm
+// availability with after a proposal books. Created on demand from
+// the Booking Operations panel — the operator clicks "Generate
+// property checks" and we walk the proposal's contentJson.days[],
+// group consecutive days at the same camp, and persist one row per
+// stay.
+//
+// Status workflow (string enum):
+//   "not_sent"          — row created, draft message ready, nothing dispatched
+//   "sent"              — operator marked the message as sent (we don't auto-send in v1)
+//   "replied"           — property has responded (operator updates manually)
+//   "available"         — property confirmed availability
+//   "not_available"     — property declined / unavailable for the dates
+//   "follow_up_needed"  — operator-flagged stall (or auto-suggested at 24h)
+//
+// Audit fields: createdAt + updatedAt + sentAt + repliedAt + resolvedAt
+// give a clear timeline. notes is operator free-form (paste the
+// property's response, internal reminders, etc.).
+
+model BookingCheckRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  // Optional link to the ProposalReservation that triggered this row.
+  // Stored loosely (no FK) so a row can survive the reservation being
+  // deleted — the proposal link is the source of truth for stay data.
+  reservationId String?
+
+  // Property snapshot captured at extraction time. Frozen — re-running
+  // generation never overwrites these fields, so the operator's
+  // dispatched message stays consistent with what was sent.
+  propertyName String
+  destination  String?
+  // Tier the room reservation should be at — "classic" | "premier" |
+  // "signature". Mirrors the proposal's activeTier at extraction time.
+  tierKey      String?
+  // Operator-curated property contact info (when present on the
+  // Property Library row). Optional — when missing, the operator
+  // pastes/dispatches manually.
+  contactEmail String?
+  contactPhone String?
+
+  checkInDate  DateTime
+  checkOutDate DateTime
+  nights       Int
+  // Adults / children pulled from contentJson.client at extraction
+  // time. Stored verbatim so the message generator can reuse them.
+  adults       Int @default(2)
+  children     Int @default(0)
+  roomingNotes String?
+
+  // Pre-rendered draft message. Operator can edit before dispatching
+  // (we surface it in a textarea); the row only stores the rendered
+  // version for the audit trail.
+  draftText String
+
+  status String @default("not_sent")
+
+  // Lifecycle timestamps. sentAt + repliedAt + resolvedAt are
+  // operator-set transitions; the 24h follow-up suggestion fires
+  // when status === "sent" and now > sentAt + 24h.
+  sentAt     DateTime?
+  repliedAt  DateTime?
+  resolvedAt DateTime?
+
+  // Operator free-form notes — paste the property's reply, internal
+  // reminders, anything that needs to live with this stay's record.
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Same property can't be added twice for the same proposal — the
+  // generate route uses this constraint to dedupe idempotently. When
+  // a proposal genuinely has back-to-back stays at the same camp
+  // (rare), they merge into one row at extraction time.
+  @@unique([proposalId, propertyName])
+  @@index([organizationId, status])
+  @@index([reservationId])
+  @@index([proposalId, createdAt])
 }
 
 // ─── Proposal deposits ──────────────────────────────────────────────────────
