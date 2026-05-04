@@ -402,6 +402,37 @@ function PrintCss({
       button[title*="Duplicate"] {
         display: none !important;
       }
+      /* Strip all interactive booking / CTA chrome — these have no
+         meaning on a printed PDF and operator screenshots showed
+         "Secure This Safari", "Share", "Download", "Request Changes",
+         "Visit Our Website" buttons rendering in the footer. The
+         class names are stable; the title-attribute matchers also
+         catch any aria-labelled affordances. */
+      .pdf-page button:not([data-print-keep]),
+      .pdf-page [role="button"]:not([data-print-keep]),
+      .pdf-page a[href^="mailto:"]:not([data-print-keep])::after,
+      [data-print-hide],
+      [data-cta-block],
+      .ss-cta-block,
+      .ss-share-bar,
+      .ss-deposit-button,
+      .ss-reserve-bar,
+      [data-section-type="footer"] button,
+      [data-section-type="footer"] [role="button"] {
+        display: none !important;
+      }
+
+      /* ── Force personalNote to stay side-by-side ─────────────────
+         Tailwind's md: prefix is viewport-based, so a print view
+         opened in a narrow window OR a sidecar with non-standard
+         viewport falls back to single-column — leaving a giant
+         image area on top of the letter. Inside .pdf-page we know
+         we're at A4 width; force the grid columns explicitly so
+         the layout can't collapse regardless of how the page is
+         opened. */
+      .pdf-page [data-section-type="personalNote"] [class*="grid-cols-1"][class*="md:grid-cols"] {
+        grid-template-columns: 3fr 2fr !important;
+      }
       /* Keep map attribution — Carto / OSM ToS require it visible. */
       .leaflet-control-attribution {
         display: block !important;
