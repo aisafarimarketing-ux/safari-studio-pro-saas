@@ -150,6 +150,27 @@ type ReservationRow = {
   } | null;
 };
 
+type LeadRow = {
+  id: string;
+  referenceNumber: string;
+  status: string;
+  receivedAt: string;
+  lastActivityAt: string;
+  client: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string | null;
+  } | null;
+  momentum: "VERY_ACTIVE" | "NEW" | "QUIET";
+  momentumReason: string;
+  nextSuggestion: {
+    message: string;
+    actionLabel?: string;
+    actionCommand?: string;
+  } | null;
+};
+
 type ActivityResponse = {
   hot: ActivityCard[];
   needsFollowup: ActivityCard[];
@@ -158,6 +179,7 @@ type ActivityResponse = {
   opportunitiesTotal: number;
   recentActivity: RecentEvent[];
   reservations: ReservationRow[];
+  leads: LeadRow[];
   pipeline: PipelineData | null;
   scope: "mine" | "all";
   canViewAll: boolean;
@@ -460,6 +482,10 @@ function CommandCenterShell() {
                 loadFailed={loadFailed}
               />
             </div>
+            <LeadsSection
+              leads={activity?.leads ?? null}
+              loadFailed={loadFailed}
+            />
           </div>
           <aside className="min-w-0 space-y-5">
             <ActivityFeed events={activity?.recentActivity ?? null} />
@@ -2159,6 +2185,145 @@ function BookingsSection({
         </ul>
       )}
     </section>
+  );
+}
+
+// ─── Leads — pre-proposal funnel ───────────────────────────────────────
+//
+// Lists Request rows that haven't been quoted yet. Each row renders
+// the same Inspector AI suggestion shape as a deal card, but with
+// preview-prefilled CTAs (no proposal exists, so day-snippets don't
+// apply). The CTA dispatches ss:openCommandBar with the prefilled
+// command — one click into the existing send_preview_itinerary
+// pipeline.
+
+function LeadsSection({
+  leads,
+  loadFailed,
+}: {
+  leads: LeadRow[] | null;
+  loadFailed: boolean;
+}) {
+  const { tokens } = useDashboardTheme();
+  // Same 3-rows-then-scroll rhythm as Bookings, since both sections
+  // share the dashboard's vertical-budget posture.
+  const visible = leads?.slice(0, 8);
+  const overflowsScroll = (leads?.length ?? 0) > 3;
+  return (
+    <section id="dash-leads">
+      <SectionHeader
+        title="Leads"
+        emoji="📥"
+        subtitle="Pre-proposal — share a sample to start the conversation."
+        count={leads?.length}
+      />
+      {loadFailed ? (
+        <EmptyCard message="Couldn't load." />
+      ) : visible === undefined ? (
+        <ListSkeleton rows={2} />
+      ) : visible.length === 0 ? (
+        <EmptyCard message="No active leads. New enquiries land here automatically." />
+      ) : (
+        <ul
+          className={`rounded-xl ${overflowsScroll ? "overflow-y-auto" : "overflow-hidden"}`}
+          style={{
+            background: tokens.tileBg,
+            border: `1px solid ${tokens.ring}`,
+            boxShadow: tokens.shadow,
+            maxHeight: overflowsScroll ? "calc(3 * 76px)" : undefined,
+          }}
+        >
+          {visible.map((lead, i) => (
+            <LeadRow key={lead.id} lead={lead} divider={i > 0} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function LeadRow({ lead, divider }: { lead: LeadRow; divider: boolean }) {
+  const { tokens } = useDashboardTheme();
+  // Lead-momentum colour map mirrors LEAD_MOMENTUM_COLORS in
+  // lib/leadMomentum.ts. Inlined here so the dashboard doesn't need
+  // to import server-only modules.
+  const colors =
+    lead.momentum === "VERY_ACTIVE"
+      ? { bg: "rgba(22,163,74,0.10)", fg: "#15803d", accent: "#16a34a" }
+      : lead.momentum === "QUIET"
+        ? { bg: "rgba(0,0,0,0.06)", fg: "rgba(0,0,0,0.55)", accent: "rgba(0,0,0,0.4)" }
+        : { bg: "rgba(202,138,4,0.10)", fg: "#a16207", accent: "#ca8a04" };
+  const label =
+    lead.momentum === "VERY_ACTIVE" ? "Active" : lead.momentum === "QUIET" ? "Quiet" : "New";
+  const triggerSuggestion = () => {
+    if (!lead.nextSuggestion?.actionCommand) return;
+    window.dispatchEvent(
+      new CustomEvent<{ prefill?: string }>("ss:openCommandBar", {
+        detail: { prefill: lead.nextSuggestion.actionCommand },
+      }),
+    );
+  };
+  return (
+    <li
+      className="px-3.5 py-3 transition"
+      style={{
+        borderTop: divider ? `1px solid ${tokens.ring}` : "none",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.primarySoft;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className="text-[9.5px] uppercase tracking-[0.18em] font-bold px-1.5 py-0.5 rounded shrink-0"
+              style={{ background: colors.accent, color: "#ffffff" }}
+            >
+              {label}
+            </span>
+            <span
+              className="text-[13px] truncate"
+              style={{ color: tokens.heading, fontWeight: 600 }}
+            >
+              {lead.client?.fullName ?? "Unnamed lead"}
+            </span>
+            <span aria-hidden style={{ color: tokens.muted, opacity: 0.5 }}>·</span>
+            <span className="text-[11px]" style={{ color: tokens.muted }}>
+              {lead.referenceNumber}
+            </span>
+          </div>
+          <div className="text-[11.5px] mt-0.5 truncate" style={{ color: tokens.muted }}>
+            {lead.client?.email ?? "(no email)"}
+            {lead.momentumReason ? ` · ${lead.momentumReason}` : ""}
+          </div>
+          {lead.nextSuggestion && (
+            <div
+              className="text-[11.5px] mt-1.5"
+              style={{ color: colors.fg }}
+              title={lead.nextSuggestion.actionCommand ?? ""}
+            >
+              <span aria-hidden>✦ </span>
+              {lead.nextSuggestion.message}
+            </div>
+          )}
+        </div>
+        {lead.nextSuggestion?.actionLabel && lead.nextSuggestion.actionCommand && (
+          <button
+            type="button"
+            onClick={triggerSuggestion}
+            className="inline-flex items-center gap-1 px-3 h-8 rounded-md text-[12px] font-semibold transition active:scale-[0.97] shrink-0"
+            style={{ background: "#1b3a2d", color: "#ffffff" }}
+            title={`Opens command bar with: "${lead.nextSuggestion.actionCommand}"`}
+          >
+            {lead.nextSuggestion.actionLabel}
+          </button>
+        )}
+      </div>
+    </li>
   );
 }
 

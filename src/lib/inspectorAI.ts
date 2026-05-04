@@ -13,6 +13,7 @@
 // ever feels noisy.
 
 import type { DealMomentum } from "@/lib/dealMomentum";
+import type { LeadMomentum } from "@/lib/leadMomentum";
 
 export type InspectorSuggestion = {
   /** Operator-readable line. Already includes the why. */
@@ -275,6 +276,85 @@ export function matchesNextStepHeuristic(
   // Heuristic with priors → "Send Day {max(prior) + 1}".
   const lastPriorMax = sortedPrior[sortedPrior.length - 1];
   return sortedExecuted.length === 1 && sortedExecuted[0] === lastPriorMax + 1;
+}
+
+// ─── Lead-side suggester ────────────────────────────────────────────────
+//
+// Sibling of suggestNextStep for the pre-proposal funnel. Reads
+// LeadMomentum + send/preview history; returns the same
+// InspectorSuggestion shape so the dashboard can render lead chips
+// with the existing render code. The CTA always opens the Command
+// Bar with a preview-prefilled command — leads have no proposal, so
+// preview-itinerary is the only execution path that fits.
+//
+// Same guards as the deal suggester:
+//   - sent in last 2h → silent (don't double-tap)
+//   - preview sent in last 24h → silent (don't pile on previews)
+// Plus: if a lead is somehow in a state where no preview makes sense
+// (no contact method, etc.), the caller filters before calling us;
+// we don't try to handle those cases here.
+
+export type LeadInspectorInput = {
+  momentum: LeadMomentum;
+  /** Most recent operator-side outbound (any kind / channel) for
+   *  this lead. Null when nothing's been sent. */
+  lastSentAt: Date | null;
+  /** Most recent preview-itinerary send for this lead's client. Null
+   *  when no preview has gone out. */
+  lastPreviewSentAt: Date | null;
+  clientFirstName: string | null;
+  /** For testability. */
+  now?: Date;
+};
+
+export function suggestNextStepForLead(
+  input: LeadInspectorInput,
+): InspectorSuggestion | null {
+  const now = input.now ?? new Date();
+
+  // Same recent-send guard as deals — don't suggest sending another
+  // message right after an outbound went.
+  if (
+    input.lastSentAt &&
+    now.getTime() - input.lastSentAt.getTime() < RECENT_SEND_WINDOW_MS
+  ) {
+    return null;
+  }
+  // Don't pile on previews — once a sample itinerary went out, give
+  // it 24h to land before the chip nudges another one.
+  if (
+    input.lastPreviewSentAt &&
+    now.getTime() - input.lastPreviewSentAt.getTime() < PREVIEW_QUIET_WINDOW_MS
+  ) {
+    return null;
+  }
+
+  const cmdName = (input.clientFirstName?.trim() || "client").toLowerCase();
+
+  if (input.momentum === "VERY_ACTIVE") {
+    // The "warm now, send while attention is fresh" moment. Spec
+    // example: "Send Day 1 and 2 preview". Our canonical previews
+    // are whole-itinerary (3/5/7-day), so the prefill stays a
+    // 5-day preview — but the chip copy leans into the urgency.
+    return {
+      message: "Lead is active right now — sharing a sample safari while attention is fresh lands well.",
+      actionLabel: "Send preview",
+      actionCommand: `send a 5 day safari to ${cmdName}`,
+    };
+  }
+  if (input.momentum === "QUIET") {
+    return {
+      message: "Quiet lead — a short safari preview can re-open the conversation.",
+      actionLabel: "Send preview",
+      actionCommand: `send a 5 day safari to ${cmdName}`,
+    };
+  }
+  // NEW
+  return {
+    message: "New lead — share a sample safari to start the conversation.",
+    actionLabel: "Send preview",
+    actionCommand: `send a 5 day safari to ${cmdName}`,
+  };
 }
 
 // ─── Live activity interpretation ───────────────────────────────────────

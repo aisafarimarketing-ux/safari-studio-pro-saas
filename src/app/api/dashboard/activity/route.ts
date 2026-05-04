@@ -15,10 +15,15 @@ import {
   deriveLiveActivity,
   extractDaysFromInput,
   matchesNextStepHeuristic,
+  suggestNextStepForLead,
   suggestNextStepWithStats,
   type InspectorSuggestion,
   type LiveActivity,
 } from "@/lib/inspectorAI";
+import {
+  classifyLeadMomentum,
+  type LeadMomentum,
+} from "@/lib/leadMomentum";
 
 // GET /api/dashboard/activity
 //
@@ -110,6 +115,31 @@ type Card = {
     phone: string | null;
   } | null;
   consultant: { id: string; name: string | null; email: string | null } | null;
+};
+
+// ─── Lead row — pre-proposal funnel ─────────────────────────────────────
+//
+// Surfaces Request rows that haven't been quoted yet (no Proposal
+// linked). Each lead carries lightweight client info + lead-momentum
+// classification + an Inspector AI suggestion sized to "no proposal
+// exists yet". The dashboard renders these in a compact list below
+// the deal-side sections; CTAs route through the Command Bar with
+// preview-itinerary prefills.
+type LeadRow = {
+  id: string;
+  referenceNumber: string;
+  status: string;
+  receivedAt: string;
+  lastActivityAt: string;
+  client: {
+    id: string;
+    fullName: string;
+    email: string;
+    phone: string | null;
+  } | null;
+  momentum: LeadMomentum;
+  momentumReason: string;
+  nextSuggestion: InspectorSuggestion | null;
 };
 
 export async function GET(req: Request) {
@@ -541,6 +571,87 @@ export async function GET(req: Request) {
   //    assignedUserId (the consultant the booking was routed to) so
   //    the activity surface stays consistent with the existing
   //    /api/dashboard/reservations endpoint.
+  // ── Leads — Request rows without a linked Proposal ──────────────────
+  // Pre-proposal funnel surface. Active statuses only ("new" /
+  // "working") — once a request hits "open" / "booked" / "completed"
+  // it has a proposal anyway. Scoped same as deals: caller's own
+  // assignments unless owner/admin asked for "all".
+  const leadsRaw = await prisma.request.findMany({
+    where: {
+      organizationId: orgId,
+      proposals: { none: {} },
+      status: { in: ["new", "working"] },
+      ...(scope === "mine" ? { assignedToUserId: myUserId } : {}),
+    },
+    orderBy: { lastActivityAt: "desc" },
+    take: GROUP_LIMIT,
+    select: {
+      id: true,
+      referenceNumber: true,
+      status: true,
+      receivedAt: true,
+      firstReplyAt: true,
+      lastActivityAt: true,
+      client: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+  });
+  // Last operator-side outbound for each lead's client. Reuses the
+  // same lastSentByProposal we already computed above by overlay —
+  // for leads that don't have a proposal, we fall back to checking
+  // AISuggestion rows keyed to the client id directly, but that
+  // would mean another query. For v1 simplicity we read the same
+  // lastPreviewByClient map (already computed earlier) for the
+  // 24h preview-quiet guard, and ignore the 2h send guard for
+  // leads (operator typically wants to send the first preview
+  // even if they noted something on the lead 30 min ago).
+  const leads: LeadRow[] = leadsRaw.map((r) => {
+    const fullName = [r.client?.firstName, r.client?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const momentum = classifyLeadMomentum({
+      receivedAt: r.receivedAt,
+      lastActivityAt: r.lastActivityAt,
+      firstReplyAt: r.firstReplyAt,
+      now,
+    });
+    const nextSuggestion = suggestNextStepForLead({
+      momentum: momentum.momentum,
+      lastSentAt: null, // no outbound to leads tracked at this stage
+      lastPreviewSentAt: r.client?.id
+        ? lastPreviewByClient.get(r.client.id) ?? null
+        : null,
+      clientFirstName: r.client?.firstName ?? null,
+      now,
+    });
+    return {
+      id: r.id,
+      referenceNumber: r.referenceNumber,
+      status: r.status,
+      receivedAt: r.receivedAt.toISOString(),
+      lastActivityAt: r.lastActivityAt.toISOString(),
+      client: r.client
+        ? {
+            id: r.client.id,
+            fullName: fullName || r.client.email,
+            email: r.client.email,
+            phone: r.client.phone,
+          }
+        : null,
+      momentum: momentum.momentum,
+      momentumReason: momentum.reason,
+      nextSuggestion,
+    };
+  });
+
   const reservationsRaw = await prisma.proposalReservation.findMany({
     where: {
       organizationId: orgId,
@@ -770,6 +881,7 @@ export async function GET(req: Request) {
     opportunitiesTotal,
     recentActivity,
     reservations,
+    leads,
     pipeline,
     scope,
     canViewAll,
