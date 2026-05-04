@@ -113,6 +113,50 @@ export async function recordProposalEvent(input: {
       },
     });
   });
+
+  // ── Outcome wiring (Phase 2) ────────────────────────────────────────
+  // When a reservation completes, every operator-side AI suggestion
+  // that was sent for this proposal is retroactively flagged as
+  // having helped close the deal. Powers the future "what kinds of
+  // follow-ups actually convert?" analytics, and surfaces a clean
+  // sent → opened → replied → BOOKED state on suggestion rows that
+  // would otherwise stop at "sent".
+  //
+  // Best-effort + outside the main transaction: a failure here must
+  // never block the booking from being recorded. We log + continue.
+  if (input.eventType === "reservation_completed") {
+    try {
+      const result = await prisma.aISuggestion.updateMany({
+        where: {
+          organizationId: input.organizationId,
+          // Operator-to-client outbound surfaces. Reservation summaries
+          // and any future internal-only kinds stay out of this loop.
+          kind: { in: ["follow-up", "execution"] },
+          targetType: "proposal",
+          targetId: input.proposalId,
+          // Only credit suggestions that actually went out, and only
+          // those still pending an outcome — this keeps the function
+          // idempotent if reservation_completed fires twice.
+          sentAt: { not: null },
+          bookedAt: null,
+        },
+        data: {
+          bookedAt: occurredAt,
+          outcome: "booked",
+        },
+      });
+      if (result.count > 0) {
+        console.log(
+          `[proposalActivity] reservation_completed · proposal=${input.proposalId} · credited ${result.count} sent suggestion(s) as booked`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[proposalActivity] outcome backfill failed (non-blocking):",
+        err,
+      );
+    }
+  }
 }
 
 // ─── Pure transform — easier to reason about + unit-testable ─────────────
