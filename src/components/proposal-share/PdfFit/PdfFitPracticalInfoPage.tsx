@@ -6,6 +6,7 @@ import type { Section, PracticalCard } from "@/lib/types";
 import {
   PRACTICAL_INFO_CARDS,
   PRACTICAL_INFO_CARDS_PER_PAGE,
+  PRACTICAL_INFO_LAYOUTS,
 } from "@/lib/pdfFit/manifests/practical_info";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
@@ -59,6 +60,10 @@ function PdfFitPracticalInfoPage({
       ? section.content.variantId
       : "default";
 
+  const manifest =
+    PRACTICAL_INFO_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
+    PRACTICAL_INFO_CARDS;
+
   const sectionTitle =
     (typeof section.content?.title === "string" && section.content.title.trim()) ||
     "Practical information";
@@ -97,7 +102,7 @@ function PdfFitPracticalInfoPage({
     <PdfPage label="Practical information" bleed>
       <div data-section-type="practicalInfo" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={PRACTICAL_INFO_CARDS}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}

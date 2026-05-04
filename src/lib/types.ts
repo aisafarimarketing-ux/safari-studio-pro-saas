@@ -254,6 +254,11 @@ export interface Property {
   roomType: string;
   nights: number;
   tier?: string;
+  /** Per-property PdfFit layout id — overrides the section's default
+   *  variant for this property only. Lets the rhythm engine and the
+   *  operator say "this signature lodge reads better as the feature
+   *  variant" while another property stays in the editorial grid. */
+  layoutVariant?: string;
   leadImageUrl?: string;
   galleryUrls: string[];
   /** Tour-operator-curated showcase fields. All optional — backfilled from

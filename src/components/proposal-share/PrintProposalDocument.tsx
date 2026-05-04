@@ -324,6 +324,16 @@ function PdfFitDayJourneyPages({ section }: { section: Section }) {
   );
 }
 
+// Rotation order for property layouts when none is operator-set.
+// Drives the "never the same layout twice in a row" rhythm rule —
+// gallery → editorial → feature → gallery → … so a 6-property
+// showcase reads as a magazine, not a catalogue.
+const PROPERTY_VARIANT_ROTATION = [
+  "property-card-standard",  // gallery (hero + thumbs)
+  "property-card-editorial", // text-left, photo-right
+  "property-card-feature",   // dominant photograph + caption
+] as const;
+
 function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
   const proposal = useProposalStore((s) => s.proposal);
   const properties = proposal.properties ?? [];
@@ -338,15 +348,24 @@ function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
   }
   return (
     <>
-      {properties.map((property, idx) => (
-        <PdfFitPropertyPage
-          key={property.id}
-          section={section}
-          property={property}
-          index={idx}
-          total={properties.length}
-        />
-      ))}
+      {properties.map((property, idx) => {
+        const synthetic = property.layoutVariant
+          ? property
+          : {
+              ...property,
+              layoutVariant:
+                PROPERTY_VARIANT_ROTATION[idx % PROPERTY_VARIANT_ROTATION.length],
+            };
+        return (
+          <PdfFitPropertyPage
+            key={property.id}
+            section={section}
+            property={synthetic}
+            index={idx}
+            total={properties.length}
+          />
+        );
+      })}
     </>
   );
 }

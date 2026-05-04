@@ -5,7 +5,10 @@ import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
 import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import type { Section } from "@/lib/types";
-import { TRIP_SUMMARY_EDITORIAL } from "@/lib/pdfFit/manifests/trip_summary";
+import {
+  TRIP_SUMMARY_EDITORIAL,
+  TRIP_SUMMARY_LAYOUTS,
+} from "@/lib/pdfFit/manifests/trip_summary";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
@@ -31,6 +34,12 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     typeof section.content?.variantId === "string"
       ? section.content.variantId
       : "balanced";
+
+  // Layout pick — operator's section.layoutVariant chooses which
+  // trip-summary manifest renders. Falls back to the editorial split.
+  const manifest =
+    TRIP_SUMMARY_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
+    TRIP_SUMMARY_EDITORIAL;
 
   const days = proposal.days ?? [];
   const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
@@ -124,7 +133,7 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     <PdfPage label="At a glance" bleed>
       <div data-section-type="tripSummary" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={TRIP_SUMMARY_EDITORIAL}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}

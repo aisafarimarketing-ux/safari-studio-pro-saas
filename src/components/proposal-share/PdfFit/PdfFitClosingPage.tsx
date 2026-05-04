@@ -3,7 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section } from "@/lib/types";
-import { CLOSING_FAREWELL } from "@/lib/pdfFit/manifests/closing";
+import { CLOSING_FAREWELL, CLOSING_LAYOUTS } from "@/lib/pdfFit/manifests/closing";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
@@ -25,6 +25,11 @@ export function PdfFitClosingPage({ section }: Props) {
     typeof section.content?.variantId === "string"
       ? section.content.variantId
       : "calm_luxury";
+
+  // Layout pick — operator's section.layoutVariant chooses which
+  // closing manifest renders; falls back to the editorial farewell.
+  const manifest =
+    CLOSING_LAYOUTS.find((l) => l.id === section.layoutVariant) ?? CLOSING_FAREWELL;
 
   const heroImageUrl =
     str(section.content?.themeImageUrl) ??
@@ -99,7 +104,7 @@ export function PdfFitClosingPage({ section }: Props) {
     <PdfPage label="Closing" bleed>
       <div data-section-type="closing" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={CLOSING_FAREWELL}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}

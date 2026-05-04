@@ -3,7 +3,7 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Section, TierKey } from "@/lib/types";
-import { PRICING_STANDARD } from "@/lib/pdfFit/manifests/pricing";
+import { PRICING_LAYOUTS, PRICING_STANDARD } from "@/lib/pdfFit/manifests/pricing";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
@@ -29,6 +29,9 @@ export function PdfFitPricingPage({ section }: Props) {
     typeof section.content?.variantId === "string"
       ? section.content.variantId
       : "clean_financial";
+
+  const manifest =
+    PRICING_LAYOUTS.find((l) => l.id === section.layoutVariant) ?? PRICING_STANDARD;
 
   const activeTier: TierKey =
     proposal.activeTier && ["classic", "premier", "signature"].includes(proposal.activeTier)
@@ -96,6 +99,10 @@ export function PdfFitPricingPage({ section }: Props) {
     row_2_calc: { kind: "text", value: row2Calc },
     row_2_total: { kind: "text", value: row2Total },
     grand_total: { kind: "text", value: grandTotal },
+    // Emphasized-total variant uses these slots; harmless when the
+    // active manifest doesn't declare them (PdfFitLayout just ignores
+    // entries with no matching slot).
+    total_label: { kind: "text", value: "Total investment" },
     included_list: { kind: "text", value: includedList },
     excluded_list: { kind: "text", value: excludedList },
     payment_block: { kind: "text", value: paymentBlock },
@@ -107,7 +114,7 @@ export function PdfFitPricingPage({ section }: Props) {
     <PdfPage label="Pricing" bleed>
       <div data-section-type="pricing" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={PRICING_STANDARD}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}

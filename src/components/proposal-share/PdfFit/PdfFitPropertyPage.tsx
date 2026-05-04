@@ -3,7 +3,10 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import type { Property, Section } from "@/lib/types";
-import { PROPERTY_CARD_STANDARD } from "@/lib/pdfFit/manifests/property_card";
+import {
+  PROPERTY_CARD_LAYOUTS,
+  PROPERTY_CARD_STANDARD,
+} from "@/lib/pdfFit/manifests/property_card";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
@@ -39,6 +42,17 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
     typeof section.content?.variantId === "string"
       ? section.content.variantId
       : "balanced";
+
+  // Per-property layout pick — operator may store layoutVariant on
+  // the property record (property.layoutVariant = "property-card-feature")
+  // to mix variants across the showcase. Rhythm engine in the
+  // orchestrator synthesises one when none is set; section-level
+  // layoutVariant is the next fallback; finally the balanced standard.
+  const propertyLayoutVariantRaw =
+    property.layoutVariant ?? section.layoutVariant;
+  const manifest =
+    PROPERTY_CARD_LAYOUTS.find((l) => l.id === propertyLayoutVariantRaw) ??
+    PROPERTY_CARD_STANDARD;
 
   // ─── Content resolution ──────────────────────────────────────────────
   const sectionTitle = `Property ${index + 1} of ${total}`;
@@ -95,7 +109,7 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
     <PdfPage label={`Property ${index + 1} · ${propertyName}`} bleed>
       <div data-section-type="propertyShowcase" data-property-id={property.id} style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={PROPERTY_CARD_STANDARD}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}
