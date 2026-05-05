@@ -171,6 +171,11 @@ function TextRender({
   if (slot.font_weight !== undefined) {
     tunedStyleProps.fontWeight = slot.font_weight;
   }
+  if (slot.column_count !== undefined && slot.column_count > 1) {
+    tunedStyleProps.columnCount = slot.column_count;
+    tunedStyleProps.columnGap = `${slot.column_gap_mm ?? 8}mm`;
+    tunedStyleProps.columnFill = "balance";
+  }
   // Color: variant override beats slot default.
   const colorRole = adjustment.colorOverride ?? slot.color_role;
   const color = colorRole ? resolveColor(colorRole, tokens) : tokens.bodyText;

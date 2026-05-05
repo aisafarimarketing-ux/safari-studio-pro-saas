@@ -1,25 +1,28 @@
 import type { LayoutManifest } from "../types";
 
-// ─── Day card — editorial luxury (single locked layout) ──────────────────
+// ─── Day card — luxury editorial spread (locked geometry) ────────────────
 //
-// Print-first A4 spread. Functional system stays intact (image
-// replace, property swap, AI rewrite live in the editor chrome /
-// inline overlays); this manifest controls the visual structure
-// of the printed page.
+// A4 print-safe. 18mm margins, 174mm content width. Vertical rhythm in
+// 4mm/8mm multiples per spec.
 //
-// Layout summary:
-//   Header band  y:14-46 — DAY · DATE · LOCATION row + Title h1
-//   Intro line   y:50-62 — italic editorial hook
-//   Body 2-col   y:68-160 — text left, image right (image dominant)
-//   Stay block   y:170-260 — image left + text block right (no card)
-//   Page footer  y:280+ — operator brand line if present
+// Stack (top → bottom):
+//   y:14   DAY LABEL + TITLE BLOCK   (28mm, max title width 140mm)
+//   y:42   HERO IMAGE                 (100mm, full content width)
+//   y:148  INTRO LINE                 (10mm, italic serif 13pt)
+//   y:162  BODY 2-COL                 (60mm, two columns 80mm each, 8mm gap)
+//   y:230  ACCOMMODATION              (32mm, text left + image right)
+//   y:268  STATS BAR                  (22mm, 4 equal columns)
+//
+// Image must dominate (100mm = ~36% of page height). Body text never
+// stretches full width; always 2-col. Accommodation block never larger
+// than 35mm.
 
 export const DAY_CARD_STANDARD: LayoutManifest = {
   id: "day-card-standard",
   section: "day_card",
   page_count: 1,
   description:
-    "Editorial day spread — header / intro / 2-col body / accommodation block",
+    "Luxury editorial day spread — title / hero / intro / 2-col body / stay / stats",
   slots: [
     {
       type: "fill",
@@ -29,7 +32,7 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       z_index: 0,
     },
 
-    // ─── HEADER BAND ───────────────────────────────────────────────────
+    // ─── 1. DAY LABEL + TITLE BLOCK (y:14–42) ─────────────────────────
     {
       type: "text",
       name: "header_meta",
@@ -47,73 +50,92 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       type: "text",
       name: "title",
       content_key: "title",
-      x_mm: 18, y_mm: 22, w_mm: 174, h_mm: 22,
+      x_mm: 18, y_mm: 22, w_mm: 140, h_mm: 14,
       style: "h1",
       color_role: "headingText",
-      size_pt: 30,
+      size_pt: 28,
       line_height: 1.05,
       font_weight: 700,
+      letter_spacing_em: -0.01,
       max_chars: 80,
       overflow_behavior: "scale_down",
     },
     {
       type: "fill",
-      name: "header_divider",
-      x_mm: 18, y_mm: 46, w_mm: 174, h_mm: 0.3,
+      name: "title_divider",
+      x_mm: 18, y_mm: 38, w_mm: 174, h_mm: 0.3,
       fill: "border",
       opacity: 0.5,
     },
 
-    // ─── INTRO LINE ────────────────────────────────────────────────────
-    {
-      type: "text",
-      name: "intro_text",
-      content_key: "introText",
-      x_mm: 18, y_mm: 52, w_mm: 174, h_mm: 12,
-      style: "body",
-      color_role: "headingText",
-      size_pt: 13,
-      line_height: 1.35,
-      max_chars: 200,
-      overflow_behavior: "scale_down",
-    },
-
-    // ─── BODY — 2 columns ─────────────────────────────────────────────
-    {
-      type: "text",
-      name: "body_text",
-      content_key: "narrative",
-      x_mm: 18, y_mm: 70, w_mm: 108, h_mm: 92,
-      style: "body",
-      color_role: "bodyText",
-      size_pt: 11,
-      line_height: 1.6,
-      max_chars: 1100,
-      overflow_behavior: "truncate",
-    },
+    // ─── 2. HERO IMAGE (y:42–142) ─────────────────────────────────────
+    // Primary visual anchor — 100mm tall, full content width.
     {
       type: "image",
       name: "main_image",
       content_key: "destinationImageUrl",
-      x_mm: 132, y_mm: 70, w_mm: 78, h_mm: 92,
+      x_mm: 18, y_mm: 42, w_mm: 174, h_mm: 100,
       object_fit: "cover",
       image_role: "hero",
     },
 
-    // ─── ACCOMMODATION BLOCK (no card, no border) ─────────────────────
+    // ─── 3. INTRO LINE (y:148–158) ────────────────────────────────────
+    {
+      type: "text",
+      name: "intro_text",
+      content_key: "introText",
+      x_mm: 18, y_mm: 148, w_mm: 174, h_mm: 10,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 13,
+      line_height: 1.3,
+      max_chars: 200,
+      overflow_behavior: "scale_down",
+    },
+
+    // ─── 4. BODY TEXT — 2-col editorial grid (y:162–222) ──────────────
+    // Single text slot rendered in 2 CSS columns with 8mm gap. Browser
+    // balances paragraphs across columns automatically.
+    {
+      type: "text",
+      name: "body_text",
+      content_key: "narrative",
+      x_mm: 18, y_mm: 162, w_mm: 174, h_mm: 60,
+      style: "body",
+      color_role: "bodyText",
+      size_pt: 11,
+      line_height: 1.55,
+      max_chars: 1100,
+      overflow_behavior: "truncate",
+      column_count: 2,
+      column_gap_mm: 10,
+    },
+
+    // ─── 5. ACCOMMODATION BLOCK (y:230–262) ───────────────────────────
+    // Soft sectionBg fill behind the block — very subtle, no harsh
+    // background. Image right (64mm wide); text left.
+    {
+      type: "fill",
+      name: "lodge_bg",
+      x_mm: 18, y_mm: 230, w_mm: 174, h_mm: 32,
+      fill: "sectionBg",
+      opacity: 0.6,
+    },
+    // Right — property image (64mm wide, full block height).
     {
       type: "image",
       name: "lodge_image",
       content_key: "lodgeImageUrl",
-      x_mm: 18, y_mm: 174, w_mm: 80, h_mm: 60,
+      x_mm: 128, y_mm: 230, w_mm: 64, h_mm: 32,
       object_fit: "cover",
       image_role: "thumb",
     },
+    // Left — text stack inside the block.
     {
       type: "text",
       name: "lodge_eyebrow",
       content_key: "lodgeEyebrow",
-      x_mm: 106, y_mm: 176, w_mm: 88, h_mm: 5,
+      x_mm: 22, y_mm: 232, w_mm: 102, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 8,
@@ -125,11 +147,11 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       type: "text",
       name: "lodge_property_name",
       content_key: "lodgePropertyName",
-      x_mm: 106, y_mm: 184, w_mm: 88, h_mm: 10,
+      x_mm: 22, y_mm: 238, w_mm: 102, h_mm: 7,
       style: "h3",
       color_role: "headingText",
-      size_pt: 16,
-      line_height: 1.15,
+      size_pt: 14,
+      line_height: 1.1,
       font_weight: 700,
       max_chars: 50,
       overflow_behavior: "scale_down",
@@ -138,68 +160,182 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       type: "text",
       name: "lodge_location",
       content_key: "lodgeLocation",
-      x_mm: 106, y_mm: 197, w_mm: 88, h_mm: 5,
+      x_mm: 22, y_mm: 246, w_mm: 102, h_mm: 4,
       style: "caption",
       color_role: "mutedText",
       size_pt: 9,
-      max_chars: 50,
+      max_chars: 60,
       overflow_behavior: "truncate",
     },
     {
       type: "text",
       name: "lodge_description",
       content_key: "lodgeDescription",
-      x_mm: 106, y_mm: 206, w_mm: 88, h_mm: 30,
+      x_mm: 22, y_mm: 250, w_mm: 102, h_mm: 8,
       style: "body",
       color_role: "bodyText",
-      size_pt: 10,
-      line_height: 1.5,
-      max_chars: 280,
+      size_pt: 9,
+      line_height: 1.4,
+      max_chars: 180,
       overflow_behavior: "truncate",
     },
     {
       type: "text",
-      name: "lodge_amenities",
-      content_key: "lodgeAmenities",
-      x_mm: 106, y_mm: 240, w_mm: 88, h_mm: 8,
+      name: "lodge_features",
+      content_key: "lodgeFeatures",
+      x_mm: 22, y_mm: 258, w_mm: 102, h_mm: 4,
       style: "caption",
       color_role: "mutedText",
-      size_pt: 9,
+      size_pt: 8,
       letter_spacing_em: 0.04,
       max_chars: 200,
       overflow_behavior: "truncate",
     },
 
-    // ─── PAGE FOOTER — quiet brand mark ──────────────────────────────
+    // ─── 7. STATS BAR (y:268–290) ─────────────────────────────────────
     {
       type: "fill",
-      name: "page_footer_border",
-      x_mm: 18, y_mm: 280, w_mm: 174, h_mm: 0.3,
+      name: "stats_top_border",
+      x_mm: 18, y_mm: 268, w_mm: 174, h_mm: 0.3,
       fill: "border",
-      opacity: 0.4,
+    },
+    // 4 equal columns: Nights / Stops / Lodges / Parks.
+    // Column width = 174/4 = 43.5mm; column x = 18 + i*43.5.
+    {
+      type: "text",
+      name: "stats_nights_value",
+      content_key: "statsNightsValue",
+      x_mm: 18, y_mm: 273, w_mm: 43.5, h_mm: 9,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: 22,
+      font_weight: 700,
+      line_height: 1.0,
+      alignment: "center",
+      max_chars: 6,
     },
     {
       type: "text",
-      name: "page_footer_brand",
-      content_key: "pageFooterBrand",
-      x_mm: 18, y_mm: 286, w_mm: 174, h_mm: 5,
+      name: "stats_nights_label",
+      x_mm: 18, y_mm: 284, w_mm: 43.5, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 8,
-      letter_spacing_em: 0.18,
+      letter_spacing_em: 0.14,
       uppercase: true,
       alignment: "center",
-      max_chars: 80,
-      overflow_behavior: "truncate",
+      max_chars: 12,
+    },
+    {
+      type: "text",
+      name: "stats_stops_value",
+      content_key: "statsStopsValue",
+      x_mm: 61.5, y_mm: 273, w_mm: 43.5, h_mm: 9,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: 22,
+      font_weight: 700,
+      line_height: 1.0,
+      alignment: "center",
+      max_chars: 6,
+    },
+    {
+      type: "text",
+      name: "stats_stops_label",
+      x_mm: 61.5, y_mm: 284, w_mm: 43.5, h_mm: 4,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.14,
+      uppercase: true,
+      alignment: "center",
+      max_chars: 12,
+    },
+    {
+      type: "text",
+      name: "stats_lodges_value",
+      content_key: "statsLodgesValue",
+      x_mm: 105, y_mm: 273, w_mm: 43.5, h_mm: 9,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: 22,
+      font_weight: 700,
+      line_height: 1.0,
+      alignment: "center",
+      max_chars: 6,
+    },
+    {
+      type: "text",
+      name: "stats_lodges_label",
+      x_mm: 105, y_mm: 284, w_mm: 43.5, h_mm: 4,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.14,
+      uppercase: true,
+      alignment: "center",
+      max_chars: 12,
+    },
+    {
+      type: "text",
+      name: "stats_parks_value",
+      content_key: "statsParksValue",
+      x_mm: 148.5, y_mm: 273, w_mm: 43.5, h_mm: 9,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: 22,
+      font_weight: 700,
+      line_height: 1.0,
+      alignment: "center",
+      max_chars: 6,
+    },
+    {
+      type: "text",
+      name: "stats_parks_label",
+      x_mm: 148.5, y_mm: 284, w_mm: 43.5, h_mm: 4,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.14,
+      uppercase: true,
+      alignment: "center",
+      max_chars: 12,
+    },
+    {
+      type: "fill",
+      name: "stats_sep_1",
+      x_mm: 61.5, y_mm: 273, w_mm: 0.3, h_mm: 16,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_sep_2",
+      x_mm: 105, y_mm: 273, w_mm: 0.3, h_mm: 16,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_sep_3",
+      x_mm: 148.5, y_mm: 273, w_mm: 0.3, h_mm: 16,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_bottom_border",
+      x_mm: 18, y_mm: 290, w_mm: 174, h_mm: 0.3,
+      fill: "border",
     },
   ],
   rules: [
-    "Section fills full A4 page (297mm)",
-    "Header band y:14-46 — eyebrow + title + hairline",
-    "Intro y:52-64 — italic editorial hook",
-    "Body 2-col y:70-162 — text left (108mm), image right (78mm)",
-    "Accommodation y:174-248 — image left, text right, no card",
-    "Page footer y:280-291 — quiet brand mark",
+    "A4 print-safe — section fills 297mm with 18mm L/R margins",
+    "Title block 28mm; hero image 100mm dominant; intro 10mm",
+    "Body 2-col 60mm at 11pt × 1.55 leading, 10mm column gap",
+    "Accommodation 32mm — text left, image right (64mm wide)",
+    "Stats bar 22mm — 4 equal columns with vertical separators",
+    "Image must dominate visually (~34% of page height)",
   ],
 };
 

@@ -83,6 +83,12 @@ export type TextSlot = SlotBox & {
   uppercase?: boolean;
   /** Override the resolved style's CSS font-weight. */
   font_weight?: number;
+  /** Render the slot's text in N CSS columns. Useful for editorial
+   *  multi-column body blocks that should auto-split a narrative. */
+  column_count?: number;
+  /** Gap between CSS columns (in mm). Defaults to 8mm when columns
+   *  > 1 and this isn't set. */
+  column_gap_mm?: number;
 };
 
 export type ImageSlot = SlotBox & {
