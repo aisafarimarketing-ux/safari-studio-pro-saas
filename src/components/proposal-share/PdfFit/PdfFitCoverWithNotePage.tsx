@@ -119,7 +119,7 @@ function ChromedHalf({
 // ─── Cover half contents ─────────────────────────────────────────────────
 
 function CoverHalfContents({ section }: { section: Section }) {
-  const { proposal } = useProposalStore();
+  const { proposal, updateSectionContent } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
   // Pick the manifest from section.layoutVariant — operator's choice
@@ -187,6 +187,15 @@ function CoverHalfContents({ section }: { section: Section }) {
       alt: tripTitle,
       objectPosition: heroImagePosition,
       scale: heroImageScale,
+      // Editor drag inside the frame — drag updates objectPosition,
+      // scroll wheel updates scale. Persisted on section.content so
+      // the print render uses the same crop.
+      onCropChange: (position, scale) => {
+        updateSectionContent(section.id, {
+          heroImagePosition: position,
+          heroImageScale: scale,
+        });
+      },
     },
     operator_logo: { kind: "image", url: operatorLogoUrl, alt: "" },
     trip_title: { kind: "text", value: tripTitle },

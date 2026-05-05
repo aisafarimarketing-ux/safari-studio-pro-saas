@@ -22,22 +22,28 @@ const HALF_H = 150;
 const PAGE_W = 210;
 const PAD = 12;
 
-// Build the meta-grid + title slots given a text-panel geometry. All
-// 7 layouts share this internal structure.
+// Build the meta-grid + title slots given a text-panel geometry. The
+// vertical rhythm is different for split panels (clean cream surface)
+// versus full-bleed overlays (text floats over imagery, needs tighter
+// stack with breathing room and a shorter title height so the meta
+// row doesn't spill below 150mm).
 function textPanelSlots(
   panel: { x: number; w: number },
   isOverlay: boolean,
 ): Slot[] {
   const innerX = panel.x + PAD;
   const innerW = Math.max(40, panel.w - PAD * 2);
-  // Pull title down to make room for the logo on top; tighten when the
-  // panel is the whole page (FULL_BLEED) by anchoring text low so the
-  // image breathes.
+  // Vertical rhythm — split layouts use the upper half generously
+  // because the text panel has its own white surface; full-bleed
+  // overlays compress the stack into the lower half (gradient
+  // ensures legibility) and use a shorter title slot so the meta
+  // grid still fits within 150mm.
+  const titleH = isOverlay ? 22 : 36;
   const titleY = isOverlay ? 78 : 38;
-  const destY = isOverlay ? 116 : 80;
-  const dividerY = isOverlay ? 124 : 92;
-  const metaTopY = isOverlay ? 130 : 102;
-  const metaBottomY = isOverlay ? 140 : 124;
+  const destY = isOverlay ? titleY + titleH + 4 : 80;
+  const dividerY = destY + 8;
+  const metaTopY = dividerY + 5;
+  const metaBottomY = metaTopY + 14;
 
   const colW = (innerW - 4) / 2; // tiny gutter between meta cols
   const col1X = innerX;
@@ -65,7 +71,7 @@ function textPanelSlots(
       type: "text",
       name: "trip_title",
       content_key: "tripTitle",
-      x_mm: innerX, y_mm: titleY, w_mm: innerW, h_mm: 36,
+      x_mm: innerX, y_mm: titleY, w_mm: innerW, h_mm: titleH,
       style: "h2",
       color_role: titleRole,
       max_chars: 90,

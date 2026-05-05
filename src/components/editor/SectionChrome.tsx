@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
 import { SECTION_REGISTRY } from "@/lib/sectionRegistry";
+import { DISPLAY_FONTS } from "@/lib/theme";
 import type { Section } from "@/lib/types";
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 
 export function SectionChrome({ section, children }: Props) {
   const [hovered, setHovered] = useState(false);
-  const { removeSection, duplicateSection, toggleSectionVisibility, updateSectionVariant } = useProposalStore();
+  const { removeSection, duplicateSection, toggleSectionVisibility, updateSectionVariant, setDisplayFont } = useProposalStore();
   const { proposal } = useProposalStore();
   const { mode, selectSection: editorSelect, selectedSectionId, openFloatingPicker } = useEditorStore();
 
@@ -260,6 +261,16 @@ export function SectionChrome({ section, children }: Props) {
               </button>
             ))}
 
+          {/* Font picker — updates the global display font; the
+              dropdown stays open until the operator clicks away or
+              picks a font. Position is anchored to the button. */}
+          {section.type !== "divider" && (
+            <FontPickerButton
+              currentFont={proposal.theme.displayFont}
+              onPick={(font) => setDisplayFont(font)}
+            />
+          )}
+
           <button
             onClick={(e) => { e.stopPropagation(); duplicateSection(section.id); }}
             className="w-8 h-8 rounded-lg bg-white/92 border border-black/10 flex items-center justify-center text-black/45 hover:text-black/75 shadow-sm transition-all duration-150 text-sm active:scale-95"
@@ -350,6 +361,73 @@ export function SectionChrome({ section, children }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Font picker dropdown ─────────────────────────────────────────────
+//
+// Compact button that shows the current display-font name and opens
+// a dropdown of available fonts on click. Picking a font updates the
+// proposal's theme.displayFont so the title typography across every
+// section repaints live. Open until the operator clicks away.
+function FontPickerButton({
+  currentFont,
+  onPick,
+}: {
+  currentFont: string;
+  onPick: (font: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="h-8 px-2.5 rounded-lg bg-white/92 border border-black/10 flex items-center gap-1 text-[11px] font-semibold text-black/60 hover:text-black/80 shadow-sm transition active:scale-95"
+        title={`Display font · ${currentFont}`}
+      >
+        <span style={{ fontFamily: `'${currentFont}', serif` }} className="text-[13px]">Aa</span>
+        <span className="hidden md:inline max-w-[80px] truncate">{currentFont}</span>
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-full left-0 mt-1 z-[800] bg-white rounded-xl shadow-2xl border border-black/10 py-1 min-w-[180px] max-h-[280px] overflow-y-auto"
+        >
+          {DISPLAY_FONTS.map((f) => {
+            const active = f.name === currentFont;
+            return (
+              <button
+                key={f.name}
+                onClick={() => {
+                  onPick(f.name);
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-black/[0.04] transition ${
+                  active ? "bg-black/[0.05] text-[#1b3a2d] font-semibold" : "text-black/70"
+                }`}
+                style={{ fontFamily: `'${f.name}', serif` }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEditorStore } from "@/store/editorStore";
 import type {
   Slot,
   TextSlot,
@@ -40,6 +41,11 @@ export type SlotContent =
        *  the natural object-fit:cover crop; >1 zooms. Recommended
        *  range 1.0–2.0. Defaults to 1. */
       scale?: number;
+      /** Editor callback — when present and the editor store is in
+       *  "editor" mode, the image becomes draggable inside its frame
+       *  (mouse drag → objectPosition; wheel → scale). The callback
+       *  receives the new values; the consumer persists them. */
+      onCropChange?: (position: string, scale: number) => void;
     }
   | { kind: "vector"; node: React.ReactNode }
   | { kind: "none" };
@@ -253,12 +259,98 @@ function ImageRender({
       </div>
     );
   }
+  const onCropChange =
+    content?.kind === "image" ? content.onCropChange : undefined;
   return (
-    <div style={{ ...position, overflow: "hidden", background: tokens.cardBg }}>
+    <DraggableImage
+      url={url}
+      alt={content?.kind === "image" ? content.alt ?? "" : ""}
+      slot={slot}
+      tokens={tokens}
+      position={position}
+      objectPosition={objectPosition}
+      scale={scale}
+      filter={adjustment.imageFilter}
+      onCropChange={onCropChange}
+    />
+  );
+}
+
+// ─── Draggable image — repositions the visible crop inside its frame ──
+//
+// When onCropChange is provided AND the editor store is in editor
+// mode, the image becomes draggable inside the slot's frame. Mouse
+// drag adjusts the object-position percentages; wheel adjusts the
+// transform scale. Persistence is the caller's responsibility — we
+// just emit the new values via onCropChange.
+function DraggableImage({
+  url, alt, slot, tokens, position, objectPosition, scale, filter, onCropChange,
+}: {
+  url: string;
+  alt: string;
+  slot: ImageSlot;
+  tokens: ThemeTokens;
+  position: React.CSSProperties;
+  objectPosition: string;
+  scale: number;
+  filter?: string;
+  onCropChange?: (position: string, scale: number) => void;
+}) {
+  const editorMode = useEditorStore((s) => s.mode);
+  const draggable = editorMode === "editor" && Boolean(onCropChange);
+
+  const containerStyle: React.CSSProperties = {
+    ...position,
+    overflow: "hidden",
+    background: tokens.cardBg,
+    cursor: draggable ? "grab" : undefined,
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (!draggable || !onCropChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const [startPosX, startPosY] = parseObjectPosition(objectPosition);
+    const target = e.currentTarget as HTMLElement;
+    target.style.cursor = "grabbing";
+    const rect = target.getBoundingClientRect();
+    const onMove = (m: MouseEvent) => {
+      const dx = m.clientX - startX;
+      const dy = m.clientY - startY;
+      // Map cursor delta (in container pixels) to object-position
+      // percent. Inverse direction so dragging RIGHT moves the image
+      // right (i.e. reveals more of the LEFT side of the source =
+      // smaller objectPosition X%).
+      const newX = clamp(startPosX - (dx / rect.width) * 100, 0, 100);
+      const newY = clamp(startPosY - (dy / rect.height) * 100, 0, 100);
+      onCropChange(`${newX.toFixed(1)}% ${newY.toFixed(1)}%`, scale);
+    };
+    const onUp = () => {
+      target.style.cursor = "grab";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (!draggable || !onCropChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = clamp(scale + (e.deltaY < 0 ? 0.1 : -0.1), 1, 3);
+    onCropChange(objectPosition, parseFloat(next.toFixed(2)));
+  };
+
+  return (
+    <div style={containerStyle} onMouseDown={onMouseDown} onWheel={onWheel}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={url}
-        alt={content?.kind === "image" ? content.alt ?? "" : ""}
+        alt={alt}
+        draggable={false}
         style={{
           width: "100%",
           height: "100%",
@@ -266,13 +358,23 @@ function ImageRender({
           objectPosition,
           transform: scale !== 1 ? `scale(${scale})` : undefined,
           transformOrigin: "center center",
-          // Variant-driven CSS filter — e.g. saturate(1.1) contrast(1.05)
-          // for "image_lead" treatments. No-op when not specified.
-          ...(adjustment.imageFilter ? { filter: adjustment.imageFilter } : {}),
+          userSelect: "none",
+          pointerEvents: "none",
+          ...(filter ? { filter } : {}),
         }}
       />
     </div>
   );
+}
+
+function parseObjectPosition(p: string): [number, number] {
+  const m = p.match(/(-?\d+(?:\.\d+)?)\s*%\s+(-?\d+(?:\.\d+)?)\s*%/);
+  if (!m) return [50, 50];
+  return [parseFloat(m[1]), parseFloat(m[2])];
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
 }
 
 // ─── Fill (solid / gradient panels) ────────────────────────────────────────
