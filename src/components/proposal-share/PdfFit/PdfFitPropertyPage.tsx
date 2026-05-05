@@ -55,50 +55,67 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
     PROPERTY_CARD_STANDARD;
 
   // ─── Content resolution ──────────────────────────────────────────────
+  // All fields come from the property record verbatim. Empty backend
+  // → empty slot (the layout still renders structural eyebrows so
+  // the editor / operator sees the gap).
   const sectionTitle = `Property ${index + 1} of ${total}`;
   const propertyName = property.name?.trim() || "";
   const locationMeta = [
     property.location?.trim() || "",
     property.tier?.trim() || "",
   ].filter(Boolean).join(" · ");
+  const whyWeChoseThis = property.whyWeChoseThis?.trim() || "";
 
   const description =
     stripHtml(property.description ?? "").trim() ||
     property.shortDesc?.trim() ||
     "";
 
-  // Stay details — packed into a single multiline block. Operator's
-  // editor sets these per-property; missing fields are omitted.
-  const stayDetails = [
-    property.roomType ? `Room: ${property.roomType}` : null,
-    property.mealPlan ? `Meal plan: ${property.mealPlan}` : null,
-    property.nights ? `Nights: ${property.nights}` : null,
-    property.checkInTime ? `Check-in: ${property.checkInTime}` : null,
-    property.checkOutTime ? `Check-out: ${property.checkOutTime}` : null,
-  ].filter(Boolean).join("\n");
+  // YOUR STAY 5-row stat grid — labels are structural (always visible
+  // via the manifest); values come from backend property fields. Em
+  // dash for missing values so each row reads as a proper key/value
+  // pair instead of a blank line.
+  const stayRows = [
+    { label: "NIGHTS", value: property.nights ? String(property.nights) : "—" },
+    { label: "ROOM", value: property.roomType?.trim() || "—" },
+    { label: "MEAL", value: property.mealPlan?.trim() || "—" },
+    { label: "CHECK-IN", value: property.checkInTime?.trim() || "—" },
+    { label: "CHECK-OUT", value: property.checkOutTime?.trim() || "—" },
+  ];
 
-  // Features list — top 6 amenities, comma-separated. The slot caps
-  // at 200 chars so we trim to fit.
-  const featuresList = (property.amenities ?? [])
-    .filter(Boolean)
-    .slice(0, 6)
-    .join("  ·  ");
+  // AT A GLANCE — amenities. Top 6 joined with " · " for inline
+  // editorial reading (no SVG icons in PDF; legacy magazine has
+  // them on screen).
+  const amenitiesList =
+    (property.amenities ?? [])
+      .filter(Boolean)
+      .slice(0, 6)
+      .join("  ·  ") || "—";
 
-  // Image resolution — leadImage as main; first 3 gallery URLs as
-  // thumbs. When gallery is short, missing thumbs render as soft
-  // fills (PdfFitSlot's no-image fallback).
+  // Image resolution.
   const gallery = (property.galleryUrls ?? []).filter(Boolean);
   const mainImageUrl = property.leadImageUrl?.trim() || gallery[0] || null;
-  // Skip the lead image from the thumbs to avoid duplication.
   const thumbs = gallery.filter((u) => u !== mainImageUrl).slice(0, 3);
 
   const contents: Record<string, SlotContent> = {
     section_title: { kind: "text", value: sectionTitle },
     property_name: { kind: "text", value: propertyName },
     location_meta: { kind: "text", value: locationMeta },
+    why_we_chose_this: { kind: "text", value: whyWeChoseThis },
     description: { kind: "text", value: description },
-    stay_details: { kind: "text", value: stayDetails },
-    features_list: { kind: "text", value: featuresList },
+    stay_label: { kind: "text", value: "YOUR STAY" },
+    stay_row_1_label: { kind: "text", value: stayRows[0].label },
+    stay_row_1_value: { kind: "text", value: stayRows[0].value },
+    stay_row_2_label: { kind: "text", value: stayRows[1].label },
+    stay_row_2_value: { kind: "text", value: stayRows[1].value },
+    stay_row_3_label: { kind: "text", value: stayRows[2].label },
+    stay_row_3_value: { kind: "text", value: stayRows[2].value },
+    stay_row_4_label: { kind: "text", value: stayRows[3].label },
+    stay_row_4_value: { kind: "text", value: stayRows[3].value },
+    stay_row_5_label: { kind: "text", value: stayRows[4].label },
+    stay_row_5_value: { kind: "text", value: stayRows[4].value },
+    amenities_label: { kind: "text", value: "AT A GLANCE" },
+    amenities_list: { kind: "text", value: amenitiesList },
     main_image: { kind: "image", url: mainImageUrl, alt: propertyName },
     thumb_1: { kind: "image", url: thumbs[0] ?? null, alt: "" },
     thumb_2: { kind: "image", url: thumbs[1] ?? null, alt: "" },
