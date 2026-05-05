@@ -177,25 +177,29 @@ export function PdfFitTripSummaryPage({ section }: Props) {
               )}
             </div>
 
-            {/* Day list — flex column space-between distributes evenly */}
+            {/* Day timeline — vertical line connecting numbered stops.
+                First day gets flex: 1.3 (slightly larger) for visual
+                hierarchy; others share remaining space evenly. */}
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: "4mm",
                 flex: 1,
                 marginTop: "10mm",
                 overflow: "hidden",
               }}
             >
-              {blocks.map((block) => (
+              {blocks.map((block, index) => (
                 <DayBlockRow
                   key={block.number + block.location}
                   block={block}
+                  isFirst={index === 0}
+                  isLast={index === blocks.length - 1}
                   cardBg={tokens.cardBg}
+                  surfaceBg={tokens.sectionSurface}
                   headingColor={tokens.headingText}
                   bodyColor={tokens.bodyText}
-                  mutedColor={tokens.mutedText}
+                  borderColor={tokens.border}
                   displayFont={displayFont}
                 />
               ))}
@@ -269,37 +273,88 @@ export function PdfFitTripSummaryPage({ section }: Props) {
 // ─── Sub-components ──────────────────────────────────────────────────────
 
 function DayBlockRow({
-  block, cardBg, headingColor, bodyColor, mutedColor, displayFont,
+  block, isFirst, isLast, cardBg, surfaceBg, headingColor, bodyColor,
+  borderColor, displayFont,
 }: {
   block: { number: string; location: string; property: string; imageUrl: string | null };
+  isFirst: boolean;
+  isLast: boolean;
   cardBg: string;
+  surfaceBg: string;
   headingColor: string;
   bodyColor: string;
-  mutedColor: string;
+  borderColor: string;
   displayFont: string;
 }) {
+  // Vertical timeline runs through the centre of the 20mm number
+  // column. Painted via a horizontal gradient so the line sits at
+  // exactly the column's centre; the number itself draws an opaque
+  // chip on top to create the "station" effect.
+  const linePosition = "calc(50% - 0.15mm)";
+  const lineGradient = `linear-gradient(to right, transparent ${linePosition}, ${borderColor} ${linePosition}, ${borderColor} calc(50% + 0.15mm), transparent calc(50% + 0.15mm))`;
+
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "12mm 1fr",
+        gridTemplateColumns: "20mm 1fr",
         gap: "3mm",
-        flex: 1,
+        flex: isFirst ? 1.4 : 1,
         minHeight: 0,
         alignItems: "stretch",
       }}
     >
+      {/* Number column with continuous timeline line behind. The line
+          is drawn for every row except the very top of the first row
+          and the very bottom of the last row (handled via mask
+          gradients on those edges). */}
       <div
         style={{
-          fontFamily: displayFont,
-          fontSize: "16pt",
-          fontWeight: 700,
-          color: mutedColor,
-          paddingTop: "1mm",
+          background: lineGradient,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+          // For the first block, mask the line above the number so
+          // it doesn't bleed into the header area.
+          maskImage: isFirst
+            ? "linear-gradient(to bottom, transparent 0, transparent 6mm, black 6mm)"
+            : isLast
+              ? "linear-gradient(to bottom, black 0, black calc(100% - 6mm), transparent calc(100% - 6mm))"
+              : undefined,
+          WebkitMaskImage: isFirst
+            ? "linear-gradient(to bottom, transparent 0, transparent 6mm, black 6mm)"
+            : isLast
+              ? "linear-gradient(to bottom, black 0, black calc(100% - 6mm), transparent calc(100% - 6mm))"
+              : undefined,
         }}
       >
-        {block.number}
+        {/* Station chip — opaque so it interrupts the line visually. */}
+        <div
+          style={{
+            background: surfaceBg,
+            padding: "1mm 0",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: displayFont,
+              fontSize: isFirst ? "20pt" : "16pt",
+              fontWeight: 700,
+              lineHeight: 1.0,
+              color: headingColor,
+            }}
+          >
+            {block.number}
+          </div>
+        </div>
       </div>
+      {/* Image + text content */}
       <div
         style={{
           display: "grid",
@@ -320,10 +375,11 @@ function DayBlockRow({
         <div>
           <div
             style={{
-              fontSize: "10.5pt",
+              fontSize: isFirst ? "12pt" : "10.5pt",
               fontWeight: 700,
               letterSpacing: "0.02em",
               color: headingColor,
+              lineHeight: 1.1,
             }}
           >
             {block.location.toUpperCase()}
@@ -334,6 +390,7 @@ function DayBlockRow({
                 fontSize: "8.5pt",
                 color: bodyColor,
                 marginTop: "0.5mm",
+                lineHeight: 1.2,
               }}
             >
               {block.property}
