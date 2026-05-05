@@ -73,21 +73,15 @@ export function PdfFitPricingPage({ section }: Props) {
     .map((s) => `•  ${s}`)
     .join("\n");
 
-  const paymentBlock =
-    strField(section.content?.paymentBlock) ??
-    "Deposit holds the booking. Balance due ahead of arrival.";
-  const cancellationBlock =
-    strField(section.content?.cancellationBlock) ??
-    "Cancellation terms apply per the operator's policy.";
-  const footerBlocks =
-    strField(section.content?.footerBlocks) ??
-    "Pricing in " + currency + ". We can adjust based on your dates and lodge preferences.";
-
-  const sectionTitle =
-    strField(section.content?.title) ?? "Pricing";
-  const sectionIntro =
-    strField(section.content?.intro) ??
-    "Here's a clear breakdown of your safari pricing.";
+  // All copy comes from operator's section content. Empty fields
+  // render empty — no invented payment / cancellation / footer
+  // boilerplate. Section title falls back to a structural label
+  // ("Pricing") only because the slot would otherwise be unlabelled.
+  const paymentBlock = strField(section.content?.paymentBlock) ?? "";
+  const cancellationBlock = strField(section.content?.cancellationBlock) ?? "";
+  const footerBlocks = strField(section.content?.footerBlocks) ?? "";
+  const sectionTitle = strField(section.content?.title) ?? "Pricing";
+  const sectionIntro = strField(section.content?.intro) ?? "";
 
   const contents: Record<string, SlotContent> = {
     section_title: { kind: "text", value: sectionTitle },

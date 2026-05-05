@@ -3,7 +3,6 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
-import { resolveSafariEndpoints } from "@/lib/safariRoutingRules";
 import type { Section } from "@/lib/types";
 import {
   TRIP_SUMMARY_EDITORIAL,
@@ -51,20 +50,16 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     .filter((s): s is string => Boolean(s))
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
 
-  const safari = resolveSafariEndpoints(stops);
-  const titleFromContent =
-    (typeof section.content?.title === "string" && section.content.title.trim()) || "";
+  // Section title comes from the operator's section content. We do
+  // NOT synthesise a route-derived headline (e.g. "Arusha → Serengeti")
+  // from backend data — that would be inventing display copy. Empty
+  // when the operator hasn't typed one.
   const sectionTitle =
-    titleFromContent ||
-    (stops.length <= 1
-      ? safari.start || "At a glance"
-      : safari.endsInPark
-        ? `${safari.start} → ${safari.lastSafariStop}`
-        : `${safari.start} to ${safari.lastSafariStop}`);
+    (typeof section.content?.title === "string" && section.content.title.trim()) || "";
 
   const eyebrow =
     (typeof section.content?.eyebrow === "string" && section.content.eyebrow.trim()) ||
-    "Trip summary";
+    "";
 
   // Itinerary block — magazine-style numbered list. Each stop gets
   // two lines: "NN  Destination" then a muted "Days X–Y · N nights",

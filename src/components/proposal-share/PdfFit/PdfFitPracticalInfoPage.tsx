@@ -64,12 +64,16 @@ function PdfFitPracticalInfoPage({
     PRACTICAL_INFO_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
     PRACTICAL_INFO_CARDS;
 
+  // Section title falls back to the structural label ("Practical
+  // information") because the slot would otherwise be unlabelled
+  // and the page would lose its identity. Subtitle is operator
+  // content only — no synthesised "Good to know" boilerplate.
   const sectionTitle =
     (typeof section.content?.title === "string" && section.content.title.trim()) ||
     "Practical information";
   const sectionSubtitle =
     (typeof section.content?.subtitle === "string" && section.content.subtitle.trim()) ||
-    "Good to know" + partLabel;
+    "";
 
   const contents: Record<string, SlotContent> = {
     section_title: { kind: "text", value: sectionTitle + partLabel },

@@ -42,11 +42,11 @@ export function PdfFitCoverPage({ section }: Props) {
         ? section.content.variantId
         : "default";
 
-  // ─── 1. Trip title ───────────────────────────────────────────────────
+  // ─── 1. Trip title — backend value verbatim, no fallback string ─────
   const tripTitle =
     proposal.metadata?.title?.trim() ||
     proposal.trip?.title?.trim() ||
-    "Your safari";
+    "";
 
   // ─── 2. Destinations (single line, joined with middle dot) ──────────
   const tripDestinations = (proposal.trip?.destinations ?? [])

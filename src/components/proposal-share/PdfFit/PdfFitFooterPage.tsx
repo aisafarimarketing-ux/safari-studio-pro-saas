@@ -28,10 +28,10 @@ export function PdfFitFooterPage({ section }: Props) {
   const operator = proposal.operator;
   const operatorLogoUrl = operator?.logoUrl?.trim() || null;
   const companyName = operator?.companyName?.trim() || "";
+  // Tagline only renders when operator has saved one in section
+  // content. No synthesized "Plan · Book · Travel" default.
   const tagline =
-    str(section.content?.tagline) ??
-    str(section.content?.subtitle) ??
-    `Plan · Book · Travel — with ${operator?.consultantName?.trim() || "us"}`;
+    str(section.content?.tagline) ?? str(section.content?.subtitle) ?? "";
 
   const addressBlock = [operator?.address, operator?.country]
     .map((s) => s?.trim())
@@ -47,13 +47,15 @@ export function PdfFitFooterPage({ section }: Props) {
     ? `Web · ${stripScheme(operator.website.trim())}`
     : "";
 
-  const closingLine =
-    str(section.content?.closingLine) ??
-    "Thank you for letting us craft this safari for you. We can't wait to welcome you on the road.";
+  // Closing line only renders if operator typed one. No invented
+  // farewell text.
+  const closingLine = str(section.content?.closingLine) ?? "";
 
+  // Brand line — operator's saved value, else fall back to the
+  // backend company name (no synthesized country addendum unless
+  // operator wrote it themselves).
   const brandLine =
-    str(section.content?.brandLine) ??
-    `${companyName}${operator?.country ? ` · ${operator.country}` : ""}`;
+    str(section.content?.brandLine) ?? companyName;
 
   const contents: Record<string, SlotContent> = {
     operator_logo: { kind: "image", url: operatorLogoUrl, alt: companyName },

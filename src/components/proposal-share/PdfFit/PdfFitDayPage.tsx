@@ -58,7 +58,7 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     `Day ${String(day.dayNumber).padStart(2, "0")} of ${totalDays}` +
     (dayDate ? ` · ${dayDate}` : "");
 
-  const destination = day.destination?.trim() || "Destination";
+  const destination = day.destination?.trim() || "";
   const introText = day.subtitle?.trim() || day.momentOfDay?.trim() || "";
 
   // Strip HTML for narrative — PDF text slots render plain text only.

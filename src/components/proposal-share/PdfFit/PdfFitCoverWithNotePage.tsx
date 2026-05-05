@@ -129,23 +129,16 @@ function CoverHalfContents({ section }: { section: Section }) {
     COVER_HALF_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
     COVER_HALF_S64L;
 
-  // 7 mandatory backend fields (spec).
-  const rawTitle =
+  // 7 mandatory backend fields — values come from the proposal data
+  // verbatim. No synthesis, no fallback strings, no expansion.
+  const tripTitle =
     proposal.metadata?.title?.trim() ||
     proposal.trip?.title?.trim() ||
-    "Your safari";
+    "";
 
-  // Editorial title — never a single word, always a complete travel
-  // product name. Backend titles like "Jerop" expand into a full
-  // pairing using the trip's first destination + duration.
   const tripDestinations = (proposal.trip?.destinations ?? [])
     .filter((s) => Boolean(s?.trim()))
     .join("  ·  ");
-  const firstDestination = (proposal.trip?.destinations ?? []).find((s) =>
-    Boolean(s?.trim()),
-  );
-  const tripNights = numField(proposal.trip?.nights);
-  const tripTitle = expandTitle(rawTitle, firstDestination, tripNights);
 
   const clientName = proposal.client?.guestNames?.trim() || "";
   const dates = proposal.trip?.dates?.trim() || "";
@@ -240,10 +233,11 @@ function NoteHalfContents({
   const { proposal } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
-  const opener = strField(section.content?.opener);
+  // Greeting + body come from backend fields verbatim — no fallback
+  // text. Empty fields render as empty slots.
+  const greeting = strField(section.content?.opener) ?? "";
   const body = stripHtml(strField(section.content?.body) ?? "");
   const signOff = strField(section.content?.signOff);
-  const greeting = opener ?? "Karibu —";
   const fullBody = [body, signOff].filter(Boolean).join("\n\n");
 
   const operator = proposal.operator;
@@ -290,39 +284,6 @@ function strField(v: unknown): string | undefined {
 function numField(v: unknown): number | undefined {
   if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
   return undefined;
-}
-
-// Expand a single-word / very short title into a complete travel
-// product name so the cover always reads as something composed:
-// "Jerop"  →  "Jerop · 5-Day Tanzania Safari"
-//          →  "Jerop · Serengeti Getaway" (no duration)
-//          →  "Jerop · Safari Experience" (no duration, no destinations)
-//
-// Only fires when the raw title is one word or under 12 chars.
-// Never overrides a title the operator has already set as a complete
-// phrase. The expansion uses backend trip data — no static
-// placeholders.
-function expandTitle(
-  raw: string,
-  firstDestination: string | undefined,
-  nights: number | undefined,
-): string {
-  const t = raw.trim();
-  if (!t) return "Your safari";
-  const words = t.split(/\s+/).filter(Boolean);
-  const isShort = words.length < 2 || t.length < 12;
-  if (!isShort) return t;
-
-  // Build a descriptor from real backend fields. Prefer duration +
-  // destination ("Jerop · 5-Day Serengeti Safari") when both are
-  // available; fall back to whichever is present.
-  const dest = firstDestination?.trim();
-  const days = nights ? nights + 1 : null;
-
-  if (days && dest) return `${t} ${days}-Day ${dest} Safari`;
-  if (days) return `${t} ${days}-Day Safari Experience`;
-  if (dest) return `${t} ${dest} Safari`;
-  return `${t} Safari Experience`;
 }
 
 function stripHtml(html: string): string {

@@ -39,37 +39,38 @@ export function PdfFitClosingPage({ section }: Props) {
   const operator = proposal.operator;
   const trip = proposal.trip;
 
+  // All text comes from the operator's section content or backend
+  // operator profile. Empty fields render as empty slots — no
+  // synthesized headlines, taglines, or CTAs.
   const eyebrow =
-    str(section.content?.themeLabel) ??
-    str(trip?.tripStyle) ??
-    "Your safari awaits";
+    str(section.content?.themeLabel) ?? str(trip?.tripStyle) ?? "";
 
-  const headline =
-    str(section.content?.headline) ??
-    `Your ${(trip?.destinations?.[0] ?? "").trim() || "safari"} journey is ready`
-      .replace(/\s+/g, " ")
-      .trim();
+  const headline = str(section.content?.headline) ?? "";
 
-  const bodyIntro =
-    stripHtml(str(section.content?.letter) ?? str(section.content?.signOff) ?? "") ||
-    "Review the plan, tell us what to adjust, and we'll secure your camp dates while you decide.";
+  const bodyIntro = stripHtml(
+    str(section.content?.letter) ?? str(section.content?.signOff) ?? "",
+  );
 
-  const ctaLabel = str(section.content?.ctaLabel) ?? "Secure this safari";
+  const ctaLabel = str(section.content?.ctaLabel) ?? "";
 
-  // Primary CTA — booking URL > whatsapp > email
+  // Primary CTA: booking URL > whatsapp > email — only renders when
+  // operator has filled at least one of these on their profile and
+  // a label exists in section.content.
   const bookingUrl = operator?.bookingUrl?.trim();
   const whatsapp = operator?.whatsapp?.trim();
   const email = operator?.email?.trim();
   const phone = operator?.phone?.trim();
   const website = operator?.website?.trim();
 
-  const primaryCta = bookingUrl
-    ? `${ctaLabel}  →  ${stripScheme(bookingUrl)}`
-    : whatsapp
-      ? `${ctaLabel}  →  WhatsApp ${whatsapp}`
-      : email
-        ? `${ctaLabel}  →  ${email}`
-        : ctaLabel;
+  const primaryCta = !ctaLabel
+    ? ""
+    : bookingUrl
+      ? `${ctaLabel}  →  ${stripScheme(bookingUrl)}`
+      : whatsapp
+        ? `${ctaLabel}  →  WhatsApp ${whatsapp}`
+        : email
+          ? `${ctaLabel}  →  ${email}`
+          : ctaLabel;
 
   const secondaryCta1 = email ? `Email · ${email}` : "";
   const secondaryCta2 = whatsapp

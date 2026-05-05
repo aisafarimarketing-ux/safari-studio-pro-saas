@@ -56,7 +56,7 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
 
   // ─── Content resolution ──────────────────────────────────────────────
   const sectionTitle = `Property ${index + 1} of ${total}`;
-  const propertyName = property.name?.trim() || "Untitled property";
+  const propertyName = property.name?.trim() || "";
   const locationMeta = [
     property.location?.trim() || "",
     property.tier?.trim() || "",
