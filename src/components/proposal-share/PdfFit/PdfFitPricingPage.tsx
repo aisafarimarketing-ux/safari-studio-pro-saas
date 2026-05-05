@@ -101,7 +101,60 @@ export function PdfFitPricingPage({ section }: Props) {
     strField(section.content?.footerBlocks) ??
     `Pricing in ${currency}. Quoted per-person rates assume double-occupancy unless otherwise noted; we can adjust based on your dates and lodge preferences.`;
 
+  // ── Magazine-clone "editorial" variant content ──────────────────
+  // Mirrors PricingSection.tsx: party label · adults calc · subtotal,
+  // optional child row, total in <currency>, value framing line,
+  // pricing notes italic, four 2x2 policy quadrants.
+  const partyLabel =
+    strField(section.content?.partyLabel) ?? "Adult";
+  const childLabel =
+    strField(section.content?.childLabel) ?? "Child";
+  const childPriceRaw =
+    strField(section.content?.childPrice) ?? "";
+  const childPrice = parsePrice(childPriceRaw);
+  const ccy = (currency || "USD").toUpperCase();
+  const adultsCalcLine = perPerson
+    ? `${adults}× ${formatMoney(currency, perPerson)}`
+    : "";
+  const adultsSubtotalLine = perPerson
+    ? formatMoney(currency, perPerson * adults)
+    : "—";
+  const childCalcLine = childPrice
+    ? `${children}× ${formatMoney(currency, childPrice)}`
+    : "";
+  const childSubtotalLine = childPrice
+    ? formatMoney(currency, childPrice * children)
+    : "";
+  const totalAmountValue = (() => {
+    const a = perPerson ? perPerson * adults : 0;
+    const c = childPrice ? childPrice * children : 0;
+    const total = a + c;
+    return total > 0 ? formatMoney(currency, total) : "—";
+  })();
+  const valueFraming =
+    strField(section.content?.valueFraming) ??
+    "Includes private guiding, hand-picked lodges, and seamless internal transfers — arranged end-to-end.";
+  const pricingNotes =
+    strField(proposal.pricing?.notes) ??
+    strField(section.content?.pricingNotes) ??
+    "";
+  const paymentSchedule =
+    strField(section.content?.paymentSchedule) ??
+    "A 30% deposit secures your booking. The balance is due 30 days before departure. Payments accepted via international wire transfer or online credit card (card payments attract a 3.5% surcharge).";
+  const cancellationPolicy =
+    strField(section.content?.cancellationPolicy) ??
+    "Cancellations made 60+ days before arrival receive a full refund minus a 10% admin fee. Between 60 and 30 days, 50% of the total is refundable. Cancellations inside 30 days are non-refundable. We strongly recommend comprehensive travel insurance.";
+  const travelInsurance =
+    strField(section.content?.travelInsurance) ??
+    "Travel insurance is not included and is strongly recommended. Your policy should cover trip cancellation, curtailment, medical evacuation, and personal effects. We can suggest reputable providers on request.";
+  const termsValue =
+    strField(section.content?.termsLabel) ??
+    "Download full terms & conditions";
+  const termsUrl = strField(section.content?.termsUrl) ?? "";
+
   const contents: Record<string, SlotContent> = {
+    // Original PRICING_STANDARD slots — still populated so that
+    // manifest renders correctly when picked.
     section_title: { kind: "text", value: sectionTitle },
     section_intro: { kind: "text", value: sectionIntro },
     row_1_label: { kind: "text", value: row1Label },
@@ -119,6 +172,46 @@ export function PdfFitPricingPage({ section }: Props) {
     payment_block: { kind: "text", value: paymentBlock },
     cancellation_block: { kind: "text", value: cancellationBlock },
     footer_blocks: { kind: "text", value: footerBlocks },
+
+    // PRICING_EDITORIAL (magazine-clone) slots.
+    section_eyebrow: { kind: "text", value: "YOUR INVESTMENT" },
+    value_framing: { kind: "text", value: valueFraming },
+    adults_label: { kind: "text", value: `${adults} × ${partyLabel}` },
+    adults_calc: { kind: "text", value: adultsCalcLine },
+    adults_subtotal: { kind: "text", value: adultsSubtotalLine },
+    child_label: {
+      kind: "text",
+      value: children > 0 ? `${children} × ${childLabel}` : "",
+    },
+    child_calc: { kind: "text", value: childCalcLine },
+    child_subtotal: { kind: "text", value: childSubtotalLine },
+    total_amount: { kind: "text", value: totalAmountValue },
+    pricing_notes: { kind: "text", value: pricingNotes },
+    payment_label: { kind: "text", value: "PAYMENT SCHEDULE" },
+    payment_schedule: { kind: "text", value: paymentSchedule },
+    cancellation_label: { kind: "text", value: "CANCELLATION POLICY" },
+    cancellation_policy: { kind: "text", value: cancellationPolicy },
+    insurance_label: { kind: "text", value: "TRAVEL INSURANCE" },
+    travel_insurance: { kind: "text", value: travelInsurance },
+    terms_label: { kind: "text", value: "TERMS & CONDITIONS" },
+    terms_value: { kind: "text", value: termsValue },
+    terms_url: { kind: "text", value: termsUrl },
+  };
+
+  // Section title flips to "Breakdown of Costs" when the editorial
+  // manifest is in play (matches the magazine layout).
+  if (manifest.id === "editorial") {
+    contents.section_title = {
+      kind: "text",
+      value: strField(section.content?.title) ?? "Breakdown of Costs",
+    };
+  }
+
+  // Total label includes the currency code so the row reads
+  // "TOTAL IN USD · 20,000".
+  contents.total_label = {
+    kind: "text",
+    value: `Total in ${ccy}`,
   };
 
   return (
