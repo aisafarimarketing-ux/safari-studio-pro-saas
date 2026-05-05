@@ -1,4 +1,4 @@
-import type { LayoutManifest } from "../types";
+import type { LayoutManifest, Slot } from "../types";
 
 // ─── Combined cover + personal note (single A4 page) ─────────────────────
 //
@@ -6,187 +6,275 @@ import type { LayoutManifest } from "../types";
 //   COVER         y 0 → 150mm    (height 150mm)
 //   PERSONAL NOTE y 150 → 297mm  (height 147mm)
 //
-// Each half has its own manifest; the consumer mounts both inside one
-// PdfPage and wraps each in its own SectionChrome so hover / click
-// controls work independently. Deleting one section does NOT shift
-// the other — coordinates are absolute.
-
-// ─── Cover half (150mm tall, S64L default) ───────────────────────────────
+// The cover half exposes the seven spec layouts. Each is a 150mm-tall
+// variant of the standalone cover layout and shares the identical text
+// content (logo / title / destinations / divider / meta 2×2 grid).
 //
-// Image left  x:0   y:0   w:90mm  h:150mm   (object-fit cover, drag inside)
-// Text right  x:90  y:0   w:120mm h:150mm   (12mm internal padding)
-//
-// Text content (top → bottom):
-//   - Logo
-//   - Title (max 3 lines)
-//   - Destinations (single line, no wrap)
-//   - Divider line
-//   - Meta 2x2 grid: FOR | DATES / DURATION | PARTY
+//   FULL_BLEED  image fills the whole half; text overlays a gradient
+//   S64L        text 64% LEFT, image 36% RIGHT
+//   S64R        text 64% RIGHT, image 36% LEFT
+//   S55L        text 55% LEFT, image 45% RIGHT
+//   S55R        text 55% RIGHT, image 45% LEFT
+//   S46L        text 46% LEFT, image 54% RIGHT
+//   S46R        text 46% RIGHT, image 54% LEFT
 
-const COVER_H = 150;
-const PANEL_X = 90;
-const PANEL_W = 120;
+const HALF_H = 150;
+const PAGE_W = 210;
 const PAD = 12;
-const INNER_X = PANEL_X + PAD;       // 102
-const INNER_W = PANEL_W - PAD * 2;   // 96
 
-export const COVER_HALF_S64L: LayoutManifest = {
-  id: "cover-half-s64l",
-  section: "cover",
-  page_count: 1,
-  description: "Combined-page cover half (top 150mm) — S64L: image left, text right",
-  slots: [
-    // Image container — full height of the half, draggable inside.
-    {
-      type: "image",
-      name: "hero_image",
-      content_key: "heroImageUrl",
-      x_mm: 0, y_mm: 0, w_mm: 90, h_mm: COVER_H,
-      object_fit: "cover",
-      image_role: "hero",
-      z_index: 0,
-    },
-    // Text panel surface — sectionSurface so the operator's section
-    // bg picker repaints just this panel.
-    {
-      type: "fill",
-      name: "text_panel_bg",
-      x_mm: PANEL_X, y_mm: 0, w_mm: PANEL_W, h_mm: COVER_H,
-      fill: "sectionSurface",
-      z_index: 0,
-    },
-    // Logo top — auto-contrast chip applies via image_role detection.
+// Build the meta-grid + title slots given a text-panel geometry. All
+// 7 layouts share this internal structure.
+function textPanelSlots(
+  panel: { x: number; w: number },
+  isOverlay: boolean,
+): Slot[] {
+  const innerX = panel.x + PAD;
+  const innerW = Math.max(40, panel.w - PAD * 2);
+  // Pull title down to make room for the logo on top; tighten when the
+  // panel is the whole page (FULL_BLEED) by anchoring text low so the
+  // image breathes.
+  const titleY = isOverlay ? 78 : 38;
+  const destY = isOverlay ? 116 : 80;
+  const dividerY = isOverlay ? 124 : 92;
+  const metaTopY = isOverlay ? 130 : 102;
+  const metaBottomY = isOverlay ? 140 : 124;
+
+  const colW = (innerW - 4) / 2; // tiny gutter between meta cols
+  const col1X = innerX;
+  const col2X = innerX + colW + 4;
+
+  // Colour roles: text panel uses "headingText"/"mutedText"; full-bleed
+  // overlay flips title + meta to white for legibility on imagery.
+  const titleRole = isOverlay ? "white" : "headingText";
+  const metaValueRole = isOverlay ? "white" : "headingText";
+  const metaLabelRole = isOverlay ? "white" : "mutedText";
+  const accentRole = isOverlay ? "white" : "accent";
+  const dividerRole = isOverlay ? "white" : "border";
+
+  return [
     {
       type: "image",
       name: "operator_logo",
       content_key: "operatorLogoUrl",
-      x_mm: INNER_X, y_mm: PAD, w_mm: 38, h_mm: 14,
+      x_mm: innerX, y_mm: PAD, w_mm: 38, h_mm: 14,
       object_fit: "contain",
       image_role: "logo",
+      z_index: 2,
     },
-    // Title — max 3 lines via slot height + scale_down overflow.
     {
       type: "text",
       name: "trip_title",
       content_key: "tripTitle",
-      x_mm: INNER_X, y_mm: 38, w_mm: INNER_W, h_mm: 36,
+      x_mm: innerX, y_mm: titleY, w_mm: innerW, h_mm: 36,
       style: "h2",
-      color_role: "headingText",
+      color_role: titleRole,
       max_chars: 90,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
-    // Destinations — single line; truncate or scale.
     {
       type: "text",
       name: "trip_destinations",
       content_key: "tripDestinations",
-      x_mm: INNER_X, y_mm: 80, w_mm: INNER_W, h_mm: 6,
+      x_mm: innerX, y_mm: destY, w_mm: innerW, h_mm: 6,
       style: "eyebrow",
-      color_role: "accent",
+      color_role: accentRole,
       max_chars: 120,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
-    // Divider line under destinations.
     {
       type: "line",
       name: "header_divider",
-      x_mm: INNER_X, y_mm: 92, w_mm: INNER_W, h_mm: 1,
-      color_role: "border",
+      x_mm: innerX, y_mm: dividerY, w_mm: innerW, h_mm: 1,
+      color_role: dividerRole,
+      z_index: 2,
     },
-    // Meta 2×2 grid:
-    //   col1 (left)   col2 (right)
-    //   FOR / value   DATES / value
-    //   DURATION / .. PARTY / value
+    // Meta row 1 — FOR | DATES
     {
       type: "text",
       name: "meta_for_label",
-      x_mm: INNER_X, y_mm: 102, w_mm: 48, h_mm: 5,
+      x_mm: col1X, y_mm: metaTopY, w_mm: colW, h_mm: 5,
       style: "eyebrow",
-      color_role: "mutedText",
+      color_role: metaLabelRole,
       max_chars: 12,
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_for_value",
-      x_mm: INNER_X, y_mm: 109, w_mm: 48, h_mm: 8,
+      x_mm: col1X, y_mm: metaTopY + 7, w_mm: colW, h_mm: 7,
       style: "body",
-      color_role: "headingText",
+      color_role: metaValueRole,
       max_chars: 60,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_dates_label",
-      x_mm: INNER_X + 48, y_mm: 102, w_mm: 48, h_mm: 5,
+      x_mm: col2X, y_mm: metaTopY, w_mm: colW, h_mm: 5,
       style: "eyebrow",
-      color_role: "mutedText",
+      color_role: metaLabelRole,
       max_chars: 12,
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_dates_value",
-      x_mm: INNER_X + 48, y_mm: 109, w_mm: 48, h_mm: 8,
+      x_mm: col2X, y_mm: metaTopY + 7, w_mm: colW, h_mm: 7,
       style: "body",
-      color_role: "headingText",
+      color_role: metaValueRole,
       max_chars: 60,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
+    // Meta row 2 — DURATION | PARTY
     {
       type: "text",
       name: "meta_duration_label",
-      x_mm: INNER_X, y_mm: 124, w_mm: 48, h_mm: 5,
+      x_mm: col1X, y_mm: metaBottomY, w_mm: colW, h_mm: 5,
       style: "eyebrow",
-      color_role: "mutedText",
+      color_role: metaLabelRole,
       max_chars: 12,
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_duration_value",
-      x_mm: INNER_X, y_mm: 131, w_mm: 48, h_mm: 8,
+      x_mm: col1X, y_mm: metaBottomY + 7, w_mm: colW, h_mm: 7,
       style: "body",
-      color_role: "headingText",
+      color_role: metaValueRole,
       max_chars: 60,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_party_label",
-      x_mm: INNER_X + 48, y_mm: 124, w_mm: 48, h_mm: 5,
+      x_mm: col2X, y_mm: metaBottomY, w_mm: colW, h_mm: 5,
       style: "eyebrow",
-      color_role: "mutedText",
+      color_role: metaLabelRole,
       max_chars: 12,
+      z_index: 2,
     },
     {
       type: "text",
       name: "meta_party_value",
-      x_mm: INNER_X + 48, y_mm: 131, w_mm: 48, h_mm: 8,
+      x_mm: col2X, y_mm: metaBottomY + 7, w_mm: colW, h_mm: 7,
       style: "body",
-      color_role: "headingText",
+      color_role: metaValueRole,
       max_chars: 60,
       overflow_behavior: "scale_down",
+      z_index: 2,
     },
-  ],
-  rules: [
-    "Cover height is exactly 150mm",
-    "Image locked to x:0–90mm; text panel locked to x:90–210mm",
-    "Title max 3 lines (36mm slot, scale_down on overflow)",
-    "Destinations single line, no wrap",
-    "Meta grid 2x2 within text panel padding",
-  ],
-};
+  ];
+}
+
+// Build a split half-cover layout. textPercent = how much horizontal
+// space the TEXT panel takes; textOnLeft picks which side gets the text.
+// Per spec: "S64L (64% text LEFT, 36% image RIGHT)" so L → text-on-left.
+function buildSplitHalf(
+  id: string,
+  textPercent: number,
+  textOnLeft: boolean,
+): LayoutManifest {
+  const textW = (PAGE_W * textPercent) / 100;
+  const imageW = PAGE_W - textW;
+  const textPanelX = textOnLeft ? 0 : imageW;
+  const imagePanelX = textOnLeft ? textW : 0;
+
+  return {
+    id,
+    section: "cover",
+    page_count: 1,
+    description: `Cover half — text ${textPercent}% on the ${textOnLeft ? "left" : "right"}, image ${100 - textPercent}% on the ${textOnLeft ? "right" : "left"}`,
+    slots: [
+      // Image first (z:0).
+      {
+        type: "image",
+        name: "hero_image",
+        content_key: "heroImageUrl",
+        x_mm: imagePanelX, y_mm: 0, w_mm: imageW, h_mm: HALF_H,
+        object_fit: "cover",
+        image_role: "hero",
+        z_index: 0,
+      },
+      // Text panel surface — sectionSurface so the operator's section
+      // bg picker repaints just the text panel.
+      {
+        type: "fill",
+        name: "text_panel_bg",
+        x_mm: textPanelX, y_mm: 0, w_mm: textW, h_mm: HALF_H,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      ...textPanelSlots({ x: textPanelX, w: textW }, false),
+    ],
+    rules: [
+      `Text panel locked to ${textPercent}% width on the ${textOnLeft ? "left" : "right"}`,
+      `Image panel locked to ${100 - textPercent}% width on the ${textOnLeft ? "right" : "left"}`,
+      "Cover half height fixed at 150mm",
+      "Destinations single line, no wrap",
+    ],
+  };
+}
+
+// Full-bleed half — image fills 0–150mm; text overlays a gradient.
+function buildFullBleedHalf(): LayoutManifest {
+  return {
+    id: "cover-full-bleed",
+    section: "cover",
+    page_count: 1,
+    description: "Cover half — full-bleed cinematic photograph with text overlay",
+    slots: [
+      {
+        type: "image",
+        name: "hero_image",
+        content_key: "heroImageUrl",
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: HALF_H,
+        object_fit: "cover",
+        image_role: "hero",
+        z_index: 0,
+      },
+      {
+        type: "fill",
+        name: "gradient_overlay",
+        x_mm: 0, y_mm: 60, w_mm: PAGE_W, h_mm: HALF_H - 60,
+        fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.62) 100%)",
+        z_index: 1,
+      },
+      ...textPanelSlots({ x: 0, w: PAGE_W }, true),
+    ],
+    rules: [
+      "Image fills the cover half",
+      "Text overlays a bottom gradient for legibility",
+      "Cover half height fixed at 150mm",
+    ],
+  };
+}
+
+// ─── Cover half layouts (the seven spec variants) ─────────────────────────
+
+export const COVER_HALF_FULL_BLEED = buildFullBleedHalf();
+export const COVER_HALF_S64L = buildSplitHalf("cover-s64l", 64, true);
+export const COVER_HALF_S64R = buildSplitHalf("cover-s64r", 64, false);
+export const COVER_HALF_S55L = buildSplitHalf("cover-s55l", 55, true);
+export const COVER_HALF_S55R = buildSplitHalf("cover-s55r", 55, false);
+export const COVER_HALF_S46L = buildSplitHalf("cover-s46l", 46, true);
+export const COVER_HALF_S46R = buildSplitHalf("cover-s46r", 46, false);
+
+export const COVER_HALF_LAYOUTS = [
+  COVER_HALF_FULL_BLEED,
+  COVER_HALF_S64L,
+  COVER_HALF_S64R,
+  COVER_HALF_S55L,
+  COVER_HALF_S55R,
+  COVER_HALF_S46L,
+  COVER_HALF_S46R,
+];
 
 // ─── Personal note half (147mm tall) ──────────────────────────────────────
-//
-// Padding 18mm left/right inside the half (so x:18, w:174 for body).
-// All y values are RELATIVE to the half (subtract 150 from spec's
-// absolute y values).
-//
-// Spec absolute → relative:
-//   greeting    y:165 → 15
-//   body        y:180 → 30  (max h: 60mm)
-//   signature   y:245 → 95
-//   name+role   y:260 → 110
-//   footer band y:275-297 → 125-147 (h: 22mm)
 
 export const PERSONAL_NOTE_HALF: LayoutManifest = {
   id: "personal-note-half",
@@ -194,8 +282,6 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
   page_count: 1,
   description: "Combined-page personal note half (bottom 147mm)",
   slots: [
-    // Half background — sectionSurface, sits behind everything so the
-    // operator's section bg picker repaints just this half.
     {
       type: "fill",
       name: "note_panel_bg",
@@ -203,7 +289,6 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       fill: "sectionSurface",
       z_index: 0,
     },
-    // Greeting — short eyebrow ("Dear Lilian," / "Karibu —")
     {
       type: "text",
       name: "note_greeting",
@@ -214,7 +299,6 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       max_chars: 80,
       overflow_behavior: "truncate",
     },
-    // Body — main letter text. Max h: 60mm; truncate if overflow.
     {
       type: "text",
       name: "note_body",
@@ -225,7 +309,6 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       max_chars: 700,
       overflow_behavior: "truncate",
     },
-    // Signature image (handwritten signature scan).
     {
       type: "image",
       name: "note_signature",
@@ -234,7 +317,6 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       object_fit: "contain",
       image_role: "signature",
     },
-    // Name + role on a single line below the signature.
     {
       type: "text",
       name: "note_advisor_name",
@@ -255,14 +337,12 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       max_chars: 60,
       overflow_behavior: "truncate",
     },
-    // Footer band — 22mm strip at bottom of the half.
     {
       type: "fill",
       name: "note_footer_bg",
       x_mm: 0, y_mm: 125, w_mm: 210, h_mm: 22,
       fill: "sectionBg",
     },
-    // Left — advisor image (square, 16mm with 3mm vertical centring).
     {
       type: "image",
       name: "note_advisor_image",
@@ -270,11 +350,9 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       x_mm: 18, y_mm: 128, w_mm: 20, h_mm: 16,
       object_fit: "cover",
     },
-    // Centre — email block (50mm).
     {
       type: "text",
       name: "note_email_label",
-      content_key: "emailLabel",
       x_mm: 48, y_mm: 129, w_mm: 50, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
@@ -283,18 +361,15 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_email_value",
-      content_key: "emailValue",
       x_mm: 48, y_mm: 135, w_mm: 50, h_mm: 9,
       style: "caption",
       color_role: "bodyText",
       max_chars: 60,
       overflow_behavior: "scale_down",
     },
-    // Centre — whatsapp block (50mm).
     {
       type: "text",
       name: "note_whatsapp_label",
-      content_key: "whatsappLabel",
       x_mm: 104, y_mm: 129, w_mm: 50, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
@@ -303,14 +378,12 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_whatsapp_value",
-      content_key: "whatsappValue",
       x_mm: 104, y_mm: 135, w_mm: 50, h_mm: 9,
       style: "caption",
       color_role: "bodyText",
       max_chars: 40,
       overflow_behavior: "scale_down",
     },
-    // Right — company logo, auto-contrast chip via image_role.
     {
       type: "image",
       name: "note_company_logo",
@@ -324,6 +397,5 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     "Personal note height is exactly 147mm",
     "Body truncates after 700 chars (60mm slot height)",
     "Footer band locked to y:125-147 within the half",
-    "Three footer columns: advisor image left, email+whatsapp centre, logo right",
   ],
 };

@@ -6,6 +6,7 @@ import { resolveTokens } from "@/lib/theme";
 import { SectionChrome } from "@/components/editor/SectionChrome";
 import type { Section } from "@/lib/types";
 import {
+  COVER_HALF_LAYOUTS,
   COVER_HALF_S64L,
   PERSONAL_NOTE_HALF,
 } from "@/lib/pdfFit/manifests/cover_combined";
@@ -121,6 +122,13 @@ function CoverHalfContents({ section }: { section: Section }) {
   const { proposal } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
+  // Pick the manifest from section.layoutVariant — operator's choice
+  // from the chrome variant switcher. Falls back to S64L (the spec's
+  // default) when the saved variant doesn't match a known PdfFit id.
+  const manifest =
+    COVER_HALF_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
+    COVER_HALF_S64L;
+
   // 7 mandatory backend fields (spec).
   const tripTitle =
     proposal.metadata?.title?.trim() ||
@@ -195,7 +203,7 @@ function CoverHalfContents({ section }: { section: Section }) {
 
   return (
     <PdfFitLayout
-      manifest={COVER_HALF_S64L}
+      manifest={manifest}
       contents={contents}
       theme={proposal.theme}
       tokens={tokens}

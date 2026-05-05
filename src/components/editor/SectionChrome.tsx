@@ -301,7 +301,12 @@ export function SectionChrome({ section, children }: Props) {
           {variants.length > 1 && (
             <div className="flex items-center gap-0.5 bg-white/92 border border-black/10 rounded-lg px-1 py-1 shadow-sm">
               {variants.map((v) => {
-                const shortLabel = v.split("-").map((w) => w[0]).join("").toUpperCase();
+                // Prefer the registry's explicit short label when set
+                // (e.g. cover-s64l → "64L"). Falls back to first-letter
+                // abbreviation for sections that don't supply labels.
+                const shortLabel =
+                  reg?.variantLabels?.[v] ??
+                  v.split("-").map((w) => w[0]).join("").toUpperCase();
                 const isActive = section.layoutVariant === v;
                 return (
                   <button

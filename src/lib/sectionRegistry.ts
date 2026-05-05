@@ -10,6 +10,10 @@ export interface SectionDefinition {
   defaultContent: Record<string, unknown>;
   /** Sections that source data from proposal-level arrays, not section.content */
   dataSource?: "days" | "properties" | "pricing" | "inclusions" | "practicalInfo";
+  /** Optional short labels for the chrome's variant switcher buttons.
+   *  Without this the chrome falls back to first-letter abbreviation
+   *  which collapses cover-s64l / cover-s64r / etc. all to "CS". */
+  variantLabels?: Record<string, string>;
 }
 
 export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
@@ -38,6 +42,15 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "cover-s46l",
       "cover-s46r",
     ],
+    variantLabels: {
+      "cover-full-bleed": "FULL",
+      "cover-s64l": "64L",
+      "cover-s64r": "64R",
+      "cover-s55l": "55L",
+      "cover-s55r": "55R",
+      "cover-s46l": "46L",
+      "cover-s46r": "46R",
+    },
     defaultVariant: "cover-s64l",
     defaultContent: { heroImageUrl: "" },
   },
