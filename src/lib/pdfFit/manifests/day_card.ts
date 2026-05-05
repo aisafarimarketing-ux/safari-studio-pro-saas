@@ -1,114 +1,111 @@
 import type { LayoutManifest } from "../types";
 
-// ─── Day card layout manifest ──────────────────────────────────────────────
+// ─── Day card — editorial luxury (single locked layout) ──────────────────
 //
-// Single layout from the operator's spec. Two halves stacked vertically:
+// Print-first A4 spread. Functional system stays intact (image
+// replace, property swap, AI rewrite live in the editor chrome /
+// inline overlays); this manifest controls the visual structure
+// of the printed page.
 //
-//   ┌──────────────────────────────────────────┐
-//   │  [accent strip — Day badge | Destination]│  y:20–40
-//   ├──────────────────────────────────────────┤
-//   │  Intro pull-quote (h3, full width)       │  y:50–70
-//   ├────────────────────────┬─────────────────┤
-//   │                        │                 │
-//   │  Narrative body        │  Destination    │  y:75–175
-//   │  (left column)         │  hero image     │
-//   │                        │                 │
-//   ├────────────────────────┼─────────────────┤
-//   │  Accommodation         │  Lodge stats    │  y:185–255
-//   │  hero image            │  block          │
-//   ├──────────────────────────────────────────┤
-//   │  ───── divider ──────                     │  y:260
-//   └──────────────────────────────────────────┘
-//
-// Variants (image_lead / narrative / balanced) live in variants.ts —
-// they tweak typography emphasis + image filters on top of these
-// fixed coordinates.
+// Layout summary:
+//   Header band  y:14-46 — DAY · DATE · LOCATION row + Title h1
+//   Intro line   y:50-62 — italic editorial hook
+//   Body 2-col   y:68-160 — text left, image right (image dominant)
+//   Stay block   y:170-260 — image left + text block right (no card)
+//   Page footer  y:280+ — operator brand line if present
 
 export const DAY_CARD_STANDARD: LayoutManifest = {
   id: "day-card-standard",
   section: "day_card",
   page_count: 1,
   description:
-    "Magazine spread day page: full-width hero, accent strip, two-column body, accommodation card",
+    "Editorial day spread — header / intro / 2-col body / accommodation block",
   slots: [
-    // Top half — large editorial hero photograph (full bleed).
-    {
-      type: "image",
-      name: "main_image",
-      content_key: "destinationImageUrl",
-      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 118,
-      object_fit: "cover",
-      image_role: "hero",
-      z_index: 0,
-    },
-    // Dark accent strip carrying the day label + destination.
     {
       type: "fill",
-      name: "day_header_bg",
-      x_mm: 0, y_mm: 118, w_mm: 210, h_mm: 14,
-      fill: "accent",
-      z_index: 1,
+      name: "section_bg",
+      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 297,
+      fill: "sectionSurface",
+      z_index: 0,
     },
+
+    // ─── HEADER BAND ───────────────────────────────────────────────────
     {
       type: "text",
-      name: "day_label",
-      content_key: "dayLabel",
-      x_mm: 18, y_mm: 122, w_mm: 80, h_mm: 8,
+      name: "header_meta",
+      content_key: "headerMeta",
+      x_mm: 18, y_mm: 14, w_mm: 174, h_mm: 5,
       style: "eyebrow",
-      color_role: "white",
-      alignment: "left",
-      max_chars: 40,
-      z_index: 2,
-    },
-    {
-      type: "text",
-      name: "location_title",
-      content_key: "destination",
-      x_mm: 100, y_mm: 122, w_mm: 92, h_mm: 8,
-      style: "eyebrow",
-      color_role: "white",
-      alignment: "right",
+      color_role: "mutedText",
+      size_pt: 9,
+      letter_spacing_em: 0.18,
+      uppercase: true,
       max_chars: 80,
-      z_index: 2,
+      overflow_behavior: "truncate",
     },
-    // Editorial pull-quote sits between the strip and the body.
+    {
+      type: "text",
+      name: "title",
+      content_key: "title",
+      x_mm: 18, y_mm: 22, w_mm: 174, h_mm: 22,
+      style: "h1",
+      color_role: "headingText",
+      size_pt: 30,
+      line_height: 1.05,
+      font_weight: 700,
+      max_chars: 80,
+      overflow_behavior: "scale_down",
+    },
+    {
+      type: "fill",
+      name: "header_divider",
+      x_mm: 18, y_mm: 46, w_mm: 174, h_mm: 0.3,
+      fill: "border",
+      opacity: 0.5,
+    },
+
+    // ─── INTRO LINE ────────────────────────────────────────────────────
     {
       type: "text",
       name: "intro_text",
       content_key: "introText",
-      x_mm: 18, y_mm: 142, w_mm: 174, h_mm: 14,
-      style: "h3",
+      x_mm: 18, y_mm: 52, w_mm: 174, h_mm: 12,
+      style: "body",
       color_role: "headingText",
-      max_chars: 140,
-      overflow_behavior: "truncate",
+      size_pt: 13,
+      line_height: 1.35,
+      max_chars: 200,
+      overflow_behavior: "scale_down",
     },
-    // Body narrative — full width, two-column visually via column-count
-    // is overkill for one page, so we use one cleaner column with
-    // generous leading and a sane char cap.
+
+    // ─── BODY — 2 columns ─────────────────────────────────────────────
     {
       type: "text",
       name: "body_text",
       content_key: "narrative",
-      x_mm: 18, y_mm: 162, w_mm: 174, h_mm: 56,
+      x_mm: 18, y_mm: 70, w_mm: 108, h_mm: 92,
       style: "body",
       color_role: "bodyText",
-      max_chars: 900,
+      size_pt: 11,
+      line_height: 1.6,
+      max_chars: 1100,
       overflow_behavior: "truncate",
     },
-    // Accommodation card — image left, text right. Sits on a faint
-    // sectionBg surface so it reads as a discrete card rather than
-    // floating type.
     {
-      type: "fill",
-      name: "lodge_card_bg",
-      x_mm: 18, y_mm: 226, w_mm: 174, h_mm: 56,
-      fill: "sectionBg",
+      type: "image",
+      name: "main_image",
+      content_key: "destinationImageUrl",
+      x_mm: 132, y_mm: 70, w_mm: 78, h_mm: 92,
+      object_fit: "cover",
+      image_role: "hero",
     },
+
+    // ─── ACCOMMODATION BLOCK (no card, no border) ─────────────────────
     {
       type: "image",
       name: "lodge_image",
       content_key: "lodgeImageUrl",
-      x_mm: 22, y_mm: 230, w_mm: 70, h_mm: 48,
+      x_mm: 18, y_mm: 174, w_mm: 80, h_mm: 60,
       object_fit: "cover",
       image_role: "thumb",
     },
@@ -116,36 +113,94 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       type: "text",
       name: "lodge_eyebrow",
       content_key: "lodgeEyebrow",
-      x_mm: 100, y_mm: 230, w_mm: 88, h_mm: 6,
+      x_mm: 106, y_mm: 176, w_mm: 88, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
-      max_chars: 30,
+      size_pt: 8,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 24,
     },
     {
       type: "text",
-      name: "lodge_text_block",
-      content_key: "lodgeText",
-      x_mm: 100, y_mm: 238, w_mm: 88, h_mm: 40,
-      style: "body",
-      color_role: "bodyText",
-      max_chars: 360,
+      name: "lodge_property_name",
+      content_key: "lodgePropertyName",
+      x_mm: 106, y_mm: 184, w_mm: 88, h_mm: 10,
+      style: "h3",
+      color_role: "headingText",
+      size_pt: 16,
+      line_height: 1.15,
+      font_weight: 700,
+      max_chars: 50,
+      overflow_behavior: "scale_down",
+    },
+    {
+      type: "text",
+      name: "lodge_location",
+      content_key: "lodgeLocation",
+      x_mm: 106, y_mm: 197, w_mm: 88, h_mm: 5,
+      style: "caption",
+      color_role: "mutedText",
+      size_pt: 9,
+      max_chars: 50,
       overflow_behavior: "truncate",
     },
     {
-      type: "line",
-      name: "divider",
-      x_mm: 18, y_mm: 288, w_mm: 174, h_mm: 1,
-      color_role: "border",
+      type: "text",
+      name: "lodge_description",
+      content_key: "lodgeDescription",
+      x_mm: 106, y_mm: 206, w_mm: 88, h_mm: 30,
+      style: "body",
+      color_role: "bodyText",
+      size_pt: 10,
+      line_height: 1.5,
+      max_chars: 280,
+      overflow_behavior: "truncate",
+    },
+    {
+      type: "text",
+      name: "lodge_amenities",
+      content_key: "lodgeAmenities",
+      x_mm: 106, y_mm: 240, w_mm: 88, h_mm: 8,
+      style: "caption",
+      color_role: "mutedText",
+      size_pt: 9,
+      letter_spacing_em: 0.04,
+      max_chars: 200,
+      overflow_behavior: "truncate",
+    },
+
+    // ─── PAGE FOOTER — quiet brand mark ──────────────────────────────
+    {
+      type: "fill",
+      name: "page_footer_border",
+      x_mm: 18, y_mm: 280, w_mm: 174, h_mm: 0.3,
+      fill: "border",
+      opacity: 0.4,
+    },
+    {
+      type: "text",
+      name: "page_footer_brand",
+      content_key: "pageFooterBrand",
+      x_mm: 18, y_mm: 286, w_mm: 174, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      alignment: "center",
+      max_chars: 80,
+      overflow_behavior: "truncate",
     },
   ],
   rules: [
-    "Each day MUST fit within one page",
-    "Hero locked to top 0–118mm; accent strip 118–132mm",
-    "Body narrative truncates at 900 chars before y:218",
-    "Accommodation card locked to 226–282mm",
-    "No text may exceed its slot height",
+    "Section fills full A4 page (297mm)",
+    "Header band y:14-46 — eyebrow + title + hairline",
+    "Intro y:52-64 — italic editorial hook",
+    "Body 2-col y:70-162 — text left (108mm), image right (78mm)",
+    "Accommodation y:174-248 — image left, text right, no card",
+    "Page footer y:280-291 — quiet brand mark",
   ],
 };
-
 
 export const DAY_CARD_LAYOUTS = [DAY_CARD_STANDARD];

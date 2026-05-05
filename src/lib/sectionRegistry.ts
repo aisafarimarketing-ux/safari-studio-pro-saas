@@ -125,6 +125,9 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // still carry the variant string render through DayCard.tsx's
     // fallback and look the same as right-flip.
     variants: ["day-card-standard"],
+    variantLabels: {
+      "day-card-standard": "STANDARD",
+    },
     defaultVariant: "day-card-standard",
     defaultContent: {},
     dataSource: "days",

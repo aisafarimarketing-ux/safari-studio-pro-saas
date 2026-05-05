@@ -53,17 +53,30 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     DAY_CARD_LAYOUTS.find((l) => l.id === dayLayoutVariantRaw) ?? DAY_CARD_STANDARD;
 
   // ─── Content resolution ──────────────────────────────────────────────
-  const dayDate = day.date?.trim() || null;
-  const dayLabel =
-    `Day ${String(day.dayNumber).padStart(2, "0")} of ${totalDays}` +
-    (dayDate ? ` · ${dayDate}` : "");
-
+  // Header row: DAY · DATE · LOCATION
+  const dayLabel = `Day ${String(day.dayNumber).padStart(2, "0")} of ${totalDays}`;
+  const dayDate = day.date?.trim() || "";
   const destination = day.destination?.trim() || "";
-  const introText = day.subtitle?.trim() || day.momentOfDay?.trim() || "";
+  const headerMeta = [dayLabel, dayDate, destination]
+    .filter(Boolean)
+    .join("  ·  ");
+
+  // Title — destination + subtitle pair when both exist; subtitle
+  // alone if no destination.
+  const titleParts = [destination, day.subtitle?.trim()].filter(Boolean);
+  const title = titleParts.join(" — ");
+
+  // Intro line — momentOfDay (the operator-curated one-liner hook)
+  // when present, else fall back to subtitle.
+  const introText =
+    day.momentOfDay?.trim() ||
+    day.subtitle?.trim() ||
+    "";
 
   // Strip HTML for narrative — PDF text slots render plain text only.
   const narrative = stripHtml(day.description ?? "").trim();
 
+  // Accommodation block — image + text resolved from the active tier.
   const tier = day.tiers?.[activeTier];
   const property = proposal.properties?.find(
     (p) => p.name?.trim().toLowerCase() === tier?.camp?.trim().toLowerCase(),
@@ -73,27 +86,27 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     property?.galleryUrls?.[0]?.trim() ||
     null;
 
-  // Accommodation card layout: eyebrow ("WHERE YOU'LL STAY"), camp
-  // name as the title, then a small stats line + short description.
   const lodgeEyebrow = "WHERE YOU'LL STAY";
-  const campName = tier?.camp?.trim() || property?.name?.trim() || "";
-  const lodgeLocation = tier?.location?.trim() || property?.location?.trim() || "";
-  const mealPlan = property?.mealPlan?.trim() || day.board?.trim() || "";
-  const shortDesc = property?.shortDesc?.trim() || tier?.note?.trim() || "";
-  const lodgeStats = [lodgeLocation, mealPlan].filter(Boolean).join("  ·  ");
-  const lodgeText = [
-    campName ? campName : "",
-    lodgeStats,
-    shortDesc ? "" : null,
-    shortDesc,
-  ]
-    .filter((v): v is string => typeof v === "string" && v.length >= 0)
-    .filter((v, i, arr) => !(v === "" && i === arr.length - 1))
-    .join("\n");
+  const lodgePropertyName = tier?.camp?.trim() || property?.name?.trim() || "";
+  const lodgeLocation = [
+    tier?.location?.trim() || property?.location?.trim() || "",
+    property?.mealPlan?.trim() || day.board?.trim() || "",
+  ].filter(Boolean).join("  ·  ");
+  const lodgeDescription =
+    property?.shortDesc?.trim() ||
+    stripHtml(property?.description ?? "").trim() ||
+    tier?.note?.trim() ||
+    "";
+  const lodgeAmenities = (property?.amenities ?? [])
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("  ·  ");
+
+  const pageFooterBrand = proposal.operator?.companyName?.trim() || "";
 
   const contents: Record<string, SlotContent> = {
-    day_label: { kind: "text", value: dayLabel },
-    location_title: { kind: "text", value: destination },
+    header_meta: { kind: "text", value: headerMeta },
+    title: { kind: "text", value: title },
     intro_text: { kind: "text", value: introText },
     body_text: { kind: "text", value: narrative },
     main_image: {
@@ -107,7 +120,11 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
       alt: tier?.camp ?? "",
     },
     lodge_eyebrow: { kind: "text", value: lodgeEyebrow },
-    lodge_text_block: { kind: "text", value: lodgeText },
+    lodge_property_name: { kind: "text", value: lodgePropertyName },
+    lodge_location: { kind: "text", value: lodgeLocation },
+    lodge_description: { kind: "text", value: lodgeDescription },
+    lodge_amenities: { kind: "text", value: lodgeAmenities },
+    page_footer_brand: { kind: "text", value: pageFooterBrand },
   };
 
   return (
