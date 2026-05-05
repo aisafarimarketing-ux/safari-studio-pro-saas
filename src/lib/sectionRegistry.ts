@@ -33,7 +33,24 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     description: "Hero cover with image + text. Click an image to replace it.",
     // PdfFit cover system — exactly the 7 spec layouts, nothing else.
     // FULL_BLEED + 6 splits where S<percent><L|R> = text size + image side.
+    // Magazine variants stay registered alongside the PdfFit IDs so
+    // the legacy on-screen renderer keeps all of its layouts.
     variants: [
+      // Magazine layouts (legacy on-screen)
+      "hero-letter",
+      "split-50-50-right",
+      "split-50-50-left",
+      "split-60-40-right",
+      "split-60-40-left",
+      "split-40-60-right",
+      "split-40-60-left",
+      "editorial-magazine",
+      "cinematic-split",
+      "flip-split",
+      "centered-editorial",
+      "minimal-type",
+      "full-bleed-overlay",
+      // PdfFit layouts (print)
       "cover-full-bleed",
       "cover-s64l",
       "cover-s64r",
@@ -51,21 +68,28 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "cover-s46l": "46L",
       "cover-s46r": "46R",
     },
-    defaultVariant: "cover-s64l",
-    defaultContent: { heroImageUrl: "" },
+    defaultVariant: "hero-letter",
+    defaultContent: { heroImageUrl: "", tagline: "", greetingBody: "" },
   },
   personalNote: {
     type: "personalNote",
     label: "Personal Note",
     icon: "✍",
     description: "Branded letter from the consultant — greeting body, signature, photo, company logo and contact.",
-    // Two variants per spec — Refined Minimal + Editorial Luxury.
-    variants: ["personal-note-variant-a", "personal-note-variant-b"],
+    variants: [
+      // Magazine layouts (legacy on-screen)
+      "editorial-letter-image",
+      "branded-letter",
+      "minimal",
+      // PdfFit layouts (print)
+      "personal-note-variant-a",
+      "personal-note-variant-b",
+    ],
     variantLabels: {
       "personal-note-variant-a": "MINIMAL",
       "personal-note-variant-b": "LUXURY",
     },
-    defaultVariant: "personal-note-variant-a",
+    defaultVariant: "editorial-letter-image",
     defaultContent: {
       body: "Thank you very much for your interest in doing a safari with us.\n\nPlease review the day-by-day itinerary and let me know your thoughts and feedback. I would be delighted to tailor the trip further to accommodate your personal preferences.",
       signOffLead: "Thanks again and I remain at your full disposal!",
@@ -86,11 +110,17 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Trip Summary",
     icon: "◈",
     description: "Quick-read stats: destinations, duration, pax, budget",
-    variants: ["trip-summary-split"],
+    variants: [
+      // Magazine layouts (legacy on-screen)
+      "default",
+      "wide-grid",
+      // PdfFit layouts (print)
+      "trip-summary-split",
+    ],
     variantLabels: {
       "trip-summary-split": "SPLIT",
     },
-    defaultVariant: "trip-summary-split",
+    defaultVariant: "default",
     defaultContent: {},
   },
   itineraryTable: {
@@ -122,11 +152,18 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // it produced visual collisions on phones; legacy proposals that
     // still carry the variant string render through DayCard.tsx's
     // fallback and look the same as right-flip.
-    variants: ["day-card-standard"],
+    variants: [
+      // Magazine layouts (legacy on-screen)
+      "right-flip",
+      "left-flip",
+      "trip-flip",
+      // PdfFit layout (print)
+      "day-card-standard",
+    ],
     variantLabels: {
       "day-card-standard": "STANDARD",
     },
-    defaultVariant: "day-card-standard",
+    defaultVariant: "trip-flip",
     defaultContent: {},
     dataSource: "days",
   },
@@ -135,8 +172,13 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Property Showcase",
     icon: "⌂",
     description: "Camp and lodge detail cards",
-    variants: ["property-card-standard"],
-    defaultVariant: "property-card-standard",
+    variants: [
+      // Magazine layout (legacy on-screen)
+      "editorial-carousel",
+      // PdfFit layout (print)
+      "property-card-standard",
+    ],
+    defaultVariant: "editorial-carousel",
     defaultContent: {},
     dataSource: "properties",
   },
@@ -145,8 +187,13 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Pricing",
     icon: "$",
     description: "Investment overview with 3-tier pricing",
-    variants: ["pricing-standard"],
-    defaultVariant: "pricing-standard",
+    variants: [
+      // Magazine layout (legacy on-screen)
+      "editorial",
+      // PdfFit layout (print)
+      "pricing-standard",
+    ],
+    defaultVariant: "editorial",
     defaultContent: {},
     dataSource: "pricing",
   },
@@ -165,8 +212,16 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Practical Information",
     icon: "ℹ",
     description: "Visas, health, packing, and travel tips",
-    variants: ["practical-info-cards"],
-    defaultVariant: "practical-info-cards",
+    variants: [
+      // Magazine layouts (legacy on-screen)
+      "two-column-notes",
+      "card-grid",
+      "icon-list",
+      "accordion-style",
+      // PdfFit layout (print)
+      "practical-info-cards",
+    ],
+    defaultVariant: "two-column-notes",
     defaultContent: {},
     dataSource: "practicalInfo",
   },
@@ -181,13 +236,24 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // trip meta + Secure CTA, like a paper dossier confirming the
     // booking. The three older variants (split-card / gallery-row /
     // stack) stay registered so legacy proposals keep their look.
-    variants: ["closing-farewell", "closing-cinematic", "closing-minimal"],
+    variants: [
+      // Magazine layouts (legacy on-screen)
+      "editorial-close",
+      "safari-ready",
+      "split-card",
+      "gallery-row",
+      "stack",
+      // PdfFit layouts (print)
+      "closing-farewell",
+      "closing-cinematic",
+      "closing-minimal",
+    ],
     variantLabels: {
       "closing-farewell": "EDITORIAL",
       "closing-cinematic": "CINEMATIC",
       "closing-minimal": "MINIMAL",
     },
-    defaultVariant: "closing-farewell",
+    defaultVariant: "safari-ready",
     defaultContent: {
       headline: "Your journey is ready",
       letter:
@@ -215,8 +281,13 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // Legacy proposals on "contact-cards" / "minimal" / "default" all
     // fall through to the unified layout in FooterSection (no migration
     // needed; the dispatcher there ignores the saved variant string).
-    variants: ["footer-contact-card"],
-    defaultVariant: "footer-contact-card",
+    variants: [
+      // Magazine layout (legacy on-screen)
+      "default",
+      // PdfFit layout (print)
+      "footer-contact-card",
+    ],
+    defaultVariant: "default",
     defaultContent: {},
   },
   customText: {
@@ -282,11 +353,16 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // reach). Existing proposals that still carry the legacy variant
     // names render through the same component since MapSection
     // unconditionally delegates to InteractiveMap.
-    variants: ["trip-summary-split"],
+    variants: [
+      // Magazine layout (legacy on-screen)
+      "interactive",
+      // PdfFit layout (print) — shares the trip-summary manifest
+      "trip-summary-split",
+    ],
     variantLabels: {
       "trip-summary-split": "SPLIT",
     },
-    defaultVariant: "trip-summary-split",
+    defaultVariant: "interactive",
     defaultContent: { caption: "", coords: [] },
   },
 };
