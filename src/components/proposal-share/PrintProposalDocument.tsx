@@ -191,7 +191,7 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
     <div className={`pdf-document ${debug ? "pdf-document--debug" : ""}`}>
       {visible.map((section) => (
         <ChromedSection key={section.id} section={section}>
-          {renderSection(section, proposal.id, proposal.sections)}
+          {renderSection(section, proposal.id)}
         </ChromedSection>
       ))}
     </div>
@@ -218,7 +218,7 @@ function ChromedSection({
   return <SectionChrome section={section}>{children}</SectionChrome>;
 }
 
-function renderSection(section: Section, proposalId: string, proposalSections: Section[]) {
+function renderSection(section: Section, proposalId: string) {
   const bleed = FULL_BLEED_TYPES.has(section.type);
 
   // Divider + spacer sections are visual rhythm controls on the
@@ -256,12 +256,6 @@ function renderSection(section: Section, proposalId: string, proposalSections: S
     return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
   }
   if (section.type === "personalNote") {
-    // Personal note is folded into the cover (cover-letter-spread)
-    // when both sections exist — saves a sparse second page. The
-    // cover consumer pulls the letter body, signature, and advisor
-    // contact info from the personalNote section.
-    const hasCover = proposalSections.some((s) => s.type === "cover" && s.visible);
-    if (hasCover) return null;
     return <PdfFitPersonalNotePage key={section.id} section={section} />;
   }
   if (section.type === "pricing") {

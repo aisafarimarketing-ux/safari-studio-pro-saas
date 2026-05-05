@@ -28,7 +28,19 @@ import type { ThemeTokens, ProposalTheme } from "@/lib/types";
 
 export type SlotContent =
   | { kind: "text"; value: string }
-  | { kind: "image"; url: string | null; alt?: string }
+  | {
+      kind: "image";
+      url: string | null;
+      alt?: string;
+      /** CSS object-position string — drives the visible crop within
+       *  the fixed slot frame. Format: "X% Y%" (e.g. "62% 38%").
+       *  Defaults to "50% 50%" when absent. */
+      objectPosition?: string;
+      /** CSS transform scale applied inside the slot frame. 1 keeps
+       *  the natural object-fit:cover crop; >1 zooms. Recommended
+       *  range 1.0–2.0. Defaults to 1. */
+      scale?: number;
+    }
   | { kind: "vector"; node: React.ReactNode }
   | { kind: "none" };
 
@@ -165,6 +177,64 @@ function ImageRender({
     // hints belong in the editor, not the printed deck.
     return null;
   }
+  // Operator-controlled crop within the fixed slot frame. Defaults
+  // to centre + 1× scale; stored on section.content as objectPosition
+  // + scale so the editor's drag/zoom UI persists across saves and
+  // print renders honour the same crop.
+  const objectPosition =
+    content?.kind === "image" && content.objectPosition
+      ? content.objectPosition
+      : "50% 50%";
+  const scale =
+    content?.kind === "image" &&
+    typeof content.scale === "number" &&
+    Number.isFinite(content.scale)
+      ? Math.min(Math.max(content.scale, 0.5), 3)
+      : 1;
+  // Logo containment — every logo slot sits inside an auto-contrast
+  // backdrop chip so the operator's logo (fixed colours) stays visible
+  // regardless of the page background. Triggered by image_role==="logo"
+  // OR slot.name including "logo". Hero / thumb / signature images
+  // skip the chip and render edge-to-edge inside the slot.
+  const isLogo =
+    slot.image_role === "logo" ||
+    slot.name === "operator_logo" ||
+    slot.name === "logo_small";
+  if (isLogo) {
+    // Pick the chip backdrop based on the slot's resolved surface.
+    // We use sectionSurface (white/cream) when the page surface is
+    // dark-ish; otherwise a transparent chip so light pages don't
+    // get a visible card behind the logo.
+    const surfaceLuminance = relativeLuminance(tokens.sectionSurface);
+    const chipBg =
+      surfaceLuminance < 0.55 ? "rgba(255,255,255,0.92)" : "transparent";
+    return (
+      <div
+        style={{
+          ...position,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          background: chipBg,
+          borderRadius: chipBg === "transparent" ? 0 : "2mm",
+          padding: chipBg === "transparent" ? 0 : "1.5mm 3mm",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={content?.kind === "image" ? content.alt ?? "" : ""}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            objectFit: "contain",
+            objectPosition,
+          }}
+        />
+      </div>
+    );
+  }
   return (
     <div style={{ ...position, overflow: "hidden", background: tokens.cardBg }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -175,6 +245,9 @@ function ImageRender({
           width: "100%",
           height: "100%",
           objectFit: slot.object_fit ?? "cover",
+          objectPosition,
+          transform: scale !== 1 ? `scale(${scale})` : undefined,
+          transformOrigin: "center center",
           // Variant-driven CSS filter — e.g. saturate(1.1) contrast(1.05)
           // for "image_lead" treatments. No-op when not specified.
           ...(adjustment.imageFilter ? { filter: adjustment.imageFilter } : {}),
@@ -266,4 +339,39 @@ function VectorRender({
 }) {
   if (content?.kind !== "vector") return null;
   return <div style={{ ...position, pointerEvents: "none" }}>{content.node}</div>;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+// Compute the relative luminance (0..1) of a CSS colour string. Used
+// by the logo-container auto-contrast logic to decide whether to paint
+// a white chip behind the logo or let it sit on the page directly.
+// Accepts hex (#rrggbb / #rgb) and rgb()/rgba() strings; returns 1 (treat
+// as light) for unknown formats so the logo defaults to "no chip".
+function relativeLuminance(colour: string | undefined | null): number {
+  if (!colour) return 1;
+  const rgb = parseColour(colour);
+  if (!rgb) return 1;
+  const [r, g, b] = rgb.map((v) => {
+    const sv = v / 255;
+    return sv <= 0.03928 ? sv / 12.92 : Math.pow((sv + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function parseColour(c: string): [number, number, number] | null {
+  const trimmed = c.trim();
+  if (trimmed.startsWith("#")) {
+    let hex = trimmed.slice(1);
+    if (hex.length === 3) hex = hex.split("").map((ch) => ch + ch).join("");
+    if (hex.length !== 6) return null;
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+    return [r, g, b];
+  }
+  const m = trimmed.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+  return null;
 }

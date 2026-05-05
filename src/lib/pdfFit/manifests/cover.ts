@@ -1,349 +1,294 @@
-import type { LayoutManifest } from "../types";
+import type { LayoutManifest, Slot } from "../types";
 
-// ─── Cover layout manifests ────────────────────────────────────────────────
+// ─── Cover layout system ──────────────────────────────────────────────────
 //
-// Three variants from the operator's spec:
+// Per spec — the cover supports ONLY 7 structural layouts:
 //
-//   cover-cinematic-hero   — full-bleed photo + bottom gradient + text
-//   cover-editorial-split  — image left half / typography right half
-//   cover-minimal-luxury   — type-led with logo + title centered
+//   FULL_BLEED  image fills page; text overlays
+//   S64L/S64R   text 64% / image 36% (L = image right, R = image left)
+//   S55L/S55R   text 55% / image 45%
+//   S46L/S46R   text 46% / image 54%
 //
-// Slot coordinates are mm; copy caps are in chars. The layout components
-// in components/proposal-share/PdfFit/CoverLayouts/ consume these
-// manifests and resolve content_key references against the proposal.
+// Every layout renders the same backend fields:
+//   logo · title · destinations (single line) · metadata row (for / dates / duration / party)
+//
+// Treatments (FRAMED_LUXURY, TINTED_OVERLAY, FLOATING_CARD, GRADIENT_SPLIT)
+// are visual variants applied on top of the structural layout — they
+// never change slot positions.
 
-export const COVER_CINEMATIC_HERO: LayoutManifest = {
-  id: "cover-cinematic-hero",
-  section: "cover",
-  page_count: 1,
-  description: "Full-bleed cinematic safari image with bottom gradient text overlay",
-  slots: [
-    {
-      type: "image",
-      name: "hero_image",
-      content_key: "heroImageUrl",
-      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 297,
-      aspect_ratio: "210:297",
-      min_resolution_px: [4960, 7016],
-      image_role: "hero",
-      object_fit: "cover",
-      z_index: 0,
-      focal_recommendation: "subject upper third, avoid bottom 30%",
-    },
-    {
-      type: "fill",
-      name: "gradient_overlay",
-      x_mm: 0, y_mm: 180, w_mm: 210, h_mm: 117,
-      fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.65) 100%)",
-      z_index: 1,
-    },
+const A4_W = 210;
+const A4_H = 297;
+const SAFE_X = 18; // horizontal text margin inside a panel
+const SAFE_Y = 22; // vertical safe margin from page edges
+
+// Build the slots inside the text panel for a given panel geometry.
+// All split layouts share the same internal structure: logo top, title
+// dominant, destinations single line, metadata row at the bottom.
+function textPanelSlots(panel: {
+  x: number; w: number;
+}): Slot[] {
+  const innerX = panel.x + SAFE_X;
+  const innerW = Math.max(40, panel.w - SAFE_X * 2);
+
+  // Metadata row — four columns, equal width, gutter ~6mm.
+  const metaY = A4_H - 60;
+  const metaH = 28;
+  const colCount = 4;
+  const colGap = 6;
+  const colW = (innerW - colGap * (colCount - 1)) / colCount;
+  const metaCols = Array.from({ length: colCount }, (_, i) => ({
+    x: innerX + i * (colW + colGap),
+    w: colW,
+  }));
+
+  return [
     {
       type: "image",
       name: "operator_logo",
       content_key: "operatorLogoUrl",
-      x_mm: 18, y_mm: 210, w_mm: 32, h_mm: 12,
-      min_resolution_px: [600, 240],
+      x_mm: innerX, y_mm: SAFE_Y, w_mm: 38, h_mm: 14,
       object_fit: "contain",
-      z_index: 2,
     },
     {
       type: "text",
       name: "trip_title",
       content_key: "tripTitle",
-      x_mm: 18, y_mm: 230, w_mm: 174, h_mm: 28,
+      x_mm: innerX, y_mm: 90, w_mm: innerW, h_mm: 50,
       style: "h1",
-      color_role: "white",
-      alignment: "left",
-      max_chars: 60,
-      overflow_behavior: "scale_down",
-      z_index: 2,
-    },
-    {
-      type: "text",
-      name: "trip_meta",
-      content_pattern: "{destinations} · {dates} · {duration}",
-      x_mm: 18, y_mm: 262, w_mm: 174, h_mm: 12,
-      style: "eyebrow",
-      color_role: "white",
-      alignment: "left",
+      color_role: "headingText",
       max_chars: 80,
-      overflow_behavior: "truncate",
-      z_index: 2,
-    },
-  ],
-  design_notes:
-    "Primary emotional entry point. Bottom gradient ensures text legibility across variable imagery.",
-};
-
-export const COVER_EDITORIAL_SPLIT: LayoutManifest = {
-  id: "cover-editorial-split",
-  section: "cover",
-  page_count: 1,
-  description: "Split layout — image left half, typography panel right",
-  slots: [
-    {
-      type: "image",
-      name: "hero_image",
-      content_key: "heroImageUrl",
-      x_mm: 0, y_mm: 0, w_mm: 126, h_mm: 297,
-      aspect_ratio: "126:297",
-      min_resolution_px: [3500, 7000],
-      image_role: "hero",
-      object_fit: "cover",
-      z_index: 0,
-    },
-    {
-      type: "fill",
-      name: "text_panel_bg",
-      x_mm: 126, y_mm: 0, w_mm: 84, h_mm: 297,
-      fill: "pageBg",
-      z_index: 0,
-    },
-    {
-      type: "image",
-      name: "operator_logo",
-      content_key: "operatorLogoUrl",
-      x_mm: 140, y_mm: 40, w_mm: 40, h_mm: 14,
-      object_fit: "contain",
-      z_index: 1,
-    },
-    {
-      type: "text",
-      name: "trip_title",
-      content_key: "tripTitle",
-      x_mm: 140, y_mm: 80, w_mm: 60, h_mm: 80,
-      style: "h1",
-      color_role: "headingText",
-      alignment: "left",
-      max_chars: 55,
-      overflow_behavior: "scale_down",
-      z_index: 1,
-    },
-    {
-      type: "text",
-      name: "trip_meta",
-      content_pattern: "{destinations} · {dates} · {duration}",
-      x_mm: 140, y_mm: 170, w_mm: 60, h_mm: 20,
-      style: "eyebrow",
-      color_role: "mutedText",
-      alignment: "left",
-      max_chars: 70,
-      overflow_behavior: "truncate",
-      z_index: 1,
-    },
-  ],
-  design_notes:
-    "Editorial composition introduces structure and contrast. Narrow text column improves readability.",
-};
-
-export const COVER_MINIMAL_LUXURY: LayoutManifest = {
-  id: "cover-minimal-luxury",
-  section: "cover",
-  page_count: 1,
-  description: "Minimal typographic cover with subtle background tone",
-  slots: [
-    {
-      type: "fill",
-      name: "background",
-      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 297,
-      fill: "pageBg",
-      z_index: 0,
-    },
-    {
-      type: "image",
-      name: "operator_logo",
-      content_key: "operatorLogoUrl",
-      x_mm: 85, y_mm: 60, w_mm: 40, h_mm: 16,
-      object_fit: "contain",
-      alignment: "center",
-      z_index: 1,
-    },
-    {
-      type: "text",
-      name: "trip_title",
-      content_key: "tripTitle",
-      x_mm: 30, y_mm: 120, w_mm: 150, h_mm: 60,
-      style: "h1",
-      color_role: "headingText",
-      alignment: "center",
-      max_chars: 50,
-      overflow_behavior: "scale_down",
-      z_index: 1,
-    },
-    {
-      type: "text",
-      name: "trip_meta",
-      content_pattern: "{destinations} · {dates} · {duration}",
-      x_mm: 30, y_mm: 190, w_mm: 150, h_mm: 20,
-      style: "eyebrow",
-      color_role: "mutedText",
-      alignment: "center",
-      max_chars: 70,
-      overflow_behavior: "truncate",
-      z_index: 1,
-    },
-  ],
-  design_notes:
-    "Minimal luxury approach removes reliance on imagery. Works best with strong font pairing.",
-};
-
-// ─── Combined cover + personal letter (editorial spread) ─────────────────
-//
-// One page that does the job of two — hero image on the top half, then
-// a magazine-style letter spread below with operator logo + trip title +
-// meta + welcome letter + signature + contact strip. Designed for
-// proposals where the cover and personal-note sections feel sparse on
-// their own; the orchestrator skips the stand-alone personalNote page
-// when this layout is in play.
-//
-//   y:0–148  hero image (full-bleed)
-//   y:155    operator logo
-//   y:170    trip title
-//   y:188    trip meta line
-//   y:200    letter body (welcome text)
-//   y:248    signature image
-//   y:260    advisor name + role
-//   y:272    cream contact strip with photo · email · whatsapp · logo
-//   y:288    brand line
-
-export const COVER_LETTER_SPREAD: LayoutManifest = {
-  id: "cover-letter-spread",
-  section: "cover",
-  page_count: 1,
-  description:
-    "Combined cover + welcome letter spread — hero up top, editorial letter and contact strip below",
-  slots: [
-    {
-      type: "image",
-      name: "hero_image",
-      content_key: "heroImageUrl",
-      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 148,
-      object_fit: "cover",
-      image_role: "hero",
-      z_index: 0,
-    },
-    {
-      type: "fill",
-      name: "hero_overlay",
-      x_mm: 0, y_mm: 110, w_mm: 210, h_mm: 38,
-      fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.42) 100%)",
-      z_index: 1,
-    },
-    {
-      type: "image",
-      name: "operator_logo",
-      content_key: "operatorLogoUrl",
-      x_mm: 18, y_mm: 156, w_mm: 32, h_mm: 12,
-      object_fit: "contain",
-    },
-    {
-      type: "text",
-      name: "trip_title",
-      content_key: "tripTitle",
-      x_mm: 18, y_mm: 170, w_mm: 174, h_mm: 18,
-      style: "h1",
-      color_role: "headingText",
-      max_chars: 60,
       overflow_behavior: "scale_down",
     },
     {
       type: "text",
-      name: "trip_meta",
-      content_pattern: "{destinations} · {dates} · {duration}",
-      x_mm: 18, y_mm: 188, w_mm: 174, h_mm: 8,
+      name: "trip_destinations",
+      content_key: "tripDestinations",
+      x_mm: innerX, y_mm: 148, w_mm: innerW, h_mm: 8,
       style: "eyebrow",
-      color_role: "mutedText",
-      max_chars: 80,
-      overflow_behavior: "truncate",
+      color_role: "accent",
+      max_chars: 120,
+      overflow_behavior: "scale_down",
     },
-    {
-      type: "text",
-      name: "letter_body",
-      content_key: "letterBody",
-      x_mm: 18, y_mm: 200, w_mm: 174, h_mm: 44,
-      style: "body",
-      color_role: "bodyText",
-      max_chars: 520,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "image",
-      name: "signature_image",
-      content_key: "signatureUrl",
-      x_mm: 18, y_mm: 247, w_mm: 50, h_mm: 12,
-      object_fit: "contain",
-      image_role: "signature",
-    },
-    {
-      type: "text",
-      name: "advisor_name",
-      content_key: "advisorName",
-      x_mm: 18, y_mm: 261, w_mm: 90, h_mm: 6,
-      style: "body",
-      color_role: "headingText",
-      max_chars: 40,
-    },
-    {
-      type: "text",
-      name: "advisor_title",
-      content_key: "advisorTitle",
-      x_mm: 18, y_mm: 267, w_mm: 90, h_mm: 5,
-      style: "caption",
-      color_role: "mutedText",
-      max_chars: 60,
-    },
-    {
-      type: "fill",
-      name: "contact_strip_bg",
-      x_mm: 0, y_mm: 274, w_mm: 210, h_mm: 23,
-      fill: "sectionBg",
-    },
-    {
-      type: "image",
-      name: "advisor_image",
-      content_key: "advisorImageUrl",
-      x_mm: 18, y_mm: 278, w_mm: 16, h_mm: 16,
-      object_fit: "cover",
-    },
-    {
-      type: "text",
-      name: "contact_email",
-      content_key: "contactEmail",
-      x_mm: 40, y_mm: 280, w_mm: 70, h_mm: 6,
-      style: "caption",
-      color_role: "bodyText",
-      max_chars: 60,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "text",
-      name: "contact_whatsapp",
-      content_key: "contactWhatsapp",
-      x_mm: 40, y_mm: 287, w_mm: 70, h_mm: 6,
-      style: "caption",
-      color_role: "bodyText",
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "image",
-      name: "logo_small",
-      content_key: "operatorLogoUrl",
-      x_mm: 160, y_mm: 280, w_mm: 32, h_mm: 12,
-      object_fit: "contain",
-    },
-  ],
-  rules: [
-    "Hero locked to top half (0–148mm)",
-    "Letter body truncates before signature at y:247",
-    "Contact strip locked to bottom 23mm",
-    "All elements fixed-position; no flow",
-  ],
-};
+    // Metadata row labels (eyebrow) sit above the values (body).
+    // The consumer fills meta_<i>_label with literal label text
+    // ("For" / "Dates" / "Duration" / "Party") and meta_<i>_value
+    // with the resolved backend value.
+    ...metaCols.flatMap((col, i): Slot[] => {
+      const valueKeys = [
+        "metaForValue",
+        "metaDatesValue",
+        "metaDurationValue",
+        "metaPartyValue",
+      ];
+      return [
+        {
+          type: "text",
+          name: `meta_${i}_label`,
+          content_key: `metaLabel${i}`,
+          x_mm: col.x, y_mm: metaY, w_mm: col.w, h_mm: 6,
+          style: "eyebrow",
+          color_role: "mutedText",
+          max_chars: 12,
+        },
+        {
+          type: "text",
+          name: `meta_${i}_value`,
+          content_key: valueKeys[i],
+          x_mm: col.x, y_mm: metaY + 8, w_mm: col.w, h_mm: metaH - 8,
+          style: "body",
+          color_role: "headingText",
+          max_chars: 60,
+          overflow_behavior: "scale_down",
+        },
+        // Hidden helper — keeps labels addressable from typed payloads.
+        // Filled with the literal label text by the consumer so the
+        // operator can override per-language if needed.
+        {
+          type: "text",
+          name: `meta_${i}_label_hidden`,
+          content_key: `metaLabel${i}Hidden`,
+          x_mm: -1000, y_mm: -1000, w_mm: 1, h_mm: 1,
+          style: "caption",
+        },
+      ];
+    }).filter((slot) => !slot.name.endsWith("_label_hidden")),
+  ];
+}
+
+// Build a split layout (S64L, S64R, S55L, S55R, S46L, S46R).
+function buildSplitLayout(
+  id: string,
+  textPercent: number,
+  imageOnRight: boolean,
+): LayoutManifest {
+  const textW = (A4_W * textPercent) / 100;
+  const imageW = A4_W - textW;
+  const textPanelX = imageOnRight ? 0 : imageW;
+  const imagePanelX = imageOnRight ? textW : 0;
+
+  return {
+    id,
+    section: "cover",
+    page_count: 1,
+    description: `Split cover ${textPercent}% text / ${100 - textPercent}% image (${imageOnRight ? "right" : "left"})`,
+    slots: [
+      // Text panel background (sectionSurface) — locks the text side
+      // to a clean paper surface even if the operator picks a dark
+      // pageBg globally.
+      {
+        type: "fill",
+        name: "text_panel_bg",
+        x_mm: textPanelX, y_mm: 0, w_mm: textW, h_mm: A4_H,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      // Image panel.
+      {
+        type: "image",
+        name: "hero_image",
+        content_key: "heroImageUrl",
+        x_mm: imagePanelX, y_mm: 0, w_mm: imageW, h_mm: A4_H,
+        object_fit: "cover",
+        image_role: "hero",
+        z_index: 0,
+      },
+      // Text panel slots (relative to the page; we already accounted
+      // for the panel offset by passing it in).
+      ...textPanelSlots({ x: textPanelX, w: textW }),
+    ],
+    rules: [
+      `Text panel locked to ${textPercent}% width`,
+      `Image panel locked to ${100 - textPercent}% width`,
+      "Destinations must remain single line (scale_down on overflow)",
+      "Metadata row pinned to bottom safe band",
+    ],
+  };
+}
+
+// Build the full-bleed layout — image fills the page; text floats
+// over a gradient overlay. The text panel coordinates run across the
+// full page width; FLOATING_CARD treatment can paint a sectionSurface
+// card behind the text at render time.
+function buildFullBleed(): LayoutManifest {
+  return {
+    id: "cover-full-bleed",
+    section: "cover",
+    page_count: 1,
+    description: "Full-bleed cinematic cover; text floats over gradient",
+    slots: [
+      {
+        type: "image",
+        name: "hero_image",
+        content_key: "heroImageUrl",
+        x_mm: 0, y_mm: 0, w_mm: A4_W, h_mm: A4_H,
+        object_fit: "cover",
+        image_role: "hero",
+        z_index: 0,
+      },
+      // Bottom-half gradient ensures legibility when text sits on
+      // varied imagery. FLOATING_CARD treatment swaps this for a
+      // solid card backdrop via variant fillOverride.
+      {
+        type: "fill",
+        name: "gradient_overlay",
+        x_mm: 0, y_mm: 150, w_mm: A4_W, h_mm: 147,
+        fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.62) 100%)",
+        z_index: 1,
+      },
+      {
+        type: "image",
+        name: "operator_logo",
+        content_key: "operatorLogoUrl",
+        x_mm: SAFE_X, y_mm: SAFE_Y, w_mm: 38, h_mm: 14,
+        object_fit: "contain",
+        z_index: 2,
+      },
+      {
+        type: "text",
+        name: "trip_title",
+        content_key: "tripTitle",
+        x_mm: SAFE_X, y_mm: 175, w_mm: A4_W - SAFE_X * 2, h_mm: 50,
+        style: "h1",
+        color_role: "white",
+        max_chars: 80,
+        overflow_behavior: "scale_down",
+        z_index: 2,
+      },
+      {
+        type: "text",
+        name: "trip_destinations",
+        content_key: "tripDestinations",
+        x_mm: SAFE_X, y_mm: 232, w_mm: A4_W - SAFE_X * 2, h_mm: 8,
+        style: "eyebrow",
+        color_role: "white",
+        max_chars: 120,
+        overflow_behavior: "scale_down",
+        z_index: 2,
+      },
+      // Metadata row (4 columns) at bottom.
+      ...(() => {
+        const innerW = A4_W - SAFE_X * 2;
+        const metaY = A4_H - 50;
+        const colCount = 4;
+        const colGap = 6;
+        const colW = (innerW - colGap * (colCount - 1)) / colCount;
+        return Array.from({ length: colCount }, (_, i): Slot[] => {
+          const valueKeys = [
+            "metaForValue",
+            "metaDatesValue",
+            "metaDurationValue",
+            "metaPartyValue",
+          ];
+          return [
+            {
+              type: "text",
+              name: `meta_${i}_label`,
+              content_key: `metaLabel${i}`,
+              x_mm: SAFE_X + i * (colW + colGap),
+              y_mm: metaY, w_mm: colW, h_mm: 6,
+              style: "eyebrow",
+              color_role: "white",
+              max_chars: 12,
+              z_index: 2,
+            },
+            {
+              type: "text",
+              name: `meta_${i}_value`,
+              content_key: valueKeys[i],
+              x_mm: SAFE_X + i * (colW + colGap),
+              y_mm: metaY + 8, w_mm: colW, h_mm: 16,
+              style: "body",
+              color_role: "white",
+              max_chars: 60,
+              overflow_behavior: "scale_down",
+              z_index: 2,
+            },
+          ];
+        }).flat();
+      })(),
+    ],
+    rules: [
+      "Image fills page; text overlays a gradient",
+      "Destinations must remain single line (scale_down on overflow)",
+      "Logo top-left safe area; title + meta in bottom band",
+    ],
+  };
+}
+
+export const COVER_FULL_BLEED = buildFullBleed();
+export const COVER_S64L = buildSplitLayout("cover-s64l", 64, true);
+export const COVER_S64R = buildSplitLayout("cover-s64r", 64, false);
+export const COVER_S55L = buildSplitLayout("cover-s55l", 55, true);
+export const COVER_S55R = buildSplitLayout("cover-s55r", 55, false);
+export const COVER_S46L = buildSplitLayout("cover-s46l", 46, true);
+export const COVER_S46R = buildSplitLayout("cover-s46r", 46, false);
 
 export const COVER_LAYOUTS = [
-  COVER_LETTER_SPREAD,
-  COVER_CINEMATIC_HERO,
-  COVER_EDITORIAL_SPLIT,
-  COVER_MINIMAL_LUXURY,
+  COVER_FULL_BLEED,
+  COVER_S64L,
+  COVER_S64R,
+  COVER_S55L,
+  COVER_S55R,
+  COVER_S46L,
+  COVER_S46R,
 ];
