@@ -7,6 +7,7 @@ import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { SectionChrome } from "@/components/editor/SectionChrome";
 import { PdfPage } from "./PdfPage";
 import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
+import { PdfFitCoverWithNotePage } from "./PdfFit/PdfFitCoverWithNotePage";
 import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
 import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
 import { PdfFitPersonalNotePage } from "./PdfFit/PdfFitPersonalNotePage";
@@ -191,7 +192,7 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
     <div className={`pdf-document ${debug ? "pdf-document--debug" : ""}`}>
       {visible.map((section) => (
         <ChromedSection key={section.id} section={section}>
-          {renderSection(section, proposal.id)}
+          {renderSection(section, proposal.id, proposal.sections)}
         </ChromedSection>
       ))}
     </div>
@@ -218,7 +219,7 @@ function ChromedSection({
   return <SectionChrome section={section}>{children}</SectionChrome>;
 }
 
-function renderSection(section: Section, proposalId: string) {
+function renderSection(section: Section, proposalId: string, allSections: Section[]) {
   const bleed = FULL_BLEED_TYPES.has(section.type);
 
   // Divider + spacer sections are visual rhythm controls on the
@@ -247,6 +248,21 @@ function renderSection(section: Section, proposalId: string) {
   // the manifest decides what fits on each A4 page. No legacy "render
   // the web layout into A4" path — we design for paper first.
   if (section.type === "cover") {
+    // Per spec — when a personalNote section also exists and is
+    // visible, the cover renders as the top half of a single A4
+    // page that also carries the personal note in its bottom half
+    // (cover y:0–150mm + note y:150–297mm). Each half has its own
+    // SectionChrome so editor controls operate independently.
+    const note = allSections.find((s) => s.type === "personalNote" && s.visible);
+    if (note) {
+      return (
+        <PdfFitCoverWithNotePage
+          key={section.id}
+          coverSection={section}
+          noteSection={note}
+        />
+      );
+    }
     return <PdfFitCoverPage key={section.id} section={section} />;
   }
   if (section.type === "dayJourney") {
@@ -256,6 +272,12 @@ function renderSection(section: Section, proposalId: string) {
     return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
   }
   if (section.type === "personalNote") {
+    // When a visible cover exists, the cover orchestrator already
+    // rendered the combined cover-with-note page; skip here so we
+    // don't print the note twice. Standalone (no cover) → render
+    // the legacy single-section note page.
+    const hasCover = allSections.some((s) => s.type === "cover" && s.visible);
+    if (hasCover) return null;
     return <PdfFitPersonalNotePage key={section.id} section={section} />;
   }
   if (section.type === "pricing") {

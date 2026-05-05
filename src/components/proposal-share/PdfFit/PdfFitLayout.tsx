@@ -27,9 +27,17 @@ type Props = {
    *  "editorial" / "minimal_luxury" for cover. Falls back to base
    *  styling when undefined. */
   variantId?: string;
+  /** Override the rendered height in mm. Defaults to A4 (297mm).
+   *  Used by composite pages (e.g. cover-with-note) that stack
+   *  multiple PdfFitLayouts at fixed sub-heights inside one PdfPage. */
+  heightMm?: number;
+  /** Override the rendered width in mm. Defaults to A4 (210mm). */
+  widthMm?: number;
 };
 
-export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: Props) {
+export function PdfFitLayout({
+  manifest, contents, theme, tokens, variantId, heightMm, widthMm,
+}: Props) {
   return (
     <div
       data-pdf-fit-layout={manifest.id}
@@ -37,8 +45,8 @@ export function PdfFitLayout({ manifest, contents, theme, tokens, variantId }: P
       data-pdf-fit-variant={variantId ?? ""}
       style={{
         position: "relative",
-        width: "210mm",
-        height: "297mm",
+        width: `${widthMm ?? 210}mm`,
+        height: `${heightMm ?? 297}mm`,
         overflow: "hidden",
         // Use the operator's section surface — the same token the
         // legacy on-screen sections render against. This restores
