@@ -88,9 +88,38 @@ export function PdfFitClosingPage({ section }: Props) {
     proposal.metadata?.title?.trim() ||
     "";
 
+  // Variant-specific content keys — derived from real backend fields
+  // when the magazine-named layouts (safari-ready / split-card /
+  // gallery-row) are picked. PdfFit ignores keys it doesn't have a
+  // matching slot for, so pre-computing them is harmless on other
+  // variants.
+  const tripTitle = proposal.metadata?.title?.trim() || trip?.title?.trim() || "";
+  const tripDates = trip?.dates?.trim() || "";
+  const tripNights = trip?.nights;
+  const tripDuration = tripNights
+    ? `${tripNights + 1} days · ${tripNights} ${tripNights === 1 ? "night" : "nights"}`
+    : "";
+  const adults = numField(proposal.client?.adults);
+  const children = numField(proposal.client?.children) ?? 0;
+  const partyLine = (() => {
+    if (!adults && !children) return proposal.client?.pax?.trim() || "";
+    const aLabel = adults && adults > 0 ? `${adults} ${adults === 1 ? "adult" : "adults"}` : "";
+    const cLabel = children > 0 ? `${children} ${children === 1 ? "child" : "children"}` : "";
+    return [aLabel, cLabel].filter(Boolean).join(", ");
+  })();
+  const tripMetaLine = [tripDates, tripDuration, partyLine].filter(Boolean).join("  ·  ");
+
+  // Image rails / tiles for split-card and gallery-row — pull from
+  // each day's heroImageUrl in dayNumber order, deduped, capped.
+  const dayImages = (proposal.days ?? [])
+    .map((d) => d.heroImageUrl?.trim() || null)
+    .filter((u): u is string => Boolean(u))
+    .filter((u, i, arr) => arr.indexOf(u) === i);
+
   const contents: Record<string, SlotContent> = {
     hero_image: { kind: "image", url: heroImageUrl, alt: headline },
     eyebrow: { kind: "text", value: eyebrow },
+    folder_eyebrow: { kind: "text", value: "SAFARI READY" },
     headline: { kind: "text", value: headline },
     body_intro: { kind: "text", value: bodyIntro },
     primary_cta: { kind: "text", value: primaryCta },
@@ -99,6 +128,18 @@ export function PdfFitClosingPage({ section }: Props) {
     secondary_cta_3: { kind: "text", value: secondaryCta3 },
     trust_badges: { kind: "text", value: trustBadges },
     brand_line: { kind: "text", value: brandLine },
+    // safari-ready folder content
+    trip_title: { kind: "text", value: tripTitle },
+    trip_meta_line: { kind: "text", value: tripMetaLine },
+    // split-card image rail (3 images)
+    rail_image_1: { kind: "image", url: dayImages[0] ?? heroImageUrl, alt: "" },
+    rail_image_2: { kind: "image", url: dayImages[1] ?? null, alt: "" },
+    rail_image_3: { kind: "image", url: dayImages[2] ?? null, alt: "" },
+    // gallery-row 4 tiles
+    tile_1: { kind: "image", url: dayImages[0] ?? heroImageUrl, alt: "" },
+    tile_2: { kind: "image", url: dayImages[1] ?? null, alt: "" },
+    tile_3: { kind: "image", url: dayImages[2] ?? null, alt: "" },
+    tile_4: { kind: "image", url: dayImages[3] ?? null, alt: "" },
   };
 
   return (
@@ -114,6 +155,11 @@ export function PdfFitClosingPage({ section }: Props) {
       </div>
     </PdfPage>
   );
+}
+
+function numField(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  return undefined;
 }
 
 function str(v: unknown): string | undefined {
