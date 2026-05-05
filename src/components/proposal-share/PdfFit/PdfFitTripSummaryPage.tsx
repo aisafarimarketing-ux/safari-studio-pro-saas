@@ -3,25 +3,20 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
-import type { Section } from "@/lib/types";
+import type { Section, Day, TierKey } from "@/lib/types";
 import {
   TRIP_SUMMARY_EDITORIAL,
-  TRIP_SUMMARY_LAYOUTS,
+  TRIP_SUMMARY_GEOMETRY,
 } from "@/lib/pdfFit/manifests/trip_summary";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
 import type { SlotContent } from "./PdfFitSlot";
 
-// ─── PDF-Fit trip summary page ─────────────────────────────────────────────
+// ─── PDF-Fit "Itinerary at a glance" page ─────────────────────────────────
 //
-// Resolves the proposal's days into:
-//   - left_itinerary_panel: numbered stop list with destination + nights
-//   - map_image: RouteMap vector (uses the section's cached coords if
-//     present, otherwise falls back to the schematic route diagram
-//     baked into RouteMap)
-//   - stats: days, stops, lodges, parks counters
-//   - eyebrow / title / caption resolved from section.content with
-//     sensible defaults
+// Renders the locked editorial trip-summary layout. Day blocks (max 3)
+// resolved from proposal.days; stats + summary computed from real
+// backend trip data (no synthesis of narrative copy).
 
 type Props = { section: Section };
 
@@ -29,81 +24,86 @@ export function PdfFitTripSummaryPage({ section }: Props) {
   const { proposal } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
-  const variantId =
-    typeof section.content?.variantId === "string"
-      ? section.content.variantId
-      : "balanced";
+  const activeTier: TierKey =
+    proposal.activeTier &&
+    ["classic", "premier", "signature"].includes(proposal.activeTier)
+      ? proposal.activeTier
+      : "premier";
 
-  // Layout pick — operator's section.layoutVariant chooses which
-  // trip-summary manifest renders. Falls back to the editorial split.
-  const manifest =
-    TRIP_SUMMARY_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
-    TRIP_SUMMARY_EDITORIAL;
+  const days = [...(proposal.days ?? [])].sort(
+    (a, b) => a.dayNumber - b.dayNumber,
+  );
 
-  const days = proposal.days ?? [];
-  const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
-
-  // Stops — collapse runs of the same destination so a 3-night stay
-  // shows as one stop, not three.
-  const stops = sortedDays
+  // ── Stop list (collapse consecutive same-destination days) ──────────
+  const stops = days
     .map((d) => d.destination?.trim())
     .filter((s): s is string => Boolean(s))
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
 
-  // Section title comes from the operator's section content. We do
-  // NOT synthesise a route-derived headline (e.g. "Arusha → Serengeti")
-  // from backend data — that would be inventing display copy. Empty
-  // when the operator hasn't typed one.
-  const sectionTitle =
-    (typeof section.content?.title === "string" && section.content.title.trim()) || "";
-
-  const eyebrow =
-    (typeof section.content?.eyebrow === "string" && section.content.eyebrow.trim()) ||
-    "";
-
-  // Itinerary block — magazine-style numbered list. Each stop gets
-  // two lines: "NN  Destination" then a muted "Days X–Y · N nights",
-  // separated by a blank line so the eye finds each entry quickly.
-  const stopLines: string[] = [];
-  let cursor = 0;
-  for (const stop of stops) {
-    cursor += 1;
-    const stopDays = sortedDays.filter((d) => d.destination === stop);
-    const nights = stopDays.length;
-    const dayNumbers = stopDays.map((d) => d.dayNumber);
-    const dayRange =
-      dayNumbers.length > 1
-        ? `Days ${dayNumbers[0]}–${dayNumbers[dayNumbers.length - 1]}`
-        : `Day ${dayNumbers[0] ?? cursor}`;
-    const nightsLabel = nights === 1 ? "1 night" : `${nights} nights`;
-    if (cursor > 1) stopLines.push("");
-    stopLines.push(`${pad2(cursor)}    ${stop}`);
-    stopLines.push(`        ${dayRange}  ·  ${nightsLabel}`);
+  // ── Day blocks (max 3) — pick representative days for each stop ─────
+  type DayBlock = {
+    number: string;
+    location: string;
+    property: string;
+    caption: string;
+    imageUrl: string | null;
+  };
+  const blockDays: DayBlock[] = [];
+  const seenStops = new Set<string>();
+  for (const day of days) {
+    const dest = day.destination?.trim();
+    if (!dest || seenStops.has(dest)) continue;
+    seenStops.add(dest);
+    const property = lookupPropertyForDay(day, proposal.properties, activeTier);
+    const propertyName =
+      property?.name?.trim() ||
+      day.tiers?.[activeTier]?.camp?.trim() ||
+      "";
+    const captionParts: string[] = [];
+    if (day.dayNumber) captionParts.push(`Day ${day.dayNumber}`);
+    if (day.subtitle?.trim()) captionParts.push(day.subtitle.trim());
+    blockDays.push({
+      number: String(day.dayNumber).padStart(2, "0"),
+      location: dest,
+      property: propertyName,
+      caption: captionParts.join(" · "),
+      imageUrl: day.heroImageUrl?.trim() || null,
+    });
+    if (blockDays.length >= TRIP_SUMMARY_GEOMETRY.DAY_BLOCKS_MAX) break;
   }
-  const itineraryText = stopLines.join("\n");
 
-  // Stats
+  // ── Stats — computed from real trip data ───────────────────────────
+  const totalNights = days.length;
+  const stopCount = stops.length;
   const lodgeCount = countUnique(
-    sortedDays.map((d) => d.board).filter((s) => Boolean(s?.trim())),
+    days
+      .map((d) =>
+        lookupPropertyForDay(d, proposal.properties, activeTier)?.name?.trim() ||
+        d.tiers?.[activeTier]?.camp?.trim() ||
+        "",
+      )
+      .filter(Boolean),
   );
   const parkCount = countParks(stops);
-  const totalNights = sortedDays.length;
 
-  const statsDays = `${totalNights}\nNights`;
-  const statsStops = `${stops.length}\nStops`;
-  const statsLodges = `${lodgeCount}\n${lodgeCount === 1 ? "Lodge" : "Lodges"}`;
-  const statsParks = `${parkCount}\n${parkCount === 1 ? "Park" : "Parks"}`;
+  // ── Section title / subtitle from operator content ──────────────────
+  const sectionTitle =
+    (typeof section.content?.title === "string" && section.content.title.trim()) ||
+    "";
+  const sectionSubtitle =
+    (typeof section.content?.subtitle === "string" && section.content.subtitle.trim()) ||
+    "";
 
-  const caption =
+  const summary =
     (typeof section.content?.caption === "string" && section.content.caption.trim()) ||
-    `${proposal.trip?.dates ?? ""}`.trim();
+    "";
 
-  // Route map — render the live RouteMap component into a vector slot.
+  // ── Map vector ──────────────────────────────────────────────────────
   const cachedCoords = (section.content?.coords as RouteCoord[] | undefined) ?? undefined;
   const routeMapNode = (
     <div style={{ width: "100%", height: "100%" }}>
       <RouteMap
-        days={sortedDays}
+        days={days}
         cachedCoords={cachedCoords}
         tokens={tokens}
         height="100%"
@@ -112,35 +112,74 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     </div>
   );
 
+  // ── Build the contents map ──────────────────────────────────────────
   const contents: Record<string, SlotContent> = {
-    eyebrow: { kind: "text", value: eyebrow },
+    section_label: { kind: "text", value: "ITINERARY AT A GLANCE" },
     section_title: { kind: "text", value: sectionTitle },
-    left_itinerary_panel: { kind: "text", value: itineraryText },
+    section_subtitle: { kind: "text", value: sectionSubtitle },
     map_image: { kind: "vector", node: routeMapNode },
-    stats_days: { kind: "text", value: statsDays },
-    stats_stops: { kind: "text", value: statsStops },
-    stats_lodges: { kind: "text", value: statsLodges },
-    stats_parks: { kind: "text", value: statsParks },
-    caption: { kind: "text", value: caption },
+    stats_0_value: { kind: "text", value: String(totalNights) },
+    stats_0_label: { kind: "text", value: "Nights" },
+    stats_1_value: { kind: "text", value: String(stopCount) },
+    stats_1_label: { kind: "text", value: "Stops" },
+    stats_2_value: { kind: "text", value: String(lodgeCount) },
+    stats_2_label: { kind: "text", value: "Lodges" },
+    stats_3_value: { kind: "text", value: String(parkCount) },
+    stats_3_label: { kind: "text", value: "Parks" },
+    summary_line: { kind: "text", value: summary },
   };
 
+  // Day-block content keys.
+  for (let i = 0; i < TRIP_SUMMARY_GEOMETRY.DAY_BLOCKS_MAX; i++) {
+    const block = blockDays[i];
+    contents[`day_${i + 1}_number`] = {
+      kind: "text",
+      value: block?.number ?? "",
+    };
+    contents[`day_${i + 1}_image`] = {
+      kind: "image",
+      url: block?.imageUrl ?? null,
+      alt: block?.location ?? "",
+    };
+    contents[`day_${i + 1}_location`] = {
+      kind: "text",
+      value: block?.location ?? "",
+    };
+    contents[`day_${i + 1}_property`] = {
+      kind: "text",
+      value: block?.property ?? "",
+    };
+    contents[`day_${i + 1}_caption`] = {
+      kind: "text",
+      value: block?.caption ?? "",
+    };
+  }
+
   return (
-    <PdfPage label="At a glance" bleed>
+    <PdfPage label="Itinerary at a glance" bleed>
       <div data-section-type="tripSummary" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={manifest}
+          manifest={TRIP_SUMMARY_EDITORIAL}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}
-          variantId={variantId}
         />
       </div>
     </PdfPage>
   );
 }
 
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function lookupPropertyForDay(
+  day: Day,
+  properties: { id: string; name: string }[] | undefined,
+  activeTier: TierKey,
+) {
+  const tier = day.tiers?.[activeTier];
+  if (!tier?.camp || !properties) return undefined;
+  const target = tier.camp.trim().toLowerCase();
+  return properties.find((p) => p.name?.trim().toLowerCase() === target);
 }
 
 function countUnique(arr: string[]): number {
