@@ -27,15 +27,25 @@ function textPanelSlots(
   const innerX = panel.x + PAD;
   const innerW = Math.max(40, panel.w - PAD * 2);
 
-  // Title is dominant — h1 size, scale_down on overflow. 3-line cap
-  // at h1 (30pt × 1.2 leading = 36pt → ~12.7mm/line) → 38mm slot
-  // for splits; tighter for overlay so the meta still fits inside
-  // 150mm.
+  // Vertical rhythm per the brief — every gap is intentional and
+  // the elements read as one composed group, not floating items:
+  //   LOGO (12mm) + 6mm gap
+  //   TITLE (h1, ~3 lines) + 6mm gap
+  //   DESTINATIONS (eyebrow_lg) + 6mm gap
+  //   DIVIDER (0.4mm) + 8mm gap
+  //   META (2x2 grid)
+  //
+  // Title slot 38mm in splits ≈ 3 lines of h1 at 12.7mm/line.
+  // Overlay (full-bleed) compresses the title slot to 28mm so meta
+  // still fits inside the 150mm half.
+  const logoY = 14;
+  const logoH = 12;
+  const titleY = logoY + logoH + 6;
   const titleH = isOverlay ? 28 : 38;
-  const titleY = isOverlay ? 70 : 32;
-  const destY = titleY + titleH + 4;
-  const dividerY = destY + 8;
-  const metaTopY = dividerY + 6;
+  const destY = titleY + titleH + 6;
+  const destH = 6;
+  const dividerY = destY + destH + 6;
+  const metaTopY = dividerY + 8;
   const metaBottomY = metaTopY + 14;
 
   // Two-column meta grid — 4mm gutter so the labels don't crowd.
@@ -54,7 +64,7 @@ function textPanelSlots(
       type: "image",
       name: "operator_logo",
       content_key: "operatorLogoUrl",
-      x_mm: innerX, y_mm: 14, w_mm: 38, h_mm: 12,
+      x_mm: innerX, y_mm: logoY, w_mm: 38, h_mm: logoH,
       object_fit: "contain",
       image_role: "logo",
       z_index: 2,
@@ -63,19 +73,23 @@ function textPanelSlots(
       type: "text",
       name: "trip_title",
       content_key: "tripTitle",
-      x_mm: innerX, y_mm: titleY, w_mm: innerW, h_mm: titleH,
+      // Title narrowed to ~85% of the inner column per spec so the
+      // line break lands on natural word boundaries; tight ~1.1
+      // leading per the editorial brief.
+      x_mm: innerX, y_mm: titleY, w_mm: innerW * 0.85, h_mm: titleH,
       style: "h1",
       color_role: titleRole,
       max_chars: 90,
       overflow_behavior: "scale_down",
+      line_height: 1.1,
       z_index: 2,
     },
     {
       type: "text",
       name: "trip_destinations",
       content_key: "tripDestinations",
-      x_mm: innerX, y_mm: destY, w_mm: innerW, h_mm: 5,
-      style: "eyebrow",
+      x_mm: innerX, y_mm: destY, w_mm: innerW, h_mm: destH,
+      style: "eyebrow_lg",
       color_role: accentRole,
       max_chars: 120,
       overflow_behavior: "scale_down",

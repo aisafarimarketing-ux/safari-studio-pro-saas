@@ -32,6 +32,7 @@ export type TypographyStyle =
   | "h3"
   | "body"
   | "eyebrow"
+  | "eyebrow_lg"
   | "caption"
   | "button_primary"
   | "button_secondary";
@@ -65,6 +66,10 @@ export type TextSlot = SlotBox & {
    *  Caller substitutes from the proposal at render time. */
   content_pattern?: string;
   overflow_behavior?: OverflowBehavior;
+  /** Override the resolved style's line-height. Useful for editorial
+   *  title slots that need tighter leading (~1.1) than the global
+   *  h1 token (1.2 from the magazine type scale). */
+  line_height?: number;
 };
 
 export type ImageSlot = SlotBox & {

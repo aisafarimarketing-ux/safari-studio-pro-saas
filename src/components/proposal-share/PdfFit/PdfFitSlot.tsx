@@ -135,6 +135,12 @@ function TextRender({
     const baseLeading = TYPOGRAPHY_STYLES[effectiveStyle].leading;
     tunedStyleProps.lineHeight = baseLeading * adjustment.leadingScale;
   }
+  // Slot-level line-height override beats both the style default and
+  // any variant leadingScale — operator's editorial choice for a
+  // specific title slot ("tight 1.1") wins.
+  if (slot.line_height !== undefined) {
+    tunedStyleProps.lineHeight = slot.line_height;
+  }
   if (effectiveStyle && adjustment.weightScale !== undefined) {
     const baseWeight = TYPOGRAPHY_STYLES[effectiveStyle].weight;
     tunedStyleProps.fontWeight = snapWeight(baseWeight, adjustment.weightScale);
@@ -163,8 +169,9 @@ function TextRender({
       {/* Single-line slots (height ≤ 8mm or scale_down behaviour) keep
           their text on one line and let the slot's overflow:hidden +
           text-overflow:ellipsis trim the tail. Multi-line slots honour
-          newlines via pre-line. This stops a long destinations string
-          from wrapping into a second line that gets clipped. */}
+          newlines via pre-line and use text-wrap:balance so the
+          browser distributes words evenly across lines (avoids
+          word-stacking on titles). */}
       <span
         style={{
           width: "100%",
@@ -175,6 +182,10 @@ function TextRender({
               : "pre-line",
           textOverflow: "ellipsis",
           overflow: "hidden",
+          // Editorial line balance — modern browsers distribute words
+          // evenly across multi-line text so titles read as balanced
+          // pairs rather than orphan words on the last line.
+          textWrap: "balance",
         }}
       >
         {displayed}

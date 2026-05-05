@@ -83,6 +83,16 @@ export const TYPOGRAPHY_STYLES: Record<TypographyStyle, StyleSpec> = {
     letterSpacing_em: 0.18,
     uppercase: true,
   },
+  // Slightly larger eyebrow — used for the cover destinations line
+  // where the small-caps feel needs more presence than a 9pt label.
+  eyebrow_lg: {
+    fontRole: "body",
+    size_pt: 10.5,
+    leading: 1.4,
+    weight: 600,
+    letterSpacing_em: 0.16,
+    uppercase: true,
+  },
   caption: {
     fontRole: "body",
     size_pt: 10.5,
