@@ -86,13 +86,11 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Trip Summary",
     icon: "◈",
     description: "Quick-read stats: destinations, duration, pax, budget",
-    variants: ["trip-summary-canvas", "trip-summary-split", "trip-summary-hero"],
+    variants: ["trip-summary-split"],
     variantLabels: {
-      "trip-summary-canvas": "CANVAS",
       "trip-summary-split": "SPLIT",
-      "trip-summary-hero": "HERO",
     },
-    defaultVariant: "trip-summary-canvas",
+    defaultVariant: "trip-summary-split",
     defaultContent: {},
   },
   itineraryTable: {
@@ -279,13 +277,11 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // reach). Existing proposals that still carry the legacy variant
     // names render through the same component since MapSection
     // unconditionally delegates to InteractiveMap.
-    variants: ["trip-summary-canvas", "trip-summary-split", "trip-summary-hero"],
+    variants: ["trip-summary-split"],
     variantLabels: {
-      "trip-summary-canvas": "CANVAS",
       "trip-summary-split": "SPLIT",
-      "trip-summary-hero": "HERO",
     },
-    defaultVariant: "trip-summary-canvas",
+    defaultVariant: "trip-summary-split",
     defaultContent: { caption: "", coords: [] },
   },
 };

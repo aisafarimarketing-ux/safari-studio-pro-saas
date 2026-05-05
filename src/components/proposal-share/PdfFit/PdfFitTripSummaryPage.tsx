@@ -3,27 +3,29 @@
 import { useProposalStore } from "@/store/proposalStore";
 import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
-import type { Section, Day, TierKey } from "@/lib/types";
-import {
-  TRIP_SUMMARY_CANVAS,
-  TRIP_SUMMARY_GEOMETRY,
-  TRIP_SUMMARY_LAYOUTS,
-} from "@/lib/pdfFit/manifests/trip_summary";
-import { PdfFitLayout } from "./PdfFitLayout";
+import type { Section, Day, TierKey, Property } from "@/lib/types";
 import { PdfPage } from "../PdfPage";
-import type { SlotContent } from "./PdfFitSlot";
 
-// ─── PDF-Fit "Itinerary at a glance" page ─────────────────────────────────
+// ─── PDF-Fit "Itinerary at a glance" — strict grid layout ────────────────
 //
-// Renders the locked editorial trip-summary layout. Day blocks (max 3)
-// resolved from proposal.days; stats + summary computed from real
-// backend trip data (no synthesis of narrative copy).
+// CSS-grid based per the latest spec. Bypasses PdfFitLayout's absolute
+// positioning so the section can use `display: grid` + `flex` for
+// real vertical distribution and edge-to-edge map fill.
+//
+// Hierarchy:
+//   .container (210×297mm, grid-template-rows: 82% 12% 6%)
+//     .topBlock         (grid-template-columns: 40% 60%)
+//       .leftColumn     (flex column, space-between)
+//       .rightMap       (height 100%, map fills container)
+//     .statsBar         (grid-template-columns: 1fr 1fr 1fr 1fr)
+//     .summaryLine      (flex centered)
 
 type Props = { section: Section };
 
 export function PdfFitTripSummaryPage({ section }: Props) {
   const { proposal } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
+  const theme = proposal.theme;
 
   const activeTier: TierKey =
     proposal.activeTier &&
@@ -41,36 +43,29 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     .filter((s): s is string => Boolean(s))
     .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
 
-  // ── Day blocks (max 3) — pick representative days for each stop ─────
+  // ── Day blocks (max 6) — pick representative day per stop ──────────
   type DayBlock = {
     number: string;
     location: string;
     property: string;
-    caption: string;
     imageUrl: string | null;
   };
-  const blockDays: DayBlock[] = [];
-  const seenStops = new Set<string>();
+  const blocks: DayBlock[] = [];
+  const seen = new Set<string>();
   for (const day of days) {
     const dest = day.destination?.trim();
-    if (!dest || seenStops.has(dest)) continue;
-    seenStops.add(dest);
+    if (!dest || seen.has(dest)) continue;
+    seen.add(dest);
     const property = lookupPropertyForDay(day, proposal.properties, activeTier);
     const propertyName =
-      property?.name?.trim() ||
-      day.tiers?.[activeTier]?.camp?.trim() ||
-      "";
-    const captionParts: string[] = [];
-    if (day.dayNumber) captionParts.push(`Day ${day.dayNumber}`);
-    if (day.subtitle?.trim()) captionParts.push(day.subtitle.trim());
-    blockDays.push({
+      property?.name?.trim() || day.tiers?.[activeTier]?.camp?.trim() || "";
+    blocks.push({
       number: String(day.dayNumber).padStart(2, "0"),
       location: dest,
       property: propertyName,
-      caption: captionParts.join(" · "),
       imageUrl: day.heroImageUrl?.trim() || null,
     });
-    if (blockDays.length >= TRIP_SUMMARY_GEOMETRY.DAY_BLOCKS_MAX) break;
+    if (blocks.length >= 6) break;
   }
 
   // ── Stats — computed from real trip data ───────────────────────────
@@ -87,91 +82,312 @@ export function PdfFitTripSummaryPage({ section }: Props) {
   );
   const parkCount = countParks(stops);
 
-  // ── Section title / subtitle from operator content ──────────────────
   const sectionTitle =
     (typeof section.content?.title === "string" && section.content.title.trim()) ||
     "";
   const sectionSubtitle =
     (typeof section.content?.subtitle === "string" && section.content.subtitle.trim()) ||
     "";
-
   const summary =
     (typeof section.content?.caption === "string" && section.content.caption.trim()) ||
     "";
 
-  // ── Map vector ──────────────────────────────────────────────────────
   const cachedCoords = (section.content?.coords as RouteCoord[] | undefined) ?? undefined;
-  const routeMapNode = (
-    <div style={{ width: "100%", height: "100%" }}>
-      <RouteMap
-        days={days}
-        cachedCoords={cachedCoords}
-        tokens={tokens}
-        height="100%"
-        presentationMode
-      />
-    </div>
-  );
 
-  // ── Build the contents map ──────────────────────────────────────────
-  const contents: Record<string, SlotContent> = {
-    section_label: { kind: "text", value: "ITINERARY AT A GLANCE" },
-    section_title: { kind: "text", value: sectionTitle },
-    section_subtitle: { kind: "text", value: sectionSubtitle },
-    map_image: { kind: "vector", node: routeMapNode },
-    stats_0_value: { kind: "text", value: String(totalNights) },
-    stats_0_label: { kind: "text", value: "Nights" },
-    stats_1_value: { kind: "text", value: String(stopCount) },
-    stats_1_label: { kind: "text", value: "Stops" },
-    stats_2_value: { kind: "text", value: String(lodgeCount) },
-    stats_2_label: { kind: "text", value: "Lodges" },
-    stats_3_value: { kind: "text", value: String(parkCount) },
-    stats_3_label: { kind: "text", value: "Parks" },
-    summary_line: { kind: "text", value: summary },
-  };
-
-  // Day-block content keys.
-  for (let i = 0; i < TRIP_SUMMARY_GEOMETRY.DAY_BLOCKS_MAX; i++) {
-    const block = blockDays[i];
-    contents[`day_${i + 1}_number`] = {
-      kind: "text",
-      value: block?.number ?? "",
-    };
-    contents[`day_${i + 1}_image`] = {
-      kind: "image",
-      url: block?.imageUrl ?? null,
-      alt: block?.location ?? "",
-    };
-    contents[`day_${i + 1}_location`] = {
-      kind: "text",
-      value: block?.location ?? "",
-    };
-    contents[`day_${i + 1}_property`] = {
-      kind: "text",
-      value: block?.property ?? "",
-    };
-    contents[`day_${i + 1}_caption`] = {
-      kind: "text",
-      value: block?.caption ?? "",
-    };
-  }
-
-  // Pick variant by section.layoutVariant; default to Editorial Canvas.
-  const manifest =
-    TRIP_SUMMARY_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
-    TRIP_SUMMARY_CANVAS;
+  // Typography helpers — pull from theme tokens.
+  const displayFont = `'${theme.displayFont}', Georgia, serif`;
+  const bodyFont = `'${theme.bodyFont}', system-ui, sans-serif`;
 
   return (
     <PdfPage label="Itinerary at a glance" bleed>
-      <div data-section-type="tripSummary" style={{ width: "100%", height: "100%" }}>
-        <PdfFitLayout
-          manifest={manifest}
-          contents={contents}
-          theme={proposal.theme}
-          tokens={tokens}
-        />
+      <div
+        data-section-type="tripSummary"
+        style={{
+          width: "210mm",
+          height: "297mm",
+          display: "grid",
+          gridTemplateRows: "82% 12% 6%",
+          background: tokens.sectionSurface,
+          color: tokens.bodyText,
+          fontFamily: bodyFont,
+          overflow: "hidden",
+        }}
+      >
+        {/* ─── TOP BLOCK ─────────────────────────────────────────────── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "40% 60%",
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
+          }}
+        >
+          {/* LEFT COLUMN — itinerary */}
+          <div
+            style={{
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              padding: "14mm 12mm 14mm 18mm",
+              overflow: "hidden",
+              borderRight: `0.3mm solid ${tokens.border}`,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "9pt",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                  color: tokens.mutedText,
+                  marginBottom: "8mm",
+                }}
+              >
+                Itinerary at a glance
+              </div>
+              {sectionTitle && (
+                <div
+                  style={{
+                    fontFamily: displayFont,
+                    fontSize: "26pt",
+                    lineHeight: 1.05,
+                    fontWeight: 700,
+                    color: tokens.headingText,
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {sectionTitle}
+                </div>
+              )}
+              {sectionSubtitle && (
+                <div
+                  style={{
+                    fontSize: "10pt",
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: tokens.mutedText,
+                    marginTop: "6mm",
+                  }}
+                >
+                  {sectionSubtitle}
+                </div>
+              )}
+            </div>
+
+            {/* Day list — flex column space-between distributes evenly */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "4mm",
+                flex: 1,
+                marginTop: "10mm",
+                overflow: "hidden",
+              }}
+            >
+              {blocks.map((block) => (
+                <DayBlockRow
+                  key={block.number + block.location}
+                  block={block}
+                  cardBg={tokens.cardBg}
+                  headingColor={tokens.headingText}
+                  bodyColor={tokens.bodyText}
+                  mutedColor={tokens.mutedText}
+                  displayFont={displayFont}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN — map fills 100% */}
+          <div
+            style={{
+              height: "100%",
+              width: "100%",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            <RouteMap
+              days={days}
+              cachedCoords={cachedCoords}
+              tokens={tokens}
+              height="100%"
+              presentationMode
+            />
+          </div>
+        </div>
+
+        {/* ─── STATS BAR (12%) ──────────────────────────────────────── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            borderTop: `0.3mm solid ${tokens.border}`,
+            borderBottom: `0.3mm solid ${tokens.border}`,
+            background: tokens.sectionSurface,
+          }}
+        >
+          <StatCell value={String(totalNights)} label="Nights" tokens={tokens} displayFont={displayFont} />
+          <StatCell value={String(stopCount)} label="Stops" tokens={tokens} displayFont={displayFont} divider />
+          <StatCell value={String(lodgeCount)} label="Lodges" tokens={tokens} displayFont={displayFont} divider />
+          <StatCell value={String(parkCount)} label="Parks" tokens={tokens} displayFont={displayFont} divider />
+        </div>
+
+        {/* ─── SUMMARY LINE (6%) ────────────────────────────────────── */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 18mm",
+            background: tokens.sectionSurface,
+          }}
+        >
+          {summary && (
+            <span
+              style={{
+                fontSize: "9pt",
+                lineHeight: 1.2,
+                color: tokens.mutedText,
+                fontStyle: "italic",
+                textAlign: "center",
+              }}
+            >
+              {summary}
+            </span>
+          )}
+        </div>
       </div>
     </PdfPage>
+  );
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────
+
+function DayBlockRow({
+  block, cardBg, headingColor, bodyColor, mutedColor, displayFont,
+}: {
+  block: { number: string; location: string; property: string; imageUrl: string | null };
+  cardBg: string;
+  headingColor: string;
+  bodyColor: string;
+  mutedColor: string;
+  displayFont: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "12mm 1fr",
+        gap: "3mm",
+        flex: 1,
+        minHeight: 0,
+        alignItems: "stretch",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: displayFont,
+          fontSize: "16pt",
+          fontWeight: 700,
+          color: mutedColor,
+          paddingTop: "1mm",
+        }}
+      >
+        {block.number}
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: "1fr auto",
+          gap: "2mm",
+          minHeight: 0,
+        }}
+      >
+        <div
+          style={{
+            background: block.imageUrl ? cardBg : "transparent",
+            backgroundImage: block.imageUrl ? `url(${block.imageUrl})` : undefined,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            minHeight: 0,
+          }}
+        />
+        <div>
+          <div
+            style={{
+              fontSize: "10.5pt",
+              fontWeight: 700,
+              letterSpacing: "0.02em",
+              color: headingColor,
+            }}
+          >
+            {block.location.toUpperCase()}
+          </div>
+          {block.property && (
+            <div
+              style={{
+                fontSize: "8.5pt",
+                color: bodyColor,
+                marginTop: "0.5mm",
+              }}
+            >
+              {block.property}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCell({
+  value, label, tokens, displayFont, divider,
+}: {
+  value: string;
+  label: string;
+  tokens: { headingText: string; mutedText: string; border: string };
+  displayFont: string;
+  divider?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        borderLeft: divider ? `0.3mm solid ${tokens.border}` : undefined,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: displayFont,
+          fontSize: "26pt",
+          fontWeight: 700,
+          lineHeight: 1.0,
+          color: tokens.headingText,
+        }}
+      >
+        {value}
+      </div>
+      <div
+        style={{
+          fontSize: "9pt",
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: tokens.mutedText,
+          fontWeight: 600,
+          marginTop: "2.5mm",
+        }}
+      >
+        {label}
+      </div>
+    </div>
   );
 }
 
@@ -179,7 +395,7 @@ export function PdfFitTripSummaryPage({ section }: Props) {
 
 function lookupPropertyForDay(
   day: Day,
-  properties: { id: string; name: string }[] | undefined,
+  properties: Property[] | undefined,
   activeTier: TierKey,
 ) {
   const tier = day.tiers?.[activeTier];
