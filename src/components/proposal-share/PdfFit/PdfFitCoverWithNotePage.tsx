@@ -244,6 +244,9 @@ function NoteHalfContents({
   const body = stripHtml(strField(section.content?.body) ?? "");
   const signOffLead = strField(section.content?.signOffLead) ?? "";
   const signOff = strField(section.content?.signOff) ?? "";
+  // Closing renders the two operator lines as one stanza so they
+  // read together without a wasted gap.
+  const closing = [signOffLead, signOff].filter(Boolean).join("\n");
 
   const operator = proposal.operator;
   const advisorName = operator?.consultantName?.trim() || "";
@@ -258,8 +261,7 @@ function NoteHalfContents({
   const contents: Record<string, SlotContent> = {
     note_greeting: { kind: "text", value: greeting },
     note_body: { kind: "text", value: body },
-    note_closing_lead: { kind: "text", value: signOffLead },
-    note_closing_sign: { kind: "text", value: signOff },
+    note_closing: { kind: "text", value: closing },
     note_signature: { kind: "image", url: signatureUrl, alt: "Signature" },
     note_advisor_name: { kind: "text", value: advisorName },
     note_advisor_role: { kind: "text", value: advisorRole },

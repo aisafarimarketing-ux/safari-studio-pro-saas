@@ -311,28 +311,31 @@ function buildPersonalNoteVariant(
   id: string,
   isLuxury: boolean,
 ): LayoutManifest {
-  // Spacing values per spec — Luxury adds breathing room.
+  // Spacing per spec — Luxury adds breathing room. Combined budget
+  // (top pad 16 + content + bottom pad 10) must fit in y:16-115 so
+  // the spec'd 10mm gap to the footer (which starts at y:125) is
+  // honoured.
   const TITLE_TO_BODY = isLuxury ? 10 : 8;
   const BODY_TO_CLOSING = isLuxury ? 10 : 8;
   const CLOSING_TO_SIG = isLuxury ? 8 : 6;
   const SIG_TO_NAME = 4;
   const SIG_W = isLuxury ? 45 : 40;
 
-  // Vertical layout (y values).
+  // Vertical rhythm — body height shrinks on Luxury so the bigger
+  // gaps + bigger signature still land above the footer at y:125.
   const TITLE_Y = 16;
   const TITLE_H = 8;
-  const BODY_Y = TITLE_Y + TITLE_H + TITLE_TO_BODY;
-  const BODY_H = 38;
-  const CLOSING_LEAD_Y = BODY_Y + BODY_H + BODY_TO_CLOSING;
-  const CLOSING_LEAD_H = 5;
-  const CLOSING_SIGN_Y = CLOSING_LEAD_Y + CLOSING_LEAD_H + 2;
-  const CLOSING_SIGN_H = 5;
-  const SIG_Y = CLOSING_SIGN_Y + CLOSING_SIGN_H + CLOSING_TO_SIG;
-  const SIG_H = 12;
-  const NAME_Y = SIG_Y + SIG_H + SIG_TO_NAME;
+  const BODY_H = isLuxury ? 25 : 32;
+  const CLOSING_H = 11; // single block, two lines at body × 1.4 leading
+  const SIG_H = isLuxury ? 12 : 10;
   const NAME_H = 5;
-  const ROLE_Y = NAME_Y + NAME_H + 1;
   const ROLE_H = 4;
+
+  const BODY_Y = TITLE_Y + TITLE_H + TITLE_TO_BODY;
+  const CLOSING_Y = BODY_Y + BODY_H + BODY_TO_CLOSING;
+  const SIG_Y = CLOSING_Y + CLOSING_H + CLOSING_TO_SIG;
+  const NAME_Y = SIG_Y + SIG_H + SIG_TO_NAME;
+  const ROLE_Y = NAME_Y + NAME_H + 1;
   const ACCENT_BOTTOM = SIG_Y + SIG_H; // accent line ends at signature bottom
 
   const footerSlots: Slot[] = [
@@ -479,27 +482,18 @@ function buildPersonalNoteVariant(
         max_chars: 560,
         overflow_behavior: "truncate",
       },
-      // Closing line 1 — "Thanks again..."
+      // Closing — two lines on one slot ("Thanks again...\nBest regards,")
+      // at slightly tighter leading so they read as a stanza.
       {
         type: "text",
-        name: "note_closing_lead",
-        content_key: "signOffLead",
-        x_mm: TEXT_X, y_mm: CLOSING_LEAD_Y, w_mm: TEXT_W, h_mm: CLOSING_LEAD_H,
+        name: "note_closing",
+        content_key: "closing",
+        x_mm: TEXT_X, y_mm: CLOSING_Y, w_mm: TEXT_W, h_mm: CLOSING_H,
         style: "body",
         color_role: "bodyText",
-        max_chars: 120,
+        max_chars: 200,
         overflow_behavior: "truncate",
-      },
-      // Closing line 2 — "Best regards,"
-      {
-        type: "text",
-        name: "note_closing_sign",
-        content_key: "signOff",
-        x_mm: TEXT_X, y_mm: CLOSING_SIGN_Y, w_mm: TEXT_W, h_mm: CLOSING_SIGN_H,
-        style: "body",
-        color_role: "bodyText",
-        max_chars: 60,
-        overflow_behavior: "truncate",
+        line_height: 1.35,
       },
       // Signature image — no background box.
       {
