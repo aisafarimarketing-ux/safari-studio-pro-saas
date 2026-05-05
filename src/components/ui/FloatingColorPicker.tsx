@@ -55,22 +55,21 @@ export function FloatingColorPicker() {
     closeFloatingPicker();
   }, [floatingPicker, initialColor, updateSectionStyleOverrides, updateThemeTokens, closeFloatingPicker]);
 
-  // Close on outside click or Escape
+  // Close on Escape (revert) or explicit Done button. Outside-click
+  // close was disabled per operator brief — the picker disappearing
+  // before the operator settled on a colour was the #1 friction in
+  // the editor flow. Now the picker stays put until the operator
+  // explicitly closes it (Done) or hits Escape (revert).
   useEffect(() => {
     if (!floatingPicker) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) handleClose();
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleRevert();
     };
-    document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [floatingPicker, handleClose, handleRevert]);
+  }, [floatingPicker, handleRevert]);
 
   // Mutual exclusion with the inline text toolbar's popovers — only
   // one floating colour editor at a time. We dispatch a custom
@@ -83,23 +82,27 @@ export function FloatingColorPicker() {
 
   if (!floatingPicker || typeof window === "undefined") return null;
 
-  const { y, color, token, sectionId } = floatingPicker;
+  const { x, y, color, token, sectionId } = floatingPicker;
 
-  // ── Right-anchored placement ─────────────────────────────────────
-  // Operator brief: when the inline text toolbar is also visible,
-  // its popovers open on the LEFT of the selection — so this picker
-  // gets the RIGHT lane, pinned to the viewport's right edge. Click
-  // X to scroll vertically based on where the click happened, but
-  // never crosses the centre line. Two editors can never overlap.
+  // ── Click-anchored placement ─────────────────────────────────────
+  // Position the picker right next to the click point, clamped to
+  // the viewport. Previous behaviour pinned the picker to the right
+  // edge, which left it off-screen on smaller viewports — operator
+  // had to zoom out just to see and use the editor. Now it appears
+  // exactly where the operator clicked, every time.
   const pickerW = 232;
   const pickerH = 420;
   const margin = 12;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  const posX = vw - pickerW - margin;
-  let posY = y - pickerH / 2;
-  posY = Math.min(Math.max(posY, margin), vh - pickerH - margin);
+  // Prefer the right side of the click; flip left if it would
+  // overflow the viewport. Vertically clamp so the picker never
+  // sits below the bottom edge.
+  let posX = x + 16;
+  if (posX + pickerW + margin > vw) posX = Math.max(margin, x - pickerW - 16);
+  let posY = y;
+  if (posY + pickerH + margin > vh) posY = Math.max(margin, vh - pickerH - margin);
 
   // ── Live preview: apply immediately on change ──
   const handleChange = (newColor: string) => {

@@ -26,32 +26,28 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     type: "cover",
     label: "Cover",
     icon: "◻",
-    description: "Hero cover with image + text. Right-click an image to replace it.",
+    description: "Hero cover with image + text. Click an image to replace it.",
+    // PdfFit cover system — exactly the 7 spec layouts, nothing else.
+    // FULL_BLEED + 6 splits where S<percent><L|R> = text size + image side.
     variants: [
-      "hero-letter",
-      "split-50-50-right",
-      "split-50-50-left",
-      "split-60-40-right",
-      "split-60-40-left",
-      "split-40-60-right",
-      "split-40-60-left",
-      "editorial-magazine",
-      "cinematic-split",
-      "flip-split",
-      "centered-editorial",
-      "minimal-type",
-      "full-bleed-overlay",
+      "cover-full-bleed",
+      "cover-s64l",
+      "cover-s64r",
+      "cover-s55l",
+      "cover-s55r",
+      "cover-s46l",
+      "cover-s46r",
     ],
-    defaultVariant: "hero-letter",
-    defaultContent: { heroImageUrl: "", tagline: "", greetingBody: "" },
+    defaultVariant: "cover-s64l",
+    defaultContent: { heroImageUrl: "" },
   },
   personalNote: {
     type: "personalNote",
     label: "Personal Note",
     icon: "✍",
     description: "Branded letter from the consultant — greeting body, signature, photo, company logo and contact.",
-    variants: ["editorial-letter-image", "branded-letter", "minimal"],
-    defaultVariant: "editorial-letter-image",
+    variants: ["personal-note-webstyle-fixed"],
+    defaultVariant: "personal-note-webstyle-fixed",
     defaultContent: {
       body: "Thank you very much for your interest in doing a safari with us.\n\nPlease review the day-by-day itinerary and let me know your thoughts and feedback. I would be delighted to tailor the trip further to accommodate your personal preferences.",
       signOffLead: "Thanks again and I remain at your full disposal!",
@@ -72,8 +68,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Trip Summary",
     icon: "◈",
     description: "Quick-read stats: destinations, duration, pax, budget",
-    variants: ["default", "wide-grid"],
-    defaultVariant: "default",
+    variants: ["trip-summary-editorial"],
+    defaultVariant: "trip-summary-editorial",
     defaultContent: {},
   },
   itineraryTable: {
@@ -105,8 +101,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // it produced visual collisions on phones; legacy proposals that
     // still carry the variant string render through DayCard.tsx's
     // fallback and look the same as right-flip.
-    variants: ["right-flip", "left-flip", "trip-flip"],
-    defaultVariant: "trip-flip",
+    variants: ["day-card-standard"],
+    defaultVariant: "day-card-standard",
     defaultContent: {},
     dataSource: "days",
   },
@@ -115,8 +111,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Property Showcase",
     icon: "⌂",
     description: "Camp and lodge detail cards",
-    variants: ["editorial-carousel"],
-    defaultVariant: "editorial-carousel",
+    variants: ["property-card-standard"],
+    defaultVariant: "property-card-standard",
     defaultContent: {},
     dataSource: "properties",
   },
@@ -125,8 +121,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Pricing",
     icon: "$",
     description: "Investment overview with 3-tier pricing",
-    variants: ["editorial"],
-    defaultVariant: "editorial",
+    variants: ["pricing-standard"],
+    defaultVariant: "pricing-standard",
     defaultContent: {},
     dataSource: "pricing",
   },
@@ -145,8 +141,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     label: "Practical Information",
     icon: "ℹ",
     description: "Visas, health, packing, and travel tips",
-    variants: ["two-column-notes", "card-grid", "icon-list", "accordion-style"],
-    defaultVariant: "two-column-notes",
+    variants: ["practical-info-cards"],
+    defaultVariant: "practical-info-cards",
     defaultContent: {},
     dataSource: "practicalInfo",
   },
@@ -161,8 +157,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // trip meta + Secure CTA, like a paper dossier confirming the
     // booking. The three older variants (split-card / gallery-row /
     // stack) stay registered so legacy proposals keep their look.
-    variants: ["editorial-close", "safari-ready", "split-card", "gallery-row", "stack"],
-    defaultVariant: "safari-ready",
+    variants: ["closing-farewell"],
+    defaultVariant: "closing-farewell",
     defaultContent: {
       headline: "Your journey is ready",
       letter:
@@ -190,8 +186,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // Legacy proposals on "contact-cards" / "minimal" / "default" all
     // fall through to the unified layout in FooterSection (no migration
     // needed; the dispatcher there ignores the saved variant string).
-    variants: ["default"],
-    defaultVariant: "default",
+    variants: ["footer-contact-card"],
+    defaultVariant: "footer-contact-card",
     defaultContent: {},
   },
   customText: {
@@ -257,8 +253,8 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // reach). Existing proposals that still carry the legacy variant
     // names render through the same component since MapSection
     // unconditionally delegates to InteractiveMap.
-    variants: ["interactive"],
-    defaultVariant: "interactive",
+    variants: ["trip-summary-editorial"],
+    defaultVariant: "trip-summary-editorial",
     defaultContent: { caption: "", coords: [] },
   },
 };

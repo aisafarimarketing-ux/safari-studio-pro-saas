@@ -318,17 +318,6 @@ function renderSection(section: Section, proposalId: string, allSections: Sectio
 // content within the A4 frame. If content exceeds caps we truncate
 // (per the operator's spec rules); we never spill into a second page.
 
-// Rotation order for day-card layouts when the operator hasn't set
-// one explicitly. Drives the "never the same layout twice in a row"
-// rhythm rule in the design brief — Day 1 narrative, Day 2 image-led,
-// Day 3 balanced (standard), Day 4 narrative, … so consecutive days
-// always feel different. The operator's per-day override always wins.
-const DAY_VARIANT_ROTATION = [
-  "day-card-narrative",
-  "day-card-image-led",
-  "day-card-standard",
-] as const;
-
 function PdfFitDayJourneyPages({ section }: { section: Section }) {
   const proposal = useProposalStore((s) => s.proposal);
   const days = proposal.days;
@@ -343,38 +332,17 @@ function PdfFitDayJourneyPages({ section }: { section: Section }) {
   }
   return (
     <>
-      {days.map((day, idx) => {
-        // Pick a rotated default unless the day already has its own
-        // layoutVariant set; PdfFitDayPage honours `day.layoutVariant`
-        // first, so we synthesise one when absent.
-        const synthetic = day.layoutVariant
-          ? day
-          : {
-              ...day,
-              layoutVariant: DAY_VARIANT_ROTATION[idx % DAY_VARIANT_ROTATION.length],
-            };
-        return (
-          <PdfFitDayPage
-            key={day.id}
-            section={section}
-            day={synthetic}
-            totalDays={days.length}
-          />
-        );
-      })}
+      {days.map((day) => (
+        <PdfFitDayPage
+          key={day.id}
+          section={section}
+          day={day}
+          totalDays={days.length}
+        />
+      ))}
     </>
   );
 }
-
-// Rotation order for property layouts when none is operator-set.
-// Drives the "never the same layout twice in a row" rhythm rule —
-// gallery → editorial → feature → gallery → … so a 6-property
-// showcase reads as a magazine, not a catalogue.
-const PROPERTY_VARIANT_ROTATION = [
-  "property-card-standard",  // gallery (hero + thumbs)
-  "property-card-editorial", // text-left, photo-right
-  "property-card-feature",   // dominant photograph + caption
-] as const;
 
 function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
   const proposal = useProposalStore((s) => s.proposal);
@@ -390,24 +358,15 @@ function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
   }
   return (
     <>
-      {properties.map((property, idx) => {
-        const synthetic = property.layoutVariant
-          ? property
-          : {
-              ...property,
-              layoutVariant:
-                PROPERTY_VARIANT_ROTATION[idx % PROPERTY_VARIANT_ROTATION.length],
-            };
-        return (
-          <PdfFitPropertyPage
-            key={property.id}
-            section={section}
-            property={synthetic}
-            index={idx}
-            total={properties.length}
-          />
-        );
-      })}
+      {properties.map((property, idx) => (
+        <PdfFitPropertyPage
+          key={property.id}
+          section={section}
+          property={property}
+          index={idx}
+          total={properties.length}
+        />
+      ))}
     </>
   );
 }

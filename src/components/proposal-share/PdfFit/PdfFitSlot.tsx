@@ -154,7 +154,25 @@ function TextRender({
         ...tunedStyleProps,
       }}
     >
-      <span style={{ width: "100%", display: "block", whiteSpace: "pre-line" }}>{displayed}</span>
+      {/* Single-line slots (height ≤ 8mm or scale_down behaviour) keep
+          their text on one line and let the slot's overflow:hidden +
+          text-overflow:ellipsis trim the tail. Multi-line slots honour
+          newlines via pre-line. This stops a long destinations string
+          from wrapping into a second line that gets clipped. */}
+      <span
+        style={{
+          width: "100%",
+          display: "block",
+          whiteSpace:
+            slot.h_mm <= 8 || slot.overflow_behavior === "scale_down"
+              ? "nowrap"
+              : "pre-line",
+          textOverflow: "ellipsis",
+          overflow: "hidden",
+        }}
+      >
+        {displayed}
+      </span>
     </div>
   );
 }
