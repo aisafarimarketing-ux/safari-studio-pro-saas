@@ -120,34 +120,6 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
         .join("  ·  ")
     : "";
 
-  // Trip-wide stats — same as the trip summary section. Each day
-  // card carries the strip as a bottom anchor so the document feels
-  // unified.
-  const allDays = [...(proposal.days ?? [])].sort(
-    (a, b) => a.dayNumber - b.dayNumber,
-  );
-  const stops = allDays
-    .map((d) => d.destination?.trim())
-    .filter((s): s is string => Boolean(s))
-    .filter((s, i, arr) => i === 0 || s !== arr[i - 1]);
-  const totalNights = allDays.length;
-  const stopCount = stops.length;
-  const lodgeCount = countUnique(
-    allDays
-      .map(
-        (d) =>
-          proposal.properties?.find(
-            (p) =>
-              p.name?.trim().toLowerCase() ===
-              d.tiers?.[activeTier]?.camp?.trim().toLowerCase(),
-          )?.name?.trim() ||
-          d.tiers?.[activeTier]?.camp?.trim() ||
-          "",
-      )
-      .filter(Boolean),
-  );
-  const parkCount = countParks(stops);
-
   const contents: Record<string, SlotContent> = {
     header_meta: { kind: "text", value: headerMeta },
     title: { kind: "text", value: title },
@@ -168,14 +140,6 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     lodge_location: { kind: "text", value: lodgeLocation },
     lodge_description: { kind: "text", value: lodgeDescription },
     lodge_features: { kind: "text", value: lodgeFeatures },
-    stats_nights_value: { kind: "text", value: String(totalNights) },
-    stats_nights_label: { kind: "text", value: "Nights" },
-    stats_stops_value: { kind: "text", value: String(stopCount) },
-    stats_stops_label: { kind: "text", value: "Stops" },
-    stats_lodges_value: { kind: "text", value: String(lodgeCount) },
-    stats_lodges_label: { kind: "text", value: "Lodges" },
-    stats_parks_value: { kind: "text", value: String(parkCount) },
-    stats_parks_label: { kind: "text", value: "Parks" },
   };
 
   return (
@@ -209,18 +173,3 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function countUnique(arr: string[]): number {
-  return new Set(arr.map((s) => s.trim().toLowerCase())).size;
-}
-
-function countParks(stops: string[]): number {
-  const parkKeywords = [
-    "serengeti", "ngorongoro", "tarangire", "lake manyara", "ruaha",
-    "selous", "nyerere", "mikumi", "katavi", "saadani", "arusha np",
-    "masai mara", "amboseli", "tsavo", "samburu", "lake nakuru",
-    "aberdare", "meru", "lake naivasha",
-  ];
-  return stops.filter((s) =>
-    parkKeywords.some((p) => s.toLowerCase().includes(p)),
-  ).length;
-}
