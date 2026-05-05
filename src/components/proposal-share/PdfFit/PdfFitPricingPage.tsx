@@ -72,6 +72,13 @@ export function PdfFitPricingPage({ section }: Props) {
     .slice(0, 12)
     .map((s) => `•  ${s}`)
     .join("\n");
+  // Empty-state copy — when the operator hasn't entered any
+  // inclusions / exclusions, the lists need a placeholder so the
+  // header label + the slot don't read as broken.
+  const includedDisplay =
+    includedList || "—";
+  const excludedDisplay =
+    excludedList || "—";
 
   // Structural defaults — these labels and policy stubs are part of
   // the layout's identity (same role as "Karibu —" on the personal
@@ -104,12 +111,11 @@ export function PdfFitPricingPage({ section }: Props) {
     row_2_calc: { kind: "text", value: row2Calc },
     row_2_total: { kind: "text", value: row2Total },
     grand_total: { kind: "text", value: grandTotal },
-    // Emphasized-total variant uses these slots; harmless when the
-    // active manifest doesn't declare them (PdfFitLayout just ignores
-    // entries with no matching slot).
     total_label: { kind: "text", value: "Total investment" },
-    included_list: { kind: "text", value: includedList },
-    excluded_list: { kind: "text", value: excludedList },
+    included_label: { kind: "text", value: "INCLUDED" },
+    included_list: { kind: "text", value: includedDisplay },
+    excluded_label: { kind: "text", value: "NOT INCLUDED" },
+    excluded_list: { kind: "text", value: excludedDisplay },
     payment_block: { kind: "text", value: paymentBlock },
     cancellation_block: { kind: "text", value: cancellationBlock },
     footer_blocks: { kind: "text", value: footerBlocks },
