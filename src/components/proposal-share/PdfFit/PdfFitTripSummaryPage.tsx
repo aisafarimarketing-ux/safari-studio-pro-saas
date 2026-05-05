@@ -50,6 +50,14 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     property: string;
     imageUrl: string | null;
   };
+  // Collapse consecutive days at the same destination so a 10-day
+  // safari with 5 unique stops shows 5 cards (not 10). Cap at 5 max
+  // — enough to read at a comfortable size; more would crush the
+  // image height. The flex column distributes whatever blocks we
+  // produce evenly across the full column height (3 stops → big
+  // cards, 5 stops → smaller cards), so the layout never collapses
+  // toward the top.
+  const MAX_DAY_BLOCKS = 5;
   const blocks: DayBlock[] = [];
   const seen = new Set<string>();
   for (const day of days) {
@@ -65,7 +73,7 @@ export function PdfFitTripSummaryPage({ section }: Props) {
       property: propertyName,
       imageUrl: day.heroImageUrl?.trim() || null,
     });
-    if (blocks.length >= 6) break;
+    if (blocks.length >= MAX_DAY_BLOCKS) break;
   }
 
   // ── Stats — computed from real trip data ───────────────────────────
@@ -297,17 +305,19 @@ function DayBlockRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "20mm 1fr",
+        gridTemplateColumns: "16mm 1fr",
         gap: "3mm",
-        flex: isFirst ? 1.4 : 1,
+        // All blocks share equal flex weight — image heights stay
+        // uniform across the timeline. Visual hierarchy for the first
+        // day comes from typography (larger number + location), not
+        // from a taller card.
+        flex: 1,
+        minWidth: 0,
         minHeight: 0,
         alignItems: "stretch",
       }}
     >
-      {/* Number column with continuous timeline line behind. The line
-          is drawn for every row except the very top of the first row
-          and the very bottom of the last row (handled via mask
-          gradients on those edges). */}
+      {/* Number column with continuous timeline line behind. */}
       <div
         style={{
           background: lineGradient,
@@ -316,8 +326,6 @@ function DayBlockRow({
           alignItems: "center",
           justifyContent: "center",
           position: "relative",
-          // For the first block, mask the line above the number so
-          // it doesn't bleed into the header area.
           maskImage: isFirst
             ? "linear-gradient(to bottom, transparent 0, transparent 6mm, black 6mm)"
             : isLast
@@ -330,13 +338,11 @@ function DayBlockRow({
               : undefined,
         }}
       >
-        {/* Station chip — opaque so it interrupts the line visually. */}
         <div
           style={{
             background: surfaceBg,
             padding: "1mm 0",
             display: "flex",
-            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -344,7 +350,7 @@ function DayBlockRow({
           <div
             style={{
               fontFamily: displayFont,
-              fontSize: isFirst ? "20pt" : "16pt",
+              fontSize: isFirst ? "18pt" : "14pt",
               fontWeight: 700,
               lineHeight: 1.0,
               color: headingColor,
@@ -354,18 +360,22 @@ function DayBlockRow({
           </div>
         </div>
       </div>
-      {/* Image + text content */}
+      {/* Image + text content. minWidth: 0 lets the column actually
+          shrink/expand to fill the available space (1fr) instead of
+          collapsing to its content's natural width. */}
       <div
         style={{
           display: "grid",
           gridTemplateRows: "1fr auto",
-          gap: "2mm",
+          gap: "1.5mm",
+          minWidth: 0,
           minHeight: 0,
         }}
       >
         <div
           style={{
-            background: block.imageUrl ? cardBg : "transparent",
+            width: "100%",
+            background: cardBg,
             backgroundImage: block.imageUrl ? `url(${block.imageUrl})` : undefined,
             backgroundSize: "cover",
             backgroundPosition: "center",
