@@ -73,15 +73,26 @@ export function PdfFitPricingPage({ section }: Props) {
     .map((s) => `•  ${s}`)
     .join("\n");
 
-  // All copy comes from operator's section content. Empty fields
-  // render empty — no invented payment / cancellation / footer
-  // boilerplate. Section title falls back to a structural label
-  // ("Pricing") only because the slot would otherwise be unlabelled.
-  const paymentBlock = strField(section.content?.paymentBlock) ?? "";
-  const cancellationBlock = strField(section.content?.cancellationBlock) ?? "";
-  const footerBlocks = strField(section.content?.footerBlocks) ?? "";
+  // Structural defaults — these labels and policy stubs are part of
+  // the layout's identity (same role as "Karibu —" on the personal
+  // note or "FOR / DATES" on the cover). The operator overrides any
+  // of them by typing into section.content.{paymentBlock,
+  // cancellationBlock, footerBlocks, title, intro}; empty backend
+  // → these defaults render so the printed page never reads as
+  // unfinished.
   const sectionTitle = strField(section.content?.title) ?? "Pricing";
-  const sectionIntro = strField(section.content?.intro) ?? "";
+  const sectionIntro =
+    strField(section.content?.intro) ??
+    "A clear breakdown of your safari investment.";
+  const paymentBlock =
+    strField(section.content?.paymentBlock) ??
+    "PAYMENT TERMS\nA deposit secures the booking. Balance due 60 days before arrival. Wire transfer or operator-issued card link accepted.";
+  const cancellationBlock =
+    strField(section.content?.cancellationBlock) ??
+    "CANCELLATION POLICY\nCancellation terms apply per the operator's standard policy. Travel insurance strongly recommended.";
+  const footerBlocks =
+    strField(section.content?.footerBlocks) ??
+    `Pricing in ${currency}. Quoted per-person rates assume double-occupancy unless otherwise noted; we can adjust based on your dates and lodge preferences.`;
 
   const contents: Record<string, SlotContent> = {
     section_title: { kind: "text", value: sectionTitle },
