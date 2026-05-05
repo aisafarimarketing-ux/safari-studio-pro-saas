@@ -113,18 +113,30 @@ export function PdfFitPricingPage({ section }: Props) {
     strField(section.content?.childPrice) ?? "";
   const childPrice = parsePrice(childPriceRaw);
   const ccy = (currency || "USD").toUpperCase();
+  // Empty pricing fields render "—" instead of blank cells so the
+  // breakdown card reads as a complete row rather than a half-built
+  // table. Operator sees the gap and fills the price; nothing
+  // synthesised — just structural placeholders.
   const adultsCalcLine = perPerson
     ? `${adults}× ${formatMoney(currency, perPerson)}`
-    : "";
+    : "—";
   const adultsSubtotalLine = perPerson
     ? formatMoney(currency, perPerson * adults)
     : "—";
-  const childCalcLine = childPrice
-    ? `${children}× ${formatMoney(currency, childPrice)}`
-    : "";
-  const childSubtotalLine = childPrice
-    ? formatMoney(currency, childPrice * children)
-    : "";
+  // Child row only shows when there's a child in the party (label
+  // empty hides the row visually since all three cells are blank).
+  const childCalcLine =
+    children > 0
+      ? childPrice
+        ? `${children}× ${formatMoney(currency, childPrice)}`
+        : "—"
+      : "";
+  const childSubtotalLine =
+    children > 0
+      ? childPrice
+        ? formatMoney(currency, childPrice * children)
+        : "—"
+      : "";
   const totalAmountValue = (() => {
     const a = perPerson ? perPerson * adults : 0;
     const c = childPrice ? childPrice * children : 0;
