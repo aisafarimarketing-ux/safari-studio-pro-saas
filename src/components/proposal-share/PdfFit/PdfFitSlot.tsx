@@ -69,7 +69,10 @@ type Props = {
 
 export function PdfFitSlot({ slot, content, theme, tokens, adjustment = {}, contents }: Props) {
   // Common position style — every slot type shares this. Position is
-  // never adjusted by variants (locked per spec).
+  // never adjusted by variants (locked per spec). Slot-level opacity
+  // wins over variant adjustment (operator's design choice).
+  const opacity =
+    slot.opacity !== undefined ? slot.opacity : adjustment.opacity;
   const position: React.CSSProperties = {
     position: "absolute",
     left: mm(slot.x_mm),
@@ -77,7 +80,7 @@ export function PdfFitSlot({ slot, content, theme, tokens, adjustment = {}, cont
     width: mm(slot.w_mm),
     height: mm(slot.h_mm),
     ...(slot.z_index !== undefined ? { zIndex: slot.z_index } : {}),
-    ...(adjustment.opacity !== undefined ? { opacity: adjustment.opacity } : {}),
+    ...(opacity !== undefined ? { opacity } : {}),
   };
 
   switch (slot.type) {
@@ -151,6 +154,22 @@ function TextRender({
       ? TYPOGRAPHY_STYLES[effectiveStyle].letterSpacing_em ?? 0
       : 0;
     tunedStyleProps.letterSpacing = `${base + adjustment.letterSpacingDelta}em`;
+  }
+  // Slot-level overrides for size / letter-spacing / weight / case.
+  // These all win over both the style spec and variant adjustments —
+  // the layout manifest gets the final word on a slot's typography
+  // when it specifies an exact value.
+  if (slot.size_pt !== undefined) {
+    tunedStyleProps.fontSize = `${slot.size_pt}pt`;
+  }
+  if (slot.letter_spacing_em !== undefined) {
+    tunedStyleProps.letterSpacing = `${slot.letter_spacing_em}em`;
+  }
+  if (slot.uppercase !== undefined) {
+    tunedStyleProps.textTransform = slot.uppercase ? "uppercase" : "none";
+  }
+  if (slot.font_weight !== undefined) {
+    tunedStyleProps.fontWeight = slot.font_weight;
   }
   // Color: variant override beats slot default.
   const colorRole = adjustment.colorOverride ?? slot.color_role;

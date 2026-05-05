@@ -51,6 +51,9 @@ type SlotBox = {
   w_mm: number;
   h_mm: number;
   z_index?: number;
+  /** Slot-level opacity (0..1). Useful for decorative ornaments like
+   *  the personal-note quote glyph or the vertical accent line. */
+  opacity?: number;
 };
 
 export type TextSlot = SlotBox & {
@@ -70,6 +73,16 @@ export type TextSlot = SlotBox & {
    *  title slots that need tighter leading (~1.1) than the global
    *  h1 token (1.2 from the magazine type scale). */
   line_height?: number;
+  /** Override the resolved style's font-size in pt. Lets a layout
+   *  spec hit an exact size (e.g. body 8.5pt) without inventing a
+   *  new token. */
+  size_pt?: number;
+  /** Override the resolved style's letter-spacing in em. */
+  letter_spacing_em?: number;
+  /** Force uppercase rendering on this slot (overrides style spec). */
+  uppercase?: boolean;
+  /** Override the resolved style's CSS font-weight. */
+  font_weight?: number;
 };
 
 export type ImageSlot = SlotBox & {
