@@ -276,101 +276,80 @@ export const COVER_HALF_LAYOUTS = [
   COVER_HALF_S46R,
 ];
 
-// ─── Personal note half (147mm tall) ──────────────────────────────────────
+// ─── Personal note — TWO variants per spec ────────────────────────────────
 //
-// Refined per the brief — top space reduced, body wider and capped to
-// ~6 lines, signature moved closer, footer rebuilt as a flat
-// text-only contact strip (no card / no shadow).
+// Layout config:
+//   Half height        147mm (locked)
+//   Footer strip       22mm (inside the half, locked at y:125-147)
+//   Left / right margin 18mm
+//   Top padding        16mm
+//   Bottom padding     10mm before footer
+//   Max text width     174mm
 //
-//   y:6    greeting (h3)
-//   y:18   body (h:48mm, ~6 lines at 12pt × 1.625 leading)
-//   y:70   signature image
-//   y:90   footer band (no fill)
-//     Left   advisor image (28mm) + name (caption) + role
-//     Centre Email label + value, WhatsApp label + value (text only)
-//     Right  small subtle company logo
+// Content order (locked, identical across variants):
+//   1. Title ("Karibu —")
+//   2. Body paragraph
+//   3. Closing lines (signOffLead / signOff)
+//   4. Signature image
+//   5. Name + role
+//   6. Footer strip — profile image · email · whatsapp · company logo
+//
+// Vertical accent line: 0.3mm wide hairline at x:18, runs from title
+// top to signature bottom. Both variants. Variant B additionally
+// renders a large decorative quotation mark and adds 1px separators
+// between footer items.
 
-export const PERSONAL_NOTE_HALF: LayoutManifest = {
-  id: "personal-note-half",
-  section: "personal_note",
-  page_count: 1,
-  description: "Personal note half — editorial letter with text-only footer",
-  slots: [
-    // Half background — sectionSurface so the operator's section bg
-    // picker repaints just this half.
-    {
-      type: "fill",
-      name: "note_panel_bg",
-      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 147,
-      fill: "sectionSurface",
-      z_index: 0,
-    },
-    // Greeting — h3, sits close to the top edge.
-    {
-      type: "text",
-      name: "note_greeting",
-      content_key: "greeting",
-      x_mm: 18, y_mm: 8, w_mm: 174, h_mm: 7,
-      style: "h3",
-      color_role: "headingText",
-      max_chars: 80,
-      overflow_behavior: "truncate",
-    },
-    // Body — wider (174mm) and ~6 lines visible. Body is 12pt × 1.625
-    // leading = ~7mm/line. 50mm = ~7 lines visible; truncate beyond.
-    {
-      type: "text",
-      name: "note_body",
-      content_key: "body",
-      x_mm: 18, y_mm: 20, w_mm: 174, h_mm: 50,
-      style: "body",
-      color_role: "bodyText",
-      max_chars: 560,
-      overflow_behavior: "truncate",
-    },
-    // Signature image — moved up close to the body.
-    {
-      type: "image",
-      name: "note_signature",
-      content_key: "signatureUrl",
-      x_mm: 18, y_mm: 73, w_mm: 50, h_mm: 12,
-      object_fit: "contain",
-      image_role: "signature",
-    },
-    // ─── Footer band (text-only, no surface fill) ────────────────────
-    // Left — advisor image with caption name underneath.
+const NOTE_LEFT = 18;        // left content edge (= accent line position)
+const NOTE_RIGHT = 192;      // right content edge (= page 210 - 18mm)
+const TEXT_X = 24;           // text starts 6mm right of accent line
+const TEXT_W = NOTE_RIGHT - TEXT_X; // 168mm
+const FOOTER_Y = 125;        // footer band start (22mm tall, ends at y:147)
+
+// Build one personal-note variant. Variant B layers an additional
+// quotation mark and footer separators on top of the same skeleton.
+function buildPersonalNoteVariant(
+  id: string,
+  isLuxury: boolean,
+): LayoutManifest {
+  // Spacing values per spec — Luxury adds breathing room.
+  const TITLE_TO_BODY = isLuxury ? 10 : 8;
+  const BODY_TO_CLOSING = isLuxury ? 10 : 8;
+  const CLOSING_TO_SIG = isLuxury ? 8 : 6;
+  const SIG_TO_NAME = 4;
+  const SIG_W = isLuxury ? 45 : 40;
+
+  // Vertical layout (y values).
+  const TITLE_Y = 16;
+  const TITLE_H = 8;
+  const BODY_Y = TITLE_Y + TITLE_H + TITLE_TO_BODY;
+  const BODY_H = 38;
+  const CLOSING_LEAD_Y = BODY_Y + BODY_H + BODY_TO_CLOSING;
+  const CLOSING_LEAD_H = 5;
+  const CLOSING_SIGN_Y = CLOSING_LEAD_Y + CLOSING_LEAD_H + 2;
+  const CLOSING_SIGN_H = 5;
+  const SIG_Y = CLOSING_SIGN_Y + CLOSING_SIGN_H + CLOSING_TO_SIG;
+  const SIG_H = 12;
+  const NAME_Y = SIG_Y + SIG_H + SIG_TO_NAME;
+  const NAME_H = 5;
+  const ROLE_Y = NAME_Y + NAME_H + 1;
+  const ROLE_H = 4;
+  const ACCENT_BOTTOM = SIG_Y + SIG_H; // accent line ends at signature bottom
+
+  const footerSlots: Slot[] = [
+    // Left — profile image (18mm square) + (no caption per spec; name
+    // is in the body block above).
     {
       type: "image",
       name: "note_advisor_image",
       content_key: "advisorImageUrl",
-      x_mm: 18, y_mm: 96, w_mm: 28, h_mm: 28,
+      x_mm: NOTE_LEFT, y_mm: FOOTER_Y + 2, w_mm: 18, h_mm: 18,
       object_fit: "cover",
     },
-    {
-      type: "text",
-      name: "note_advisor_name",
-      content_key: "advisorName",
-      x_mm: 18, y_mm: 127, w_mm: 56, h_mm: 5,
-      style: "caption",
-      color_role: "headingText",
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "text",
-      name: "note_advisor_role",
-      content_key: "advisorRole",
-      x_mm: 18, y_mm: 133, w_mm: 56, h_mm: 4,
-      style: "eyebrow",
-      color_role: "mutedText",
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-    // Centre — email + whatsapp text blocks (no buttons, no chips).
+    // Middle — Email + WhatsApp stacked, label above value.
     {
       type: "text",
       name: "note_email_label",
-      x_mm: 80, y_mm: 96, w_mm: 64, h_mm: 4,
+      x_mm: 60, y_mm: FOOTER_Y + 3, w_mm: 60, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       max_chars: 12,
@@ -379,7 +358,7 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       type: "text",
       name: "note_email_value",
       content_key: "emailValue",
-      x_mm: 80, y_mm: 102, w_mm: 64, h_mm: 6,
+      x_mm: 60, y_mm: FOOTER_Y + 8, w_mm: 60, h_mm: 5,
       style: "caption",
       color_role: "bodyText",
       max_chars: 60,
@@ -388,7 +367,7 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_whatsapp_label",
-      x_mm: 80, y_mm: 114, w_mm: 64, h_mm: 4,
+      x_mm: 60, y_mm: FOOTER_Y + 13, w_mm: 60, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       max_chars: 12,
@@ -397,26 +376,190 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       type: "text",
       name: "note_whatsapp_value",
       content_key: "whatsappValue",
-      x_mm: 80, y_mm: 120, w_mm: 64, h_mm: 6,
+      x_mm: 60, y_mm: FOOTER_Y + 18, w_mm: 60, h_mm: 4,
       style: "caption",
       color_role: "bodyText",
       max_chars: 40,
       overflow_behavior: "scale_down",
     },
-    // Right — small subtle company logo.
+    // Right — company logo (max 22mm tall).
     {
       type: "image",
       name: "note_company_logo",
       content_key: "operatorLogoUrl",
-      x_mm: 162, y_mm: 100, w_mm: 32, h_mm: 12,
+      x_mm: 162, y_mm: FOOTER_Y + 4, w_mm: 30, h_mm: 14,
       object_fit: "contain",
       image_role: "logo",
     },
-  ],
-  rules: [
-    "Greeting top edge at 8mm — minimal whitespace above",
-    "Body 174mm wide, capped at ~6 visible lines (truncate beyond 560 chars)",
-    "Signature sits 73mm — close to body bottom",
-    "Footer band is flat text only (no fills, no cards, no shadows)",
-  ],
-};
+  ];
+
+  // Variant B adds 1px separators between footer items (between left
+  // image and middle stack, and between middle and right logo).
+  const footerSeparators: Slot[] = isLuxury
+    ? [
+        {
+          type: "line",
+          name: "footer_sep_left",
+          x_mm: 50, y_mm: FOOTER_Y + 4, w_mm: 0.2, h_mm: 14,
+          color_role: "border",
+        },
+        {
+          type: "line",
+          name: "footer_sep_right",
+          x_mm: 152, y_mm: FOOTER_Y + 4, w_mm: 0.2, h_mm: 14,
+          color_role: "border",
+        },
+      ]
+    : [];
+
+  // Variant B also adds a large decorative quotation mark above the
+  // title, low opacity (the quote glyph itself is the content; we
+  // pin it via slot content in the consumer so the variant manifest
+  // stays content-free).
+  const quoteSlot: Slot[] = isLuxury
+    ? [
+        {
+          type: "text",
+          name: "note_quote_mark",
+          x_mm: TEXT_X, y_mm: 6, w_mm: 18, h_mm: 14,
+          style: "h1",
+          color_role: "mutedText",
+          alignment: "left",
+          max_chars: 4,
+        },
+      ]
+    : [];
+
+  return {
+    id,
+    section: "personal_note",
+    page_count: 1,
+    description: isLuxury
+      ? "Variant B — Editorial Luxury (decorative quote, more whitespace, footer separators)"
+      : "Variant A — Refined Minimal (clean accent line, tight rhythm)",
+    slots: [
+      // Half background — sectionSurface so the operator's section
+      // bg picker repaints just this half.
+      {
+        type: "fill",
+        name: "note_panel_bg",
+        x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 147,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      // Vertical accent line — title top → signature bottom.
+      {
+        type: "line",
+        name: "note_accent_line",
+        x_mm: NOTE_LEFT, y_mm: TITLE_Y,
+        w_mm: 0.3, h_mm: ACCENT_BOTTOM - TITLE_Y,
+        color_role: "border",
+      },
+      ...quoteSlot,
+      // Title — Karibu —
+      {
+        type: "text",
+        name: "note_greeting",
+        content_key: "greeting",
+        x_mm: TEXT_X, y_mm: TITLE_Y, w_mm: TEXT_W, h_mm: TITLE_H,
+        style: "h3",
+        color_role: "headingText",
+        max_chars: 80,
+        overflow_behavior: "truncate",
+        line_height: 1.2,
+      },
+      // Body paragraph.
+      {
+        type: "text",
+        name: "note_body",
+        content_key: "body",
+        x_mm: TEXT_X, y_mm: BODY_Y, w_mm: TEXT_W, h_mm: BODY_H,
+        style: "body",
+        color_role: "bodyText",
+        max_chars: 560,
+        overflow_behavior: "truncate",
+      },
+      // Closing line 1 — "Thanks again..."
+      {
+        type: "text",
+        name: "note_closing_lead",
+        content_key: "signOffLead",
+        x_mm: TEXT_X, y_mm: CLOSING_LEAD_Y, w_mm: TEXT_W, h_mm: CLOSING_LEAD_H,
+        style: "body",
+        color_role: "bodyText",
+        max_chars: 120,
+        overflow_behavior: "truncate",
+      },
+      // Closing line 2 — "Best regards,"
+      {
+        type: "text",
+        name: "note_closing_sign",
+        content_key: "signOff",
+        x_mm: TEXT_X, y_mm: CLOSING_SIGN_Y, w_mm: TEXT_W, h_mm: CLOSING_SIGN_H,
+        style: "body",
+        color_role: "bodyText",
+        max_chars: 60,
+        overflow_behavior: "truncate",
+      },
+      // Signature image — no background box.
+      {
+        type: "image",
+        name: "note_signature",
+        content_key: "signatureUrl",
+        x_mm: TEXT_X, y_mm: SIG_Y, w_mm: SIG_W, h_mm: SIG_H,
+        object_fit: "contain",
+        image_role: "signature",
+      },
+      // Name (semi-bold body) + Role (caption tracked).
+      {
+        type: "text",
+        name: "note_advisor_name",
+        content_key: "advisorName",
+        x_mm: TEXT_X, y_mm: NAME_Y, w_mm: 110, h_mm: NAME_H,
+        style: "body",
+        color_role: "headingText",
+        max_chars: 50,
+        overflow_behavior: "truncate",
+      },
+      {
+        type: "text",
+        name: "note_advisor_role",
+        content_key: "advisorRole",
+        x_mm: TEXT_X, y_mm: ROLE_Y, w_mm: 110, h_mm: ROLE_H,
+        style: "eyebrow",
+        color_role: "mutedText",
+        max_chars: 60,
+        overflow_behavior: "truncate",
+      },
+      // Footer slots last so they sit above the bg fill.
+      ...footerSlots,
+      ...footerSeparators,
+    ],
+    rules: [
+      "Half height locked at 147mm; footer locked at y:125–147",
+      "Vertical accent line runs title top → signature bottom",
+      "Content order: title → body → closing → signature → name+role → footer",
+      isLuxury
+        ? "Variant B — large decorative quote mark, +2mm spacing rhythm, footer separators"
+        : "Variant A — clean accent line, tight rhythm",
+    ],
+  };
+}
+
+// Two variants per spec — exactly two, no more.
+export const PERSONAL_NOTE_VARIANT_A = buildPersonalNoteVariant(
+  "personal-note-variant-a",
+  false,
+);
+export const PERSONAL_NOTE_VARIANT_B = buildPersonalNoteVariant(
+  "personal-note-variant-b",
+  true,
+);
+
+// Backwards-compat alias used by the consumer when it needs a default.
+export const PERSONAL_NOTE_HALF = PERSONAL_NOTE_VARIANT_A;
+
+export const PERSONAL_NOTE_LAYOUTS = [
+  PERSONAL_NOTE_VARIANT_A,
+  PERSONAL_NOTE_VARIANT_B,
+];

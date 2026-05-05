@@ -8,7 +8,8 @@ import type { Section } from "@/lib/types";
 import {
   COVER_HALF_LAYOUTS,
   COVER_HALF_S64L,
-  PERSONAL_NOTE_HALF,
+  PERSONAL_NOTE_LAYOUTS,
+  PERSONAL_NOTE_VARIANT_A,
 } from "@/lib/pdfFit/manifests/cover_combined";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
@@ -233,12 +234,16 @@ function NoteHalfContents({
   const { proposal } = useProposalStore();
   const tokens = resolveTokens(proposal.theme.tokens, section.styleOverrides);
 
-  // Greeting + body come from backend fields verbatim — no fallback
-  // text. Empty fields render as empty slots.
+  // Pick variant A or B based on the operator's section.layoutVariant.
+  const manifest =
+    PERSONAL_NOTE_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
+    PERSONAL_NOTE_VARIANT_A;
+
+  // All copy comes from backend fields. Empty fields → empty slots.
   const greeting = strField(section.content?.opener) ?? "";
   const body = stripHtml(strField(section.content?.body) ?? "");
-  const signOff = strField(section.content?.signOff);
-  const fullBody = [body, signOff].filter(Boolean).join("\n\n");
+  const signOffLead = strField(section.content?.signOffLead) ?? "";
+  const signOff = strField(section.content?.signOff) ?? "";
 
   const operator = proposal.operator;
   const advisorName = operator?.consultantName?.trim() || "";
@@ -252,7 +257,9 @@ function NoteHalfContents({
 
   const contents: Record<string, SlotContent> = {
     note_greeting: { kind: "text", value: greeting },
-    note_body: { kind: "text", value: fullBody },
+    note_body: { kind: "text", value: body },
+    note_closing_lead: { kind: "text", value: signOffLead },
+    note_closing_sign: { kind: "text", value: signOff },
     note_signature: { kind: "image", url: signatureUrl, alt: "Signature" },
     note_advisor_name: { kind: "text", value: advisorName },
     note_advisor_role: { kind: "text", value: advisorRole },
@@ -262,11 +269,15 @@ function NoteHalfContents({
     note_whatsapp_label: { kind: "text", value: "WHATSAPP" },
     note_whatsapp_value: { kind: "text", value: whatsappValue },
     note_company_logo: { kind: "image", url: operatorLogoUrl, alt: "" },
+    // Variant B-only — large decorative quotation glyph at top-left.
+    // Hardcoded glyph (not invented copy — it's a typographic ornament,
+    // not narrative text).
+    note_quote_mark: { kind: "text", value: "“" },
   };
 
   return (
     <PdfFitLayout
-      manifest={PERSONAL_NOTE_HALF}
+      manifest={manifest}
       contents={contents}
       theme={proposal.theme}
       tokens={tokens}
