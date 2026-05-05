@@ -239,13 +239,19 @@ function NoteHalfContents({
     PERSONAL_NOTE_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
     PERSONAL_NOTE_VARIANT_A;
 
-  // All copy comes from backend fields. Empty fields → empty slots.
-  const greeting = strField(section.content?.opener) ?? "";
+  // Personal note layout has two structural labels per spec — the
+  // greeting "Karibu —" and the closing valediction
+  // ("Thanks again…" / "Best regards,"). These behave like the FOR /
+  // DATES / DURATION / PARTY meta labels on the cover: the layout
+  // expects them by design, the operator can override either by
+  // typing into section.content.opener / .signOffLead / .signOff.
+  // Body content is operator-only — empty body → empty body slot.
+  const greeting = strField(section.content?.opener) ?? "Karibu —";
   const body = stripHtml(strField(section.content?.body) ?? "");
-  const signOffLead = strField(section.content?.signOffLead) ?? "";
-  const signOff = strField(section.content?.signOff) ?? "";
-  // Closing renders the two operator lines as one stanza so they
-  // read together without a wasted gap.
+  const signOffLead =
+    strField(section.content?.signOffLead) ??
+    "Thanks again and I remain at your full disposal!";
+  const signOff = strField(section.content?.signOff) ?? "Best regards,";
   const closing = [signOffLead, signOff].filter(Boolean).join("\n");
 
   const operator = proposal.operator;

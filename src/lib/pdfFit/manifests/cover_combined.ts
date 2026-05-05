@@ -321,12 +321,14 @@ function buildPersonalNoteVariant(
   const SIG_TO_NAME = 4;
   const SIG_W = isLuxury ? 45 : 40;
 
-  // Vertical rhythm — body height shrinks on Luxury so the bigger
-  // gaps + bigger signature still land above the footer at y:125.
+  // Vertical rhythm — body sized for ~5 lines (35mm A / 32mm B at
+  // body × 1.625 leading ≈ 7mm/line). Luxury trades a touch of body
+  // height for the larger spacing rhythm + bigger signature so the
+  // role line still lands above the footer at y:125.
   const TITLE_Y = 16;
   const TITLE_H = 8;
-  const BODY_H = isLuxury ? 25 : 32;
-  const CLOSING_H = 11; // single block, two lines at body × 1.4 leading
+  const BODY_H = isLuxury ? 30 : 35;
+  const CLOSING_H = 11; // single block, two lines at body × 1.35 leading
   const SIG_H = isLuxury ? 12 : 10;
   const NAME_H = 5;
   const ROLE_H = 4;
