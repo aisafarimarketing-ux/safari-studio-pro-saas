@@ -193,4 +193,213 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
   ],
 };
 
-export const DAY_CARD_LAYOUTS = [DAY_CARD_STANDARD];
+// ─── Magazine clones — flip variants ─────────────────────────────────────
+//
+// Same structure as STANDARD except the hero image swaps sides with
+// the body text instead of sitting full-width on top. Matches the
+// magazine FlipCard layouts. Variant ids match the magazine ones so
+// picking right-flip / left-flip in the chrome dropdown resolves to
+// the right PdfFit manifest.
+
+function buildFlipManifest(
+  id: string,
+  imageOnRight: boolean,
+): LayoutManifest {
+  // Each side gets ~half the content band (174mm content / 2 - small
+  // gap). Image is 84mm wide × 130mm tall — substantial visual
+  // anchor. Text fills the other 84mm wide × 130mm tall column.
+  const IMAGE_W = 84;
+  const TEXT_W = 84;
+  const SIDE_GAP = 6;
+
+  const imageX = imageOnRight ? 18 + TEXT_W + SIDE_GAP : 18;
+  const textX = imageOnRight ? 18 : 18 + IMAGE_W + SIDE_GAP;
+
+  return {
+    id,
+    section: "day_card",
+    page_count: 1,
+    description: imageOnRight
+      ? "Day card — text left, hero image right (right-flip)"
+      : "Day card — image left, text right (left-flip)",
+    slots: [
+      {
+        type: "fill",
+        name: "section_bg",
+        x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 297,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+
+      // Header band (top, full width).
+      {
+        type: "text",
+        name: "header_meta",
+        content_key: "headerMeta",
+        x_mm: 18, y_mm: 14, w_mm: 174, h_mm: 5,
+        style: "eyebrow",
+        color_role: "mutedText",
+        size_pt: 9,
+        letter_spacing_em: 0.18,
+        uppercase: true,
+        max_chars: 80,
+        overflow_behavior: "truncate",
+      },
+      {
+        type: "text",
+        name: "title",
+        content_key: "title",
+        x_mm: 18, y_mm: 22, w_mm: 174, h_mm: 22,
+        style: "h1",
+        color_role: "headingText",
+        size_pt: 30,
+        line_height: 1.05,
+        font_weight: 700,
+        letter_spacing_em: -0.01,
+        max_chars: 80,
+        overflow_behavior: "scale_down",
+      },
+      {
+        type: "fill",
+        name: "title_divider",
+        x_mm: 18, y_mm: 46, w_mm: 174, h_mm: 0.3,
+        fill: "border",
+        opacity: 0.5,
+      },
+
+      // Hero image — one half of the content band.
+      {
+        type: "image",
+        name: "main_image",
+        content_key: "destinationImageUrl",
+        x_mm: imageX, y_mm: 52, w_mm: IMAGE_W, h_mm: 130,
+        object_fit: "cover",
+        image_role: "hero",
+      },
+
+      // Intro line — sits inside the text column.
+      {
+        type: "text",
+        name: "intro_text",
+        content_key: "introText",
+        x_mm: textX, y_mm: 52, w_mm: TEXT_W, h_mm: 14,
+        style: "body",
+        color_role: "headingText",
+        size_pt: 13,
+        line_height: 1.3,
+        max_chars: 200,
+        overflow_behavior: "scale_down",
+      },
+      // Body narrative — fills the rest of the text column.
+      {
+        type: "text",
+        name: "body_text",
+        content_key: "narrative",
+        x_mm: textX, y_mm: 70, w_mm: TEXT_W, h_mm: 112,
+        style: "body",
+        color_role: "bodyText",
+        size_pt: 11,
+        line_height: 1.55,
+        max_chars: 1100,
+        overflow_behavior: "truncate",
+      },
+
+      // Accommodation block — full width below hero/text.
+      {
+        type: "image",
+        name: "lodge_image",
+        content_key: "lodgeImageUrl",
+        x_mm: 18, y_mm: 188, w_mm: 174, h_mm: 50,
+        object_fit: "cover",
+        image_role: "hero",
+      },
+      {
+        type: "text",
+        name: "lodge_eyebrow",
+        content_key: "lodgeEyebrow",
+        x_mm: 18, y_mm: 242, w_mm: 174, h_mm: 5,
+        style: "eyebrow",
+        color_role: "mutedText",
+        size_pt: 9,
+        letter_spacing_em: 0.18,
+        uppercase: true,
+        max_chars: 30,
+      },
+      {
+        type: "text",
+        name: "lodge_property_name",
+        content_key: "lodgePropertyName",
+        x_mm: 18, y_mm: 250, w_mm: 174, h_mm: 9,
+        style: "h3",
+        color_role: "headingText",
+        size_pt: 18,
+        line_height: 1.1,
+        font_weight: 700,
+        max_chars: 60,
+        overflow_behavior: "scale_down",
+      },
+      {
+        type: "text",
+        name: "lodge_location",
+        content_key: "lodgeLocation",
+        x_mm: 18, y_mm: 261, w_mm: 174, h_mm: 5,
+        style: "caption",
+        color_role: "mutedText",
+        size_pt: 10,
+        letter_spacing_em: 0.02,
+        max_chars: 80,
+        overflow_behavior: "truncate",
+      },
+      {
+        type: "text",
+        name: "lodge_description",
+        content_key: "lodgeDescription",
+        x_mm: 18, y_mm: 268, w_mm: 174, h_mm: 12,
+        style: "body",
+        color_role: "bodyText",
+        size_pt: 10.5,
+        line_height: 1.4,
+        max_chars: 320,
+        overflow_behavior: "truncate",
+      },
+      {
+        type: "text",
+        name: "lodge_features",
+        content_key: "lodgeFeatures",
+        x_mm: 18, y_mm: 282, w_mm: 174, h_mm: 5,
+        style: "caption",
+        color_role: "mutedText",
+        size_pt: 9,
+        letter_spacing_em: 0.04,
+        max_chars: 240,
+        overflow_behavior: "truncate",
+      },
+    ],
+    rules: [
+      "Header band y:14-46 — full content width",
+      `Hero image ${imageOnRight ? "RIGHT" : "LEFT"} — 84mm × 130mm`,
+      `Body text ${imageOnRight ? "LEFT" : "RIGHT"} — 84mm × 130mm`,
+      "Accommodation y:188-282 — full-width image + text stack",
+    ],
+  };
+}
+
+// Magazine variant ids — picked from the chrome dropdown.
+export const DAY_CARD_RIGHT_FLIP = buildFlipManifest("right-flip", true);
+export const DAY_CARD_LEFT_FLIP = buildFlipManifest("left-flip", false);
+// trip-flip resolves to right-flip by default — the consumer
+// detects "trip-flip" and alternates between left/right per
+// day index so the deck reads as a magazine spread.
+export const DAY_CARD_TRIP_FLIP: LayoutManifest = {
+  ...DAY_CARD_RIGHT_FLIP,
+  id: "trip-flip",
+  description:
+    "Day card — alternates right-flip / left-flip per day for magazine rhythm",
+};
+
+export const DAY_CARD_LAYOUTS = [
+  DAY_CARD_STANDARD,
+  DAY_CARD_RIGHT_FLIP,
+  DAY_CARD_LEFT_FLIP,
+  DAY_CARD_TRIP_FLIP,
+];

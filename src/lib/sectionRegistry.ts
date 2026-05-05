@@ -153,14 +153,18 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // still carry the variant string render through DayCard.tsx's
     // fallback and look the same as right-flip.
     variants: [
-      // Magazine layouts (legacy on-screen)
+      // Magazine layouts — also clone to PdfFit so picking one
+      // changes both renderers' output.
       "right-flip",
       "left-flip",
       "trip-flip",
-      // PdfFit layout (print)
+      // PdfFit-only standard (full-width hero on top).
       "day-card-standard",
     ],
     variantLabels: {
+      "right-flip": "FLIP-R",
+      "left-flip": "FLIP-L",
+      "trip-flip": "TRIP",
       "day-card-standard": "STANDARD",
     },
     defaultVariant: "trip-flip",

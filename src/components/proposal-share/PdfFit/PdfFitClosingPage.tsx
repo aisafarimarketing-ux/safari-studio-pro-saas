@@ -116,6 +116,12 @@ export function PdfFitClosingPage({ section }: Props) {
     .filter((u): u is string => Boolean(u))
     .filter((u, i, arr) => arr.indexOf(u) === i);
 
+  // Stops caption for the "stack" variant — destinations from the
+  // proposal joined with " · " for an editorial uppercase strip.
+  const stopsCaption = (proposal.trip?.destinations ?? [])
+    .filter((s) => Boolean(s?.trim()))
+    .join("  ·  ");
+
   const contents: Record<string, SlotContent> = {
     hero_image: { kind: "image", url: heroImageUrl, alt: headline },
     eyebrow: { kind: "text", value: eyebrow },
@@ -140,6 +146,8 @@ export function PdfFitClosingPage({ section }: Props) {
     tile_2: { kind: "image", url: dayImages[1] ?? null, alt: "" },
     tile_3: { kind: "image", url: dayImages[2] ?? null, alt: "" },
     tile_4: { kind: "image", url: dayImages[3] ?? null, alt: "" },
+    // stack variant — tracked stops caption
+    stops_caption: { kind: "text", value: stopsCaption },
   };
 
   return (

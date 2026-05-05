@@ -48,7 +48,13 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
   // variants across the deck; the rhythm engine also synthesises
   // one when none is set. Falls back to the section-level
   // layoutVariant, then to the standard balanced layout.
-  const dayLayoutVariantRaw = day.layoutVariant ?? section.layoutVariant;
+  let dayLayoutVariantRaw = day.layoutVariant ?? section.layoutVariant;
+  // Magazine convention — "trip-flip" alternates per day index so
+  // even days render as left-flip and odd days as right-flip. We
+  // resolve here so each day picks the appropriate manifest.
+  if (dayLayoutVariantRaw === "trip-flip") {
+    dayLayoutVariantRaw = day.dayNumber % 2 === 0 ? "left-flip" : "right-flip";
+  }
   const manifest =
     DAY_CARD_LAYOUTS.find((l) => l.id === dayLayoutVariantRaw) ?? DAY_CARD_STANDARD;
 
