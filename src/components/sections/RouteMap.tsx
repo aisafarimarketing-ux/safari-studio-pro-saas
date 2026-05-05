@@ -60,6 +60,7 @@ const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ss
 // DivIcon (see buildDayPill) so pill + caption render as one unit
 // with zero gap, regardless of zoom or pill direction.
 const Polyline = dynamic(() => import("react-leaflet").then((m) => m.Polyline), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((m) => m.Popup), { ssr: false });
 // Polygon — re-introduced to render translucent park outlines under
 // the markers. Only parks that actually appear in the itinerary are
 // drawn (parksInTrip filter), so the operator sees the TRUE relative
@@ -502,7 +503,17 @@ export function RouteMap({
   // (long flights). Both bow outward from the trip centroid; the kind
   // affects bow magnitude and stroke style only.
   const TRANSFER_THRESHOLD_KM = 250;
-  const legPaths = buildLegPaths(visibleGroups, TRANSFER_THRESHOLD_KM);
+  const legPathsRaw = buildLegPaths(visibleGroups, TRANSFER_THRESHOLD_KM);
+  // Apply a gentle sinusoidal wave to "transfer" (flight) legs so
+  // they read as a flowing journey rather than a mechanical line.
+  // Drives stay as their dotted bezier — waves on dotted lines look
+  // muddled. Amplitude tapers at the endpoints so the path lands
+  // exactly on each marker.
+  const legPaths = legPathsRaw.map((leg) =>
+    leg.kind === "transfer"
+      ? { ...leg, path: makeWavyPath(leg.path as [number, number][]) }
+      : leg,
+  );
 
   // Parks visited on this trip — only polygons whose match regex hits
   // a stop ON the visible (inland) marker set. Drawn as a soft green
@@ -678,15 +689,42 @@ export function RouteMap({
           // anchor from the pill, separating "Day 1" from "Arusha"
           // by the marker dot. Operator wanted them tightly together,
           // so they're now a single icon stack.
+          // Click popup — show the day's hero image + place name +
+          // day label. Looks up the matching day from the proposal's
+          // days list by startDay so the image stays in sync with
+          // any operator edits.
+          const dayMatch = days.find((d) => d.dayNumber === g.startDay);
+          const popupImage = dayMatch?.heroImageUrl?.trim() || null;
           return (
-            // Place name is baked into the icon HTML (see
-            // buildDayPill) — no separate Tooltip needed.
             <Marker
               key={`${g.lat}-${g.lng}-${g.startDay}`}
               position={[g.lat, g.lng]}
               icon={icon}
               zIndexOffset={isSelected ? 1000 : 0}
-            />
+            >
+              {!inset && (
+                <Popup className="ss-route-popup" closeButton={false}>
+                  <div className="ss-route-popup-card">
+                    {popupImage && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={popupImage}
+                        alt={g.placeName}
+                        className="ss-route-popup-img"
+                      />
+                    )}
+                    <div className="ss-route-popup-meta">
+                      <div className="ss-route-popup-day">
+                        Day {g.dayLabel}
+                      </div>
+                      <div className="ss-route-popup-name">
+                        {g.placeName}
+                      </div>
+                    </div>
+                  </div>
+                </Popup>
+              )}
+            </Marker>
           );
         })}
       </MapContainer>
@@ -701,6 +739,52 @@ export function RouteMap({
         /* Day pill — slightly bigger for visibility on the editorial
            route diagram. Charcoal background, white text, tiny stem
            pointing at the geo anchor. */
+        /* Click popup — luxury card with hero image + day + place
+           name. Replaces Leaflet's default popup chrome so the
+           floating card reads as editorial, not navigation UI. */
+        .ss-route-popup .leaflet-popup-content-wrapper {
+          background: #ffffff;
+          border-radius: 6px;
+          padding: 0;
+          box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+          overflow: hidden;
+        }
+        .ss-route-popup .leaflet-popup-content {
+          margin: 0;
+          width: 220px !important;
+        }
+        .ss-route-popup .leaflet-popup-tip {
+          background: #ffffff;
+        }
+        .ss-route-popup-card {
+          display: flex;
+          flex-direction: column;
+        }
+        .ss-route-popup-img {
+          width: 100%;
+          height: 110px;
+          object-fit: cover;
+          display: block;
+        }
+        .ss-route-popup-meta {
+          padding: 10px 14px 12px;
+        }
+        .ss-route-popup-day {
+          font-size: 10px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: rgba(0, 0, 0, 0.45);
+          font-weight: 600;
+          margin-bottom: 2px;
+        }
+        .ss-route-popup-name {
+          font-family: 'Playfair Display', Georgia, serif;
+          font-size: 16px;
+          font-weight: 600;
+          color: #1a1a1a;
+          letter-spacing: -0.005em;
+        }
+
         .ss-day-pill {
           display: inline-flex;
           align-items: center;
@@ -1139,6 +1223,43 @@ type LegPath = {
 // Spotlight helpers removed — the mask is gone; bright basemap fills
 // the frame. Bottom-crop in computeViewport + tight asymmetric leaflet
 // padding handle the "no empty outside region" goal.
+
+// Subdivide each polyline segment into a gentle sinusoidal curve so
+// long transfer legs feel like a flowing journey, not a mechanical
+// straight line. Amplitude is a small fraction of the segment's
+// length, tapered at endpoints (sin envelope) so the curve lands
+// exactly on each marker. 3 wave cycles per segment reads as
+// "swooping" without becoming busy.
+function makeWavyPath(path: [number, number][]): [number, number][] {
+  if (path.length < 2) return path;
+  const result: [number, number][] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0) continue;
+    const segments = Math.max(20, Math.floor(dist * 60));
+    // Perpendicular vector (90° rotation in 2D), normalized.
+    const perpX = -dy / dist;
+    const perpY = dx / dist;
+    // Wave amplitude scales with leg distance but capped so short
+    // legs still read as gentle curves rather than tight squiggles.
+    const amplitude = Math.min(dist * 0.05, 0.6);
+    for (let j = 0; j < segments; j++) {
+      const t = j / segments;
+      const taper = Math.sin(t * Math.PI); // 0 at endpoints, 1 at midpoint
+      const wave = Math.sin(t * Math.PI * 3) * amplitude * taper;
+      result.push([
+        a[0] + dx * t + perpX * wave,
+        a[1] + dy * t + perpY * wave,
+      ]);
+    }
+  }
+  result.push(path[path.length - 1]);
+  return result;
+}
 
 /**
  * For each adjacent pair of groups, classify by haversine distance:
