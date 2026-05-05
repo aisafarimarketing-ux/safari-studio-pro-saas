@@ -34,45 +34,59 @@ export type StyleSpec = {
   uppercase?: boolean;
 };
 
+// Pulled from src/app/globals.css :root tokens (the magazine layout's
+// canonical type scale). Conversions: 1rem = 16px = 12pt at 96 dpi
+// (px ÷ 1.333), so the print pt sizes here are exact analogues of
+// the on-screen rem sizes the working system uses.
+//
+//   Display 64/72/-0.02   → 48pt/54/1.125 leading  (cover hero)
+//   H1      40/48/-0.015  → 30pt/36/1.2  leading
+//   H2      28/36/-0.01   → 21pt/27/1.286 leading
+//   H3      20/28         → 15pt/21/1.4  leading
+//   BodyLg  18/28         → 13.5pt/21/1.556 leading
+//   Body    16/26         → 12pt/19.5/1.625 leading
+//   Small   14/22         → 10.5pt/16.5/1.571 leading
+//   Label   12/18/0.18    → 9pt/13.5/1.5 leading, uppercase, +0.18em
+
 export const TYPOGRAPHY_STYLES: Record<TypographyStyle, StyleSpec> = {
   h1: {
     fontRole: "display",
-    size_pt: 28,
-    leading: 1.1,
+    size_pt: 30,
+    leading: 1.2,
     weight: 700,
-    letterSpacing_em: -0.012,
+    letterSpacing_em: -0.015,
   },
   h2: {
     fontRole: "display",
-    size_pt: 18,
-    leading: 1.2,
+    size_pt: 21,
+    leading: 1.286,
     weight: 700,
-    letterSpacing_em: -0.005,
+    letterSpacing_em: -0.01,
   },
   h3: {
     fontRole: "display",
-    size_pt: 14,
-    leading: 1.3,
+    size_pt: 15,
+    leading: 1.4,
     weight: 600,
   },
   body: {
     fontRole: "body",
-    size_pt: 11,
-    leading: 1.55,
+    size_pt: 12,
+    leading: 1.625,
     weight: 400,
   },
   eyebrow: {
     fontRole: "body",
     size_pt: 9,
-    leading: 1.2,
+    leading: 1.5,
     weight: 600,
     letterSpacing_em: 0.18,
     uppercase: true,
   },
   caption: {
     fontRole: "body",
-    size_pt: 9,
-    leading: 1.4,
+    size_pt: 10.5,
+    leading: 1.571,
     weight: 400,
   },
   button_primary: {

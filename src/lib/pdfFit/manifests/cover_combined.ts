@@ -6,55 +6,47 @@ import type { LayoutManifest, Slot } from "../types";
 //   COVER         y 0 → 150mm    (height 150mm)
 //   PERSONAL NOTE y 150 → 297mm  (height 147mm)
 //
-// The cover half exposes the seven spec layouts. Each is a 150mm-tall
-// variant of the standalone cover layout and shares the identical text
-// content (logo / title / destinations / divider / meta 2×2 grid).
-//
-//   FULL_BLEED  image fills the whole half; text overlays a gradient
-//   S64L        text 64% LEFT, image 36% RIGHT
-//   S64R        text 64% RIGHT, image 36% LEFT
-//   S55L        text 55% LEFT, image 45% RIGHT
-//   S55R        text 55% RIGHT, image 45% LEFT
-//   S46L        text 46% LEFT, image 54% RIGHT
-//   S46R        text 46% RIGHT, image 54% LEFT
+// Typography matches the magazine layout's type scale exactly (see
+// lib/pdfFit/typography.ts). Title uses h1 (30pt / 1.2 leading,
+// -0.015em); destinations use the eyebrow style with 0.18em tracking.
+// Spacing rhythm tightened per the brief — meta values sit 7mm below
+// labels, meta rows are 14mm apart, gaps reduced ~15% from prior pass.
 
 const HALF_H = 150;
 const PAGE_W = 210;
 const PAD = 12;
 
-// Build the meta-grid + title slots given a text-panel geometry. The
-// vertical rhythm is different for split panels (clean cream surface)
-// versus full-bleed overlays (text floats over imagery, needs tighter
-// stack with breathing room and a shorter title height so the meta
-// row doesn't spill below 150mm).
+// Build the meta-grid + title slots for a text-panel geometry. Same
+// internal structure for all 7 cover layouts; only the (x, w) of the
+// panel changes between split layouts and the geometry of the meta
+// columns adjusts to the panel's inner width.
 function textPanelSlots(
   panel: { x: number; w: number },
   isOverlay: boolean,
 ): Slot[] {
   const innerX = panel.x + PAD;
   const innerW = Math.max(40, panel.w - PAD * 2);
-  // Vertical rhythm — split layouts use the upper half generously
-  // because the text panel has its own white surface; full-bleed
-  // overlays compress the stack into the lower half (gradient
-  // ensures legibility) and use a shorter title slot so the meta
-  // grid still fits within 150mm.
-  const titleH = isOverlay ? 22 : 36;
-  const titleY = isOverlay ? 78 : 38;
-  const destY = isOverlay ? titleY + titleH + 4 : 80;
+
+  // Title is dominant — h1 size, scale_down on overflow. 3-line cap
+  // at h1 (30pt × 1.2 leading = 36pt → ~12.7mm/line) → 38mm slot
+  // for splits; tighter for overlay so the meta still fits inside
+  // 150mm.
+  const titleH = isOverlay ? 28 : 38;
+  const titleY = isOverlay ? 70 : 32;
+  const destY = titleY + titleH + 4;
   const dividerY = destY + 8;
-  const metaTopY = dividerY + 5;
+  const metaTopY = dividerY + 6;
   const metaBottomY = metaTopY + 14;
 
-  const colW = (innerW - 4) / 2; // tiny gutter between meta cols
+  // Two-column meta grid — 4mm gutter so the labels don't crowd.
+  const colW = (innerW - 4) / 2;
   const col1X = innerX;
   const col2X = innerX + colW + 4;
 
-  // Colour roles: text panel uses "headingText"/"mutedText"; full-bleed
-  // overlay flips title + meta to white for legibility on imagery.
   const titleRole = isOverlay ? "white" : "headingText";
   const metaValueRole = isOverlay ? "white" : "headingText";
   const metaLabelRole = isOverlay ? "white" : "mutedText";
-  const accentRole = isOverlay ? "white" : "accent";
+  const accentRole = isOverlay ? "white" : "mutedText";
   const dividerRole = isOverlay ? "white" : "border";
 
   return [
@@ -62,7 +54,7 @@ function textPanelSlots(
       type: "image",
       name: "operator_logo",
       content_key: "operatorLogoUrl",
-      x_mm: innerX, y_mm: PAD, w_mm: 38, h_mm: 14,
+      x_mm: innerX, y_mm: 14, w_mm: 38, h_mm: 12,
       object_fit: "contain",
       image_role: "logo",
       z_index: 2,
@@ -72,7 +64,7 @@ function textPanelSlots(
       name: "trip_title",
       content_key: "tripTitle",
       x_mm: innerX, y_mm: titleY, w_mm: innerW, h_mm: titleH,
-      style: "h2",
+      style: "h1",
       color_role: titleRole,
       max_chars: 90,
       overflow_behavior: "scale_down",
@@ -82,7 +74,7 @@ function textPanelSlots(
       type: "text",
       name: "trip_destinations",
       content_key: "tripDestinations",
-      x_mm: innerX, y_mm: destY, w_mm: innerW, h_mm: 6,
+      x_mm: innerX, y_mm: destY, w_mm: innerW, h_mm: 5,
       style: "eyebrow",
       color_role: accentRole,
       max_chars: 120,
@@ -92,7 +84,7 @@ function textPanelSlots(
     {
       type: "line",
       name: "header_divider",
-      x_mm: innerX, y_mm: dividerY, w_mm: innerW, h_mm: 1,
+      x_mm: innerX, y_mm: dividerY, w_mm: innerW, h_mm: 0.4,
       color_role: dividerRole,
       z_index: 2,
     },
@@ -100,7 +92,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_for_label",
-      x_mm: col1X, y_mm: metaTopY, w_mm: colW, h_mm: 5,
+      x_mm: col1X, y_mm: metaTopY, w_mm: colW, h_mm: 4,
       style: "eyebrow",
       color_role: metaLabelRole,
       max_chars: 12,
@@ -109,7 +101,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_for_value",
-      x_mm: col1X, y_mm: metaTopY + 7, w_mm: colW, h_mm: 7,
+      x_mm: col1X, y_mm: metaTopY + 5, w_mm: colW, h_mm: 7,
       style: "body",
       color_role: metaValueRole,
       max_chars: 60,
@@ -119,7 +111,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_dates_label",
-      x_mm: col2X, y_mm: metaTopY, w_mm: colW, h_mm: 5,
+      x_mm: col2X, y_mm: metaTopY, w_mm: colW, h_mm: 4,
       style: "eyebrow",
       color_role: metaLabelRole,
       max_chars: 12,
@@ -128,7 +120,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_dates_value",
-      x_mm: col2X, y_mm: metaTopY + 7, w_mm: colW, h_mm: 7,
+      x_mm: col2X, y_mm: metaTopY + 5, w_mm: colW, h_mm: 7,
       style: "body",
       color_role: metaValueRole,
       max_chars: 60,
@@ -139,7 +131,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_duration_label",
-      x_mm: col1X, y_mm: metaBottomY, w_mm: colW, h_mm: 5,
+      x_mm: col1X, y_mm: metaBottomY, w_mm: colW, h_mm: 4,
       style: "eyebrow",
       color_role: metaLabelRole,
       max_chars: 12,
@@ -148,7 +140,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_duration_value",
-      x_mm: col1X, y_mm: metaBottomY + 7, w_mm: colW, h_mm: 7,
+      x_mm: col1X, y_mm: metaBottomY + 5, w_mm: colW, h_mm: 7,
       style: "body",
       color_role: metaValueRole,
       max_chars: 60,
@@ -158,7 +150,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_party_label",
-      x_mm: col2X, y_mm: metaBottomY, w_mm: colW, h_mm: 5,
+      x_mm: col2X, y_mm: metaBottomY, w_mm: colW, h_mm: 4,
       style: "eyebrow",
       color_role: metaLabelRole,
       max_chars: 12,
@@ -167,7 +159,7 @@ function textPanelSlots(
     {
       type: "text",
       name: "meta_party_value",
-      x_mm: col2X, y_mm: metaBottomY + 7, w_mm: colW, h_mm: 7,
+      x_mm: col2X, y_mm: metaBottomY + 5, w_mm: colW, h_mm: 7,
       style: "body",
       color_role: metaValueRole,
       max_chars: 60,
@@ -177,9 +169,6 @@ function textPanelSlots(
   ];
 }
 
-// Build a split half-cover layout. textPercent = how much horizontal
-// space the TEXT panel takes; textOnLeft picks which side gets the text.
-// Per spec: "S64L (64% text LEFT, 36% image RIGHT)" so L → text-on-left.
 function buildSplitHalf(
   id: string,
   textPercent: number,
@@ -196,7 +185,6 @@ function buildSplitHalf(
     page_count: 1,
     description: `Cover half — text ${textPercent}% on the ${textOnLeft ? "left" : "right"}, image ${100 - textPercent}% on the ${textOnLeft ? "right" : "left"}`,
     slots: [
-      // Image first (z:0).
       {
         type: "image",
         name: "hero_image",
@@ -206,8 +194,6 @@ function buildSplitHalf(
         image_role: "hero",
         z_index: 0,
       },
-      // Text panel surface — sectionSurface so the operator's section
-      // bg picker repaints just the text panel.
       {
         type: "fill",
         name: "text_panel_bg",
@@ -219,14 +205,13 @@ function buildSplitHalf(
     ],
     rules: [
       `Text panel locked to ${textPercent}% width on the ${textOnLeft ? "left" : "right"}`,
-      `Image panel locked to ${100 - textPercent}% width on the ${textOnLeft ? "right" : "left"}`,
-      "Cover half height fixed at 150mm",
+      "Title h1 / 30pt / max 3 lines, scale_down on overflow",
       "Destinations single line, no wrap",
+      "Meta grid 2x2, tightened label-to-value spacing",
     ],
   };
 }
 
-// Full-bleed half — image fills 0–150mm; text overlays a gradient.
 function buildFullBleedHalf(): LayoutManifest {
   return {
     id: "cover-full-bleed",
@@ -255,12 +240,9 @@ function buildFullBleedHalf(): LayoutManifest {
     rules: [
       "Image fills the cover half",
       "Text overlays a bottom gradient for legibility",
-      "Cover half height fixed at 150mm",
     ],
   };
 }
-
-// ─── Cover half layouts (the seven spec variants) ─────────────────────────
 
 export const COVER_HALF_FULL_BLEED = buildFullBleedHalf();
 export const COVER_HALF_S64L = buildSplitHalf("cover-s64l", 64, true);
@@ -281,13 +263,27 @@ export const COVER_HALF_LAYOUTS = [
 ];
 
 // ─── Personal note half (147mm tall) ──────────────────────────────────────
+//
+// Refined per the brief — top space reduced, body wider and capped to
+// ~6 lines, signature moved closer, footer rebuilt as a flat
+// text-only contact strip (no card / no shadow).
+//
+//   y:6    greeting (h3)
+//   y:18   body (h:48mm, ~6 lines at 12pt × 1.625 leading)
+//   y:70   signature image
+//   y:90   footer band (no fill)
+//     Left   advisor image (28mm) + name (caption) + role
+//     Centre Email label + value, WhatsApp label + value (text only)
+//     Right  small subtle company logo
 
 export const PERSONAL_NOTE_HALF: LayoutManifest = {
   id: "personal-note-half",
   section: "personal_note",
   page_count: 1,
-  description: "Combined-page personal note half (bottom 147mm)",
+  description: "Personal note half — editorial letter with text-only footer",
   slots: [
+    // Half background — sectionSurface so the operator's section bg
+    // picker repaints just this half.
     {
       type: "fill",
       name: "note_panel_bg",
@@ -295,71 +291,72 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
       fill: "sectionSurface",
       z_index: 0,
     },
+    // Greeting — h3, sits close to the top edge.
     {
       type: "text",
       name: "note_greeting",
       content_key: "greeting",
-      x_mm: 18, y_mm: 15, w_mm: 174, h_mm: 8,
+      x_mm: 18, y_mm: 8, w_mm: 174, h_mm: 7,
       style: "h3",
       color_role: "headingText",
       max_chars: 80,
       overflow_behavior: "truncate",
     },
+    // Body — wider (174mm) and ~6 lines visible. Body is 12pt × 1.625
+    // leading = ~7mm/line. 50mm = ~7 lines visible; truncate beyond.
     {
       type: "text",
       name: "note_body",
       content_key: "body",
-      x_mm: 18, y_mm: 30, w_mm: 174, h_mm: 60,
+      x_mm: 18, y_mm: 20, w_mm: 174, h_mm: 50,
       style: "body",
       color_role: "bodyText",
-      max_chars: 700,
+      max_chars: 560,
       overflow_behavior: "truncate",
     },
+    // Signature image — moved up close to the body.
     {
       type: "image",
       name: "note_signature",
       content_key: "signatureUrl",
-      x_mm: 18, y_mm: 95, w_mm: 50, h_mm: 12,
+      x_mm: 18, y_mm: 73, w_mm: 50, h_mm: 12,
       object_fit: "contain",
       image_role: "signature",
+    },
+    // ─── Footer band (text-only, no surface fill) ────────────────────
+    // Left — advisor image with caption name underneath.
+    {
+      type: "image",
+      name: "note_advisor_image",
+      content_key: "advisorImageUrl",
+      x_mm: 18, y_mm: 96, w_mm: 28, h_mm: 28,
+      object_fit: "cover",
     },
     {
       type: "text",
       name: "note_advisor_name",
       content_key: "advisorName",
-      x_mm: 18, y_mm: 110, w_mm: 110, h_mm: 6,
-      style: "body",
+      x_mm: 18, y_mm: 127, w_mm: 56, h_mm: 5,
+      style: "caption",
       color_role: "headingText",
-      max_chars: 50,
+      max_chars: 40,
       overflow_behavior: "truncate",
     },
     {
       type: "text",
       name: "note_advisor_role",
       content_key: "advisorRole",
-      x_mm: 18, y_mm: 117, w_mm: 110, h_mm: 5,
-      style: "caption",
+      x_mm: 18, y_mm: 133, w_mm: 56, h_mm: 4,
+      style: "eyebrow",
       color_role: "mutedText",
-      max_chars: 60,
+      max_chars: 40,
       overflow_behavior: "truncate",
     },
-    {
-      type: "fill",
-      name: "note_footer_bg",
-      x_mm: 0, y_mm: 125, w_mm: 210, h_mm: 22,
-      fill: "sectionBg",
-    },
-    {
-      type: "image",
-      name: "note_advisor_image",
-      content_key: "advisorImageUrl",
-      x_mm: 18, y_mm: 128, w_mm: 20, h_mm: 16,
-      object_fit: "cover",
-    },
+    // Centre — email + whatsapp text blocks (no buttons, no chips).
     {
       type: "text",
       name: "note_email_label",
-      x_mm: 48, y_mm: 129, w_mm: 50, h_mm: 5,
+      x_mm: 80, y_mm: 96, w_mm: 64, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       max_chars: 12,
@@ -367,7 +364,8 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_email_value",
-      x_mm: 48, y_mm: 135, w_mm: 50, h_mm: 9,
+      content_key: "emailValue",
+      x_mm: 80, y_mm: 102, w_mm: 64, h_mm: 6,
       style: "caption",
       color_role: "bodyText",
       max_chars: 60,
@@ -376,7 +374,7 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_whatsapp_label",
-      x_mm: 104, y_mm: 129, w_mm: 50, h_mm: 5,
+      x_mm: 80, y_mm: 114, w_mm: 64, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       max_chars: 12,
@@ -384,24 +382,27 @@ export const PERSONAL_NOTE_HALF: LayoutManifest = {
     {
       type: "text",
       name: "note_whatsapp_value",
-      x_mm: 104, y_mm: 135, w_mm: 50, h_mm: 9,
+      content_key: "whatsappValue",
+      x_mm: 80, y_mm: 120, w_mm: 64, h_mm: 6,
       style: "caption",
       color_role: "bodyText",
       max_chars: 40,
       overflow_behavior: "scale_down",
     },
+    // Right — small subtle company logo.
     {
       type: "image",
       name: "note_company_logo",
       content_key: "operatorLogoUrl",
-      x_mm: 162, y_mm: 130, w_mm: 30, h_mm: 12,
+      x_mm: 162, y_mm: 100, w_mm: 32, h_mm: 12,
       object_fit: "contain",
       image_role: "logo",
     },
   ],
   rules: [
-    "Personal note height is exactly 147mm",
-    "Body truncates after 700 chars (60mm slot height)",
-    "Footer band locked to y:125-147 within the half",
+    "Greeting top edge at 8mm — minimal whitespace above",
+    "Body 174mm wide, capped at ~6 visible lines (truncate beyond 560 chars)",
+    "Signature sits 73mm — close to body bottom",
+    "Footer band is flat text only (no fills, no cards, no shadows)",
   ],
 };

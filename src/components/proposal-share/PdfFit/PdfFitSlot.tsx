@@ -215,23 +215,16 @@ function ImageRender({
     Number.isFinite(content.scale)
       ? Math.min(Math.max(content.scale, 0.5), 3)
       : 1;
-  // Logo containment — every logo slot sits inside an auto-contrast
-  // backdrop chip so the operator's logo (fixed colours) stays visible
-  // regardless of the page background. Triggered by image_role==="logo"
-  // OR slot.name including "logo". Hero / thumb / signature images
-  // skip the chip and render edge-to-edge inside the slot.
+  // Logo treatment — minimal and editorial per spec. No chip, no
+  // shadow, no card. Logo sits transparent inside its slot; the
+  // operator picks a contrasting page surface (or swaps to a
+  // mono variant) when imagery requires it.
   const isLogo =
     slot.image_role === "logo" ||
     slot.name === "operator_logo" ||
-    slot.name === "logo_small";
+    slot.name === "logo_small" ||
+    slot.name === "note_company_logo";
   if (isLogo) {
-    // Pick the chip backdrop based on the slot's resolved surface.
-    // We use sectionSurface (white/cream) when the page surface is
-    // dark-ish; otherwise a transparent chip so light pages don't
-    // get a visible card behind the logo.
-    const surfaceLuminance = relativeLuminance(tokens.sectionSurface);
-    const chipBg =
-      surfaceLuminance < 0.55 ? "rgba(255,255,255,0.92)" : "transparent";
     return (
       <div
         style={{
@@ -240,9 +233,7 @@ function ImageRender({
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-start",
-          background: chipBg,
-          borderRadius: chipBg === "transparent" ? 0 : "2mm",
-          padding: chipBg === "transparent" ? 0 : "1.5mm 3mm",
+          background: "transparent",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -461,37 +452,3 @@ function VectorRender({
   return <div style={{ ...position, pointerEvents: "none" }}>{content.node}</div>;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-// Compute the relative luminance (0..1) of a CSS colour string. Used
-// by the logo-container auto-contrast logic to decide whether to paint
-// a white chip behind the logo or let it sit on the page directly.
-// Accepts hex (#rrggbb / #rgb) and rgb()/rgba() strings; returns 1 (treat
-// as light) for unknown formats so the logo defaults to "no chip".
-function relativeLuminance(colour: string | undefined | null): number {
-  if (!colour) return 1;
-  const rgb = parseColour(colour);
-  if (!rgb) return 1;
-  const [r, g, b] = rgb.map((v) => {
-    const sv = v / 255;
-    return sv <= 0.03928 ? sv / 12.92 : Math.pow((sv + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-function parseColour(c: string): [number, number, number] | null {
-  const trimmed = c.trim();
-  if (trimmed.startsWith("#")) {
-    let hex = trimmed.slice(1);
-    if (hex.length === 3) hex = hex.split("").map((ch) => ch + ch).join("");
-    if (hex.length !== 6) return null;
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    if ([r, g, b].some((n) => Number.isNaN(n))) return null;
-    return [r, g, b];
-  }
-  const m = trimmed.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (m) return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
-  return null;
-}
