@@ -567,15 +567,14 @@ export function RouteMap({
         <RefitOnResize map={mapRef} viewport={viewport} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          // Carto Voyager NO LABELS — soft cartographic basemap
-          // showing parks/terrain in natural green-tinted regions
-          // and water in proper blues, with ZERO text labels baked
-          // into the tiles. Operators want only the itinerary stops
-          // labelled (via our own pill + tooltip), not every town
-          // and park name on the basemap.
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png"
+          // Carto Light NO LABELS — minimalist gray basemap. We tint
+          // it to a cream paper tone via a CSS filter on the tile
+          // pane (see <style> below) so the map reads as an editorial
+          // hand-drawn diagram rather than a navigation UI.
+          url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
           subdomains={["a", "b", "c", "d"]}
           maxZoom={19}
+          className="ss-route-tile-pane"
         />
         {/* Park polygon overlays — only parks visited on THIS trip.
             Soft green wash, low-opacity outline. Drawn FIRST so leg
@@ -588,11 +587,14 @@ export function RouteMap({
             // Source: scripts/fetch-park-boundaries.mjs.
             positions={park.coords}
             pathOptions={{
-              color: "#2d5a40",
-              weight: 1,
-              opacity: 0.6,
-              fillColor: "#3a7a52",
-              fillOpacity: 0.22,
+              // Editorial olive — matches the cream-paper aesthetic.
+              // Outline slightly darker than fill; fill at 0.55 opacity
+              // so the park names underneath stay readable.
+              color: "#5a6b3f",
+              weight: 1.2,
+              opacity: 0.7,
+              fillColor: "#8a9968",
+              fillOpacity: 0.55,
               lineCap: "round",
               lineJoin: "round",
             }}
@@ -736,6 +738,19 @@ export function RouteMap({
           caption below. No leader arrows, no opaque cards, no
           competing UI chrome. */}
       <style jsx global>{`
+        /* Cream paper basemap — flattens and warms the gray tiles
+           into an editorial cream tone. Leaflet draws each tile as
+           an <img> inside .leaflet-tile-pane; we apply a filter
+           chain there so the basemap reads as a hand-drawn cream
+           sheet rather than a satellite view. */
+        .ss-route-tile-pane,
+        .leaflet-container .leaflet-tile-pane {
+          filter: sepia(0.18) saturate(0.55) brightness(1.08)
+                  contrast(0.92);
+        }
+        .leaflet-container {
+          background: #f4ece0 !important;
+        }
         /* Day pill — slightly bigger for visibility on the editorial
            route diagram. Charcoal background, white text, tiny stem
            pointing at the geo anchor. */
