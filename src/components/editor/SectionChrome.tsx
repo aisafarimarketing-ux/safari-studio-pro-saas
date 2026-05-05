@@ -125,6 +125,25 @@ export function SectionChrome({ section, children }: Props) {
         swatch: overrides?.accent ?? themeTokens.accent,
       },
     );
+  } else if (section.type === "cover") {
+    // Cover spec — section color is already exposed above; add text
+    // color (writes headingText, drives the trip title + meta values)
+    // and accent (drives the destinations line). These three pills
+    // together let the operator recolour every visible element on
+    // every cover layout (FULL_BLEED + 6 splits) without touching
+    // the global theme.
+    pickerSpecs.push(
+      {
+        token: "headingText",
+        title: "Text color — title and meta values",
+        swatch: overrides?.headingText ?? themeTokens.headingText,
+      },
+      {
+        token: "accent",
+        title: "Accent — destinations line",
+        swatch: overrides?.accent ?? themeTokens.accent,
+      },
+    );
   } else if (section.type === "personalNote") {
     // Personal Note carries multiple sub-surfaces beyond the section
     // bg: the side-image cell + consultant-photo tile (cardBg), and
