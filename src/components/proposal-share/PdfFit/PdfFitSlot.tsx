@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { useEditorStore } from "@/store/editorStore";
 import type {
   Slot,
@@ -154,6 +155,14 @@ function TextRender({
   // Color: variant override beats slot default.
   const colorRole = adjustment.colorOverride ?? slot.color_role;
   const color = colorRole ? resolveColor(colorRole, tokens) : tokens.bodyText;
+
+  // Single-line slots force nowrap so they truncate cleanly with
+  // an ellipsis. Multi-line slots wrap normally and use scale_down
+  // (when declared) to shrink the font when content overflows.
+  const singleLine = slot.h_mm <= 8;
+
+  const isScaleDown = slot.overflow_behavior === "scale_down";
+
   return (
     <div
       style={{
@@ -166,31 +175,78 @@ function TextRender({
         ...tunedStyleProps,
       }}
     >
-      {/* Single-line slots (height ≤ 8mm or scale_down behaviour) keep
-          their text on one line and let the slot's overflow:hidden +
-          text-overflow:ellipsis trim the tail. Multi-line slots honour
-          newlines via pre-line and use text-wrap:balance so the
-          browser distributes words evenly across lines (avoids
-          word-stacking on titles). */}
-      <span
-        style={{
-          width: "100%",
-          display: "block",
-          whiteSpace:
-            slot.h_mm <= 8 || slot.overflow_behavior === "scale_down"
-              ? "nowrap"
-              : "pre-line",
-          textOverflow: "ellipsis",
-          overflow: "hidden",
-          // Editorial line balance — modern browsers distribute words
-          // evenly across multi-line text so titles read as balanced
-          // pairs rather than orphan words on the last line.
-          textWrap: "balance",
-        }}
-      >
-        {displayed}
-      </span>
+      <ScalingText
+        text={displayed}
+        singleLine={singleLine}
+        isScaleDown={isScaleDown}
+        baseFontSize={tunedStyleProps.fontSize as string | undefined}
+      />
     </div>
+  );
+}
+
+// Render text inside a slot with optional font-size auto-fit. When
+// scale_down is declared on the slot, post-mount we measure the
+// rendered height vs the parent's clientHeight and shrink the font
+// size by 5% increments until it fits (or hits 60% of base). This
+// means a long title like "Jerop 5-Day Arusha Safari" stays in 3
+// lines on a narrow S46L panel by reducing point size, instead of
+// clipping the bottom line.
+function ScalingText({
+  text, singleLine, isScaleDown, baseFontSize,
+}: {
+  text: string;
+  singleLine: boolean;
+  isScaleDown: boolean;
+  baseFontSize: string | undefined;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  // Measure-and-adjust runs in a layout effect that writes the new
+  // font-size directly to the DOM (no setState — that's why we don't
+  // re-render in a feedback loop). Triggers on text changes, slot
+  // dimensions, and font changes; the parent's layout has already
+  // settled by the time we read scrollWidth / scrollHeight.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.fontSize = "";
+    if (singleLine || !isScaleDown) return;
+    const parent = el.parentElement;
+    if (!parent) return;
+    let scale = 1;
+    const minScale = 0.6;
+    const step = 0.05;
+    let guard = 12;
+    while (
+      (el.scrollHeight > parent.clientHeight + 1 ||
+        el.scrollWidth > parent.clientWidth + 1) &&
+      scale > minScale &&
+      guard > 0
+    ) {
+      scale -= step;
+      el.style.fontSize = `calc(${baseFontSize ?? "1em"} * ${scale.toFixed(2)})`;
+      guard -= 1;
+    }
+  }, [text, singleLine, isScaleDown, baseFontSize]);
+
+  return (
+    <span
+      ref={ref}
+      style={{
+        width: "100%",
+        display: "block",
+        whiteSpace: singleLine ? "nowrap" : "pre-line",
+        textOverflow: "ellipsis",
+        overflow: "hidden",
+        // Editorial line balance — modern browsers distribute words
+        // evenly across multi-line text so titles read as balanced
+        // pairs rather than orphan words on the last line.
+        textWrap: "balance",
+      }}
+    >
+      {text}
+    </span>
   );
 }
 
