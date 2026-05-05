@@ -68,23 +68,23 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       opacity: 0.5,
     },
 
-    // ─── 2. HERO IMAGE (y:42–142) ─────────────────────────────────────
-    // Primary visual anchor — 100mm tall, full content width.
+    // ─── 2. HERO IMAGE (y:42–122) ─────────────────────────────────────
+    // Primary visual anchor — full content width.
     {
       type: "image",
       name: "main_image",
       content_key: "destinationImageUrl",
-      x_mm: 18, y_mm: 42, w_mm: 174, h_mm: 100,
+      x_mm: 18, y_mm: 42, w_mm: 174, h_mm: 80,
       object_fit: "cover",
       image_role: "hero",
     },
 
-    // ─── 3. INTRO LINE (y:148–158) ────────────────────────────────────
+    // ─── 3. INTRO LINE (y:128–138) ────────────────────────────────────
     {
       type: "text",
       name: "intro_text",
       content_key: "introText",
-      x_mm: 18, y_mm: 148, w_mm: 174, h_mm: 10,
+      x_mm: 18, y_mm: 128, w_mm: 174, h_mm: 10,
       style: "body",
       color_role: "headingText",
       size_pt: 13,
@@ -93,97 +93,88 @@ export const DAY_CARD_STANDARD: LayoutManifest = {
       overflow_behavior: "scale_down",
     },
 
-    // ─── 4. BODY TEXT — 2-col editorial grid (y:162–222) ──────────────
-    // Single text slot rendered in 2 CSS columns with 8mm gap. Browser
-    // balances paragraphs across columns automatically.
+    // ─── 4. BODY TEXT — 2-col editorial grid (y:142–182) ──────────────
     {
       type: "text",
       name: "body_text",
       content_key: "narrative",
-      x_mm: 18, y_mm: 162, w_mm: 174, h_mm: 60,
+      x_mm: 18, y_mm: 142, w_mm: 174, h_mm: 40,
       style: "body",
       color_role: "bodyText",
       size_pt: 11,
       line_height: 1.55,
-      max_chars: 1100,
+      max_chars: 900,
       overflow_behavior: "truncate",
       column_count: 2,
       column_gap_mm: 10,
     },
 
-    // ─── 5. ACCOMMODATION BLOCK (y:230–262) ───────────────────────────
-    // Soft sectionBg fill behind the block — very subtle, no harsh
-    // background. Image right (64mm wide); text left.
-    {
-      type: "fill",
-      name: "lodge_bg",
-      x_mm: 18, y_mm: 230, w_mm: 174, h_mm: 32,
-      fill: "sectionBg",
-      opacity: 0.6,
-    },
-    // Right — property image (64mm wide, full block height).
+    // ─── 5. ACCOMMODATION BLOCK (y:188–262) ───────────────────────────
+    // Full-width property image dominant; text stack below. No card,
+    // no harsh background. All bound to the active-tier property's
+    // backend data — empty state handled by the consumer.
     {
       type: "image",
       name: "lodge_image",
       content_key: "lodgeImageUrl",
-      x_mm: 128, y_mm: 230, w_mm: 64, h_mm: 32,
+      x_mm: 18, y_mm: 188, w_mm: 174, h_mm: 42,
       object_fit: "cover",
-      image_role: "thumb",
+      image_role: "hero",
     },
-    // Left — text stack inside the block.
     {
       type: "text",
       name: "lodge_eyebrow",
       content_key: "lodgeEyebrow",
-      x_mm: 22, y_mm: 232, w_mm: 102, h_mm: 4,
+      x_mm: 18, y_mm: 232, w_mm: 174, h_mm: 4,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 8,
       letter_spacing_em: 0.18,
       uppercase: true,
-      max_chars: 24,
+      max_chars: 30,
     },
     {
       type: "text",
       name: "lodge_property_name",
       content_key: "lodgePropertyName",
-      x_mm: 22, y_mm: 238, w_mm: 102, h_mm: 7,
+      x_mm: 18, y_mm: 238, w_mm: 174, h_mm: 7,
       style: "h3",
       color_role: "headingText",
-      size_pt: 14,
+      size_pt: 16,
       line_height: 1.1,
       font_weight: 700,
-      max_chars: 50,
+      max_chars: 60,
       overflow_behavior: "scale_down",
     },
     {
       type: "text",
       name: "lodge_location",
       content_key: "lodgeLocation",
-      x_mm: 22, y_mm: 246, w_mm: 102, h_mm: 4,
+      x_mm: 18, y_mm: 246, w_mm: 174, h_mm: 4,
       style: "caption",
       color_role: "mutedText",
       size_pt: 9,
-      max_chars: 60,
+      letter_spacing_em: 0.02,
+      max_chars: 80,
       overflow_behavior: "truncate",
     },
     {
       type: "text",
       name: "lodge_description",
       content_key: "lodgeDescription",
-      x_mm: 22, y_mm: 250, w_mm: 102, h_mm: 8,
+      x_mm: 18, y_mm: 251, w_mm: 174, h_mm: 7,
       style: "body",
       color_role: "bodyText",
-      size_pt: 9,
-      line_height: 1.4,
-      max_chars: 180,
+      size_pt: 10,
+      line_height: 1.35,
+      max_chars: 240,
       overflow_behavior: "truncate",
     },
     {
       type: "text",
       name: "lodge_features",
       content_key: "lodgeFeatures",
-      x_mm: 22, y_mm: 258, w_mm: 102, h_mm: 4,
+      x_mm: 18, y_mm: 259, w_mm: 174, h_mm: 4,
       style: "caption",
       color_role: "mutedText",
       size_pt: 8,

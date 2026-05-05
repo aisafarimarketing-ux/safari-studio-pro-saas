@@ -76,31 +76,49 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
   // Strip HTML for narrative — PDF text slots render plain text only.
   const narrative = stripHtml(day.description ?? "").trim();
 
-  // Accommodation block — image + text resolved from the active tier.
+  // ─── Accommodation block — strict backend binding ───────────────
+  // All property data comes from the proposal's properties library
+  // resolved against the day's active-tier camp name. AI may rewrite
+  // descriptions but never invent property facts; missing fields
+  // render empty (operator sees the gap and adds / swaps a property
+  // via the editor chrome).
   const tier = day.tiers?.[activeTier];
   const property = proposal.properties?.find(
     (p) => p.name?.trim().toLowerCase() === tier?.camp?.trim().toLowerCase(),
   );
+  const hasProperty = Boolean(property || tier?.camp?.trim());
+
   const lodgeImageUrl =
     property?.leadImageUrl?.trim() ||
     property?.galleryUrls?.[0]?.trim() ||
     null;
 
-  const lodgeEyebrow = "WHERE YOU'LL STAY";
-  const lodgePropertyName = tier?.camp?.trim() || property?.name?.trim() || "";
-  const lodgeLocation = [
-    tier?.location?.trim() || property?.location?.trim() || "",
-    property?.mealPlan?.trim() || day.board?.trim() || "",
-  ].filter(Boolean).join("  ·  ");
-  const lodgeDescription =
-    property?.shortDesc?.trim() ||
-    stripHtml(property?.description ?? "").trim() ||
-    tier?.note?.trim() ||
-    "";
-  const lodgeFeatures = (property?.amenities ?? [])
-    .filter(Boolean)
-    .slice(0, 5)
-    .join("  ·  ");
+  // When NO property has been linked to this day, the eyebrow flips
+  // to a CTA so the operator (and the print itself) makes the gap
+  // obvious. The text-only "+ ADD PROPERTY" reads as a structural
+  // empty state, not a button — interactive add/swap controls live
+  // in the editor chrome.
+  const lodgeEyebrow = hasProperty ? "WHERE YOU'LL STAY" : "+ ADD PROPERTY";
+
+  const lodgePropertyName = property?.name?.trim() || tier?.camp?.trim() || "";
+  const lodgeLocation = hasProperty
+    ? [
+        property?.location?.trim() || tier?.location?.trim() || "",
+        property?.mealPlan?.trim() || day.board?.trim() || "",
+      ].filter(Boolean).join("  ·  ")
+    : "";
+  const lodgeDescription = hasProperty
+    ? property?.shortDesc?.trim() ||
+      stripHtml(property?.description ?? "").trim() ||
+      tier?.note?.trim() ||
+      ""
+    : "";
+  const lodgeFeatures = hasProperty
+    ? (property?.amenities ?? [])
+        .filter(Boolean)
+        .slice(0, 5)
+        .join("  ·  ")
+    : "";
 
   // Trip-wide stats — same as the trip summary section. Each day
   // card carries the strip as a bottom anchor so the document feels
