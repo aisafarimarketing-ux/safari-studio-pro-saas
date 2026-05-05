@@ -1,31 +1,34 @@
 import type { LayoutManifest, Slot } from "../types";
 
-// ─── Trip summary / "Itinerary at a glance" — three variants ─────────────
+// ─── Trip summary / "Itinerary at a glance" — 3 variants ────────────────
 //
-// Section locked at 149mm total for all variants:
-//   Top content (itinerary + map):   y:0   → 122  (122mm)
-//   Stats bar:                       y:122 → 142  (20mm)
-//   Summary line:                    y:142 → 149  (7mm)
+// Section fills the full A4 page (297mm). Locked vertical zones:
+//   TOP BLOCK   y:0   → 244  (82%)  — itinerary + map
+//   STATS BAR   y:244 → 280  (12%)  — 4 columns
+//   SUMMARY     y:280 → 297  (6%)   — centered line
 //
-// Variants:
-//   trip-summary-canvas  (default) — Map full width as canvas;
-//                                    floating itinerary panel left.
-//   trip-summary-split             — 84/126 left strip + map column.
-//   trip-summary-hero              — Hero map top, horizontal day
-//                                    strip below.
+// No unused vertical space. Map height === left-column height === 244mm.
 
 const PAGE_W = 210;
-const SECTION_H = 149;
-const STATS_H = 20;
-const SUMMARY_H = 7;
-const TOP_CONTENT_H = SECTION_H - STATS_H - SUMMARY_H; // 122
+const PAGE_H = 297;
 
-const STATS_Y = TOP_CONTENT_H;        // 122
-const SUMMARY_Y = STATS_Y + STATS_H;  // 142
+const TOP_H = Math.round(PAGE_H * 0.82);   // 244
+const STATS_H = Math.round(PAGE_H * 0.12); // 36
+const SUMMARY_H = PAGE_H - TOP_H - STATS_H; // 17
+
+const STATS_Y = TOP_H;
+const SUMMARY_Y = STATS_Y + STATS_H;
 
 const CONTENT_X = 18;
 const CONTENT_W = 174;
-const TEXT_INSET_W = 66; // splits + canvas: text inside left strip
+
+// 40 / 60 horizontal split inside the top block.
+const LEFT_COL_W = Math.round(PAGE_W * 0.4);  // 84
+const RIGHT_COL_W = PAGE_W - LEFT_COL_W;       // 126
+const RIGHT_COL_X = LEFT_COL_W;
+
+// Inside left column the text content insets from page edge.
+const TEXT_INSET_W = LEFT_COL_W - CONTENT_X;   // 66
 
 // ─── Shared sub-builders ─────────────────────────────────────────────────
 
@@ -41,10 +44,10 @@ function buildStatsColumn(
       type: "text",
       name: `stats_${index}_value`,
       content_key: valueKey,
-      x_mm: x, y_mm: STATS_Y + 4, w_mm: colW, h_mm: 9,
+      x_mm: x, y_mm: STATS_Y + 8, w_mm: colW, h_mm: 14,
       style: "h2",
       color_role: "headingText",
-      size_pt: 22,
+      size_pt: 30,
       line_height: 1.0,
       font_weight: 700,
       alignment: "center",
@@ -54,11 +57,11 @@ function buildStatsColumn(
       type: "text",
       name: `stats_${index}_label`,
       content_key: labelKey,
-      x_mm: x, y_mm: STATS_Y + 14, w_mm: colW, h_mm: 4,
+      x_mm: x, y_mm: STATS_Y + 24, w_mm: colW, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
       alignment: "center",
-      size_pt: 8,
+      size_pt: 9,
       letter_spacing_em: 0.14,
       uppercase: true,
       max_chars: 12,
@@ -82,21 +85,21 @@ function statsBar(): Slot[] {
     {
       type: "fill",
       name: "stats_sep_1",
-      x_mm: CONTENT_X + colW, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      x_mm: CONTENT_X + colW, y_mm: STATS_Y + 5, w_mm: 0.3, h_mm: STATS_H - 10,
       fill: "border",
       opacity: 0.5,
     },
     {
       type: "fill",
       name: "stats_sep_2",
-      x_mm: CONTENT_X + colW * 2, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      x_mm: CONTENT_X + colW * 2, y_mm: STATS_Y + 5, w_mm: 0.3, h_mm: STATS_H - 10,
       fill: "border",
       opacity: 0.5,
     },
     {
       type: "fill",
       name: "stats_sep_3",
-      x_mm: CONTENT_X + colW * 3, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      x_mm: CONTENT_X + colW * 3, y_mm: STATS_Y + 5, w_mm: 0.3, h_mm: STATS_H - 10,
       fill: "border",
       opacity: 0.5,
     },
@@ -114,7 +117,7 @@ function summaryLine(): Slot {
     type: "text",
     name: "summary_line",
     content_key: "summary",
-    x_mm: CONTENT_X, y_mm: SUMMARY_Y, w_mm: CONTENT_W, h_mm: SUMMARY_H,
+    x_mm: CONTENT_X, y_mm: SUMMARY_Y + 4, w_mm: CONTENT_W, h_mm: SUMMARY_H - 4,
     style: "caption",
     color_role: "mutedText",
     size_pt: 9,
@@ -125,7 +128,54 @@ function summaryLine(): Slot {
   };
 }
 
-// Vertical day block — used by Canvas + Split variants.
+// Header (label + title + subtitle) — used by Canvas + Split.
+function headerSlots(
+  origin: { x: number; y: number },
+  width: number,
+  titlePt = 28,
+): Slot[] {
+  return [
+    {
+      type: "text",
+      name: "section_label",
+      x_mm: origin.x, y_mm: origin.y, w_mm: width, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 9,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 30,
+    },
+    {
+      type: "text",
+      name: "section_title",
+      content_key: "sectionTitle",
+      x_mm: origin.x, y_mm: origin.y + 8, w_mm: width, h_mm: 18,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: titlePt,
+      line_height: 1.05,
+      font_weight: 700,
+      max_chars: 60,
+      overflow_behavior: "scale_down",
+    },
+    {
+      type: "text",
+      name: "section_subtitle",
+      content_key: "sectionSubtitle",
+      x_mm: origin.x, y_mm: origin.y + 28, w_mm: width, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 10,
+      letter_spacing_em: 0.14,
+      uppercase: true,
+      max_chars: 60,
+      overflow_behavior: "truncate",
+    },
+  ];
+}
+
+// Vertical day block — used by Canvas + Split.
 function buildVerticalDayBlock(
   index: number,
   origin: { x: number; y: number },
@@ -136,7 +186,7 @@ function buildVerticalDayBlock(
   const dayNumX = origin.x;
   const imageX = origin.x + 12;
   const imageW = panelW - 12;
-  const imageH = Math.max(12, blockH - 10);
+  const imageH = Math.max(14, blockH - 14);
   const textBelowY = baseY + imageH + 1;
 
   return [
@@ -144,7 +194,7 @@ function buildVerticalDayBlock(
       type: "text",
       name: `day_${index + 1}_number`,
       content_key: `day${index + 1}Number`,
-      x_mm: dayNumX, y_mm: baseY + 2, w_mm: 12, h_mm: 12,
+      x_mm: dayNumX, y_mm: baseY + 4, w_mm: 12, h_mm: 12,
       style: "h2",
       color_role: "headingText",
       size_pt: 18,
@@ -163,10 +213,10 @@ function buildVerticalDayBlock(
       type: "text",
       name: `day_${index + 1}_location`,
       content_key: `day${index + 1}Location`,
-      x_mm: imageX, y_mm: textBelowY, w_mm: imageW, h_mm: 4,
+      x_mm: imageX, y_mm: textBelowY, w_mm: imageW, h_mm: 5,
       style: "body",
       color_role: "headingText",
-      size_pt: 11,
+      size_pt: 12,
       line_height: 1.1,
       font_weight: 700,
       letter_spacing_em: 0.02,
@@ -177,10 +227,10 @@ function buildVerticalDayBlock(
       type: "text",
       name: `day_${index + 1}_property`,
       content_key: `day${index + 1}Property`,
-      x_mm: imageX, y_mm: textBelowY + 4, w_mm: imageW, h_mm: 3,
+      x_mm: imageX, y_mm: textBelowY + 5, w_mm: imageW, h_mm: 4,
       style: "body",
       color_role: "bodyText",
-      size_pt: 8.5,
+      size_pt: 9,
       line_height: 1.1,
       max_chars: 40,
       overflow_behavior: "truncate",
@@ -197,8 +247,8 @@ function buildHorizontalDayCard(
   cardH: number,
 ): Slot[] {
   const padding = 2;
-  const imageW = Math.min(cardW - padding * 2, 50);
-  const imageH = cardH - 14;
+  const imageH = Math.max(20, cardH - 4);
+  const imageW = Math.min(cardW * 0.45, 60);
   return [
     {
       type: "image",
@@ -211,7 +261,7 @@ function buildHorizontalDayCard(
       type: "text",
       name: `day_${index + 1}_number`,
       content_key: `day${index + 1}Number`,
-      x_mm: cardX + padding + imageW + 3, y_mm: cardY + 2, w_mm: 12, h_mm: 5,
+      x_mm: cardX + padding + imageW + 3, y_mm: cardY + 2, w_mm: 16, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 8,
@@ -223,11 +273,11 @@ function buildHorizontalDayCard(
       type: "text",
       name: `day_${index + 1}_location`,
       content_key: `day${index + 1}Location`,
-      x_mm: cardX + padding + imageW + 3,
-      y_mm: cardY + 6, w_mm: cardW - imageW - padding * 2 - 3, h_mm: 5,
+      x_mm: cardX + padding + imageW + 3, y_mm: cardY + 8,
+      w_mm: cardW - imageW - padding * 2 - 3, h_mm: 7,
       style: "body",
       color_role: "headingText",
-      size_pt: 10,
+      size_pt: 12,
       line_height: 1.1,
       font_weight: 700,
       max_chars: 18,
@@ -237,81 +287,40 @@ function buildHorizontalDayCard(
       type: "text",
       name: `day_${index + 1}_property`,
       content_key: `day${index + 1}Property`,
-      x_mm: cardX + padding + imageW + 3,
-      y_mm: cardY + 11, w_mm: cardW - imageW - padding * 2 - 3, h_mm: 4,
+      x_mm: cardX + padding + imageW + 3, y_mm: cardY + 16,
+      w_mm: cardW - imageW - padding * 2 - 3, h_mm: 5,
       style: "caption",
       color_role: "bodyText",
-      size_pt: 8,
-      line_height: 1.1,
-      max_chars: 30,
-      overflow_behavior: "truncate",
-    },
-  ];
-}
-
-// ─── Header — ITINERARY AT A GLANCE / Title / Subtitle ───────────────────
-
-function headerSlots(
-  origin: { x: number; y: number },
-  width: number,
-  titlePt = 24,
-): Slot[] {
-  return [
-    {
-      type: "text",
-      name: "section_label",
-      x_mm: origin.x, y_mm: origin.y, w_mm: width, h_mm: 5,
-      style: "eyebrow",
-      color_role: "mutedText",
       size_pt: 9,
-      letter_spacing_em: 0.18,
-      uppercase: true,
-      max_chars: 30,
-    },
-    {
-      type: "text",
-      name: "section_title",
-      content_key: "sectionTitle",
-      x_mm: origin.x, y_mm: origin.y + 8, w_mm: width, h_mm: 14,
-      style: "h2",
-      color_role: "headingText",
-      size_pt: titlePt,
-      line_height: 1.05,
-      font_weight: 700,
-      max_chars: 60,
-      overflow_behavior: "scale_down",
-    },
-    {
-      type: "text",
-      name: "section_subtitle",
-      content_key: "sectionSubtitle",
-      x_mm: origin.x, y_mm: origin.y + 25, w_mm: width, h_mm: 5,
-      style: "eyebrow",
-      color_role: "mutedText",
-      size_pt: 10,
-      letter_spacing_em: 0.14,
-      uppercase: true,
-      max_chars: 60,
+      line_height: 1.1,
+      max_chars: 32,
       overflow_behavior: "truncate",
     },
   ];
 }
 
 // ─── VARIANT 1 — EDITORIAL CANVAS (default) ──────────────────────────────
-//
-// Map fills the full content width as a canvas; floating panel on
-// the left holds the itinerary list. Map is desaturated and slightly
-// transparent so the panel reads cleanly above it.
-
-const CANVAS_PANEL_X = CONTENT_X;
-const CANVAS_PANEL_Y = 8;
-const CANVAS_PANEL_W = 78;
 
 function buildCanvasVariant(): LayoutManifest {
-  // Day blocks inside the panel — 3 max, 22mm each + 2mm gap.
-  const headerOriginY = CANVAS_PANEL_Y + 4;
-  const dayOriginY = headerOriginY + 36;
-  const dayBlockH = 22 + 2;
+  // Floating panel inside the top block.
+  const panelX = CONTENT_X;
+  const panelY = 14;
+  const panelW = 80;
+  const panelH = TOP_H - 28;
+  const headerOriginY = panelY + 8;
+  const dayOriginY = headerOriginY + 40;
+  const dayCount = 5;
+  const daysAvailableH = panelH - (dayOriginY - panelY) - 8;
+  const dayBlockH = Math.floor(daysAvailableH / dayCount);
+
+  const dayBlocks = Array.from({ length: dayCount }, (_, i) =>
+    buildVerticalDayBlock(
+      i,
+      { x: panelX + 6, y: dayOriginY },
+      panelW - 12,
+      dayBlockH,
+    ).map((s) => ({ ...s, z_index: 4 })),
+  ).flat();
 
   return {
     id: "trip-summary-canvas",
@@ -319,92 +328,74 @@ function buildCanvasVariant(): LayoutManifest {
     page_count: 1,
     description: "Editorial Canvas — map full-width with floating itinerary panel",
     slots: [
-      // Section bg.
       {
         type: "fill",
         name: "section_bg",
-        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: PAGE_H,
         fill: "sectionSurface",
         z_index: 0,
       },
-      // Map canvas — full content width, slightly transparent.
+      // Map canvas — fills the entire 244mm top block.
       {
         type: "vector",
         name: "map_image",
         payload_key: "routeMap",
-        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_CONTENT_H,
+        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_H,
         opacity: 0.82,
         z_index: 1,
       },
-      // Subtle desaturating wash over the map.
+      // Subtle wash for legibility.
       {
         type: "fill",
         name: "map_wash",
-        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_CONTENT_H,
+        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_H,
         fill: "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 60%)",
         z_index: 2,
       },
-      // Floating panel — very subtle backdrop so text reads against
-      // varied map content; transparent enough to feel editorial.
+      // Floating panel.
       {
         type: "fill",
         name: "canvas_panel_bg",
-        x_mm: CANVAS_PANEL_X, y_mm: CANVAS_PANEL_Y,
-        w_mm: CANVAS_PANEL_W, h_mm: TOP_CONTENT_H - 16,
+        x_mm: panelX, y_mm: panelY, w_mm: panelW, h_mm: panelH,
         fill: "sectionSurface",
         opacity: 0.85,
         z_index: 3,
       },
-      // Header inside panel.
       ...headerSlots(
-        { x: CANVAS_PANEL_X + 6, y: headerOriginY },
-        CANVAS_PANEL_W - 12,
-        18,
+        { x: panelX + 6, y: headerOriginY },
+        panelW - 12,
+        20,
       ).map((s) => ({ ...s, z_index: 4 })),
-      // Day blocks.
-      ...buildVerticalDayBlock(
-        0,
-        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
-        CANVAS_PANEL_W - 12,
-        dayBlockH,
-      ).map((s) => ({ ...s, z_index: 4 })),
-      ...buildVerticalDayBlock(
-        1,
-        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
-        CANVAS_PANEL_W - 12,
-        dayBlockH,
-      ).map((s, i) => (i === 0 ? s : s)).map((s) => ({ ...s, z_index: 4 })),
-      ...buildVerticalDayBlock(
-        2,
-        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
-        CANVAS_PANEL_W - 12,
-        dayBlockH,
-      ).map((s) => ({ ...s, z_index: 4 })),
-      // Stats + summary.
+      ...dayBlocks,
       ...statsBar(),
       summaryLine(),
     ],
     rules: [
-      "Section locked at 149mm",
-      "Map fills full content width as a canvas",
-      "Floating panel left at x:18 w:78 with subtle backdrop",
-      "Map washed at 0.82 opacity for a desaturated editorial feel",
+      "Section fills full A4 (297mm)",
+      "Top block 244mm (82%); stats 36mm (12%); summary 17mm (6%)",
+      "Map fills entire 174×244mm top block edge-to-edge",
+      "Floating panel evenly distributes 5 day blocks vertically",
     ],
   };
 }
 
 // ─── VARIANT 2 — SOFT SPLIT EDITORIAL ────────────────────────────────────
-//
-// Classic 84/126 split. Left column itinerary, right column map.
-
-const SPLIT_LEFT_W = 84;
-const SPLIT_RIGHT_X = SPLIT_LEFT_W;
-const SPLIT_RIGHT_W = PAGE_W - SPLIT_LEFT_W; // 126
 
 function buildSplitVariant(): LayoutManifest {
   const headerOriginY = 14;
-  const dayOriginY = 50;
-  const dayBlockH = 22 + 2;
+  const dayOriginY = headerOriginY + 44;
+  const dayCount = 6;
+  const daysAvailableH = TOP_H - dayOriginY - 4;
+  const dayBlockH = Math.floor(daysAvailableH / dayCount);
+
+  const dayBlocks = Array.from({ length: dayCount }, (_, i) =>
+    buildVerticalDayBlock(
+      i,
+      { x: CONTENT_X, y: dayOriginY },
+      TEXT_INSET_W,
+      dayBlockH,
+    ),
+  ).flat();
 
   return {
     id: "trip-summary-split",
@@ -415,87 +406,74 @@ function buildSplitVariant(): LayoutManifest {
       {
         type: "fill",
         name: "section_bg",
-        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: PAGE_H,
         fill: "sectionSurface",
         z_index: 0,
       },
-      // Map fills right column edge to edge.
+      // Map fills right column completely (126×244).
       {
         type: "vector",
         name: "map_image",
         payload_key: "routeMap",
-        x_mm: SPLIT_RIGHT_X, y_mm: 0, w_mm: SPLIT_RIGHT_W, h_mm: TOP_CONTENT_H,
+        x_mm: RIGHT_COL_X, y_mm: 0, w_mm: RIGHT_COL_W, h_mm: TOP_H,
         opacity: 0.92,
       },
-      // Hairline divider on the seam.
       {
         type: "fill",
         name: "column_divider",
-        x_mm: SPLIT_RIGHT_X - 0.15, y_mm: 14,
-        w_mm: 0.3, h_mm: TOP_CONTENT_H - 28,
+        x_mm: RIGHT_COL_X - 0.15, y_mm: 14,
+        w_mm: 0.3, h_mm: TOP_H - 28,
         fill: "border",
         opacity: 0.4,
       },
-      // Header inside left column (text inset 18mm from page edge).
-      ...headerSlots({ x: CONTENT_X, y: headerOriginY }, TEXT_INSET_W, 24),
-      // 3 day blocks in left column.
-      ...buildVerticalDayBlock(
-        0, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
-      ),
-      ...buildVerticalDayBlock(
-        1, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
-      ),
-      ...buildVerticalDayBlock(
-        2, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
-      ),
+      ...headerSlots({ x: CONTENT_X, y: headerOriginY }, TEXT_INSET_W, 26),
+      ...dayBlocks,
       ...statsBar(),
       summaryLine(),
     ],
     rules: [
-      "Section locked at 149mm",
+      "Section fills full A4 (297mm)",
       "Left strip 84mm; right map column 126mm",
-      "Map fills right column edge to edge",
+      "Map fills right column edge-to-edge at 244mm height",
+      "6 day blocks evenly distributed across left column",
     ],
   };
 }
 
 // ─── VARIANT 3 — HERO MAP + STORY STRIP ──────────────────────────────────
-//
-// Top: map dominates as a hero (174mm × 90mm).
-// Bottom: horizontal day strip 32mm — 3 cards inline.
 
 function buildHeroVariant(): LayoutManifest {
-  const HERO_MAP_H = 90;
+  // Hero occupies most of the top block; strip fills the rest.
+  const HERO_MAP_H = Math.floor(TOP_H * 0.72); // ~176
   const STRIP_Y = HERO_MAP_H;
-  const STRIP_H = TOP_CONTENT_H - HERO_MAP_H; // 32
+  const STRIP_H = TOP_H - HERO_MAP_H; // ~68
   const cardCount = 3;
   const cardGap = 4;
-  const cardW = (CONTENT_W - cardGap * (cardCount - 1)) / cardCount; // ~55.3
+  const cardW = (CONTENT_W - cardGap * (cardCount - 1)) / cardCount;
   return {
     id: "trip-summary-hero",
     section: "trip_summary",
     page_count: 1,
-    description: "Hero Map + Story Strip — full-width map on top, horizontal day cards below",
+    description:
+      "Hero Map + Story Strip — full-width map on top, horizontal day cards below",
     slots: [
       {
         type: "fill",
         name: "section_bg",
-        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: PAGE_H,
         fill: "sectionSurface",
         z_index: 0,
       },
-      // Hero map — full content width.
       {
         type: "vector",
         name: "map_image",
         payload_key: "routeMap",
         x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: HERO_MAP_H,
       },
-      // Tiny eyebrow over the map (top-left, low opacity backdrop).
       {
         type: "fill",
         name: "hero_eyebrow_bg",
-        x_mm: CONTENT_X, y_mm: 6, w_mm: 60, h_mm: 12,
+        x_mm: CONTENT_X, y_mm: 8, w_mm: 70, h_mm: 14,
         fill: "sectionSurface",
         opacity: 0.85,
         z_index: 2,
@@ -503,7 +481,7 @@ function buildHeroVariant(): LayoutManifest {
       {
         type: "text",
         name: "section_label",
-        x_mm: CONTENT_X + 4, y_mm: 9, w_mm: 56, h_mm: 4,
+        x_mm: CONTENT_X + 4, y_mm: 11, w_mm: 64, h_mm: 4,
         style: "eyebrow",
         color_role: "mutedText",
         size_pt: 8,
@@ -516,40 +494,41 @@ function buildHeroVariant(): LayoutManifest {
         type: "text",
         name: "section_title",
         content_key: "sectionTitle",
-        x_mm: CONTENT_X + 4, y_mm: 13, w_mm: 56, h_mm: 5,
+        x_mm: CONTENT_X + 4, y_mm: 15, w_mm: 64, h_mm: 6,
         style: "h3",
         color_role: "headingText",
-        size_pt: 11,
+        size_pt: 12,
         line_height: 1.1,
         font_weight: 700,
         max_chars: 30,
         overflow_behavior: "truncate",
         z_index: 3,
       },
-      // Horizontal strip — 3 day cards.
-      ...buildHorizontalDayCard(
-        0, CONTENT_X + (cardW + cardGap) * 0, STRIP_Y + 2, cardW, STRIP_H - 4,
-      ),
-      ...buildHorizontalDayCard(
-        1, CONTENT_X + (cardW + cardGap) * 1, STRIP_Y + 2, cardW, STRIP_H - 4,
-      ),
-      ...buildHorizontalDayCard(
-        2, CONTENT_X + (cardW + cardGap) * 2, STRIP_Y + 2, cardW, STRIP_H - 4,
-      ),
-      // Top border line above the strip.
       {
         type: "fill",
         name: "strip_top_border",
         x_mm: CONTENT_X, y_mm: STRIP_Y, w_mm: CONTENT_W, h_mm: 0.3,
         fill: "border",
       },
+      ...buildHorizontalDayCard(
+        0, CONTENT_X + (cardW + cardGap) * 0,
+        STRIP_Y + 4, cardW, STRIP_H - 8,
+      ),
+      ...buildHorizontalDayCard(
+        1, CONTENT_X + (cardW + cardGap) * 1,
+        STRIP_Y + 4, cardW, STRIP_H - 8,
+      ),
+      ...buildHorizontalDayCard(
+        2, CONTENT_X + (cardW + cardGap) * 2,
+        STRIP_Y + 4, cardW, STRIP_H - 8,
+      ),
       ...statsBar(),
       summaryLine(),
     ],
     rules: [
-      "Section locked at 149mm",
-      "Hero map y:0–90 (90mm tall, full content width)",
-      "Story strip y:90–122 (32mm) with 3 horizontal day cards",
+      "Section fills full A4 (297mm)",
+      `Hero map y:0–${HERO_MAP_H} (full content width)`,
+      `Story strip y:${STRIP_Y}–${TOP_H} with 3 horizontal day cards`,
     ],
   };
 }
@@ -558,7 +537,6 @@ export const TRIP_SUMMARY_CANVAS = buildCanvasVariant();
 export const TRIP_SUMMARY_SPLIT = buildSplitVariant();
 export const TRIP_SUMMARY_HERO = buildHeroVariant();
 
-// Default alias — Canvas per spec.
 export const TRIP_SUMMARY_EDITORIAL = TRIP_SUMMARY_CANVAS;
 
 export const TRIP_SUMMARY_LAYOUTS = [
@@ -568,9 +546,13 @@ export const TRIP_SUMMARY_LAYOUTS = [
 ];
 
 export const TRIP_SUMMARY_GEOMETRY = {
-  SECTION_H,
-  TOP_CONTENT_H,
+  PAGE_H,
+  TOP_H,
   STATS_H,
   SUMMARY_H,
-  DAY_BLOCKS_MAX: 3,
+  LEFT_COL_W,
+  RIGHT_COL_W,
+  RIGHT_COL_X,
+  // Canvas variant uses 5; Split uses 6; Hero uses 3.
+  DAY_BLOCKS_MAX: 6,
 };
