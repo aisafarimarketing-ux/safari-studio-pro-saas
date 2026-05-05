@@ -181,7 +181,12 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
     // trip meta + Secure CTA, like a paper dossier confirming the
     // booking. The three older variants (split-card / gallery-row /
     // stack) stay registered so legacy proposals keep their look.
-    variants: ["closing-farewell"],
+    variants: ["closing-farewell", "closing-cinematic", "closing-minimal"],
+    variantLabels: {
+      "closing-farewell": "EDITORIAL",
+      "closing-cinematic": "CINEMATIC",
+      "closing-minimal": "MINIMAL",
+    },
     defaultVariant: "closing-farewell",
     defaultContent: {
       headline: "Your journey is ready",
