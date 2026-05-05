@@ -11,8 +11,11 @@ import type { LayoutManifest, GroupSlot, FillSlot } from "../types";
 const SECTION_TITLE_HEIGHT = 16;
 const SUBTITLE_HEIGHT = 10;
 const CARDS_PER_PAGE = 6;
-const CARD_HEIGHT_MM = 30;
-const CARD_GAP_MM = 4;
+// Bumped from 30→36mm so the body slot can hold ~4–5 lines of card
+// copy at caption 9pt × 1.4 leading. Operator info ("Visas",
+// "Flights", etc.) was clipping at ~3 lines on the previous size.
+const CARD_HEIGHT_MM = 36;
+const CARD_GAP_MM = 3;
 const FIRST_CARD_Y_MM = 50;
 
 function cardYMm(index: number): number {
@@ -42,7 +45,7 @@ function buildCardSlot(index: number): GroupSlot {
         type: "text",
         name: `card_${index + 1}_icon`,
         content_key: `card${index + 1}Icon`,
-        x_mm: 4, y_mm: 4, w_mm: 8, h_mm: 8,
+        x_mm: 4, y_mm: 5, w_mm: 8, h_mm: 8,
         style: "h3",
         color_role: "headingText",
         max_chars: 4,
@@ -51,7 +54,7 @@ function buildCardSlot(index: number): GroupSlot {
         type: "text",
         name: `card_${index + 1}_title`,
         content_key: `card${index + 1}Title`,
-        x_mm: 14, y_mm: 4, w_mm: 120, h_mm: 8,
+        x_mm: 14, y_mm: 5, w_mm: 156, h_mm: 7,
         style: "h3",
         color_role: "headingText",
         max_chars: 40,
@@ -61,10 +64,12 @@ function buildCardSlot(index: number): GroupSlot {
         type: "text",
         name: `card_${index + 1}_body`,
         content_key: `card${index + 1}Body`,
-        x_mm: 14, y_mm: 12, w_mm: 156, h_mm: 14,
+        x_mm: 14, y_mm: 14, w_mm: 156, h_mm: 20,
         style: "caption",
         color_role: "bodyText",
-        max_chars: 220,
+        size_pt: 9,
+        line_height: 1.4,
+        max_chars: 360,
         overflow_behavior: "truncate",
       },
     ],
@@ -99,7 +104,7 @@ export const PRACTICAL_INFO_CARDS: LayoutManifest = {
     ...Array.from({ length: CARDS_PER_PAGE }, (_, i) => buildCardSlot(i)),
   ],
   rules: [
-    "Each card has fixed height (30mm)",
+    "Each card has fixed height (36mm)",
     "Max 6 cards per page",
     "No card expands beyond its slot",
     "Body text truncates if too long",
