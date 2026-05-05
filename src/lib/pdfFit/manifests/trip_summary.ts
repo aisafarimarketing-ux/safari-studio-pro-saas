@@ -1,132 +1,41 @@
 import type { LayoutManifest, Slot } from "../types";
 
-// ─── Trip summary / "Itinerary at a glance" — full-page editorial ────────
+// ─── Trip summary / "Itinerary at a glance" — three variants ─────────────
 //
-// Section fills the entire A4 page (297mm). Spec proportions kept:
-//   Top content (itinerary + map):   y:0   → 270  (270mm, 90.9%)
-//   Stats bar:                       y:270 → 290  (20mm)
-//   Summary line:                    y:290 → 297  (7mm)
+// Section locked at 149mm total for all variants:
+//   Top content (itinerary + map):   y:0   → 122  (122mm)
+//   Stats bar:                       y:122 → 142  (20mm)
+//   Summary line:                    y:142 → 149  (7mm)
 //
-// Top-content split (270mm height):
-//   Left column (itinerary)  x:0   w:84  (40%)
-//   Right column (map)       x:84  w:126 (60%)
-//
-// Left column (text inset x:18, w:66):
-//   ITINERARY AT A GLANCE      y:14   9pt eyebrow / 0.18em
-//   Section title              y:24   28pt h2 / 1.05
-//   Subtitle                   y:48   10pt eyebrow / 0.14em
-//   Day blocks (max 6)         y:60 → 270 (6 × 32mm + 5 × 3mm gap)
-//
-// Each day block (32mm tall, full 84mm column):
-//   Day number  x:6  y:8  w:12 h:14   18pt bold
-//   Image       x:18 y:0  w:66 h:22   object-fit cover
-//   LOCATION    x:18 y:23 w:66 h:4    12pt bold
-//   Property    x:18 y:27 w:66 h:3    9pt
-//   Day text    x:18 y:30 w:66 h:2    8pt muted
-//
-// Stats bar (4 equal columns at 43.5mm each, vertical separators):
-//   Number 26pt bold · Label 9pt uppercase 0.14em
-//
-// Summary: centered italic 9pt across the 174mm content band
+// Variants:
+//   trip-summary-canvas  (default) — Map full width as canvas;
+//                                    floating itinerary panel left.
+//   trip-summary-split             — 84/126 left strip + map column.
+//   trip-summary-hero              — Hero map top, horizontal day
+//                                    strip below.
 
 const PAGE_W = 210;
-const SECTION_H = 297;
+const SECTION_H = 149;
 const STATS_H = 20;
 const SUMMARY_H = 7;
-const TOP_CONTENT_H = SECTION_H - STATS_H - SUMMARY_H; // 270
+const TOP_CONTENT_H = SECTION_H - STATS_H - SUMMARY_H; // 122
 
-const LEFT_COL_W = 84;
-const RIGHT_COL_W = PAGE_W - LEFT_COL_W;
-const RIGHT_COL_X = LEFT_COL_W;
+const STATS_Y = TOP_CONTENT_H;        // 122
+const SUMMARY_Y = STATS_Y + STATS_H;  // 142
 
-const TEXT_INSET_X = 18;
-const TEXT_INSET_W = LEFT_COL_W - TEXT_INSET_X;
+const CONTENT_X = 18;
+const CONTENT_W = 174;
+const TEXT_INSET_W = 66; // splits + canvas: text inside left strip
 
-// Day block geometry — 6 blocks, 32mm tall, 3mm spacing.
-const DAY_BLOCKS_MAX = 6;
-const DAY_BLOCK_H = 32;
-const DAY_BLOCK_GAP = 3;
-const DAY_BLOCK_FIRST_Y = 60;
-
-const STATS_Y = TOP_CONTENT_H;        // 270
-const SUMMARY_Y = STATS_Y + STATS_H;  // 290
-
-function buildDayBlock(index: number): Slot[] {
-  const y = DAY_BLOCK_FIRST_Y + index * (DAY_BLOCK_H + DAY_BLOCK_GAP);
-  const dayNumX = TEXT_INSET_X - 12;
-  const imageX = TEXT_INSET_X;
-  const imageW = TEXT_INSET_W;
-  const imageH = 22;
-  const textBelowY = y + imageH + 1;
-
-  return [
-    {
-      type: "text",
-      name: `day_${index + 1}_number`,
-      content_key: `day${index + 1}Number`,
-      x_mm: dayNumX, y_mm: y + 4, w_mm: 12, h_mm: 14,
-      style: "h2",
-      color_role: "headingText",
-      size_pt: 18,
-      line_height: 1.0,
-      font_weight: 700,
-      max_chars: 4,
-    },
-    {
-      type: "image",
-      name: `day_${index + 1}_image`,
-      content_key: `day${index + 1}ImageUrl`,
-      x_mm: imageX, y_mm: y, w_mm: imageW, h_mm: imageH,
-      object_fit: "cover",
-    },
-    {
-      type: "text",
-      name: `day_${index + 1}_location`,
-      content_key: `day${index + 1}Location`,
-      x_mm: imageX, y_mm: textBelowY, w_mm: imageW, h_mm: 4,
-      style: "body",
-      color_role: "headingText",
-      size_pt: 12,
-      line_height: 1.1,
-      font_weight: 700,
-      letter_spacing_em: 0.02,
-      max_chars: 30,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "text",
-      name: `day_${index + 1}_property`,
-      content_key: `day${index + 1}Property`,
-      x_mm: imageX, y_mm: textBelowY + 4, w_mm: imageW, h_mm: 3,
-      style: "body",
-      color_role: "bodyText",
-      size_pt: 9,
-      line_height: 1.1,
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "text",
-      name: `day_${index + 1}_caption`,
-      content_key: `day${index + 1}Caption`,
-      x_mm: imageX, y_mm: textBelowY + 7, w_mm: imageW, h_mm: 3,
-      style: "caption",
-      color_role: "mutedText",
-      size_pt: 8,
-      line_height: 1.1,
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-  ];
-}
+// ─── Shared sub-builders ─────────────────────────────────────────────────
 
 function buildStatsColumn(
   index: number,
   valueKey: string,
   labelKey: string,
 ): Slot[] {
-  const colW = 174 / 4;
-  const x = 18 + index * colW;
+  const colW = CONTENT_W / 4;
+  const x = CONTENT_X + index * colW;
   return [
     {
       type: "text",
@@ -135,7 +44,7 @@ function buildStatsColumn(
       x_mm: x, y_mm: STATS_Y + 4, w_mm: colW, h_mm: 9,
       style: "h2",
       color_role: "headingText",
-      size_pt: 26,
+      size_pt: 22,
       line_height: 1.0,
       font_weight: 700,
       alignment: "center",
@@ -149,7 +58,7 @@ function buildStatsColumn(
       style: "eyebrow",
       color_role: "mutedText",
       alignment: "center",
-      size_pt: 9,
+      size_pt: 8,
       letter_spacing_em: 0.14,
       uppercase: true,
       max_chars: 12,
@@ -157,28 +66,201 @@ function buildStatsColumn(
   ];
 }
 
-export const TRIP_SUMMARY_EDITORIAL: LayoutManifest = {
-  id: "trip-summary-editorial",
-  section: "trip_summary",
-  page_count: 1,
-  description:
-    "Editorial 'Itinerary at a glance' — full-page magazine spread with map dominance",
-  slots: [
-    // Section bg — fills the page so the map column doesn't expose
-    // the page background where it might mismatch the section.
+function statsBar(): Slot[] {
+  const colW = CONTENT_W / 4;
+  return [
     {
       type: "fill",
-      name: "section_bg",
-      x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
-      fill: "sectionSurface",
-      z_index: 0,
+      name: "stats_top_border",
+      x_mm: CONTENT_X, y_mm: STATS_Y, w_mm: CONTENT_W, h_mm: 0.3,
+      fill: "border",
     },
+    ...buildStatsColumn(0, "statsNightsValue", "statsNightsLabel"),
+    ...buildStatsColumn(1, "statsStopsValue", "statsStopsLabel"),
+    ...buildStatsColumn(2, "statsLodgesValue", "statsLodgesLabel"),
+    ...buildStatsColumn(3, "statsParksValue", "statsParksLabel"),
+    {
+      type: "fill",
+      name: "stats_sep_1",
+      x_mm: CONTENT_X + colW, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_sep_2",
+      x_mm: CONTENT_X + colW * 2, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_sep_3",
+      x_mm: CONTENT_X + colW * 3, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
+      fill: "border",
+      opacity: 0.5,
+    },
+    {
+      type: "fill",
+      name: "stats_bottom_border",
+      x_mm: CONTENT_X, y_mm: STATS_Y + STATS_H - 0.3, w_mm: CONTENT_W, h_mm: 0.3,
+      fill: "border",
+    },
+  ];
+}
 
-    // ─── LEFT COLUMN — itinerary strip ────────────────────────────────
+function summaryLine(): Slot {
+  return {
+    type: "text",
+    name: "summary_line",
+    content_key: "summary",
+    x_mm: CONTENT_X, y_mm: SUMMARY_Y, w_mm: CONTENT_W, h_mm: SUMMARY_H,
+    style: "caption",
+    color_role: "mutedText",
+    size_pt: 9,
+    line_height: 1.2,
+    alignment: "center",
+    max_chars: 200,
+    overflow_behavior: "truncate",
+  };
+}
+
+// Vertical day block — used by Canvas + Split variants.
+function buildVerticalDayBlock(
+  index: number,
+  origin: { x: number; y: number },
+  panelW: number,
+  blockH: number,
+): Slot[] {
+  const baseY = origin.y + index * blockH;
+  const dayNumX = origin.x;
+  const imageX = origin.x + 12;
+  const imageW = panelW - 12;
+  const imageH = Math.max(12, blockH - 10);
+  const textBelowY = baseY + imageH + 1;
+
+  return [
+    {
+      type: "text",
+      name: `day_${index + 1}_number`,
+      content_key: `day${index + 1}Number`,
+      x_mm: dayNumX, y_mm: baseY + 2, w_mm: 12, h_mm: 12,
+      style: "h2",
+      color_role: "headingText",
+      size_pt: 18,
+      line_height: 1.0,
+      font_weight: 700,
+      max_chars: 4,
+    },
+    {
+      type: "image",
+      name: `day_${index + 1}_image`,
+      content_key: `day${index + 1}ImageUrl`,
+      x_mm: imageX, y_mm: baseY, w_mm: imageW, h_mm: imageH,
+      object_fit: "cover",
+    },
+    {
+      type: "text",
+      name: `day_${index + 1}_location`,
+      content_key: `day${index + 1}Location`,
+      x_mm: imageX, y_mm: textBelowY, w_mm: imageW, h_mm: 4,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 11,
+      line_height: 1.1,
+      font_weight: 700,
+      letter_spacing_em: 0.02,
+      max_chars: 30,
+      overflow_behavior: "truncate",
+    },
+    {
+      type: "text",
+      name: `day_${index + 1}_property`,
+      content_key: `day${index + 1}Property`,
+      x_mm: imageX, y_mm: textBelowY + 4, w_mm: imageW, h_mm: 3,
+      style: "body",
+      color_role: "bodyText",
+      size_pt: 8.5,
+      line_height: 1.1,
+      max_chars: 40,
+      overflow_behavior: "truncate",
+    },
+  ];
+}
+
+// Horizontal day card — used by Hero variant's bottom strip.
+function buildHorizontalDayCard(
+  index: number,
+  cardX: number,
+  cardY: number,
+  cardW: number,
+  cardH: number,
+): Slot[] {
+  const padding = 2;
+  const imageW = Math.min(cardW - padding * 2, 50);
+  const imageH = cardH - 14;
+  return [
+    {
+      type: "image",
+      name: `day_${index + 1}_image`,
+      content_key: `day${index + 1}ImageUrl`,
+      x_mm: cardX + padding, y_mm: cardY, w_mm: imageW, h_mm: imageH,
+      object_fit: "cover",
+    },
+    {
+      type: "text",
+      name: `day_${index + 1}_number`,
+      content_key: `day${index + 1}Number`,
+      x_mm: cardX + padding + imageW + 3, y_mm: cardY + 2, w_mm: 12, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.14,
+      uppercase: true,
+      max_chars: 6,
+    },
+    {
+      type: "text",
+      name: `day_${index + 1}_location`,
+      content_key: `day${index + 1}Location`,
+      x_mm: cardX + padding + imageW + 3,
+      y_mm: cardY + 6, w_mm: cardW - imageW - padding * 2 - 3, h_mm: 5,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 10,
+      line_height: 1.1,
+      font_weight: 700,
+      max_chars: 18,
+      overflow_behavior: "truncate",
+    },
+    {
+      type: "text",
+      name: `day_${index + 1}_property`,
+      content_key: `day${index + 1}Property`,
+      x_mm: cardX + padding + imageW + 3,
+      y_mm: cardY + 11, w_mm: cardW - imageW - padding * 2 - 3, h_mm: 4,
+      style: "caption",
+      color_role: "bodyText",
+      size_pt: 8,
+      line_height: 1.1,
+      max_chars: 30,
+      overflow_behavior: "truncate",
+    },
+  ];
+}
+
+// ─── Header — ITINERARY AT A GLANCE / Title / Subtitle ───────────────────
+
+function headerSlots(
+  origin: { x: number; y: number },
+  width: number,
+  titlePt = 24,
+): Slot[] {
+  return [
     {
       type: "text",
       name: "section_label",
-      x_mm: TEXT_INSET_X, y_mm: 14, w_mm: TEXT_INSET_W, h_mm: 5,
+      x_mm: origin.x, y_mm: origin.y, w_mm: width, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 9,
@@ -190,10 +272,10 @@ export const TRIP_SUMMARY_EDITORIAL: LayoutManifest = {
       type: "text",
       name: "section_title",
       content_key: "sectionTitle",
-      x_mm: TEXT_INSET_X, y_mm: 24, w_mm: TEXT_INSET_W, h_mm: 18,
+      x_mm: origin.x, y_mm: origin.y + 8, w_mm: width, h_mm: 14,
       style: "h2",
       color_role: "headingText",
-      size_pt: 28,
+      size_pt: titlePt,
       line_height: 1.05,
       font_weight: 700,
       max_chars: 60,
@@ -203,7 +285,7 @@ export const TRIP_SUMMARY_EDITORIAL: LayoutManifest = {
       type: "text",
       name: "section_subtitle",
       content_key: "sectionSubtitle",
-      x_mm: TEXT_INSET_X, y_mm: 48, w_mm: TEXT_INSET_W, h_mm: 5,
+      x_mm: origin.x, y_mm: origin.y + 25, w_mm: width, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 10,
@@ -212,101 +294,283 @@ export const TRIP_SUMMARY_EDITORIAL: LayoutManifest = {
       max_chars: 60,
       overflow_behavior: "truncate",
     },
-    ...buildDayBlock(0),
-    ...buildDayBlock(1),
-    ...buildDayBlock(2),
-    ...buildDayBlock(3),
-    ...buildDayBlock(4),
-    ...buildDayBlock(5),
+  ];
+}
 
-    // ─── RIGHT COLUMN — full-height map ───────────────────────────────
-    {
-      type: "vector",
-      name: "map_image",
-      payload_key: "routeMap",
-      x_mm: RIGHT_COL_X, y_mm: 0, w_mm: RIGHT_COL_W, h_mm: TOP_CONTENT_H,
-    },
-    {
-      type: "fill",
-      name: "column_divider",
-      x_mm: RIGHT_COL_X - 0.15, y_mm: 14, w_mm: 0.3, h_mm: TOP_CONTENT_H - 28,
-      fill: "border",
-      opacity: 0.4,
-    },
+// ─── VARIANT 1 — EDITORIAL CANVAS (default) ──────────────────────────────
+//
+// Map fills the full content width as a canvas; floating panel on
+// the left holds the itinerary list. Map is desaturated and slightly
+// transparent so the panel reads cleanly above it.
 
-    // ─── STATS BAR ────────────────────────────────────────────────────
-    {
-      type: "fill",
-      name: "stats_top_border",
-      x_mm: 18, y_mm: STATS_Y, w_mm: 174, h_mm: 0.3,
-      fill: "border",
-    },
-    ...buildStatsColumn(0, "statsNightsValue", "statsNightsLabel"),
-    ...buildStatsColumn(1, "statsStopsValue", "statsStopsLabel"),
-    ...buildStatsColumn(2, "statsLodgesValue", "statsLodgesLabel"),
-    ...buildStatsColumn(3, "statsParksValue", "statsParksLabel"),
-    {
-      type: "fill",
-      name: "stats_sep_1",
-      x_mm: 18 + 43.5, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
-      fill: "border",
-      opacity: 0.5,
-    },
-    {
-      type: "fill",
-      name: "stats_sep_2",
-      x_mm: 18 + 87, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
-      fill: "border",
-      opacity: 0.5,
-    },
-    {
-      type: "fill",
-      name: "stats_sep_3",
-      x_mm: 18 + 130.5, y_mm: STATS_Y + 3, w_mm: 0.3, h_mm: STATS_H - 6,
-      fill: "border",
-      opacity: 0.5,
-    },
-    {
-      type: "fill",
-      name: "stats_bottom_border",
-      x_mm: 18, y_mm: STATS_Y + STATS_H - 0.3, w_mm: 174, h_mm: 0.3,
-      fill: "border",
-    },
+const CANVAS_PANEL_X = CONTENT_X;
+const CANVAS_PANEL_Y = 8;
+const CANVAS_PANEL_W = 78;
 
-    // ─── SUMMARY LINE ─────────────────────────────────────────────────
-    {
-      type: "text",
-      name: "summary_line",
-      content_key: "summary",
-      x_mm: 18, y_mm: SUMMARY_Y, w_mm: 174, h_mm: SUMMARY_H,
-      style: "caption",
-      color_role: "mutedText",
-      size_pt: 9,
-      line_height: 1.2,
-      alignment: "center",
-      max_chars: 200,
-      overflow_behavior: "truncate",
-    },
-  ],
-  rules: [
-    "Section fills the full A4 page (297mm)",
-    "Top content y:0–270, stats y:270–290, summary y:290–297",
-    "Left column 84mm; right column 126mm — no overlap, no gap",
-    "Map fills 270mm tall edge-to-edge",
-    "Day blocks max 6 (truncate beyond), evenly spaced 32mm + 3mm",
-    "No empty space below summary",
-  ],
-};
+function buildCanvasVariant(): LayoutManifest {
+  // Day blocks inside the panel — 3 max, 22mm each + 2mm gap.
+  const headerOriginY = CANVAS_PANEL_Y + 4;
+  const dayOriginY = headerOriginY + 36;
+  const dayBlockH = 22 + 2;
 
-export const TRIP_SUMMARY_LAYOUTS = [TRIP_SUMMARY_EDITORIAL];
+  return {
+    id: "trip-summary-canvas",
+    section: "trip_summary",
+    page_count: 1,
+    description: "Editorial Canvas — map full-width with floating itinerary panel",
+    slots: [
+      // Section bg.
+      {
+        type: "fill",
+        name: "section_bg",
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      // Map canvas — full content width, slightly transparent.
+      {
+        type: "vector",
+        name: "map_image",
+        payload_key: "routeMap",
+        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_CONTENT_H,
+        opacity: 0.82,
+        z_index: 1,
+      },
+      // Subtle desaturating wash over the map.
+      {
+        type: "fill",
+        name: "map_wash",
+        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: TOP_CONTENT_H,
+        fill: "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 60%)",
+        z_index: 2,
+      },
+      // Floating panel — very subtle backdrop so text reads against
+      // varied map content; transparent enough to feel editorial.
+      {
+        type: "fill",
+        name: "canvas_panel_bg",
+        x_mm: CANVAS_PANEL_X, y_mm: CANVAS_PANEL_Y,
+        w_mm: CANVAS_PANEL_W, h_mm: TOP_CONTENT_H - 16,
+        fill: "sectionSurface",
+        opacity: 0.85,
+        z_index: 3,
+      },
+      // Header inside panel.
+      ...headerSlots(
+        { x: CANVAS_PANEL_X + 6, y: headerOriginY },
+        CANVAS_PANEL_W - 12,
+        18,
+      ).map((s) => ({ ...s, z_index: 4 })),
+      // Day blocks.
+      ...buildVerticalDayBlock(
+        0,
+        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
+        CANVAS_PANEL_W - 12,
+        dayBlockH,
+      ).map((s) => ({ ...s, z_index: 4 })),
+      ...buildVerticalDayBlock(
+        1,
+        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
+        CANVAS_PANEL_W - 12,
+        dayBlockH,
+      ).map((s, i) => (i === 0 ? s : s)).map((s) => ({ ...s, z_index: 4 })),
+      ...buildVerticalDayBlock(
+        2,
+        { x: CANVAS_PANEL_X + 6, y: dayOriginY },
+        CANVAS_PANEL_W - 12,
+        dayBlockH,
+      ).map((s) => ({ ...s, z_index: 4 })),
+      // Stats + summary.
+      ...statsBar(),
+      summaryLine(),
+    ],
+    rules: [
+      "Section locked at 149mm",
+      "Map fills full content width as a canvas",
+      "Floating panel left at x:18 w:78 with subtle backdrop",
+      "Map washed at 0.82 opacity for a desaturated editorial feel",
+    ],
+  };
+}
+
+// ─── VARIANT 2 — SOFT SPLIT EDITORIAL ────────────────────────────────────
+//
+// Classic 84/126 split. Left column itinerary, right column map.
+
+const SPLIT_LEFT_W = 84;
+const SPLIT_RIGHT_X = SPLIT_LEFT_W;
+const SPLIT_RIGHT_W = PAGE_W - SPLIT_LEFT_W; // 126
+
+function buildSplitVariant(): LayoutManifest {
+  const headerOriginY = 14;
+  const dayOriginY = 50;
+  const dayBlockH = 22 + 2;
+
+  return {
+    id: "trip-summary-split",
+    section: "trip_summary",
+    page_count: 1,
+    description: "Soft Split Editorial — 84mm itinerary strip + 126mm map column",
+    slots: [
+      {
+        type: "fill",
+        name: "section_bg",
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      // Map fills right column edge to edge.
+      {
+        type: "vector",
+        name: "map_image",
+        payload_key: "routeMap",
+        x_mm: SPLIT_RIGHT_X, y_mm: 0, w_mm: SPLIT_RIGHT_W, h_mm: TOP_CONTENT_H,
+        opacity: 0.92,
+      },
+      // Hairline divider on the seam.
+      {
+        type: "fill",
+        name: "column_divider",
+        x_mm: SPLIT_RIGHT_X - 0.15, y_mm: 14,
+        w_mm: 0.3, h_mm: TOP_CONTENT_H - 28,
+        fill: "border",
+        opacity: 0.4,
+      },
+      // Header inside left column (text inset 18mm from page edge).
+      ...headerSlots({ x: CONTENT_X, y: headerOriginY }, TEXT_INSET_W, 24),
+      // 3 day blocks in left column.
+      ...buildVerticalDayBlock(
+        0, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
+      ),
+      ...buildVerticalDayBlock(
+        1, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
+      ),
+      ...buildVerticalDayBlock(
+        2, { x: CONTENT_X, y: dayOriginY }, TEXT_INSET_W, dayBlockH,
+      ),
+      ...statsBar(),
+      summaryLine(),
+    ],
+    rules: [
+      "Section locked at 149mm",
+      "Left strip 84mm; right map column 126mm",
+      "Map fills right column edge to edge",
+    ],
+  };
+}
+
+// ─── VARIANT 3 — HERO MAP + STORY STRIP ──────────────────────────────────
+//
+// Top: map dominates as a hero (174mm × 90mm).
+// Bottom: horizontal day strip 32mm — 3 cards inline.
+
+function buildHeroVariant(): LayoutManifest {
+  const HERO_MAP_H = 90;
+  const STRIP_Y = HERO_MAP_H;
+  const STRIP_H = TOP_CONTENT_H - HERO_MAP_H; // 32
+  const cardCount = 3;
+  const cardGap = 4;
+  const cardW = (CONTENT_W - cardGap * (cardCount - 1)) / cardCount; // ~55.3
+  return {
+    id: "trip-summary-hero",
+    section: "trip_summary",
+    page_count: 1,
+    description: "Hero Map + Story Strip — full-width map on top, horizontal day cards below",
+    slots: [
+      {
+        type: "fill",
+        name: "section_bg",
+        x_mm: 0, y_mm: 0, w_mm: PAGE_W, h_mm: SECTION_H,
+        fill: "sectionSurface",
+        z_index: 0,
+      },
+      // Hero map — full content width.
+      {
+        type: "vector",
+        name: "map_image",
+        payload_key: "routeMap",
+        x_mm: CONTENT_X, y_mm: 0, w_mm: CONTENT_W, h_mm: HERO_MAP_H,
+      },
+      // Tiny eyebrow over the map (top-left, low opacity backdrop).
+      {
+        type: "fill",
+        name: "hero_eyebrow_bg",
+        x_mm: CONTENT_X, y_mm: 6, w_mm: 60, h_mm: 12,
+        fill: "sectionSurface",
+        opacity: 0.85,
+        z_index: 2,
+      },
+      {
+        type: "text",
+        name: "section_label",
+        x_mm: CONTENT_X + 4, y_mm: 9, w_mm: 56, h_mm: 4,
+        style: "eyebrow",
+        color_role: "mutedText",
+        size_pt: 8,
+        letter_spacing_em: 0.18,
+        uppercase: true,
+        max_chars: 30,
+        z_index: 3,
+      },
+      {
+        type: "text",
+        name: "section_title",
+        content_key: "sectionTitle",
+        x_mm: CONTENT_X + 4, y_mm: 13, w_mm: 56, h_mm: 5,
+        style: "h3",
+        color_role: "headingText",
+        size_pt: 11,
+        line_height: 1.1,
+        font_weight: 700,
+        max_chars: 30,
+        overflow_behavior: "truncate",
+        z_index: 3,
+      },
+      // Horizontal strip — 3 day cards.
+      ...buildHorizontalDayCard(
+        0, CONTENT_X + (cardW + cardGap) * 0, STRIP_Y + 2, cardW, STRIP_H - 4,
+      ),
+      ...buildHorizontalDayCard(
+        1, CONTENT_X + (cardW + cardGap) * 1, STRIP_Y + 2, cardW, STRIP_H - 4,
+      ),
+      ...buildHorizontalDayCard(
+        2, CONTENT_X + (cardW + cardGap) * 2, STRIP_Y + 2, cardW, STRIP_H - 4,
+      ),
+      // Top border line above the strip.
+      {
+        type: "fill",
+        name: "strip_top_border",
+        x_mm: CONTENT_X, y_mm: STRIP_Y, w_mm: CONTENT_W, h_mm: 0.3,
+        fill: "border",
+      },
+      ...statsBar(),
+      summaryLine(),
+    ],
+    rules: [
+      "Section locked at 149mm",
+      "Hero map y:0–90 (90mm tall, full content width)",
+      "Story strip y:90–122 (32mm) with 3 horizontal day cards",
+    ],
+  };
+}
+
+export const TRIP_SUMMARY_CANVAS = buildCanvasVariant();
+export const TRIP_SUMMARY_SPLIT = buildSplitVariant();
+export const TRIP_SUMMARY_HERO = buildHeroVariant();
+
+// Default alias — Canvas per spec.
+export const TRIP_SUMMARY_EDITORIAL = TRIP_SUMMARY_CANVAS;
+
+export const TRIP_SUMMARY_LAYOUTS = [
+  TRIP_SUMMARY_CANVAS,
+  TRIP_SUMMARY_SPLIT,
+  TRIP_SUMMARY_HERO,
+];
 
 export const TRIP_SUMMARY_GEOMETRY = {
   SECTION_H,
   TOP_CONTENT_H,
   STATS_H,
   SUMMARY_H,
-  LEFT_COL_W,
-  RIGHT_COL_W,
-  RIGHT_COL_X,
-  DAY_BLOCKS_MAX,
+  DAY_BLOCKS_MAX: 3,
 };

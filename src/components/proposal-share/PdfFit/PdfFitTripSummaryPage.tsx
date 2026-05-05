@@ -5,8 +5,9 @@ import { resolveTokens } from "@/lib/theme";
 import { RouteMap, type RouteCoord } from "@/components/sections/RouteMap";
 import type { Section, Day, TierKey } from "@/lib/types";
 import {
-  TRIP_SUMMARY_EDITORIAL,
+  TRIP_SUMMARY_CANVAS,
   TRIP_SUMMARY_GEOMETRY,
+  TRIP_SUMMARY_LAYOUTS,
 } from "@/lib/pdfFit/manifests/trip_summary";
 import { PdfFitLayout } from "./PdfFitLayout";
 import { PdfPage } from "../PdfPage";
@@ -155,11 +156,16 @@ export function PdfFitTripSummaryPage({ section }: Props) {
     };
   }
 
+  // Pick variant by section.layoutVariant; default to Editorial Canvas.
+  const manifest =
+    TRIP_SUMMARY_LAYOUTS.find((l) => l.id === section.layoutVariant) ??
+    TRIP_SUMMARY_CANVAS;
+
   return (
     <PdfPage label="Itinerary at a glance" bleed>
       <div data-section-type="tripSummary" style={{ width: "100%", height: "100%" }}>
         <PdfFitLayout
-          manifest={TRIP_SUMMARY_EDITORIAL}
+          manifest={manifest}
           contents={contents}
           theme={proposal.theme}
           tokens={tokens}
