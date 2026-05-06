@@ -397,9 +397,253 @@ export const DAY_CARD_TRIP_FLIP: LayoutManifest = {
     "Day card — alternates right-flip / left-flip per day for magazine rhythm",
 };
 
+// ─── Editorial-split — full-bleed hero with overlay typography ───────────
+//
+// Single readable narrative flow under a 120mm hero. Title is destination
+// only, rendered as white display type over a soft bottom gradient.
+// Stats simplify to TRANSFER + HIGHLIGHT only — minimal luxury, not
+// dashboard. Horizontal lodge block (68mm landscape image · 98mm content)
+// closes the page at y=281 with 16mm intentional editorial whitespace.
+//
+// Two slot names diverge from the standard/flip layouts:
+//   - title_overlay   (vs title)         — destination-only, no subtitle
+//   - lodge_features_3 (vs lodge_features) — top 3 amenities only
+// The renderer in PdfFitDayPage.tsx populates these as additional
+// contents-map entries; other variants ignore them.
+
+export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
+  id: "day-card-editorial-split",
+  section: "day_card",
+  page_count: 1,
+  description:
+    "Editorial split — 120mm hero with overlay typography, single-column narrative, TRANSFER/HIGHLIGHT stats, horizontal lodge",
+  slots: [
+    // ─── Background ──────────────────────────────────────────────────
+    {
+      type: "fill",
+      name: "section_bg",
+      x_mm: 0, y_mm: 0, w_mm: 210, h_mm: 297,
+      fill: "sectionSurface",
+      z_index: 0,
+    },
+
+    // ─── Hero (y:18–138) ─────────────────────────────────────────────
+    {
+      type: "image",
+      name: "main_image",
+      content_key: "destinationImageUrl",
+      x_mm: 18, y_mm: 18, w_mm: 174, h_mm: 120,
+      object_fit: "cover",
+      image_role: "hero",
+    },
+    // Bottom-band gradient scrim — transparent → rgba(0,0,0,0.55) so the
+    // overlay typography stays legible on most photos. Bump opacity to
+    // 0.65 if dark heroes (sunset/silhouette) cause problems.
+    {
+      type: "fill",
+      name: "hero_overlay_gradient",
+      x_mm: 18, y_mm: 108, w_mm: 174, h_mm: 30,
+      fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)",
+      z_index: 1,
+    },
+    // Overlay eyebrow — DAY · DATE · LOCATION in white.
+    {
+      type: "text",
+      name: "header_meta",
+      content_key: "headerMeta",
+      x_mm: 24, y_mm: 118, w_mm: 162, h_mm: 5,
+      style: "eyebrow",
+      color_role: "white",
+      size_pt: 9,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 80,
+      overflow_behavior: "truncate",
+      z_index: 2,
+    },
+    // Overlay title — DESTINATION ONLY. New slot name so it can carry
+    // a different content value than the standard `title` slot.
+    {
+      type: "text",
+      name: "title_overlay",
+      content_key: "destinationOnly",
+      x_mm: 24, y_mm: 124, w_mm: 162, h_mm: 12,
+      style: "h1",
+      color_role: "white",
+      size_pt: 28,
+      line_height: 1.05,
+      font_weight: 700,
+      letter_spacing_em: -0.005,
+      max_chars: 60,
+      overflow_behavior: "scale_down",
+      z_index: 2,
+    },
+
+    // ─── Intro line (y:144–158) — italic editorial pull ──────────────
+    // Carries the "subtitle feeling" since the title overlay is now
+    // destination only. Renderer falls back to subtitle / momentOfDay.
+    {
+      type: "text",
+      name: "intro_text",
+      content_key: "introText",
+      x_mm: 18, y_mm: 144, w_mm: 174, h_mm: 14,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 13,
+      line_height: 1.3,
+      max_chars: 200,
+      overflow_behavior: "scale_down",
+    },
+
+    // ─── Body (y:162–209) — single readable column ───────────────────
+    {
+      type: "text",
+      name: "body_text",
+      content_key: "narrative",
+      x_mm: 18, y_mm: 162, w_mm: 174, h_mm: 47,
+      style: "body",
+      color_role: "bodyText",
+      size_pt: 11,
+      line_height: 1.55,
+      max_chars: 600,
+      overflow_behavior: "truncate",
+    },
+
+    // ─── Stats strip (y:213–229) — TRANSFER + HIGHLIGHT only ─────────
+    {
+      type: "text",
+      name: "stat_1_label",
+      x_mm: 18, y_mm: 213, w_mm: 80, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 16,
+    },
+    {
+      type: "text",
+      name: "stat_1_value",
+      x_mm: 18, y_mm: 220, w_mm: 80, h_mm: 9,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 11.5,
+      font_weight: 500,
+      max_chars: 38,
+      overflow_behavior: "truncate",
+    },
+    {
+      type: "text",
+      name: "stat_2_label",
+      x_mm: 110, y_mm: 213, w_mm: 84, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 16,
+    },
+    {
+      type: "text",
+      name: "stat_2_value",
+      x_mm: 110, y_mm: 220, w_mm: 84, h_mm: 9,
+      style: "body",
+      color_role: "headingText",
+      size_pt: 11.5,
+      font_weight: 500,
+      max_chars: 40,
+      overflow_behavior: "truncate",
+    },
+
+    // ─── Lodge (y:233–281) — landscape image · content ───────────────
+    {
+      type: "image",
+      name: "lodge_image",
+      content_key: "lodgeImageUrl",
+      x_mm: 18, y_mm: 233, w_mm: 68, h_mm: 48,
+      object_fit: "cover",
+      image_role: "hero",
+    },
+    {
+      type: "text",
+      name: "lodge_eyebrow",
+      content_key: "lodgeEyebrow",
+      x_mm: 94, y_mm: 233, w_mm: 98, h_mm: 5,
+      style: "eyebrow",
+      color_role: "mutedText",
+      size_pt: 9,
+      letter_spacing_em: 0.18,
+      uppercase: true,
+      max_chars: 30,
+    },
+    {
+      type: "text",
+      name: "lodge_property_name",
+      content_key: "lodgePropertyName",
+      x_mm: 94, y_mm: 239, w_mm: 98, h_mm: 9,
+      style: "h3",
+      color_role: "headingText",
+      size_pt: 17,
+      line_height: 1.1,
+      font_weight: 700,
+      max_chars: 60,
+      overflow_behavior: "scale_down",
+    },
+    {
+      type: "text",
+      name: "lodge_location",
+      content_key: "lodgeLocation",
+      x_mm: 94, y_mm: 249, w_mm: 98, h_mm: 5,
+      style: "caption",
+      color_role: "mutedText",
+      size_pt: 10,
+      letter_spacing_em: 0.02,
+      max_chars: 70,
+      overflow_behavior: "truncate",
+    },
+    {
+      type: "text",
+      name: "lodge_description",
+      content_key: "lodgeDescription",
+      x_mm: 94, y_mm: 256, w_mm: 98, h_mm: 18,
+      style: "body",
+      color_role: "bodyText",
+      size_pt: 10,
+      line_height: 1.4,
+      max_chars: 220,
+      overflow_behavior: "truncate",
+    },
+    // Top 3 amenities only — distinct slot name from `lodge_features`
+    // so the standard/flip variants keep their 5-amenity rendering.
+    // Subtle muted typography (8pt + opacity 0.7) per editorial brief.
+    {
+      type: "text",
+      name: "lodge_features_3",
+      content_key: "lodgeFeaturesShort",
+      x_mm: 94, y_mm: 276, w_mm: 98, h_mm: 5,
+      style: "caption",
+      color_role: "mutedText",
+      size_pt: 8,
+      letter_spacing_em: 0.06,
+      opacity: 0.7,
+      max_chars: 80,
+      overflow_behavior: "truncate",
+    },
+  ],
+  rules: [
+    "A4 print-safe — 18mm L/R margins, 18mm top, 16mm bottom whitespace",
+    "Hero 174×120 (y:18–138) with bottom-band gradient + white overlay typography",
+    "Title is destination only (h1 white over 30mm scrim)",
+    "Single-column body 174×47 — ~600 chars before truncate",
+    "Stats strip TRANSFER + HIGHLIGHT only (y:213–229)",
+    "Horizontal lodge: 68×48 image + 98×48 content, 8mm gutter (y:233–281)",
+  ],
+};
+
 export const DAY_CARD_LAYOUTS = [
   DAY_CARD_STANDARD,
   DAY_CARD_RIGHT_FLIP,
   DAY_CARD_LEFT_FLIP,
   DAY_CARD_TRIP_FLIP,
+  DAY_CARD_EDITORIAL_SPLIT,
 ];

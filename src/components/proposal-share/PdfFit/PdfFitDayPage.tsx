@@ -126,6 +126,25 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
         .join("  ·  ")
     : "";
 
+  // ─── Editorial-split-only content ──────────────────────────────────
+  // The day-card-editorial-split manifest references a different set of
+  // slot names (title_overlay, lodge_features_3, stat_1/2_*) so it can
+  // render destination-only titles, top-3 amenities, and TRANSFER/
+  // HIGHLIGHT stats without altering what the standard/flip layouts
+  // produce. Adding these keys to the contents map is additive — other
+  // manifests don't reference them.
+  const lodgeFeaturesShort = hasProperty
+    ? (property?.amenities ?? [])
+        .filter(Boolean)
+        .slice(0, 3)
+        .join("  ·  ")
+    : "";
+  const transferValue = day.transfer?.trim() || "—";
+  const highlightValue =
+    day.highlights?.[0]?.trim() ||
+    day.momentOfDay?.trim()?.slice(0, 40) ||
+    "—";
+
   const contents: Record<string, SlotContent> = {
     header_meta: { kind: "text", value: headerMeta },
     title: { kind: "text", value: title },
@@ -146,6 +165,13 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     lodge_location: { kind: "text", value: lodgeLocation },
     lodge_description: { kind: "text", value: lodgeDescription },
     lodge_features: { kind: "text", value: lodgeFeatures },
+    // Editorial-split additions (ignored by other variants)
+    title_overlay: { kind: "text", value: destination },
+    lodge_features_3: { kind: "text", value: lodgeFeaturesShort },
+    stat_1_label: { kind: "text", value: "TRANSFER" },
+    stat_1_value: { kind: "text", value: transferValue },
+    stat_2_label: { kind: "text", value: "HIGHLIGHT" },
+    stat_2_value: { kind: "text", value: highlightValue },
   };
 
   return (

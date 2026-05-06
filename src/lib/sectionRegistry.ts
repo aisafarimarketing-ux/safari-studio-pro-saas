@@ -160,12 +160,16 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "trip-flip",
       // PdfFit-only standard (full-width hero on top).
       "day-card-standard",
+      // Editorial split — overlay typography, single-col narrative,
+      // simplified TRANSFER/HIGHLIGHT stats, horizontal lodge.
+      "day-card-editorial-split",
     ],
     variantLabels: {
       "right-flip": "FLIP-R",
       "left-flip": "FLIP-L",
       "trip-flip": "TRIP",
       "day-card-standard": "STANDARD",
+      "day-card-editorial-split": "EDITORIAL",
     },
     defaultVariant: "trip-flip",
     defaultContent: {},
