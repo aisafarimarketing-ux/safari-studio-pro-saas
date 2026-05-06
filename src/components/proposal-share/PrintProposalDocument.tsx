@@ -1,83 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useProposalStore } from "@/store/proposalStore";
 import { useEditorStore } from "@/store/editorStore";
-import { SectionRenderer } from "@/components/editor/SectionRenderer";
 import { SectionChrome } from "@/components/editor/SectionChrome";
-import { PdfPage } from "./PdfPage";
-import { PdfFitCoverPage } from "./PdfFit/PdfFitCoverPage";
-import { PdfFitCoverWithNotePage } from "./PdfFit/PdfFitCoverWithNotePage";
-import { PdfFitDayPage } from "./PdfFit/PdfFitDayPage";
-import { PdfFitPropertyPage } from "./PdfFit/PdfFitPropertyPage";
-import { PdfFitPersonalNotePage } from "./PdfFit/PdfFitPersonalNotePage";
-import { PdfFitPricingPage } from "./PdfFit/PdfFitPricingPage";
-import { PdfFitPracticalInfoPages } from "./PdfFit/PdfFitPracticalInfoPage";
-import { PdfFitTripSummaryPage } from "./PdfFit/PdfFitTripSummaryPage";
-import { PdfFitClosingPage } from "./PdfFit/PdfFitClosingPage";
-import { PdfFitFooterPage } from "./PdfFit/PdfFitFooterPage";
-import type { Section, SectionType } from "@/lib/types";
+import { composePdfPages, type PdfPage } from "@/lib/composePdfPages";
+import { PdfPageRenderer } from "./PdfPageRenderer";
+import type { Section } from "@/lib/types";
 
 // ─── PrintProposalDocument — orchestrator for the printed deck ───────────
 //
-// Reads the proposal's section list and renders each as a strict A4
-// PdfPage. Two sections get special treatment because they're naturally
-// multi-item:
-//
-//   dayJourney  — splits into one page per Day. Each day renders the
-//                 same EditorialStackCard the on-screen proposal uses.
-//   propertyShowcase — for now renders as a single page (the carousel
-//                 layout). Future commit will split per property.
-//
-// Every other section gets wrapped in one PdfPage (clipped to A4).
+// Calls composePdfPages() to turn the proposal's section list into a
+// list of A4-page descriptors (cover+note merge, map+summary merge,
+// closing+footer merge, day/property fan-out, etc.) and dispatches
+// each descriptor through PdfPageRenderer. Section-level edit chrome
+// (variant switcher, color picker, drag handle) wraps consecutive
+// pages that derive from the same source section, so multi-page groups
+// like Day-by-Day or Properties keep one chrome envelope around all
+// their pages.
 //
 // Debug mode (?debugPdf=true on the URL) draws per-page outlines and
 // logs any page whose content overflows. Useful for finding sections
 // that need design changes without exporting + opening the PDF.
 
-const FULL_BLEED_TYPES = new Set<SectionType>(["cover", "closing", "footer"]);
-
-// Return true when the section is one of the content-only types AND
-// its body is empty enough that printing it on its own A4 page would
-// produce a near-empty page. Each section type's "content" lives at
-// a different content-key — operator's editor writes those keys, so
-// we whitelist the keys we know carry the meaningful body. Other
-// section types (cover, dayJourney, propertyShowcase, etc.) are
-// excluded from the check because they have rich computed content
-// from elsewhere on the proposal.
-function isContentlessSection(section: Section): boolean {
-  if (section.type === "customText" || section.type === "quote") {
-    const content = section.content as Record<string, unknown> | undefined;
-    const body = strField(content?.body) ?? strField(content?.text) ?? strField(content?.quote);
-    return !body || body.length === 0;
-  }
-  if (section.type === "gallery") {
-    const content = section.content as Record<string, unknown> | undefined;
-    const images = Array.isArray(content?.images) ? content.images : [];
-    return images.length === 0;
-  }
-  if (section.type === "inclusions") {
-    const content = section.content as Record<string, unknown> | undefined;
-    const items = Array.isArray(content?.items) ? content.items : [];
-    return items.length === 0;
-  }
-  return false;
-}
-
-function strField(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  // Strip HTML and whitespace before length-checking — operators
-  // sometimes paste an empty <p></p> from a rich editor that looks
-  // empty visually but isn't a zero-length string.
-  const stripped = v.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
-  return stripped.length > 0 ? stripped : null;
-}
-
 export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
   const { proposal } = useProposalStore();
-  const visible = [...proposal.sections]
-    .filter((s) => s.visible)
-    .sort((a, b) => a.order - b.order);
+
+  const pages: PdfPage[] = useMemo(
+    () => composePdfPages(proposal),
+    [proposal],
+  );
+  const groups = useMemo(() => groupPagesBySource(pages), [pages]);
 
   // ── Overflow detection — runs after every render in debug mode.
   //    Stamps each .pdf-page with a "used / total" readout, flags
@@ -87,7 +40,7 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
   useEffect(() => {
     if (!debug) return;
     const id = window.setTimeout(() => {
-      const pages = document.querySelectorAll<HTMLElement>(".pdf-page");
+      const pageEls = document.querySelectorAll<HTMLElement>(".pdf-page");
       const report: Array<{
         label: string;
         usedPx: number;
@@ -104,7 +57,7 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
       // an intentional luxury whitespace.
       const UNDERFILL_THRESHOLD = 0.65;
 
-      pages.forEach((page) => {
+      pageEls.forEach((page) => {
         const child = page.firstElementChild as HTMLElement | null;
         const usedPx = child?.scrollHeight ?? page.scrollHeight;
         const totalPx = page.clientHeight;
@@ -186,225 +139,84 @@ export function PrintProposalDocument({ debug = false }: { debug?: boolean }) {
       }
     }, 250);
     return () => window.clearTimeout(id);
-  }, [debug, visible.length, proposal.id]);
+  }, [debug, pages.length, proposal.id]);
 
   return (
     <div className={`pdf-document ${debug ? "pdf-document--debug" : ""}`}>
-      {visible.map((section) => (
-        <ChromedSection key={section.id} section={section}>
-          {renderSection(section, proposal.id, proposal.sections)}
+      {groups.map((group, gi) => (
+        <ChromedSection key={`g-${gi}-${group.sourceSection?.id ?? "anon"}`} section={group.sourceSection}>
+          {group.pages.map((page, pi) => (
+            <PdfPageRenderer key={`p-${gi}-${pi}`} page={page} />
+          ))}
         </ChromedSection>
       ))}
     </div>
   );
 }
 
-// Wraps each PdfFit page in SectionChrome ONLY in editor mode so the
-// operator gets the same hover-detected colour pickers, drag handle,
-// variant switcher, visibility toggle, and per-section style picker
-// they have on the Magazine view. In print + share modes, no chrome
-// is added so the rendered pages stay pixel-clean.
+// Wraps each PdfFit page (or page group) in SectionChrome ONLY in
+// editor mode so the operator gets the same hover-detected colour
+// pickers, drag handle, variant switcher, visibility toggle, and
+// per-section style picker they have on the Web View. In print + share
+// modes, no chrome is added so the rendered pages stay pixel-clean.
+//
+// section is null for composed pages with no source section (rare —
+// only the lone-footer-as-closing case via the synthetic section, and
+// the dispatcher already handles that). When null, we skip chrome.
 function ChromedSection({
   section,
   children,
 }: {
-  section: Section;
+  section: Section | null;
   children: React.ReactNode;
 }) {
   const mode = useEditorStore((s) => s.mode);
   if (children == null) return null;
-  if (mode !== "editor") {
+  if (mode !== "editor" || section == null) {
     return <>{children}</>;
   }
   return <SectionChrome section={section}>{children}</SectionChrome>;
 }
 
-function renderSection(section: Section, proposalId: string, allSections: Section[]) {
-  const bleed = FULL_BLEED_TYPES.has(section.type);
-
-  // Divider + spacer sections are visual rhythm controls on the
-  // flowing on-screen layout — a thin line, a vertical gap. In the
-  // strict A4 print deck they each consumed an entire page that
-  // rendered as ~98% empty (just the section's bg + the divider's
-  // hairline strip). Skipped here so the printed deck stays
-  // continuous; the on-screen view still renders them via the
-  // normal SectionRenderer path. Operator brief: "no blank pages."
-  if (section.type === "divider" || section.type === "spacer") {
-    return null;
+// Anchor section a composed page binds to for editor chrome / DOM
+// attribution. Returns null when the page has no representative
+// source section (e.g., synthesized lone-footer closing).
+function anchorSection(page: PdfPage): Section | null {
+  switch (page.kind) {
+    case "coverNote":
+      return page.cover ?? page.note ?? null;
+    case "mapSummary":
+      return page.map ?? page.summary ?? null;
+    case "day":
+    case "property":
+      return page.sourceSection;
+    case "pricing":
+    case "practicalInfo":
+    case "passthrough":
+      return page.section;
+    case "closing":
+      return page.closing ?? page.footer ?? null;
   }
+}
 
-  // Standalone Inclusions/Exclusions section is deprecated — its data
-  // (proposal.inclusions / proposal.exclusions) is rendered inside the
-  // Pricing page's editorial variant. Legacy proposals (~17% per the
-  // Phase-1 audit) still carry the section block; rendering it here
-  // would produce a duplicate A4 page after the pricing page. Skip in
-  // print + share. Editor mode still shows it (with a deprecation
-  // badge) so operators can manually delete the block.
-  if (section.type === "inclusions") {
-    return null;
-  }
-
-  // Empty content sections — operator added a customText / quote /
-  // gallery / inclusions block but never filled the body. In the
-  // strict A4 deck these render as a section header strip on top
-  // of an otherwise empty page. Skip them so the printed deck
-  // stays content-dense; on-screen they still render as the
-  // operator's reminder to come back and fill them.
-  if (isContentlessSection(section)) {
-    return null;
-  }
-
-  // PDF-Fit layouts — reverse-engineered print system, always on.
-  // Slot positions are locked in mm, content is capped per slot, and
-  // the manifest decides what fits on each A4 page. No legacy "render
-  // the web layout into A4" path — we design for paper first.
-  if (section.type === "cover") {
-    // Per spec — when a personalNote section also exists and is
-    // visible, the cover renders as the top half of a single A4
-    // page that also carries the personal note in its bottom half
-    // (cover y:0–150mm + note y:150–297mm). Each half has its own
-    // SectionChrome so editor controls operate independently.
-    const note = allSections.find((s) => s.type === "personalNote" && s.visible);
-    if (note) {
-      return (
-        <PdfFitCoverWithNotePage
-          key={section.id}
-          coverSection={section}
-          noteSection={note}
-        />
-      );
+// Fold consecutive pages that share an anchor section into one group
+// so the operator's per-section chrome (variant switcher, color
+// picker, etc.) wraps the entire run. Day-by-day's N day pages and
+// Properties' M property pages each become one chromed group.
+function groupPagesBySource(
+  pages: PdfPage[],
+): Array<{ sourceSection: Section | null; pages: PdfPage[] }> {
+  const groups: Array<{ sourceSection: Section | null; pages: PdfPage[] }> = [];
+  for (const page of pages) {
+    const source = anchorSection(page);
+    const last = groups[groups.length - 1];
+    if (last && last.sourceSection?.id === source?.id) {
+      last.pages.push(page);
+    } else {
+      groups.push({ sourceSection: source, pages: [page] });
     }
-    return <PdfFitCoverPage key={section.id} section={section} />;
   }
-  if (section.type === "dayJourney") {
-    return <PdfFitDayJourneyPages key={section.id} section={section} />;
-  }
-  if (section.type === "propertyShowcase") {
-    return <PdfFitPropertyShowcasePages key={section.id} section={section} />;
-  }
-  if (section.type === "personalNote") {
-    // When a visible cover exists, the cover orchestrator already
-    // rendered the combined cover-with-note page; skip here so we
-    // don't print the note twice. Standalone (no cover) → render
-    // the legacy single-section note page.
-    const hasCover = allSections.some((s) => s.type === "cover" && s.visible);
-    if (hasCover) return null;
-    return <PdfFitPersonalNotePage key={section.id} section={section} />;
-  }
-  if (section.type === "pricing") {
-    return <PdfFitPricingPage key={section.id} section={section} />;
-  }
-  if (section.type === "practicalInfo") {
-    return <PdfFitPracticalInfoPages key={section.id} section={section} />;
-  }
-  if (section.type === "tripSummary" || section.type === "map") {
-    return <PdfFitTripSummaryPage key={section.id} section={section} />;
-  }
-  if (section.type === "closing") {
-    return <PdfFitClosingPage key={section.id} section={section} />;
-  }
-  if (section.type === "footer") {
-    return <PdfFitFooterPage key={section.id} section={section} />;
-  }
-
-  // Every other section — single page, clipped to A4.
-  return (
-    <PdfPage
-      key={section.id}
-      label={labelFor(section)}
-      bleed={bleed}
-    >
-      <div data-section-type={section.type} data-proposal-id={proposalId}>
-        <SectionRenderer section={section} />
-      </div>
-    </PdfPage>
-  );
-}
-
-
-// ─── PDF-Fit multi-page wrappers ──────────────────────────────────────────
-//
-// PDF-Fit pages are single-shot per day / per property — no tail
-// continuation needed because the manifest has fixed slots that cap
-// content within the A4 frame. If content exceeds caps we truncate
-// (per the operator's spec rules); we never spill into a second page.
-
-function PdfFitDayJourneyPages({ section }: { section: Section }) {
-  const proposal = useProposalStore((s) => s.proposal);
-  const days = proposal.days;
-  if (days.length === 0) {
-    return (
-      <PdfPage label="Day-by-day (empty)" bleed={false}>
-        <div data-section-type="dayJourney">
-          <SectionRenderer section={section} />
-        </div>
-      </PdfPage>
-    );
-  }
-  return (
-    <>
-      {days.map((day) => (
-        <PdfFitDayPage
-          key={day.id}
-          section={section}
-          day={day}
-          totalDays={days.length}
-        />
-      ))}
-    </>
-  );
-}
-
-function PdfFitPropertyShowcasePages({ section }: { section: Section }) {
-  const proposal = useProposalStore((s) => s.proposal);
-  const properties = proposal.properties ?? [];
-  if (properties.length === 0) {
-    return (
-      <PdfPage label="Properties (empty)" bleed>
-        <div data-section-type="propertyShowcase">
-          <SectionRenderer section={section} />
-        </div>
-      </PdfPage>
-    );
-  }
-  return (
-    <>
-      {properties.map((property, idx) => (
-        <PdfFitPropertyPage
-          key={property.id}
-          section={section}
-          property={property}
-          index={idx}
-          total={properties.length}
-        />
-      ))}
-    </>
-  );
-}
-
-function labelFor(section: Section): string {
-  const map: Record<SectionType, string> = {
-    operatorHeader: "Header",
-    cover: "Cover",
-    personalNote: "Personal note",
-    greeting: "Greeting",
-    tripSummary: "Trip summary",
-    itineraryTable: "Itinerary at a glance",
-    map: "Map",
-    dayJourney: "Day-by-day",
-    propertyShowcase: "Properties",
-    pricing: "Investment",
-    inclusions: "Inclusions",
-    practicalInfo: "Good to know",
-    closing: "Closing",
-    footer: "Contact",
-    customText: "Custom",
-    quote: "Quote",
-    gallery: "Gallery",
-    divider: "Divider",
-    spacer: "Spacer",
-  };
-  return map[section.type] ?? section.type;
+  return groups;
 }
 
 // Walk the page's descendants and find the FIRST element whose
