@@ -38,7 +38,11 @@ export function ProposalCanvas() {
   // → magazine (the original full-width flow); set to "spread" to
   // switch. The toggle lives in the editor toolbar.
   if (proposal.viewMode === "spread") {
-    return <SpreadView />;
+    return (
+      <PrintGuard>
+        <SpreadView />
+      </PrintGuard>
+    );
   }
 
   // PDF-Fit view = exactly the layout the printed PDF will produce.
@@ -47,7 +51,8 @@ export function ProposalCanvas() {
   // mental reconciliation between "what I see" and "what prints."
   // Inline section chrome is intentionally muted here because the
   // PdfFit components own their own layout; structural edits move
-  // to the side panels.
+  // to the side panels. No PrintGuard here — Print PDF is the only
+  // mode allowed to reach the printer.
   if (proposal.viewMode === "pdf-fit") {
     return (
       <div
@@ -88,53 +93,112 @@ export function ProposalCanvas() {
   };
 
   return (
-    <div
-      className={`flex-1 overflow-auto${isEditor ? " dm-editing" : ""}`}
-      style={{ background: proposal.theme.tokens.pageBg }}
-      onClick={handleGutterClick}
-      title={isEditor ? "Click to edit page background color" : undefined}
-    >
-      {/* Proposal width wrapper */}
-      <div className="max-w-[900px] mx-auto min-h-full shadow-xl" style={{ background: proposal.theme.tokens.pageBg }}>
-        {isEditor ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={sorted.map((s) => s.id)}
-              strategy={verticalListSortingStrategy}
+    <PrintGuard>
+      <div
+        className={`flex-1 overflow-auto${isEditor ? " dm-editing" : ""}`}
+        style={{ background: proposal.theme.tokens.pageBg }}
+        onClick={handleGutterClick}
+        title={isEditor ? "Click to edit page background color" : undefined}
+      >
+        {/* Proposal width wrapper */}
+        <div className="max-w-[900px] mx-auto min-h-full shadow-xl" style={{ background: proposal.theme.tokens.pageBg }}>
+          {isEditor ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              {/* Inserter before first section */}
-              <AddSectionInserter afterOrder={-1} />
+              <SortableContext
+                items={sorted.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {/* Inserter before first section */}
+                <AddSectionInserter afterOrder={-1} />
 
-              {sorted.map((section) => (
-                <div key={section.id}>
-                  <SectionChrome section={section}>
-                    <SectionRenderer section={section} />
-                  </SectionChrome>
-                  <AddSectionInserter afterOrder={section.order} />
+                {sorted.map((section) => (
+                  <div key={section.id}>
+                    <SectionChrome section={section}>
+                      <SectionRenderer section={section} />
+                    </SectionChrome>
+                    <AddSectionInserter afterOrder={section.order} />
+                  </div>
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            // Preview / print: no chrome, no inserters. Standalone
+            // Inclusions blocks are also suppressed here — their data
+            // already renders inside the Pricing page's editorial
+            // variant, so showing the legacy block would duplicate the
+            // Included/Not Included rows. Editor mode still renders the
+            // block (with a deprecation badge) so operators can delete it.
+            sorted
+              .filter((s) => s.visible && s.type !== "inclusions")
+              .map((section) => (
+                <div key={section.id} id={`section-${section.id}`}>
+                  <SectionRenderer section={section} />
                 </div>
-              ))}
-            </SortableContext>
-          </DndContext>
-        ) : (
-          // Preview / print: no chrome, no inserters. Standalone
-          // Inclusions blocks are also suppressed here — their data
-          // already renders inside the Pricing page's editorial
-          // variant, so showing the legacy block would duplicate the
-          // Included/Not Included rows. Editor mode still renders the
-          // block (with a deprecation badge) so operators can delete it.
-          sorted
-            .filter((s) => s.visible && s.type !== "inclusions")
-            .map((section) => (
-              <div key={section.id} id={`section-${section.id}`}>
-                <SectionRenderer section={section} />
-              </div>
-            ))
-        )}
+              ))
+          )}
+        </div>
       </div>
-    </div>
+    </PrintGuard>
+  );
+}
+
+// ─── PrintGuard — block CMD+P / File→Print outside Print PDF mode ────────
+//
+// Web View and Spread are designed for online viewing — printing them
+// produces a long-webpage screenshot chopped across pages. This guard
+// hides the canvas in print media and shows a redirect message so the
+// operator gets clear feedback instead of a broken PDF.
+//
+// Print PDF mode never wraps with this — the composer-driven A4 deck
+// IS the export, so window.print() / Save as PDF must pass through.
+
+function PrintGuard({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <style>{`
+        .ss-print-guard-message { display: none; }
+        @media print {
+          .ss-print-guard-canvas { display: none !important; }
+          .ss-print-guard-message {
+            display: flex !important;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 40px;
+            text-align: center;
+            flex-direction: column;
+            gap: 14px;
+            background: white;
+            color: #1b3a2d;
+            font-family: system-ui, -apple-system, sans-serif;
+          }
+          /* Strip any leftover @page margins and ambient backgrounds
+             so the message reads as the only content on the page. */
+          @page { margin: 16mm; }
+        }
+      `}</style>
+      <div className="ss-print-guard-canvas contents">{children}</div>
+      <div className="ss-print-guard-message" aria-hidden="true">
+        <div style={{ fontSize: "22px", fontWeight: 600, lineHeight: 1.3 }}>
+          Please switch to Print PDF mode to print or export this proposal.
+        </div>
+        <div
+          style={{
+            fontSize: "13px",
+            color: "rgba(0,0,0,0.55)",
+            maxWidth: "480px",
+            lineHeight: 1.55,
+          }}
+        >
+          Web View and Spread are designed for online viewing. Printing them
+          would cut sections across pages. Print PDF renders A4-safe pages
+          composed for clean output.
+        </div>
+      </div>
+    </>
   );
 }
