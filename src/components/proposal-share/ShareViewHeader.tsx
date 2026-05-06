@@ -27,8 +27,21 @@ export function ShareViewHeader({ proposal }: { proposal: Proposal }) {
     }
   };
 
+  // Print routes through /p/[id]/print, which always renders the
+  // composer-driven A4 PrintProposalDocument regardless of the
+  // proposal's viewMode. Calling window.print() directly on this
+  // page would screenshot the on-screen Web View / Spread layout
+  // and chop sections across pages — Print PDF is the only safe
+  // export source.
   const handlePrint = () => {
-    window.print();
+    if (!proposal.id) return;
+    const url = `/p/${proposal.id}/print?autoPrint=1`;
+    const win = window.open(url, "_blank");
+    if (!win) {
+      // Popup blocked → fall back to same-tab navigation. The print
+      // route auto-fires window.print() once layout has settled.
+      window.location.href = url;
+    }
   };
 
   const company = operator.companyName?.trim() || "";
@@ -68,7 +81,7 @@ export function ShareViewHeader({ proposal }: { proposal: Proposal }) {
             onClick={handlePrint}
             className="px-3 py-1.5 text-[13px] rounded-lg transition active:scale-95 hover:bg-black/5"
             style={{ color: tokens.mutedText, border: `1px solid ${tokens.border}` }}
-            title="Print or save as PDF"
+            title="Open the print-safe A4 view to print or save as PDF"
           >
             Print
           </button>
