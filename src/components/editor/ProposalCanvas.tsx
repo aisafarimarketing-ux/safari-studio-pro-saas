@@ -120,9 +120,14 @@ export function ProposalCanvas() {
             </SortableContext>
           </DndContext>
         ) : (
-          // Preview / print: no chrome, no inserters
+          // Preview / print: no chrome, no inserters. Standalone
+          // Inclusions blocks are also suppressed here — their data
+          // already renders inside the Pricing page's editorial
+          // variant, so showing the legacy block would duplicate the
+          // Included/Not Included rows. Editor mode still renders the
+          // block (with a deprecation badge) so operators can delete it.
           sorted
-            .filter((s) => s.visible)
+            .filter((s) => s.visible && s.type !== "inclusions")
             .map((section) => (
               <div key={section.id} id={`section-${section.id}`}>
                 <SectionRenderer section={section} />

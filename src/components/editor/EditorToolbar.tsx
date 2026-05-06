@@ -374,6 +374,7 @@ export function EditorToolbar({
           pdfState={pdfState}
           onDuplicate={handleDuplicate}
           duplicating={duplicating}
+          viewMode={proposal.viewMode ?? "magazine"}
           brandMasterEditable={brandMaster.canEdit}
           isBrandMaster={isBrandMaster}
           brandMasterBusy={brandMasterBusy}
@@ -667,9 +668,9 @@ function ViewModeSwitch({
   onChange: (next: "magazine" | "spread" | "pdf-fit") => void;
 }) {
   const items: { key: "magazine" | "spread" | "pdf-fit"; label: string }[] = [
-    { key: "magazine", label: "Magazine" },
+    { key: "magazine", label: "Web View" },
     { key: "spread", label: "Spread" },
-    { key: "pdf-fit", label: "PDF" },
+    { key: "pdf-fit", label: "Print PDF" },
   ];
   return (
     <div
@@ -680,7 +681,7 @@ function ViewModeSwitch({
       }}
       role="tablist"
       aria-label="Proposal layout"
-      title="Switch between Magazine (single column) and Spread (two-column) layouts"
+      title="Switch between Web View (online), Spread, and Print PDF (A4 ready)."
     >
       {items.map((it) => {
         const active = mode === it.key;
@@ -764,6 +765,7 @@ function ActionsMenu({
   pdfState,
   onDuplicate,
   duplicating,
+  viewMode,
   brandMasterEditable,
   isBrandMaster,
   brandMasterBusy,
@@ -778,6 +780,10 @@ function ActionsMenu({
   pdfState: "idle" | "rendering" | "error";
   onDuplicate: () => void;
   duplicating: boolean;
+  /** Current canvas view. Download PDF only renders when this is
+   *  "pdf-fit" (Print PDF mode) — Web View and Spread are read-only
+   *  online layouts and shouldn't expose print/export actions. */
+  viewMode: "magazine" | "spread" | "pdf-fit";
   /** Admin/owner gate: when true the brand-master toggle item is
    *  rendered. Members never see this item. */
   brandMasterEditable: boolean;
@@ -828,9 +834,11 @@ function ActionsMenu({
           <div className="my-1 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }} />
           <MenuItem onClick={() => { setOpen(false); onPreview(); }}>Preview</MenuItem>
           <MenuItem onClick={() => { setOpen(false); onCopyLink(); }}>Copy link</MenuItem>
-          <MenuItem onClick={onDownloadPDF} disabled={pdfState === "rendering"}>
-            {pdfState === "rendering" ? "Rendering PDF…" : pdfState === "error" ? "PDF failed — retry" : "Download PDF"}
-          </MenuItem>
+          {viewMode === "pdf-fit" && (
+            <MenuItem onClick={onDownloadPDF} disabled={pdfState === "rendering"}>
+              {pdfState === "rendering" ? "Rendering PDF…" : pdfState === "error" ? "PDF failed — retry" : "Download PDF"}
+            </MenuItem>
+          )}
           <MenuItem onClick={onDuplicate} disabled={duplicating}>
             {duplicating ? "Duplicating…" : "Duplicate"}
           </MenuItem>

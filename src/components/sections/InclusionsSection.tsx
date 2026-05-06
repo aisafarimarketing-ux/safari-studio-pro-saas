@@ -25,6 +25,14 @@ export function InclusionsSection({ section }: { section: Section }) {
   const tokens = resolveTokens(theme.tokens, section.styleOverrides);
   const variant = section.layoutVariant || "inline-ribbon";
 
+  // Deprecation badge — operators on legacy proposals (pre-pricing-
+  // editorial) sometimes still carry a standalone Inclusions section
+  // even though the same Included/Not Included data now renders inside
+  // the Pricing page. Web View and Print PDF suppress this block to
+  // avoid duplicate rendering; the badge nudges the operator to delete
+  // it from Editor too.
+  const deprecationBadge = isEditor ? <DeprecationBadge /> : null;
+
   const onInclusion = (i: number, v: string) => {
     const next = [...inclusions];
     next[i] = v;
@@ -40,78 +48,58 @@ export function InclusionsSection({ section }: { section: Section }) {
     else updateExclusions([...exclusions, "New item"]);
   };
 
+  const layoutProps = {
+    inclusions,
+    exclusions,
+    onInclusion,
+    onExclusion,
+    addItem,
+    isEditor,
+    tokens,
+    theme,
+  };
+
+  let body: React.ReactNode;
   if (variant === "inline-ribbon") {
-    return (
-      <InlineRibbon
-        inclusions={inclusions}
-        exclusions={exclusions}
-        onInclusion={onInclusion}
-        onExclusion={onExclusion}
-        addItem={addItem}
-        isEditor={isEditor}
-        tokens={tokens}
-        theme={theme}
-      />
-    );
+    body = <InlineRibbon {...layoutProps} />;
+  } else if (variant === "stacked-clean") {
+    body = <StackedClean {...layoutProps} />;
+  } else if (variant === "two-tone-bands") {
+    body = <TwoToneBands {...layoutProps} />;
+  } else if (variant === "split-columns") {
+    body = <SplitColumns {...layoutProps} />;
+  } else {
+    // Legacy chip-card "default" — kept so old proposals don't shift.
+    body = <Default {...layoutProps} />;
   }
 
-  if (variant === "stacked-clean") {
-    return (
-      <StackedClean
-        inclusions={inclusions}
-        exclusions={exclusions}
-        onInclusion={onInclusion}
-        onExclusion={onExclusion}
-        addItem={addItem}
-        isEditor={isEditor}
-        tokens={tokens}
-        theme={theme}
-      />
-    );
-  }
-
-  if (variant === "two-tone-bands") {
-    return (
-      <TwoToneBands
-        inclusions={inclusions}
-        exclusions={exclusions}
-        onInclusion={onInclusion}
-        onExclusion={onExclusion}
-        addItem={addItem}
-        isEditor={isEditor}
-        tokens={tokens}
-        theme={theme}
-      />
-    );
-  }
-
-  if (variant === "split-columns") {
-    return (
-      <SplitColumns
-        inclusions={inclusions}
-        exclusions={exclusions}
-        onInclusion={onInclusion}
-        onExclusion={onExclusion}
-        addItem={addItem}
-        isEditor={isEditor}
-        tokens={tokens}
-        theme={theme}
-      />
-    );
-  }
-
-  // Legacy chip-card "default" — kept so old proposals don't shift.
   return (
-    <Default
-      inclusions={inclusions}
-      exclusions={exclusions}
-      onInclusion={onInclusion}
-      onExclusion={onExclusion}
-      addItem={addItem}
-      isEditor={isEditor}
-      tokens={tokens}
-      theme={theme}
-    />
+    <>
+      {deprecationBadge}
+      {body}
+    </>
+  );
+}
+
+function DeprecationBadge() {
+  return (
+    <div
+      className="mx-auto max-w-[900px] px-6 pt-4"
+      data-deprecation-badge="inclusions"
+    >
+      <div
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11.5px] font-semibold"
+        style={{
+          background: "rgba(179,67,52,0.08)",
+          color: "#7a2e25",
+          border: "1px solid rgba(179,67,52,0.2)",
+        }}
+        title="The Web View and Print PDF no longer render this block — its data lives on the Pricing page. Safe to delete from this section list."
+      >
+        <span aria-hidden>⚠</span>
+        <span>Deprecated — already shown in Pricing. Delete this block.</span>
+      </div>
+    </div>
   );
 }
 

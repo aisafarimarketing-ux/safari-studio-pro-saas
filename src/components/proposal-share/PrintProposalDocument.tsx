@@ -233,6 +233,17 @@ function renderSection(section: Section, proposalId: string, allSections: Sectio
     return null;
   }
 
+  // Standalone Inclusions/Exclusions section is deprecated — its data
+  // (proposal.inclusions / proposal.exclusions) is rendered inside the
+  // Pricing page's editorial variant. Legacy proposals (~17% per the
+  // Phase-1 audit) still carry the section block; rendering it here
+  // would produce a duplicate A4 page after the pricing page. Skip in
+  // print + share. Editor mode still shows it (with a deprecation
+  // badge) so operators can manually delete the block.
+  if (section.type === "inclusions") {
+    return null;
+  }
+
   // Empty content sections — operator added a customText / quote /
   // gallery / inclusions block but never filled the body. In the
   // strict A4 deck these render as a section header strip on top
