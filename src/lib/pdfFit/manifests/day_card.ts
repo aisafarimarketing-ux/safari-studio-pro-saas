@@ -399,11 +399,24 @@ export const DAY_CARD_TRIP_FLIP: LayoutManifest = {
 
 // ─── Editorial-split — full-bleed hero with overlay typography ───────────
 //
-// Single readable narrative flow under a 120mm hero. Title is destination
-// only, rendered as white display type over a soft bottom gradient.
-// Stats simplify to TRANSFER + HIGHLIGHT only — minimal luxury, not
-// dashboard. Horizontal lodge block (68mm landscape image · 98mm content)
-// closes the page at y=281 with 16mm intentional editorial whitespace.
+// INVARIANT: ONE DAY = ONE PAGE. This variant is non-paginating by
+// construction. Every text slot has a max_chars cap with truncate or
+// scale_down overflow_behavior, and .pdf-page sets overflow:hidden as
+// the final safety net. The content composer emits exactly one
+// PdfFitDayPage per Day; nothing in the rendering path may split a day
+// across multiple A4 pages. Long narratives ellipsize gracefully —
+// they do not spill onto a continuation page. Operators who routinely
+// need 700+ char narratives should pick the standard or flip variants
+// (1100+ char body caps) instead.
+//
+// Composition (emotionally weighted top → bottom):
+//   y:18-150  HERO 174×132 — primary anchor, dominant
+//   y:156-170 INTRO 174×14 — italic editorial pull (carries subtitle)
+//   y:174-232 BODY 174×58 — single-column readable narrative
+//   y:236-286 LODGE — 72×50 landscape image · 94×50 content panel
+//   y:286-297 Bottom whitespace 11mm — intentional editorial breath
+//
+// Stats strip removed — the page reads as composition, not dashboard.
 //
 // Two slot names diverge from the standard/flip layouts:
 //   - title_overlay   (vs title)         — destination-only, no subtitle
@@ -416,7 +429,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
   section: "day_card",
   page_count: 1,
   description:
-    "Editorial split — 120mm hero with overlay typography, single-column narrative, TRANSFER/HIGHLIGHT stats, horizontal lodge",
+    "Editorial split — 132mm hero with overlay typography, single-column narrative, horizontal lodge. ONE DAY = ONE PAGE.",
   slots: [
     // ─── Background ──────────────────────────────────────────────────
     {
@@ -427,12 +440,12 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       z_index: 0,
     },
 
-    // ─── Hero (y:18–138) ─────────────────────────────────────────────
+    // ─── Hero (y:18–150) — 132mm dominant anchor ─────────────────────
     {
       type: "image",
       name: "main_image",
       content_key: "destinationImageUrl",
-      x_mm: 18, y_mm: 18, w_mm: 174, h_mm: 120,
+      x_mm: 18, y_mm: 18, w_mm: 174, h_mm: 132,
       object_fit: "cover",
       image_role: "hero",
     },
@@ -442,7 +455,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
     {
       type: "fill",
       name: "hero_overlay_gradient",
-      x_mm: 18, y_mm: 108, w_mm: 174, h_mm: 30,
+      x_mm: 18, y_mm: 120, w_mm: 174, h_mm: 30,
       fill: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)",
       z_index: 1,
     },
@@ -451,7 +464,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "header_meta",
       content_key: "headerMeta",
-      x_mm: 24, y_mm: 118, w_mm: 162, h_mm: 5,
+      x_mm: 24, y_mm: 130, w_mm: 162, h_mm: 5,
       style: "eyebrow",
       color_role: "white",
       size_pt: 9,
@@ -467,7 +480,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "title_overlay",
       content_key: "destinationOnly",
-      x_mm: 24, y_mm: 124, w_mm: 162, h_mm: 12,
+      x_mm: 24, y_mm: 136, w_mm: 162, h_mm: 12,
       style: "h1",
       color_role: "white",
       size_pt: 28,
@@ -479,14 +492,14 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       z_index: 2,
     },
 
-    // ─── Intro line (y:144–158) — italic editorial pull ──────────────
+    // ─── Intro line (y:156–170) — italic editorial pull ──────────────
     // Carries the "subtitle feeling" since the title overlay is now
     // destination only. Renderer falls back to subtitle / momentOfDay.
     {
       type: "text",
       name: "intro_text",
       content_key: "introText",
-      x_mm: 18, y_mm: 144, w_mm: 174, h_mm: 14,
+      x_mm: 18, y_mm: 156, w_mm: 174, h_mm: 14,
       style: "body",
       color_role: "headingText",
       size_pt: 13,
@@ -495,72 +508,30 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       overflow_behavior: "scale_down",
     },
 
-    // ─── Body (y:162–209) — single readable column ───────────────────
+    // ─── Body (y:174–232) — single readable column, 58mm tall ────────
+    // 700-char cap → roughly 9-10 lines at 11pt × 1.55 leading. Longer
+    // narratives truncate with ellipsis rather than paginate.
     {
       type: "text",
       name: "body_text",
       content_key: "narrative",
-      x_mm: 18, y_mm: 162, w_mm: 174, h_mm: 47,
+      x_mm: 18, y_mm: 174, w_mm: 174, h_mm: 58,
       style: "body",
       color_role: "bodyText",
       size_pt: 11,
       line_height: 1.55,
-      max_chars: 600,
+      max_chars: 700,
       overflow_behavior: "truncate",
     },
 
-    // ─── Stats strip (y:213–229) — TRANSFER + HIGHLIGHT only ─────────
-    {
-      type: "text",
-      name: "stat_1_label",
-      x_mm: 18, y_mm: 213, w_mm: 80, h_mm: 5,
-      style: "eyebrow",
-      color_role: "mutedText",
-      size_pt: 8,
-      letter_spacing_em: 0.18,
-      uppercase: true,
-      max_chars: 16,
-    },
-    {
-      type: "text",
-      name: "stat_1_value",
-      x_mm: 18, y_mm: 220, w_mm: 80, h_mm: 9,
-      style: "body",
-      color_role: "headingText",
-      size_pt: 11.5,
-      font_weight: 500,
-      max_chars: 38,
-      overflow_behavior: "truncate",
-    },
-    {
-      type: "text",
-      name: "stat_2_label",
-      x_mm: 110, y_mm: 213, w_mm: 84, h_mm: 5,
-      style: "eyebrow",
-      color_role: "mutedText",
-      size_pt: 8,
-      letter_spacing_em: 0.18,
-      uppercase: true,
-      max_chars: 16,
-    },
-    {
-      type: "text",
-      name: "stat_2_value",
-      x_mm: 110, y_mm: 220, w_mm: 84, h_mm: 9,
-      style: "body",
-      color_role: "headingText",
-      size_pt: 11.5,
-      font_weight: 500,
-      max_chars: 40,
-      overflow_behavior: "truncate",
-    },
-
-    // ─── Lodge (y:233–281) — landscape image · content ───────────────
+    // ─── Lodge (y:236–286) — landscape 72×50 image · 94×50 content ──
+    // 8mm gutter between image and content; content stack uses uniform
+    // 2mm gaps for editorial breathing room.
     {
       type: "image",
       name: "lodge_image",
       content_key: "lodgeImageUrl",
-      x_mm: 18, y_mm: 233, w_mm: 68, h_mm: 48,
+      x_mm: 18, y_mm: 236, w_mm: 72, h_mm: 50,
       object_fit: "cover",
       image_role: "hero",
     },
@@ -568,7 +539,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "lodge_eyebrow",
       content_key: "lodgeEyebrow",
-      x_mm: 94, y_mm: 233, w_mm: 98, h_mm: 5,
+      x_mm: 98, y_mm: 236, w_mm: 94, h_mm: 5,
       style: "eyebrow",
       color_role: "mutedText",
       size_pt: 9,
@@ -580,7 +551,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "lodge_property_name",
       content_key: "lodgePropertyName",
-      x_mm: 94, y_mm: 239, w_mm: 98, h_mm: 9,
+      x_mm: 98, y_mm: 243, w_mm: 94, h_mm: 9,
       style: "h3",
       color_role: "headingText",
       size_pt: 17,
@@ -593,7 +564,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "lodge_location",
       content_key: "lodgeLocation",
-      x_mm: 94, y_mm: 249, w_mm: 98, h_mm: 5,
+      x_mm: 98, y_mm: 254, w_mm: 94, h_mm: 5,
       style: "caption",
       color_role: "mutedText",
       size_pt: 10,
@@ -605,7 +576,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "lodge_description",
       content_key: "lodgeDescription",
-      x_mm: 94, y_mm: 256, w_mm: 98, h_mm: 18,
+      x_mm: 98, y_mm: 261, w_mm: 94, h_mm: 18,
       style: "body",
       color_role: "bodyText",
       size_pt: 10,
@@ -620,7 +591,7 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
       type: "text",
       name: "lodge_features_3",
       content_key: "lodgeFeaturesShort",
-      x_mm: 94, y_mm: 276, w_mm: 98, h_mm: 5,
+      x_mm: 98, y_mm: 281, w_mm: 94, h_mm: 5,
       style: "caption",
       color_role: "mutedText",
       size_pt: 8,
@@ -631,12 +602,13 @@ export const DAY_CARD_EDITORIAL_SPLIT: LayoutManifest = {
     },
   ],
   rules: [
-    "A4 print-safe — 18mm L/R margins, 18mm top, 16mm bottom whitespace",
-    "Hero 174×120 (y:18–138) with bottom-band gradient + white overlay typography",
+    "ONE DAY = ONE PAGE — non-paginating by construction; long content truncates, never splits",
+    "A4 print-safe — 18mm L/R margins, 18mm top, 11mm bottom whitespace",
+    "Hero 174×132 (y:18–150) — dominant anchor with bottom-band scrim + overlay typography",
     "Title is destination only (h1 white over 30mm scrim)",
-    "Single-column body 174×47 — ~600 chars before truncate",
-    "Stats strip TRANSFER + HIGHLIGHT only (y:213–229)",
-    "Horizontal lodge: 68×48 image + 98×48 content, 8mm gutter (y:233–281)",
+    "Single-column body 174×58 — 700 chars cap before truncate",
+    "No stats strip — composition prioritised over dashboard density",
+    "Horizontal lodge: 72×50 image + 94×50 content, 8mm gutter, 2mm uniform inner gaps (y:236–286)",
   ],
 };
 

@@ -10,6 +10,18 @@ import type { SlotContent } from "./PdfFitSlot";
 
 // ─── PDF-Fit day page renderer ─────────────────────────────────────────────
 //
+// INVARIANT — ONE DAY = ONE PAGE.
+// Every variant must render each Day on exactly one A4 page. No
+// continuations, no splits, no auto-pagination. This is enforced
+// structurally (the composer emits one PdfFitDayPage per Day; this
+// component wraps in exactly one <PdfPage>) and defensively (every
+// text slot in every day_card manifest carries a max_chars cap with
+// truncate or scale_down overflow_behavior; .pdf-page sets
+// overflow:hidden as the final safety net). When adding a new day
+// variant, preserve this contract — long content truncates, never
+// paginates. Operators with content that won't fit should pick a
+// looser-cap variant (standard/flip), not break this rule.
+//
 // One PdfPage per Day. Resolves content for the day_card_standard
 // manifest:
 //
@@ -127,10 +139,10 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     : "";
 
   // ─── Editorial-split-only content ──────────────────────────────────
-  // The day-card-editorial-split manifest references a different set of
-  // slot names (title_overlay, lodge_features_3, stat_1/2_*) so it can
-  // render destination-only titles, top-3 amenities, and TRANSFER/
-  // HIGHLIGHT stats without altering what the standard/flip layouts
+  // The day-card-editorial-split manifest references two slot names that
+  // diverge from the standard/flip layouts (title_overlay,
+  // lodge_features_3) so it can render destination-only titles and
+  // top-3 amenities without altering what the standard/flip layouts
   // produce. Adding these keys to the contents map is additive — other
   // manifests don't reference them.
   const lodgeFeaturesShort = hasProperty
@@ -139,11 +151,6 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
         .slice(0, 3)
         .join("  ·  ")
     : "";
-  const transferValue = day.transfer?.trim() || "—";
-  const highlightValue =
-    day.highlights?.[0]?.trim() ||
-    day.momentOfDay?.trim()?.slice(0, 40) ||
-    "—";
 
   const contents: Record<string, SlotContent> = {
     header_meta: { kind: "text", value: headerMeta },
@@ -168,10 +175,6 @@ export function PdfFitDayPage({ section, day, totalDays }: Props) {
     // Editorial-split additions (ignored by other variants)
     title_overlay: { kind: "text", value: destination },
     lodge_features_3: { kind: "text", value: lodgeFeaturesShort },
-    stat_1_label: { kind: "text", value: "TRANSFER" },
-    stat_1_value: { kind: "text", value: transferValue },
-    stat_2_label: { kind: "text", value: "HIGHLIGHT" },
-    stat_2_value: { kind: "text", value: highlightValue },
   };
 
   return (
