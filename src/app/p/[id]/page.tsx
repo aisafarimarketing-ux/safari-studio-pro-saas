@@ -9,6 +9,7 @@ import { ShareViewHeader } from "@/components/proposal-share/ShareViewHeader";
 import { ViewTracker } from "@/components/proposal-share/ViewTracker";
 import { DepositPayButton } from "@/components/proposal-share/DepositPayButton";
 import { PrintProposalDocument } from "@/components/proposal-share/PrintProposalDocument";
+import { PrintGuard } from "@/components/proposal-share/PrintGuard";
 import type { Proposal } from "@/lib/types";
 
 export default function ClientProposalPage({
@@ -103,7 +104,13 @@ export default function ClientProposalPage({
         // Spread view — two-column sticky layout. Wider canvas (no
         // 900px constraint) so the photograph on the left has room
         // to breathe and the right column reads at editorial width.
-        <SpreadView />
+        // Wrapped in PrintGuard so a client's CMD+P doesn't screenshot
+        // the spread layout (which would chop across pages); they're
+        // redirected to use the Print button which routes through the
+        // composer-driven /p/[id]/print URL.
+        <PrintGuard headline="Please use the Print button to download a properly formatted PDF.">
+          <SpreadView />
+        </PrintGuard>
       ) : (
         // Magazine view — render the same PdfFit pages the print
         // pipeline produces. Client + operator both see the editorial

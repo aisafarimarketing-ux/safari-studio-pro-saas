@@ -20,6 +20,10 @@ import { SectionRenderer } from "./SectionRenderer";
 import { AddSectionInserter } from "./AddSectionInserter";
 import { SpreadView } from "./SpreadView";
 import { PrintProposalDocument } from "@/components/proposal-share/PrintProposalDocument";
+import { PrintGuard } from "@/components/proposal-share/PrintGuard";
+
+const EDITOR_PRINT_GUARD_HEADLINE =
+  "Please switch to Print PDF mode to print or export this proposal.";
 
 export function ProposalCanvas() {
   const { proposal, moveSection } = useProposalStore();
@@ -39,7 +43,7 @@ export function ProposalCanvas() {
   // switch. The toggle lives in the editor toolbar.
   if (proposal.viewMode === "spread") {
     return (
-      <PrintGuard>
+      <PrintGuard headline={EDITOR_PRINT_GUARD_HEADLINE}>
         <SpreadView />
       </PrintGuard>
     );
@@ -93,7 +97,7 @@ export function ProposalCanvas() {
   };
 
   return (
-    <PrintGuard>
+    <PrintGuard headline={EDITOR_PRINT_GUARD_HEADLINE}>
       <div
         className={`flex-1 overflow-auto${isEditor ? " dm-editing" : ""}`}
         style={{ background: proposal.theme.tokens.pageBg }}
@@ -146,59 +150,3 @@ export function ProposalCanvas() {
   );
 }
 
-// ─── PrintGuard — block CMD+P / File→Print outside Print PDF mode ────────
-//
-// Web View and Spread are designed for online viewing — printing them
-// produces a long-webpage screenshot chopped across pages. This guard
-// hides the canvas in print media and shows a redirect message so the
-// operator gets clear feedback instead of a broken PDF.
-//
-// Print PDF mode never wraps with this — the composer-driven A4 deck
-// IS the export, so window.print() / Save as PDF must pass through.
-
-function PrintGuard({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <style>{`
-        .ss-print-guard-message { display: none; }
-        @media print {
-          .ss-print-guard-canvas { display: none !important; }
-          .ss-print-guard-message {
-            display: flex !important;
-            min-height: 100vh;
-            align-items: center;
-            justify-content: center;
-            padding: 60px 40px;
-            text-align: center;
-            flex-direction: column;
-            gap: 14px;
-            background: white;
-            color: #1b3a2d;
-            font-family: system-ui, -apple-system, sans-serif;
-          }
-          /* Strip any leftover @page margins and ambient backgrounds
-             so the message reads as the only content on the page. */
-          @page { margin: 16mm; }
-        }
-      `}</style>
-      <div className="ss-print-guard-canvas contents">{children}</div>
-      <div className="ss-print-guard-message" aria-hidden="true">
-        <div style={{ fontSize: "22px", fontWeight: 600, lineHeight: 1.3 }}>
-          Please switch to Print PDF mode to print or export this proposal.
-        </div>
-        <div
-          style={{
-            fontSize: "13px",
-            color: "rgba(0,0,0,0.55)",
-            maxWidth: "480px",
-            lineHeight: 1.55,
-          }}
-        >
-          Web View and Spread are designed for online viewing. Printing them
-          would cut sections across pages. Print PDF renders A4-safe pages
-          composed for clean output.
-        </div>
-      </div>
-    </>
-  );
-}
