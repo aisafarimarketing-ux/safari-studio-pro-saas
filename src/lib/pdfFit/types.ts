@@ -66,7 +66,17 @@ export type TextSlot = SlotBox & {
   alignment?: "left" | "center" | "right";
   max_chars?: number;
   /** Compound content like "{destinations} · {dates} · {duration}".
-   *  Caller substitutes from the proposal at render time. */
+   *  Caller substitutes from the proposal at render time.
+   *
+   *  RESERVED — not yet wired into PdfFitSlot. Kept as a deliberate
+   *  surface for future semantic content orchestration: when the Look
+   *  System lands, manifests will declare *what data folds into a slot*
+   *  rather than every renderer hand-wiring contents-map entries. The
+   *  pattern-substitution model is the natural shape for that.
+   *  See applyContentPattern in PdfFitLayout.tsx for the helper. Do
+   *  not remove as "dead code" — re-adding later would be churn against
+   *  the additive-evolution principle in
+   *  /docs/SAFARI_STUDIO_GUIDELINES.md. */
   content_pattern?: string;
   overflow_behavior?: OverflowBehavior;
   /** Override the resolved style's line-height. Useful for editorial

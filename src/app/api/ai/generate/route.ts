@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection, brandDNAHasContent } from "@/lib/brandDNAPrompt";
+import { LUXURY_VOICE_BANS } from "@/lib/aiVoice";
 
 // ─── Default style — applies whether or not Brand DNA is set ────────────────
 //
@@ -13,13 +14,7 @@ import { buildBrandDNAPromptSection, brandDNAHasContent } from "@/lib/brandDNAPr
 
 const STYLE_RULES = `Operator copy rules (non-negotiable — these are the floor; brand voice may shift register but never relaxes these bans):
 
-BAN — never use these words, or any close variant:
-- Adjective clichés: stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, awe-inspiring, world-class, luxurious, luxe, iconic, ultimate, lush, vibrant, verdant, pristine, picturesque, idyllic.
-- Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge, "experience the magic", "step into".
-- Brochure phrases: nestled in, tucked away, hidden gem, dotted with, paradise, rolling savannahs, rich biodiversity, "sights and sounds", "the perfect blend of", "a true testament to".
-- AI tells: "Whether you're…", "From X to Y, …", "ensures", openings that introduce the destination as the hero ("The Masai Mara is…").
-- Closers: "memories to last a lifetime", "a journey to remember", "your dream safari awaits", any flourish ending.
-- No exclamation marks. No rhetorical questions.
+${LUXURY_VOICE_BANS}
 
 VOICE:
 - Operator brief, not brochure. Like writing to a colleague who already knows the ground.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { STARTER_LIBRARY } from "@/lib/starterLibrary";
 import { nanoid } from "@/lib/nanoid";
+import { LUXURY_VOICE_BANS } from "@/lib/aiVoice";
 import type { Day, PracticalCard, TierKey } from "@/lib/types";
 
 // ─── Public demo autopilot ─────────────────────────────────────────────────
@@ -124,8 +125,9 @@ RULES:
 - Day 1 uses the FIRST destination. The last day uses either the first (gateway return) or the last destination (beach/extension).
 - Distribute internal destinations geographically. No one-night transit loops.
 - Match picks to style: Luxury → favour lodge/luxury class; Mid-range → balanced; Classic → tented/no-frills.
-- Operator voice: brief, factual, confident. One adjective per noun. No exclamation marks, no rhetorical questions.
-- BANNED words (hard block): stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, luxurious, iconic, lush, vibrant, pristine, picturesque, idyllic, nestled, tucked, hidden gem, immerse, escape, embark, indulge, "memories to last a lifetime". Never open with "Whether you're…" or "From X to Y,".
+- Operator voice: brief, factual, confident. One adjective per noun.
+
+${LUXURY_VOICE_BANS}
 
 OUTPUT — JSON only, no fences, no preamble:
 {

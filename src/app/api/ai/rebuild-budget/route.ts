@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { nanoid } from "@/lib/nanoid";
+import { LUXURY_VOICE_BANS } from "@/lib/aiVoice";
 import type { Day, Proposal, TierKey } from "@/lib/types";
 
 // ─── Rebuild-to-a-budget ────────────────────────────────────────────────────
@@ -78,9 +79,11 @@ HARD RULES:
   • Keep destinations + country + day count + nights per destination EXACTLY. Do not move the trip around.
   • Match picks to the new budget band — camp rate bands are 1 (value) through 5 (top). Pick combinations whose bands roughly match: target <$5k/pp → band 2-3; $5-9k → band 3-4; $9k+ → band 4-5.
   • Preserve the guests' names, dates, origin, special occasion — you're only changing the trip shape at the camp level.
-  • Rewrite each day.description to match the NEW tier. If going down-market, drop "infinity pool" / "private butler" / "ultra-luxury" type detail; lead with specific, grounded facts. If going up-market, add detail proportionally but never "stunning" / "magical" / brochure clichés.
-  • OPERATOR VOICE RULES: short declarative sentences. One adjective per noun. No exclamation marks. No rhetorical questions. BANNED: stunning, breathtaking, amazing, incredible, unforgettable, magical, luxurious, iconic, nestled, immerse, escape, "memories to last a lifetime", "step into", "experience the magic".
+  • Rewrite each day.description to match the NEW tier. If going down-market, drop "infinity pool" / "private butler" / "ultra-luxury" type detail; lead with specific, grounded facts. If going up-market, add detail proportionally but never brochure clichés.
   • Library only. Refer to camps by integer slot, never by name. If the library has nothing suitable for a tier on a given day, set {"slot": -1} — do not invent.
+
+OPERATOR VOICE RULES:
+${LUXURY_VOICE_BANS}
 
 OUTPUT — JSON only, no preamble, no markdown fences:
 {

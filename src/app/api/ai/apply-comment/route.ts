@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
+import { LUXURY_VOICE_DISCIPLINE } from "@/lib/aiVoice";
 
 // POST /api/ai/apply-comment
 //
@@ -45,15 +46,7 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
-BAN — never use these words / phrases:
-- Adjective clichés: stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, awe-inspiring, world-class, luxurious, luxe, iconic, ultimate, lush, vibrant, verdant, pristine, picturesque, idyllic.
-- Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge, "experience the magic", "step into".
-- Brochure phrases: nestled in, tucked away, hidden gem, dotted with, paradise, rolling savannahs, rich biodiversity, "sights and sounds", "the perfect blend of", "a true testament to".
-- AI tells: "Whether you're…", "From X to Y, …", "ensures", openings that introduce the destination as the hero.
-- Closers: "memories to last a lifetime", "a journey to remember", any flourish ending.
-- No exclamation marks. No rhetorical questions.
-
-VOICE: Operator brief, not brochure. Confident, specific, unfussy. Short declarative sentences. One adjective per noun. Lead with facts.`;
+${LUXURY_VOICE_DISCIPLINE}`;
 
 interface IncomingDay {
   id: string;

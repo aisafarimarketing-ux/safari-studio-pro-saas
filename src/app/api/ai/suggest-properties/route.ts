@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { rankProperties } from "@/lib/propertyRanking";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
+import { LUXURY_VOICE_BANS } from "@/lib/aiVoice";
 import { MEAL_PLANS } from "@/lib/properties";
 
 // POST /api/ai/suggest-properties
@@ -37,13 +38,9 @@ import { MEAL_PLANS } from "@/lib/properties";
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
-const STYLE_RULES = `Operator copy rules (non-negotiable):
+const STYLE_RULES = `Operator copy rules (non-negotiable — apply to your reasoning text):
 
-BAN — never use these words / phrases in your reasoning text:
-- Adjective clichés: stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, awe-inspiring, world-class, luxurious, luxe, iconic, ultimate.
-- Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge.
-- AI tells: "Whether you're…", "From X to Y, …", "ensures".
-- No exclamation marks. No rhetorical questions.
+${LUXURY_VOICE_BANS}
 
 VOICE: Operator brief, not brochure. One sentence per pick. Lead with the concrete reason ("quiet conservancy edge — pairs with the reflective pace you described").`;
 

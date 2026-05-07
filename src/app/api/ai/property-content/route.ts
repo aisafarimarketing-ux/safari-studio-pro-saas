@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAuthContext } from "@/lib/currentUser";
 import { prisma } from "@/lib/prisma";
 import { buildBrandDNAPromptSection } from "@/lib/brandDNAPrompt";
+import { LUXURY_VOICE_BANS } from "@/lib/aiVoice";
 
 // POST /api/ai/property-content
 //
@@ -25,7 +26,7 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
-BAN — never use: stunning, breathtaking, amazing, incredible, unforgettable, magical, iconic, ultimate, lush, vibrant, verdant, pristine, picturesque, idyllic, luxurious, luxe, immerse yourself, escape to, unwind, indulge, discover, "the perfect blend of", "a true testament to", "nestled in", "tucked away", "hidden gem", exclamation marks, rhetorical questions.
+${LUXURY_VOICE_BANS}
 
 VOICE: Operator brief, not brochure. Confident, specific, unfussy. Short sentences. One adjective per noun. Lead with facts, not adjectives. Don't open with the property as hero ("Mara Plains Camp is…" ← bad). Don't end with flourishes.`;
 

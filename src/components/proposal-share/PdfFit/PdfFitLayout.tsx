@@ -76,6 +76,14 @@ export function PdfFitLayout({
 // Helper — substitute {placeholder} tokens in a content_pattern string
 // against a values map. Unknown placeholders pass through verbatim so
 // missing data is visible at render time.
+//
+// RESERVED — exported but not currently called by PdfFitSlot. Paired
+// with the content_pattern field on TextSlot (see lib/pdfFit/types.ts);
+// both are deliberately deferred infrastructure for the Look System's
+// semantic content orchestration phase, where manifests will declare
+// what data folds into a slot rather than every renderer hand-wiring
+// contents-map entries. Do not remove as "dead code" — see the field's
+// JSDoc and /docs/SAFARI_STUDIO_GUIDELINES.md.
 export function applyContentPattern(
   pattern: string,
   values: Record<string, string | undefined | null>,

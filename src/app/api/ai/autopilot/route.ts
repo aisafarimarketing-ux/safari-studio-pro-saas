@@ -7,6 +7,7 @@ import { nanoid } from "@/lib/nanoid";
 import { orderDestinations, countryOf } from "@/lib/destinationOrdering";
 import { classifyStop } from "@/lib/safariRoutingRules";
 import { pickBrandImageForDestination, type BrandImage } from "@/lib/brandDNA";
+import { LUXURY_VOICE_DISCIPLINE } from "@/lib/aiVoice";
 import type { Day, TierKey } from "@/lib/types";
 
 // AI autopilot — given a Trip Setup proposal (guest names, dates, nights,
@@ -69,15 +70,7 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929";
 
 const STYLE_RULES = `Operator copy rules (non-negotiable):
 
-BAN — never use these words, or any close variant:
-- Adjective clichés: stunning, breathtaking, amazing, incredible, unforgettable, magical, magnificent, awe-inspiring, world-class, luxurious, luxe, iconic, ultimate, lush, vibrant, verdant, pristine, picturesque, idyllic.
-- Marketing verbs: discover, immerse yourself, escape (to), unwind, embark on, indulge, "experience the magic", "step into".
-- Brochure phrases: nestled in, tucked away, hidden gem, dotted with, paradise, rolling savannahs, rich biodiversity, "sights and sounds", "the perfect blend of".
-- AI tells: "Whether you're…", "From X to Y, …", "ensures", openings that introduce the destination as the hero.
-- Closers: "memories to last a lifetime", "a journey to remember", any flourish ending.
-- No exclamation marks. No rhetorical questions.
-
-VOICE: Operator brief, not brochure. Confident, specific, unfussy. Lead with a fact. Short declarative sentences. One adjective per noun, max.`;
+${LUXURY_VOICE_DISCIPLINE}`;
 
 const PERSONALISATION_RULES = `PERSONALISATION — every section below must feel hand-written for these specific guests:
 - Address the guests by their exact name as given (never "dear guest" or "dear traveller").
