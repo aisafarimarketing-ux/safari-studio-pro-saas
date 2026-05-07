@@ -97,6 +97,26 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
   const mainImageUrl = property.leadImageUrl?.trim() || gallery[0] || null;
   const thumbs = gallery.filter((u) => u !== mainImageUrl).slice(0, 3);
 
+  // ─── Editorial-only content (additive, ignored by Standard) ──────
+  // The property-card-editorial manifest references a different set of
+  // slot names (property_class_eyebrow, location_suitability,
+  // why_we_chose_this_pullquote, atmosphere_paragraph, supporting_image,
+  // practical_strip, closure) so it can compose identity, promote the
+  // pullquote, and surface a single panoramic supporting image without
+  // affecting Standard's output. Standard's manifest doesn't reference
+  // any of these keys.
+  const propertyClassEyebrow = (property.propertyClass ?? "").trim().toUpperCase();
+  const locationSuitability = composeLocationSuitability(property);
+  // The pullquote is the page's emotional center — when empty, render
+  // a structural placeholder so the operator sees the gap (mirrors
+  // Day Page's "+ ADD PROPERTY" convention for the lodge_eyebrow).
+  // Other slots render empty when blank (acceptable per blueprint).
+  const whyWeChoseThisPullquote = property.whyWeChoseThis?.trim() || "+ ADD POSITIONING";
+  const atmosphereParagraph = description; // Same source as Standard's description
+  const supportingImageUrl = thumbs[0] ?? null; // First gallery URL excluding the lead
+  const practicalStrip = composePracticalStrip(property);
+  const closure = `Property ${index + 1} of ${total}`;
+
   const contents: Record<string, SlotContent> = {
     section_title: { kind: "text", value: sectionTitle },
     property_name: { kind: "text", value: propertyName },
@@ -120,6 +140,14 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
     thumb_1: { kind: "image", url: thumbs[0] ?? null, alt: "" },
     thumb_2: { kind: "image", url: thumbs[1] ?? null, alt: "" },
     thumb_3: { kind: "image", url: thumbs[2] ?? null, alt: "" },
+    // Editorial-only additions
+    property_class_eyebrow: { kind: "text", value: propertyClassEyebrow },
+    location_suitability: { kind: "text", value: locationSuitability },
+    why_we_chose_this_pullquote: { kind: "text", value: whyWeChoseThisPullquote },
+    atmosphere_paragraph: { kind: "text", value: atmosphereParagraph },
+    supporting_image: { kind: "image", url: supportingImageUrl, alt: propertyName },
+    practical_strip: { kind: "text", value: practicalStrip },
+    closure: { kind: "text", value: closure },
   };
 
   return (
@@ -135,6 +163,39 @@ export function PdfFitPropertyPage({ section, property, index, total }: Props) {
       </div>
     </PdfPage>
   );
+}
+
+// Compose the location · suitability eyebrow used by the Editorial
+// Look. Format: "Maasai Mara · Couples · Photographers". Caps the
+// suitability tags at 2 so the line stays restrained — a strip with
+// 5 chips reads as dashboard, not editorial.
+function composeLocationSuitability(property: Property): string {
+  const parts: string[] = [];
+  const loc = property.location?.trim();
+  if (loc) parts.push(loc);
+  const suitability = (property.suitability ?? [])
+    .map((s) => s?.trim())
+    .filter((s): s is string => Boolean(s))
+    .slice(0, 2);
+  parts.push(...suitability);
+  return parts.join(" · ");
+}
+
+// Compose the practical strip caption used by the Editorial Look.
+// Format: "5 nights · Family Suite · full board · arrive 14:00".
+// Skips empty fields cleanly; if all four are empty, returns "".
+function composePracticalStrip(property: Property): string {
+  const parts: string[] = [];
+  if (property.nights && property.nights > 0) {
+    parts.push(`${property.nights} ${property.nights === 1 ? "night" : "nights"}`);
+  }
+  const room = property.roomType?.trim();
+  if (room) parts.push(room);
+  const meal = property.mealPlan?.trim();
+  if (meal) parts.push(meal);
+  const checkIn = property.checkInTime?.trim();
+  if (checkIn) parts.push(`arrive ${checkIn}`);
+  return parts.join(" · ");
 }
 
 function stripHtml(html: string): string {

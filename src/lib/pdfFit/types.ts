@@ -93,6 +93,11 @@ export type TextSlot = SlotBox & {
   uppercase?: boolean;
   /** Override the resolved style's CSS font-weight. */
   font_weight?: number;
+  /** Override the resolved style's CSS font-style. Used by editorial
+   *  pull-quote slots (italic display) where typography needs italic
+   *  emphasis without inventing a new TypographyStyle. Defaults to
+   *  "normal" when absent — same shape as font_weight. */
+  font_style?: "normal" | "italic";
   /** Render the slot's text in N CSS columns. Useful for editorial
    *  multi-column body blocks that should auto-split a narrative. */
   column_count?: number;

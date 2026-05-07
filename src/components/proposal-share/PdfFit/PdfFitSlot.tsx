@@ -171,6 +171,9 @@ function TextRender({
   if (slot.font_weight !== undefined) {
     tunedStyleProps.fontWeight = slot.font_weight;
   }
+  if (slot.font_style !== undefined) {
+    tunedStyleProps.fontStyle = slot.font_style;
+  }
   if (slot.column_count !== undefined && slot.column_count > 1) {
     tunedStyleProps.columnCount = slot.column_count;
     tunedStyleProps.columnGap = `${slot.column_gap_mm ?? 8}mm`;

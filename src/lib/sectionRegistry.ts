@@ -185,7 +185,13 @@ export const SECTION_REGISTRY: Record<SectionType, SectionDefinition> = {
       "editorial-carousel",
       // PdfFit layout (print)
       "property-card-standard",
+      // Editorial Look — calm, story-led, promoted whyWeChoseThis pullquote,
+      // asymmetric supporting image, no thumbnail filmstrip.
+      "property-card-editorial",
     ],
+    variantLabels: {
+      "property-card-editorial": "EDITORIAL",
+    },
     defaultVariant: "editorial-carousel",
     defaultContent: {},
     dataSource: "properties",
